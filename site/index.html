@@ -318,7 +318,7 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
 <!-- REACT -->
 <section id="react" class="band"><div class="wrap reveal">
   <div class="sec-head"><span class="sec-num">VII</span><div><span class="eyebrow">Capture reactions — walk through live</span><h2>Your read on each pillar.</h2></div></div>
-  <p class="muted" style="max-width:60ch;margin-bottom:24px">Tap a reaction and jot notes as you go. Then <b>Copy for Damien</b> and paste it back into the chat — that's how we iterate.</p>
+  <p class="muted" style="max-width:64ch;margin-bottom:24px">Two ways to give feedback as we walk through: tap a <b>✎ pencil</b> beside any section or card to leave a comment tied to that spot, and/or set an overall reaction per pillar below. Everything gathers in <b>✎ Comments</b> (bottom-right) → <b>Copy all for Damien</b> to paste back into the chat.</p>
   <div class="fb" id="fb">
     <div class="fbrow" data-k="Vision &amp; why-now"><h3>Vision &amp; why-now</h3><div class="opts"></div><textarea placeholder="John / Roger's notes on the vision…"></textarea></div>
     <div class="fbrow" data-k="The Magnum Opus (book + curriculum + platform)"><h3>The layered Opus</h3><div class="opts"></div><textarea placeholder="Is the book+curriculum+platform framing right? What's missing?"></textarea></div>
@@ -327,10 +327,8 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
     <div class="fbrow" data-k="Open / MIT &amp; where it lives"><h3>Open / MIT &amp; where it lives</h3><div class="opts"></div><textarea placeholder="Institutional home, licensing, names on the door…"></textarea></div>
     <div class="fbrow" data-k="The flagship first build"><h3>The flagship — build first</h3><div class="opts"></div><textarea placeholder="Which single skill / Midstate exercise do we prove first?"></textarea></div>
     <div class="fbactions">
-      <button class="btn" id="copyBtn">Copy for Damien</button>
-      <span class="copied" id="copied">Copied ✓ — paste it into the chat</span>
+      <span class="muted" style="font-size:.92rem">Your picks + every ✎ comment are copied together from <b>✎ Comments</b> (bottom-right).</span>
     </div>
-    <div class="preview" id="preview"></div>
   </div>
 </div></section>
 
@@ -340,41 +338,183 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
   <p style="margin-top:8px;color:#8f8574">Draft for discussion · the work of <b>John O. Sonsteng</b> with <b>Roger S. Haydock</b> · open &amp; MIT-licensed · 2026</p>
 </div></footer>
 
+<style>
+/* ---- comment / pencil system ---- */
+.cmt{position:relative}
+.cmt-pencil{position:absolute;z-index:20;top:8px;right:8px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.78);color:var(--claret);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s,background .2s,transform .15s;padding:0}
+.band-ink .cmt-pencil{background:rgba(20,16,14,.55);border-color:rgba(255,255,255,.3);color:var(--brass-lite)}
+.cmt:hover>.cmt-pencil,.cmt-pencil:focus-visible{opacity:.95}
+.cmt-pencil:hover{background:var(--claret);color:#f4ece0;transform:scale(1.07)}
+.cmt-pencil.has{opacity:1;background:var(--claret);color:#f4ece0;border-color:var(--claret)}
+.cmt-pencil svg{width:15px;height:15px;pointer-events:none}
+@media (hover:none){.cmt-pencil{opacity:.5}}
+.cmt-flash{animation:cmtflash 1.3s ease}
+@keyframes cmtflash{0%,100%{box-shadow:none}25%{box-shadow:0 0 0 3px var(--brass)}}
+/* floating open button */
+.cbtn{position:fixed;z-index:60;right:20px;bottom:20px;background:var(--claret);color:#f5ece0;border:0;border-radius:100px;padding:13px 20px;font-family:'Fraunces',serif;font-weight:700;font-size:.92rem;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center;gap:9px}
+.cbtn:hover{background:var(--claret-deep)}
+.cbtn .cnt{background:#f5ece0;color:var(--claret);border-radius:100px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;padding:0 6px;font-family:'Spectral',serif}
+/* drawer */
+.drawer{position:fixed;z-index:70;top:0;right:0;height:100%;width:min(430px,100vw);background:var(--paper);border-left:1px solid var(--line);box-shadow:-30px 0 60px -30px rgba(40,20,10,.5);transform:translateX(101%);transition:transform .32s cubic-bezier(.4,0,.1,1);display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
+.drawer header h3{font-size:1.24rem}
+.drawer .x{background:0;border:0;font-size:1.7rem;cursor:pointer;color:var(--ink-soft);line-height:1;padding:0 4px}
+.drawer .dbody{padding:18px 22px;overflow:auto;flex:1}
+.active-cmt{background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:6px;padding:15px;margin-bottom:20px}
+.chipid{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.68rem;background:var(--claret);color:#f5ece0;border-radius:4px;padding:3px 8px;margin-bottom:9px;word-break:break-all}
+.active-cmt .al{font-family:'Fraunces',serif;font-weight:600;margin-bottom:9px}
+.drawer textarea{width:100%;font-family:'Spectral',serif;font-size:1rem;border:1px solid var(--line);border-radius:5px;padding:10px 12px;min-height:88px;resize:vertical;background:#fff;color:var(--ink)}
+.drawer textarea:focus{outline:2px solid var(--brass);border-color:transparent}
+.clist-h{font-family:'Fraunces',serif;font-weight:600;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin:4px 0 8px}
+.citem{border-bottom:1px solid var(--line-soft);padding:11px 0;cursor:pointer}
+.citem:last-child{border-bottom:0}
+.citem .cl{font-family:'Fraunces',serif;font-weight:600;font-size:.94rem}
+.citem .cid{font-family:ui-monospace,Menlo,monospace;font-size:.64rem;color:var(--brass);margin-left:7px}
+.citem .ct{font-size:.88rem;color:var(--ink-soft);white-space:pre-wrap;margin-top:3px}
+.citem:hover .cl{color:var(--claret)}
+.drawer .empty{color:var(--ink-faint);font-size:.92rem;font-style:italic}
+.drawer footer{padding:16px 22px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px}
+</style>
+
+<button class="cbtn" id="cOpen" aria-haspopup="dialog" aria-controls="cDrawer">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+  Comments <span class="cnt" id="cCount">0</span>
+</button>
+<aside class="drawer" id="cDrawer" role="dialog" aria-label="Comments" aria-hidden="true">
+  <header><h3>Comments &amp; reactions</h3><button class="x" id="cClose" aria-label="Close comments">×</button></header>
+  <div class="dbody">
+    <div class="active-cmt" id="cActive" hidden>
+      <span class="chipid" id="cActiveId"></span>
+      <div class="al" id="cActiveLabel"></div>
+      <textarea id="cActiveText" placeholder="Your suggestion for this part…"></textarea>
+    </div>
+    <div class="clist-h">All comments (<span id="cListCount">0</span>)</div>
+    <div id="cList"><p class="empty">No comments yet — tap a ✎ pencil beside any section or card.</p></div>
+  </div>
+  <footer>
+    <button class="btn" id="cCopy">Copy all for Damien</button>
+    <span class="copied" id="cCopied">Copied ✓ — paste it into the chat</span>
+  </footer>
+</aside>
+
 <script>
 (function(){
   // scroll reveals
   var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.14});
   document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
 
-  // feedback options
+  // ---- VII pillar quick-reactions ----
   var CHOICES=['Compelling','Promising · refine','Not yet'];
   document.querySelectorAll('#fb .fbrow').forEach(function(row){
     var opts=row.querySelector('.opts');
     CHOICES.forEach(function(c){
       var b=document.createElement('button');b.className='opt';b.type='button';b.textContent=c;
-      b.onclick=function(){opts.querySelectorAll('.opt').forEach(function(o){o.classList.remove('on')});b.classList.add('on');row.dataset.choice=c;build();};
+      b.onclick=function(){opts.querySelectorAll('.opt').forEach(function(o){o.classList.remove('on')});b.classList.add('on');row.dataset.choice=c;updateCount();};
       opts.appendChild(b);
     });
-    row.querySelector('textarea').addEventListener('input',build);
+    row.querySelector('textarea').addEventListener('input',updateCount);
   });
 
-  function build(){
-    var out='SONSTENG MAGNUM OPUS — walkthrough reactions\n(John / Roger, captured with Damien)\n\n';
-    document.querySelectorAll('#fb .fbrow').forEach(function(row){
-      var k=row.getAttribute('data-k').replace(/&amp;/g,'&');
-      var choice=row.dataset.choice||'—';
-      var note=(row.querySelector('textarea').value||'').trim();
-      out+='• '+k+': ['+choice+']'+(note?'\n   '+note:'')+'\n';
-    });
-    document.getElementById('preview').textContent=out;
-    return out;
-  }
-  build();
+  // ---- commentable targets: sections + key subsections ----
+  var store={};                 // cid -> {label, text}
+  var byId={};
+  function slug(s){return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,26)||'item';}
+  var PENCIL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
-  document.getElementById('copyBtn').onclick=function(){
-    var text=build(), done=function(){var c=document.getElementById('copied');c.classList.add('show');setTimeout(function(){c.classList.remove('show')},2600);};
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);}else{fallback();}
-    function fallback(){var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done();}
+  document.querySelectorAll('section[id]').forEach(function(sec){
+    if(sec.id==='react') return;
+    var h=sec.querySelector('.sec-head h2');
+    var label=(h?h.textContent:sec.id).trim();
+    addTarget(sec.querySelector('.sec-head')||sec, sec, sec.id, label);
+    var seen={};
+    sec.querySelectorAll('.tl,.layer,.step,.exhibit,.ph,.ask').forEach(function(sub){
+      var sh=sub.querySelector('h3');
+      var sl=sh?sh.textContent.trim():sub.className.split(' ')[0];
+      var base=sec.id+'-'+slug(sl); seen[base]=(seen[base]||0)+1;
+      var cid=seen[base]>1?base+'-'+seen[base]:base;
+      addTarget(sub, sub, cid, label+' › '+sl);
+    });
+  });
+
+  function addTarget(anchor, host, cid, label){
+    anchor.classList.add('cmt');
+    var p=document.createElement('button');
+    p.className='cmt-pencil';p.type='button';p.innerHTML=PENCIL;
+    p.setAttribute('aria-label','Comment on: '+label);
+    p.onclick=function(e){e.stopPropagation();openFor(cid);};
+    anchor.appendChild(p);
+    byId[cid]={cid:cid,label:label,host:host,pencil:p};
+  }
+
+  // ---- drawer wiring ----
+  var drawer=document.getElementById('cDrawer'),
+      activeBox=document.getElementById('cActive'),
+      activeId=document.getElementById('cActiveId'),
+      activeLabel=document.getElementById('cActiveLabel'),
+      activeText=document.getElementById('cActiveText'),
+      curCid=null;
+
+  function openDrawer(){drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');}
+  function closeDrawer(){drawer.classList.remove('open');drawer.setAttribute('aria-hidden','true');}
+  document.getElementById('cOpen').onclick=function(){renderList();openDrawer();};
+  document.getElementById('cClose').onclick=closeDrawer;
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer();});
+
+  function openFor(cid){
+    var t=byId[cid]; if(!t) return;
+    curCid=cid;
+    activeBox.hidden=false;
+    activeId.textContent='#'+cid;
+    activeLabel.textContent=t.label;
+    activeText.value=(store[cid]&&store[cid].text)||'';
+    renderList(); openDrawer();
+    if(t.host){t.host.classList.remove('cmt-flash');void t.host.offsetWidth;t.host.classList.add('cmt-flash');}
+    setTimeout(function(){activeText.focus();},340);
+  }
+  activeText.addEventListener('input',function(){
+    if(!curCid) return;
+    var t=byId[curCid];
+    store[curCid]={label:t.label,text:activeText.value};
+    if(t.pencil) t.pencil.classList.toggle('has',!!activeText.value.trim());
+    updateCount(); renderList();
+  });
+
+  function comments(){return Object.keys(store).filter(function(k){return (store[k].text||'').trim();});}
+  function reactions(){var r=[];document.querySelectorAll('#fb .fbrow').forEach(function(row){
+    var choice=row.dataset.choice, note=(row.querySelector('textarea').value||'').trim();
+    if(choice||note) r.push({k:row.getAttribute('data-k').replace(/&amp;/g,'&'),choice:choice||'—',note:note});
+  });return r;}
+  function updateCount(){
+    document.getElementById('cCount').textContent=comments().length+reactions().length;
+    document.getElementById('cListCount').textContent=comments().length;
+  }
+  function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+  function renderList(){
+    var list=document.getElementById('cList'), ks=comments();
+    document.getElementById('cListCount').textContent=ks.length;
+    if(!ks.length){list.innerHTML='<p class="empty">No comments yet — tap a ✎ pencil beside any section or card.</p>';return;}
+    list.innerHTML='';
+    ks.forEach(function(k){
+      var d=document.createElement('div');d.className='citem';
+      d.innerHTML='<div class="cl">'+esc(store[k].label)+'<span class="cid">#'+esc(k)+'</span></div><div class="ct">'+esc(store[k].text)+'</div>';
+      d.onclick=function(){openFor(k);};
+      list.appendChild(d);
+    });
+  }
+
+  document.getElementById('cCopy').onclick=function(){
+    var out='SONSTENG MAGNUM OPUS — walkthrough feedback\n(paste back to iterate)\n';
+    var rs=reactions();
+    if(rs.length){out+='\n## Section reactions\n';rs.forEach(function(r){out+='• '+r.k+': ['+r.choice+']'+(r.note?'\n   '+r.note:'')+'\n';});}
+    var ks=comments();
+    if(ks.length){out+='\n## Inline comments\n';ks.forEach(function(k){out+='['+k+'] '+store[k].label+'\n   '+store[k].text+'\n';});}
+    if(!rs.length&&!ks.length) out+='\n(no comments yet)\n';
+    var done=function(){var c=document.getElementById('cCopied');c.classList.add('show');setTimeout(function(){c.classList.remove('show')},2600);};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(out).then(done,fb);}else{fb();}
+    function fb(){var ta=document.createElement('textarea');ta.value=out;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');}catch(e){}document.body.removeChild(ta);done();}
   };
+
+  updateCount();
 })();
 </script>
