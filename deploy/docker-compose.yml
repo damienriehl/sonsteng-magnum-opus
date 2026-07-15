@@ -1,0 +1,30 @@
+# DEV deploy for sonsteng-dev.damienriehl.com — static site behind Coolify's Traefik.
+# Standalone compose (woodshed pattern): joins the external `coolify` network, publishes
+# no ports, Traefik routes by Host and issues Let's Encrypt via HTTP-01.
+services:
+  sonsteng:
+    image: nginx:alpine
+    container_name: sonsteng
+    restart: unless-stopped
+    volumes:
+      - ../site:/usr/share/nginx/html:ro
+    networks: [coolify]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      # HTTPS router
+      - traefik.http.routers.sonsteng.rule=Host(`sonsteng-dev.damienriehl.com`)
+      - traefik.http.routers.sonsteng.entrypoints=https
+      - traefik.http.routers.sonsteng.tls=true
+      - traefik.http.routers.sonsteng.tls.certresolver=letsencrypt
+      - traefik.http.routers.sonsteng.service=sonsteng
+      - traefik.http.services.sonsteng.loadbalancer.server.port=80
+      # HTTP -> HTTPS redirect
+      - traefik.http.routers.sonsteng-http.rule=Host(`sonsteng-dev.damienriehl.com`)
+      - traefik.http.routers.sonsteng-http.entrypoints=http
+      - traefik.http.routers.sonsteng-http.middlewares=sonsteng-redirect
+      - traefik.http.middlewares.sonsteng-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.sonsteng-redirect.redirectscheme.permanent=true
+networks:
+  coolify:
+    external: true
