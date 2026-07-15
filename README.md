@@ -21,13 +21,19 @@ C-LAB × IGUL / Bahçeşehir University) and [Trialbook](https://trialbook.org/)
 | `site/index.html` | Single-page **walkthrough website** — the pitch to walk John & Roger through. Self-contained (embedded fonts, no external requests); has a built-in reaction-capture panel. |
 | `docs/brainstorms/2026-07-15-magnum-opus-brainstorm.md` | The brainstorm: decisions, source-corpus inventory, the centaur model, and open questions. |
 
-## View the site
+## Deployments
 
-```bash
-cd site && python3 -m http.server 8791   # then open http://localhost:8791
-```
+| Env | URL | Host | Deploy |
+|-----|-----|------|--------|
+| **PROD** | https://sonsteng.damienriehl.com | Cloudflare Pages (project `sonsteng`) | `bash deploy/deploy-prod.sh` |
+| **DEV** | https://sonsteng-dev.damienriehl.com | Hetzner box, nginx behind Coolify/Traefik | `bash deploy/deploy-dev.sh` |
 
-Or open the hosted Artifact (see the project chat).
+- **PROD** — Cloudflare Pages direct-upload of `site/` (no build). Re-run the script after edits; same URL. Custom domain + proxied CNAME already wired.
+- **DEV** — standalone `deploy/docker-compose.yml` (nginx:alpine serving `site/`) on the box's external `coolify` Docker network, routed by Traefik with a Let's Encrypt cert. DNS is a grey-cloud A record → the box.
+  - ⚠️ The DEV stack uses an explicit Compose project name (`-p sonsteng`) and **must not** use `--remove-orphans` — other stacks on the box put their compose file in a dir also named `deploy`, so a shared default project name + `--remove-orphans` will remove *their* containers. (Learned the hard way.)
+
+**Local preview:** `cd site && python3 -m http.server 8791` → http://localhost:8791
+**Hosted walkthrough (private Artifact):** see the project chat.
 
 ## The idea in one breath
 
