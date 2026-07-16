@@ -476,9 +476,133 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
   <p class="muted" style="margin-top:22px;max-width:66ch">This is the differentiator. Peers build AI judges or AI witnesses; we bind a named scholar's life work, an open curriculum, and a <em>faculty-anchored</em> centaur into one system — in the NITA tradition of learning by doing, finally at scale. And we've already shipped generation one: <b>Trialbook's</b> AI companions prove the model works.</p>
 </div></section>
 
-<!-- VII — WHERE IT LIVES -->
+<!-- VII — COVERAGE -->
+<style>
+/* VII — coverage matrix + method triads */
+#coverage .cov-lead{max-width:66ch}
+#coverage .cov-note{font-style:italic;color:var(--ink-faint);font-size:.95rem;max-width:66ch;margin-top:12px}
+.covmap{display:grid;gap:1px;margin:22px 0 6px;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--line)}
+.covmap .ch,.covrow{display:grid;grid-template-columns:1.55fr 1.5fr .95fr 1.35fr;gap:16px;align-items:center;padding:12px 18px;background:rgba(255,255,255,.55)}
+.covmap .ch{background:rgba(124,30,43,.07);font-family:'Fraunces',serif;font-weight:600;font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:var(--claret)}
+.covrow .cs{font-family:'Fraunces',serif;font-weight:600;font-size:.99rem;color:var(--ink);line-height:1.25}
+.covrow .cs b{display:inline-block;min-width:1.5em;color:var(--brass);font-weight:700;font-size:.82rem}
+.covrow .ca,.covrow .cst,.covrow .cai{font-size:.9rem;color:var(--ink-soft);line-height:1.3}
+.covrow .cst{font-variant:small-caps;letter-spacing:.02em}
+.covrow .cai{color:var(--green);font-weight:600}
+@media(max-width:720px){
+  .covmap .ch{display:none}
+  .covrow{grid-template-columns:1fr;gap:6px;padding:15px 16px}
+  .covrow .ca::before{content:'Anchored in — ';color:var(--ink-faint);font-weight:400}
+  .covrow .cst::before{content:'Stage — ';color:var(--ink-faint);font-variant:normal}
+  .covrow .cai::before{content:'AI — ';color:var(--ink-faint);font-weight:400}
+}
+/* method triad cluster cards */
+.cov .layer.tri{display:block}
+.tri-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:6px}
+.tri-head h3{font-size:1.16rem;margin:0}
+.tri-sk{font-size:.8rem;color:var(--ink-faint);font-style:italic}
+.trirow{display:grid;grid-template-columns:132px 1fr;gap:18px;align-items:start;padding:12px 0;border-top:1px solid var(--line-soft)}
+@media(max-width:560px){.trirow{grid-template-columns:1fr;gap:4px}}
+.trilab{font-family:'Fraunces',serif;font-weight:700;font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;padding-top:3px}
+.trilab.son{color:var(--claret)}
+.trilab.imp{color:var(--brass)}
+.trilab.ai{color:var(--green)}
+.trirow p{font-size:.98rem;color:var(--ink-soft);margin:0;line-height:1.5}
+.trirow p b{color:var(--ink);font-weight:600}
+</style>
+<section id="coverage" class="band cov"><div class="wrap reveal">
+  <div class="sec-head"><span class="sec-num">VII</span><div><span class="eyebrow">The coverage · every skill, mapped</span><h2>Every skill — <em>taught</em>, improved, and amplified.</h2></div></div>
+  <p class="lead-para muted cov-lead">The survey named the whole job — 17 practice skills, 9 management skills — and showed school leading on only seven. The Practicum is designed backward from that list: <b>every one of the 26 skills has a home in an exercise, a stage in the teaching cycle, and a human-anchored AI amplification.</b> Nothing is assumed; each skill is graded work.</p>
+  <p class="cov-note">Sonsteng's method below is drawn from his articles and the live Skills Practicum. The <span style="color:var(--brass);font-style:normal;font-weight:600">improvements</span> and the <span style="color:var(--green);font-style:normal;font-weight:600">AI amplification</span> are our proposed layer over that proven method — never a replacement for it.</p>
+
+  <div class="statline" style="margin:26px 0 8px">
+    <div class="stat"><b>7/17 · 0/9</b><span>what school leads today</span></div>
+    <div class="stat"><b>17/17 · 9/9</b><span>what the Practicum reaches</span></div>
+    <div class="stat"><b>3</b><span>stages each skill passes · prepare · perform · integrate</span></div>
+  </div>
+
+  <p class="gaphint">The 17 legal-practice skills — where the curriculum puts each one</p>
+  <div class="covmap">
+    <div class="ch"><span>Skill</span><span>Anchored in</span><span>Stage</span><span>AI amplification</span></div>
+    <div class="covrow"><span class="cs"><b>1</b>Diagnose &amp; plan solutions</span><span class="ca">Every matter · the 4-page case-analysis memo</span><span class="cst">Prepare</span><span class="cai">AI intake + issue-spot spar</span></div>
+    <div class="covrow"><span class="cs"><b>2</b>Legal analysis &amp; reasoning</span><span class="ca"><em>In re Halbrock</em> · briefs</span><span class="cst">All three</span><span class="cai">Reasoning spar · rubric critic</span></div>
+    <div class="covrow"><span class="cs"><b>3</b>Knowledge of substantive law</span><span class="ca"><em>Reagan</em> · tort doctrine</span><span class="cst">Prepare</span><span class="cai">Adaptive doctrine drills</span></div>
+    <div class="covrow"><span class="cs"><b>4</b>Knowledge of procedural law</span><span class="ca"><em>Reagan</em> · pleadings → verdict</span><span class="cst">Perform</span><span class="cai">Simulated docket + rule checks</span></div>
+    <div class="covrow"><span class="cs"><b>5</b>Library legal research</span><span class="ca"><em>Halbrock</em> / <em>SSHC</em> · authorities</span><span class="cst">Prepare</span><span class="cai">Citation-verify gate</span></div>
+    <div class="covrow"><span class="cs"><b>6</b>Computer legal research</span><span class="ca"><em>SSHC</em> · injunction memo</span><span class="cst">Prepare</span><span class="cai">Research spar, verified sources</span></div>
+    <div class="covrow"><span class="cs"><b>7</b>Factual (fact) gathering</span><span class="ca"><em>Midstate</em> · statements &amp; discovery</span><span class="cst">Perform</span><span class="cai">AI witnesses &amp; documents to mine</span></div>
+    <div class="covrow"><span class="cs"><b>8</b>Oral communication</span><span class="ca"><em>Midstate</em> · direct &amp; cross</span><span class="cst">Perform</span><span class="cai">AI witness + bench questioning</span></div>
+    <div class="covrow"><span class="cs"><b>9</b>Written communication</span><span class="ca">All · the 7 four-page memos</span><span class="cst">Integrate</span><span class="cai">Instant rubric redline</span></div>
+    <div class="covrow"><span class="cs"><b>10</b>Counseling</span><span class="ca"><em>Peters</em> · advice; <em>James</em> · plea</span><span class="cst">Perform</span><span class="cai">AI client to advise</span></div>
+    <div class="covrow"><span class="cs"><b>11</b>Instilling others' confidence</span><span class="ca">Firm sim · client letters</span><span class="cst">Perform</span><span class="cai">AI client trust signals</span></div>
+    <div class="covrow"><span class="cs"><b>12</b>Obtain &amp; keep clients</span><span class="ca">Firm sim · representation agreements</span><span class="cst">Integrate</span><span class="cai">Simulated intake &amp; pitch</span></div>
+    <div class="covrow"><span class="cs"><b>13</b>Negotiation</span><span class="ca"><em>Peters</em> · 3-way; <em>SSHC</em> · settlement</span><span class="cst">Perform</span><span class="cai">AI counterpart, any posture</span></div>
+    <div class="covrow"><span class="cs"><b>14</b>Understanding &amp; conducting litigation</span><span class="ca"><em>Reagan</em> · full-day jury trial</span><span class="cst">Perform</span><span class="cai">AI opposing counsel + judge panel</span></div>
+    <div class="covrow"><span class="cs"><b>15</b>Organization &amp; management of work</span><span class="ca">Firm sim · 13 time sheets, billing</span><span class="cst">Integrate</span><span class="cai">AI matter / PM assistant</span></div>
+    <div class="covrow"><span class="cs"><b>16</b>Professional &amp; ethical concerns</span><span class="ca"><em>In re Halbrock</em> · OLPR panel</span><span class="cst">All three</span><span class="cai">Dilemma simulator + coach</span></div>
+    <div class="covrow"><span class="cs"><b>17</b>Drafting legal documents</span><span class="ca"><em>Peters</em> · purchase agreement; all pleadings</span><span class="cst">Perform</span><span class="cai">Clause-level rubric critique</span></div>
+  </div>
+  <p class="muted" style="font-size:.9rem;margin:10px 0 0">The 9 management skills — the blackout school leads on <em>none</em> of — live in cluster <b>F</b> below: the working-firm overlay of agreements, time sheets, and billing.</p>
+
+  <p class="section-sub" style="margin-top:40px">The method — Sonsteng's approach, our improvement, the AI at each stage</p>
+  <div class="layers" style="display:grid;gap:16px">
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>A · Analysis, research &amp; doctrine</h3><span class="tri-sk">skills 1–6 · where school already leads</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p>Keeps the doctrinal rigor school does well — legal reasoning, procedural law, research — but tethers every analysis task to a live matter file. The four-page case-analysis memo forces governing law, both sides' strengths, the elements to prevail, and a recommended path, <b>checked by a short paper or oral exercise before the room convenes</b> (FSS-I).</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Make doctrine <b>adaptive</b> — re-drill the elements a student keeps missing — and route every cited authority through a verification gate, so a confident-but-wrong citation can't reach the client's memo.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>An always-on reasoning spar that argues the other side of any rule, plus instant rubric critique that flags a mis-stated standard of review in seconds — the FSS-I competence check, available at 2&nbsp;a.m.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>B · Fact investigation &amp; case theory</h3><span class="tri-sk">skills 1 &amp; 7 · learned on the job today</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p>The Midstate files hand students a <b>mess</b> — witness statements, exhibits, discovery — not a tidy hypothetical, and grade diagnosis and fact-gathering as first-class work. <em>Midstate v. Rogers</em> turns on developing one witness per side; <em>Reagan</em>'s stipulated diagram is the load-bearing exhibit.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Make the record <b>interrogable</b> — witnesses and documents a student can actually question — so fact-gathering becomes an act, not a reading, and gaps surface as costed risks the way they do in practice.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>AI witnesses and clients answer follow-ups in character, and an AI "opposing theory" pressure-tests the case so weak facts are found in the practicum, not at trial.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>C · Drafting &amp; legal writing</h3><span class="tri-sk">skills 9 &amp; 17 · the graded core</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p>Roughly <b>1,438 graded points</b> ride on written product — 7 four-page memos, pleadings, briefs, agreements — under strict page limits that force concision. Anything scored below 6 is re-written within a week against the same rubric, submitted as a redline. Writing is taught as <b>revision, not inspiration</b>.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Keep rubric-and-repeat but collapse its latency: the re-write no longer waits a week for a human read, and feedback lands at the <b>clause level</b> — specific enough to act on immediately.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>Instant, rubric-anchored redlines on every draft — unlimited, judgment-free reps — while faculty hours move to the passages where judgment, not form, is the issue.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>D · Oral advocacy &amp; litigation</h3><span class="tri-sk">skills 8 &amp; 14 · the reps that only happen live</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p>The IRP core, in trial garb: arbitration hearings, PR argument before a judge and two OLPR panelists, DWI bench trials before Judge Olmstead, and the capstone — a <b>full-day jury trial</b> in <em>Reagan v. Jacobson</em>, pleadings through verdict, with volunteer jurors deliberating.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Give <b>unlimited private reps before the graded live one</b>, so scarce, high-stakes courtroom hours are spent on polish and presence, not first attempts.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>AI witnesses to cross, AI opposing counsel to answer, and an AI judge panel that rules on the identical record and returns a distribution — the same adversarial engine already running on real matters.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>E · Negotiation &amp; counseling</h3><span class="tri-sk">skills 10 &amp; 13 · a person, not a worksheet</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p><em>Peters, Taylor &amp; Thomas</em> is a three-way negotiation with <b>confidential facts distributed per side</b>; <em>State v. James</em> runs plea talks into a hearing; <em>SSHC</em> ends in a settlement conference. The graded strategic settlement &amp; negotiation plan (SSNP) makes the strategy explicit.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Let a student run the same negotiation <b>ten times against ten temperaments</b>, then debrief which moves travel and which were luck — turning one rep into a distribution.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>An AI counterpart or client that holds any posture on command — hostile, anxious, sophisticated — so counseling and bargaining are rehearsed against variety no single classroom can stage.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>F · Clients, trust &amp; the business of law</h3><span class="tri-sk">skills 11, 12, 15 + the 9 management skills · school leads on none</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p>The course runs as a <b>working firm</b> — two-person partnerships with their own letterhead, representation agreements, and 13 weekly time sheets feeding client billing statements. These are the business skills school credits for none of the nine, taught here because a practice <em>is</em> a business.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Surface the economics the way a partner sees them — every task carries a <b>notional cost and a client-facing bill</b> — so students feel the cost of over-lawyering before a real client pays for it.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>A simulated intake, pitch, and billing cycle with an AI client whose confidence tracks competence and candor — the market feedback a classroom can't otherwise give.</p></div>
+    </div>
+
+    <div class="layer tri">
+      <div class="tri-head"><h3>G · Professional responsibility &amp; judgment</h3><span class="tri-sk">skill 16 · school leads, Sonsteng deepens</span></div>
+      <div class="trirow"><span class="trilab son">Sonsteng</span><p><em>In re Halbrock</em> argues an attorney-discipline matter before a judge and two OLPR panelists — <b>professional responsibility as advocacy under questioning</b>, not a multiple-choice afterthought — turning a skill school already leads into a live oral crucible.</p></div>
+      <div class="trirow"><span class="trilab imp">Improvement</span><p>Wire the ethical check into <b>every exercise</b>, not one dedicated matter — a fabrication or a confidentiality slip is caught wherever it happens, mirroring a fail-closed guardrail.</p></div>
+      <div class="trirow"><span class="trilab ai">AI amplifies</span><p>A dilemma simulator that escalates the hard facts, plus a coach who reserves the human hour for the "why" — the judgment, ethics, and presence machines can flag but can't teach.</p></div>
+    </div>
+
+  </div>
+  <div class="pull"><q>School leads on seven. The Practicum — human-anchored, AI-amplified — reaches all twenty-six.</q><cite>Sonsteng's method, faithfully extended · the improvements &amp; AI are the proposed layer</cite></div>
+</div></section>
+
+<!-- VIII — WHERE IT LIVES -->
 <section id="where"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">VII</span><div><span class="eyebrow">Open by design · where it lives · the ask</span><h2>Given away, so it outlives us.</h2></div></div>
+  <div class="sec-head"><span class="sec-num">VIII</span><div><span class="eyebrow">Open by design · where it lives · the ask</span><h2>Given away, so it outlives us.</h2></div></div>
   <div class="cols">
     <div>
       <p class="lead-para">The opus is <strong>open source and MIT-licensed</strong>, extending the open-access spirit of the Resource Tool. A movement to remake how advocates are trained can't be locked in a paywall — it has to be free to copy, adapt to any jurisdiction, and improve. That's how a life's work becomes a standard.</p>
@@ -504,15 +628,16 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
   </div>
 </div></section>
 
-<!-- VIII — REACT -->
+<!-- IX — REACT -->
 <section id="react" class="band"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">VIII</span><div><span class="eyebrow">Capture reactions — walk through live</span><h2>Your read on each pillar.</h2></div></div>
+  <div class="sec-head"><span class="sec-num">IX</span><div><span class="eyebrow">Capture reactions — walk through live</span><h2>Your read on each pillar.</h2></div></div>
   <p class="muted" style="max-width:64ch;margin-bottom:24px">Two ways to give feedback as we walk through: tap a <b>✎ pencil</b> beside any section or card to leave a comment tied to that spot, and/or set an overall reaction per pillar below. Everything gathers in <b>✎ Comments</b> (bottom-right) → <b>Copy all for Damien</b> to paste back into the chat.</p>
   <div class="fb" id="fb">
     <div class="fbrow" data-k="Vision &amp; why-now"><h3>Vision &amp; why-now</h3><div class="opts"></div><textarea placeholder="John / Roger's notes on the vision…"></textarea></div>
     <div class="fbrow" data-k="The evidence (17+9 skills survey)"><h3>The evidence — the skills survey</h3><div class="opts"></div><textarea placeholder="Do the 17+9 skills &amp; the gap chart land right? Any numbers to refine?"></textarea></div>
     <div class="fbrow" data-k="The Magnum Opus (book + curriculum + platform)"><h3>The layered Opus</h3><div class="opts"></div><textarea placeholder="Is the book+curriculum+platform framing right? What's missing?"></textarea></div>
     <div class="fbrow" data-k="The Practicum structure"><h3>The Practicum structure</h3><div class="opts"></div><textarea placeholder="Skills, exercises, the firm-simulation model…"></textarea></div>
+    <div class="fbrow" data-k="Skills coverage (approach + improvements + AI)"><h3>The skills-coverage matrix</h3><div class="opts"></div><textarea placeholder="Does the all-26-skills map hold? Any skill mis-anchored, any improvement or AI amplification to change?"></textarea></div>
     <div class="fbrow" data-k="The Centaur (human + AI) model"><h3>The Centaur model</h3><div class="opts"></div><textarea placeholder="Does the human-anchored AI model feel right?"></textarea></div>
     <div class="fbrow" data-k="Open / MIT &amp; where it lives"><h3>Open / MIT &amp; where it lives</h3><div class="opts"></div><textarea placeholder="Institutional home, licensing, names on the door…"></textarea></div>
     <div class="fbrow" data-k="The flagship first build"><h3>The flagship — build first</h3><div class="opts"></div><textarea placeholder="Which single skill / Midstate exercise do we prove first?"></textarea></div>
