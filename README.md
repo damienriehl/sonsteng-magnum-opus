@@ -61,6 +61,13 @@ simulator you need an API backend — either:
    `ANTHROPIC_API_KEY` (enables the keyless hosted pool with a $10/day cap), then
    `npx wrangler@4 deploy`; point the site at it via the `sonsteng-api` meta tag.
 
+The Worker unit tests need no `npm install` (Node's built-in runner, Node ≥ 20):
+```bash
+cd app/worker && node --test test/*.test.js        # 56 tests
+```
+(`test/redteam.mjs` is an adversarial probe, not a unit test — it needs a live
+Worker URL + API key; run it separately, not via the glob.)
+
 Regenerate the site after editing any spine data:
 ```bash
 python3 tools/validate_spine.py && python3 tools/build_site.py --check

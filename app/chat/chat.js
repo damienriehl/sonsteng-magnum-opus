@@ -117,6 +117,10 @@
     '.chat-wrap{max-width:52rem;margin:0 auto;padding:var(--sp-6) var(--gutter) var(--sp-16)}',
     '.chat-topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;padding-top:var(--sp-6)}',
     '.chat-topbar .brand{font-family:var(--font-display);font-weight:900;font-size:var(--fs-md);letter-spacing:-.01em}',
+    /* the shared segmented-toggle primitive is ~28px tall; bump the type-size */
+    /* toggle to a 44px touch target on the chat page (WCAG 2.5.5), esp. since */
+    /* it is itself an accessibility control used on mobile. */
+    '.chat-topbar .segmented-toggle button{min-height:44px;display:inline-flex;align-items:center}',
     '.chat-head h1{font-size:var(--fs-xl);margin:var(--sp-3) 0 var(--sp-2)}',
     '.chat-head .who{font-family:var(--font-body);color:var(--ink-soft);margin:0}',
     '.chat-head .who .role{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);margin-left:.5em}',
@@ -137,6 +141,9 @@
     '.chambers__actions{display:flex;gap:var(--sp-6);align-items:center;flex-wrap:wrap}',
     '.composer{display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-8)}',
     '.composer textarea{width:100%;min-height:118px;font-family:var(--font-body);font-size:1.18rem;line-height:1.5;color:var(--ink);background:var(--paper);border:var(--rule) solid var(--line);border-left:var(--rule-bold) solid var(--brass);border-radius:var(--radius);padding:var(--sp-3) var(--sp-6);resize:vertical}',
+    /* large-type mode must scale the student's OWN input too, not just the client's
+       replies — otherwise a low-vision user types into small text. */
+    'html.type-lg .composer textarea{font-size:1.42rem}',
     '.composer__row{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-3);flex-wrap:wrap}',
     '.composer__hint{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint);text-transform:uppercase;letter-spacing:.08em}',
     '.btn{font-family:var(--font-mono);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.08em;min-height:48px;padding:0 var(--sp-8);cursor:pointer;border-radius:var(--radius);border:var(--rule) solid var(--claret);background:var(--claret);color:var(--ink-invert);transition:opacity var(--dur) var(--ease)}',
@@ -166,6 +173,7 @@
     '.ethics-line .pos{color:var(--green)}.ethics-line .neg{color:var(--claret)}',
     '.reflect{margin-top:var(--sp-8)}',
     '.reflect textarea{width:100%;min-height:96px;font-family:var(--font-body);font-size:1.1rem;background:var(--paper);border:var(--rule) solid var(--line);border-left:var(--rule-bold) solid var(--green);border-radius:var(--radius);padding:var(--sp-3) var(--sp-6);resize:vertical}',
+    'html.type-lg .reflect textarea{font-size:1.32rem}',
     '.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}'
   ].join('\n');
 

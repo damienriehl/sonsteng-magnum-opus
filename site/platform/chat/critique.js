@@ -36,9 +36,30 @@
   if (cfg.apiParam) { try { localStorage.setItem('sonsteng_api', cfg.apiParam.replace(/\/+$/, '')); } catch (e) {} }
 
   /* per-tab session token (shared with chat), probe-write storage */
+  var K_SESS = 'sonsteng_sess';
   function ss(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
   function sessionToken() {
-    try { var s = JSON.parse(ss('sonsteng_sess') || 'null'); return s && s.session_token ? s.session_token : ''; } catch (e) { return ''; }
+    try { var s = JSON.parse(ss(K_SESS) || 'null'); return s && s.session_token ? s.session_token : ''; } catch (e) { return ''; }
+  }
+
+  /* Mint a session if this tab has none yet. The critique galley is deep-linked
+     straight from the matter packet (chat/critique.html?matter=…), so it can't
+     assume the interview room already minted a token in this tab — without this,
+     every submit would 401 (session_invalid) before the key/hosted-key path is
+     ever reached. Reuses an existing per-tab token (shared with chat.js) when
+     present. Idempotent; safe to call repeatedly. */
+  var minting = null;
+  function ensureSession() {
+    if (sessionToken()) return Promise.resolve();
+    if (minting) return minting;
+    var path = '/v1/session';
+    if (cfg.bypass) path += '?bypass=' + encodeURIComponent(cfg.bypass); // query only; never logged/rendered
+    minting = api(path, { method: 'GET' }).then(function (out) {
+      minting = null;
+      if (out.ok && out.data && out.data.session_token) { ssSet(K_SESS, JSON.stringify(out.data)); }
+    }, function () { minting = null; });
+    return minting;
   }
 
   function api(path, opts) {
@@ -157,6 +178,10 @@
     ta.addEventListener('input', updateCount);
     paste.addEventListener('submit', function (e) { e.preventDefault(); run(); });
     updateCount();
+
+    /* mint a session up front so the first submit is ready to go (no-op if this
+       tab already carries a token from the interview room). */
+    ensureSession();
   }
 
   function updateCount() {
@@ -181,6 +206,9 @@
     considering.appendChild(el('span', null, 'The grader is reading your draft'));
     refs.mount.appendChild(considering);
 
+    // Ensure this tab has a session token before we send (deep-linked galley may
+    // have no prior interview in the tab). ensureSession is a no-op when present.
+    ensureSession().then(function () {
     var body = { session_token: sessionToken(), matter_id: cfg.matter_id, deliverable_text: text };
     if (cfg.bypass) body.bypass = cfg.bypass;
     var byok = window.SonstengBYOK && window.SonstengBYOK.get();
@@ -206,6 +234,11 @@
           oversizeOrNotice('That draft is too long', e.message || 'Trim your draft and try again.');
         } else if (e.code === 'cap_exceeded') {
           oversizeOrNotice('Demo budget spent', e.in_character || 'Demo budget for today is spent — come back tomorrow or bring your own key.');
+        } else if (e.code === 'session_invalid' || e.code === 'origin_forbidden') {
+          // token expired/invalid — drop it so the next submit re-mints, and tell
+          // the student to try once more rather than showing a dead-end error.
+          try { sessionStorage.removeItem(K_SESS); } catch (x) {}
+          oversizeOrNotice('Session expired', 'Your review session lapsed. Submit again and it will reconnect — your draft is still in the box above.');
         } else {
           oversizeOrNotice('Couldn’t complete the critique', e.message || 'The grader didn’t respond just now. Please try again in a moment.');
         }
@@ -214,6 +247,7 @@
       busy = false; refs.submit.disabled = false; refs.submit.textContent = 'Submit for critique';
       refs.mount.textContent = '';
       oversizeOrNotice('Couldn’t reach the grader', 'The critique server didn’t answer. Check your connection or API address and try again.');
+    });
     });
   }
 
