@@ -1,0 +1,419 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/taxonomy/skills",
+  "spine_version": "1.0.0",
+  "description": "Sonsteng's 17 Legal Practice + 9 Law Practice Management skills (exact survey names, both phrasings preserved) plus a clearly-marked AI-era extension set. Survey importance/preparedness from reliable tables in docs/research/skills-survey.md (Table 4 management-importance percentages deliberately omitted as unreliable).",
+  "surveyed_count": 26,
+  "extension_count": 5,
+  "skills": [
+    {
+      "id": "SK-LP-01",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-01",
+      "name": "Ability to diagnose and plan solutions for legal problems",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 96.1
+      }
+    },
+    {
+      "id": "SK-LP-02",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-02",
+      "name": "Ability in legal analysis and reasoning",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true,
+      "survey": {
+        "importance": 96.8,
+        "preparedness": 84.3
+      }
+    },
+    {
+      "id": "SK-LP-03",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-03",
+      "name": "Knowledge of substantive law",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-04",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-04",
+      "name": "Knowledge of procedural law",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-05",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-05",
+      "name": "Library legal research",
+      "category": "legal_practice",
+      "extension": false,
+      "alt_name": "Skills to conduct legal library research",
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 28.5
+      }
+    },
+    {
+      "id": "SK-LP-06",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-06",
+      "name": "Computer legal research",
+      "category": "legal_practice",
+      "extension": false,
+      "alt_name": "Knowledge of computer legal research",
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 87.1,
+        "preparedness": 81.7
+      }
+    },
+    {
+      "id": "SK-LP-07",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-07",
+      "name": "Fact gathering",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "RVZJBUCRB7cgWN1CIbeJJq",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "SK-LP-08",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-08",
+      "name": "Oral communication",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true,
+      "survey": {
+        "importance": 96.0,
+        "preparedness": 72.7
+      }
+    },
+    {
+      "id": "SK-LP-09",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-09",
+      "name": "Written communication",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true,
+      "survey": {
+        "importance": 97.4,
+        "preparedness": 78.6
+      }
+    },
+    {
+      "id": "SK-LP-10",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-10",
+      "name": "Counseling",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 86.4,
+        "preparedness": 39.1
+      }
+    },
+    {
+      "id": "SK-LP-11",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-11",
+      "name": "Instilling others' confidence in you",
+      "category": "legal_practice",
+      "extension": false,
+      "alt_name": "The ability to instill others' confidence in their work",
+      "no_folio_equivalent": true,
+      "survey": {
+        "importance": 89.0,
+        "preparedness": 42.0
+      }
+    },
+    {
+      "id": "SK-LP-12",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-12",
+      "name": "Ability to obtain and keep clients",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "R81n0uoiTFQMwwdzAskqkZD",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 80.4,
+        "preparedness": 10.0
+      }
+    },
+    {
+      "id": "SK-LP-13",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-13",
+      "name": "Negotiation",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 86.2,
+        "preparedness": 43.6
+      }
+    },
+    {
+      "id": "SK-LP-14",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-14",
+      "name": "Litigation",
+      "category": "legal_practice",
+      "extension": false,
+      "alt_name": "Understanding and conducting litigation",
+      "folio": {
+        "iri": "R79LjWBKHCdmQKEW6zPY8Co",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 71.5,
+        "preparedness": 28.7
+      }
+    },
+    {
+      "id": "SK-LP-15",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-15",
+      "name": "Organization and management of legal work",
+      "category": "legal_practice",
+      "extension": false,
+      "folio": {
+        "iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "importance": 85.2,
+        "preparedness": 30.7
+      }
+    },
+    {
+      "id": "SK-LP-16",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-16",
+      "name": "Sensitivity to professional and ethical concerns",
+      "category": "legal_practice",
+      "extension": false,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-17",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-17",
+      "name": "Drafting legal documents",
+      "category": "legal_practice",
+      "extension": false,
+      "alt_name": "Ability to draft legal documents",
+      "no_folio_equivalent": true,
+      "survey": {
+        "importance": 91.0,
+        "preparedness": 45.0
+      }
+    },
+    {
+      "id": "SK-PM-01",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-01",
+      "name": "Fee arrangements, pricing, billing",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "RgV0GDy1p5PQCXleadL2hV",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "preparedness": 9.0
+      }
+    },
+    {
+      "id": "SK-PM-02",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-02",
+      "name": "Human resources, hiring, support staff",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      },
+      "survey": {
+        "preparedness": 8.9
+      }
+    },
+    {
+      "id": "SK-PM-03",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-03",
+      "name": "Capitalization, investment",
+      "category": "practice_management",
+      "extension": false,
+      "no_folio_equivalent": true,
+      "survey": {
+        "preparedness": 4.0
+      }
+    },
+    {
+      "id": "SK-PM-04",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-04",
+      "name": "Project and time management, efficiency",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "R9ScBHXlUfa31SlBnKmDarJ",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "preparedness": 40.3
+      }
+    },
+    {
+      "id": "SK-PM-05",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-05",
+      "name": "Planning, resource allocation, budgeting",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "RW7P6EPg4NMe8dhyO52jzl",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "preparedness": 13.7
+      }
+    },
+    {
+      "id": "SK-PM-06",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-06",
+      "name": "Marketing, client development",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "R81n0uoiTFQMwwdzAskqkZD",
+        "mapping_confidence": "near"
+      },
+      "survey": {
+        "preparedness": 10.2
+      }
+    },
+    {
+      "id": "SK-PM-07",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-07",
+      "name": "Technology, computers, communications",
+      "category": "practice_management",
+      "extension": false,
+      "no_folio_equivalent": true,
+      "survey": {
+        "preparedness": 53.4
+      }
+    },
+    {
+      "id": "SK-PM-08",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-08",
+      "name": "Governance, decision-making, long-range strategic planning",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      },
+      "survey": {
+        "preparedness": 13.4
+      }
+    },
+    {
+      "id": "SK-PM-09",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-09",
+      "name": "Interpersonal communications, staff relations",
+      "category": "practice_management",
+      "extension": false,
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      },
+      "survey": {
+        "preparedness": 39.6
+      }
+    },
+    {
+      "id": "SK-LP-18",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-18",
+      "name": "Prompt formulation and iteration",
+      "category": "legal_practice",
+      "extension": true,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-19",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-19",
+      "name": "AI-output verification and citation checking",
+      "category": "legal_practice",
+      "extension": true,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-20",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-20",
+      "name": "Centaur workflow judgment",
+      "category": "legal_practice",
+      "extension": true,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-LP-21",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-21",
+      "name": "Confidentiality and privilege protection in AI-assisted work",
+      "category": "legal_practice",
+      "extension": true,
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "SK-PM-10",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-PM-10",
+      "name": "Data and matter hygiene with AI tools",
+      "category": "practice_management",
+      "extension": true,
+      "no_folio_equivalent": true
+    }
+  ]
+}

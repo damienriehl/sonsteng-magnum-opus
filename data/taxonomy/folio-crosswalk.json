@@ -1,0 +1,916 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/taxonomy/folio-crosswalk",
+  "verified_at": "2026-07-17",
+  "source": "folio MCP live retrieval",
+  "description": "FOLIO crosswalk for every skill and every primary task. Each entry either records a verified FOLIO concept {folio_iri, folio_label (as retrieved), branch, mapping_confidence in exact|near|parent} or declares no_folio_equivalent with a note. This snapshot is the offline source of truth; the ship gate validates against it, not live MCP.",
+  "skills": [
+    {
+      "id": "SK-LP-01",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-02",
+      "no_folio_equivalent": true,
+      "note": "FOLIO Services models delivered service types, not the cross-cutting cognitive skill of legal analysis and reasoning; the skill's concrete tasks map to Opinion Memo Practice and Legal Argument."
+    },
+    {
+      "id": "SK-LP-03",
+      "no_folio_equivalent": true,
+      "note": "Substantive-law knowledge spans FOLIO's areas_of_law branch generally rather than any single service concept; the skill's tasks map to specific practice and research concepts."
+    },
+    {
+      "id": "SK-LP-04",
+      "no_folio_equivalent": true,
+      "note": "Procedural-law knowledge is embodied across Litigation, Trial Court, and Appellate Practice; no single FOLIO concept captures the knowledge competency itself."
+    },
+    {
+      "id": "SK-LP-05",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-06",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-07",
+      "folio_iri": "RVZJBUCRB7cgWN1CIbeJJq",
+      "folio_label": "Fact Investigation and Development",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-08",
+      "no_folio_equivalent": true,
+      "note": "Oral communication is a generic delivery skill with no FOLIO service equivalent; its tasks map to Trial Court Practice, Advisory Service, and Settlement/Demand/Collection Practice."
+    },
+    {
+      "id": "SK-LP-09",
+      "no_folio_equivalent": true,
+      "note": "Written communication is a generic skill; concrete tasks map to Letter Communication, Opinion Memo Practice, and Appellate Practice."
+    },
+    {
+      "id": "SK-LP-10",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-11",
+      "no_folio_equivalent": true,
+      "note": "Instilling confidence is an interpersonal skill with no FOLIO equivalent; the nearest adjacent firm concept is CRM Management."
+    },
+    {
+      "id": "SK-LP-12",
+      "folio_iri": "R81n0uoiTFQMwwdzAskqkZD",
+      "folio_label": "Business Development Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-13",
+      "folio_iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+      "folio_label": "Settlement, Demand, and Collection Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-14",
+      "folio_iri": "R79LjWBKHCdmQKEW6zPY8Co",
+      "folio_label": "Litigation Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-15",
+      "folio_iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+      "folio_label": "Matter Management Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-LP-16",
+      "no_folio_equivalent": true,
+      "note": "FOLIO has no legal-ethics / professional-responsibility service concept; the skill's tasks map to Conflicts Management, Risk Management, and Billing Management (trust duties)."
+    },
+    {
+      "id": "SK-LP-17",
+      "no_folio_equivalent": true,
+      "note": "FOLIO has no generic legal-drafting concept; drafting is embodied across Purchase and Sale, Estate Management, Engagement Letter, and litigation-document concepts to which the tasks map."
+    },
+    {
+      "id": "SK-PM-01",
+      "folio_iri": "RgV0GDy1p5PQCXleadL2hV",
+      "folio_label": "Billing Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-PM-02",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "SK-PM-03",
+      "no_folio_equivalent": true,
+      "note": "FOLIO's Business of Law branch has no firm-capitalization / investment concept; the nearest adjacent concept is Budgeting Management."
+    },
+    {
+      "id": "SK-PM-04",
+      "folio_iri": "R9ScBHXlUfa31SlBnKmDarJ",
+      "folio_label": "Project Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-PM-05",
+      "folio_iri": "RW7P6EPg4NMe8dhyO52jzl",
+      "folio_label": "Budgeting Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-PM-06",
+      "folio_iri": "R81n0uoiTFQMwwdzAskqkZD",
+      "folio_label": "Business Development Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "SK-PM-07",
+      "no_folio_equivalent": true,
+      "note": "FOLIO's technology concepts (Records, Information Governance, Email Management) are narrow tooling categories, not the firm-IT competency; mapped no-equivalent at the skill level, with tasks mapping to those tooling concepts."
+    },
+    {
+      "id": "SK-PM-08",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "SK-PM-09",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "SK-LP-18",
+      "no_folio_equivalent": true,
+      "note": "AI-era competency not yet modeled in FOLIO; candidate for an upstream contribution to the FOLIO Services / Legal Use Cases branches."
+    },
+    {
+      "id": "SK-LP-19",
+      "no_folio_equivalent": true,
+      "note": "AI-era competency not yet modeled in FOLIO; adjacent to Legal Research (cite validation) but has no dedicated concept; candidate for upstream contribution."
+    },
+    {
+      "id": "SK-LP-20",
+      "no_folio_equivalent": true,
+      "note": "AI-era competency (deciding what to delegate to AI vs. retain for human judgment) not yet modeled in FOLIO; candidate for upstream contribution."
+    },
+    {
+      "id": "SK-LP-21",
+      "no_folio_equivalent": true,
+      "note": "AI-era competency not yet modeled in FOLIO; adjacent to Risk Management and Information Governance Management but has no dedicated concept; candidate for upstream contribution."
+    },
+    {
+      "id": "SK-PM-10",
+      "no_folio_equivalent": true,
+      "note": "AI-era practice-management competency not yet modeled in FOLIO; adjacent to Records Management and Information Governance Management; candidate for upstream contribution."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "TSK-001",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-002",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-003",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-004",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-005",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-006",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-007",
+      "folio_iri": "R77n3Z14OcgllZTAx8sw9xZ",
+      "folio_label": "Legal Argument",
+      "branch": "document_artifacts",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-008",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-009",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-010",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-011",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-012",
+      "folio_iri": "R79LjWBKHCdmQKEW6zPY8Co",
+      "folio_label": "Litigation Practice",
+      "branch": "services",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-013",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-014",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-015",
+      "folio_iri": "RBKT1I6J8ce2Gs6xwwFcUTr",
+      "folio_label": "Appellate Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-016",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-017",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-018",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-019",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-020",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-021",
+      "folio_iri": "R7TB5AJsngthjmL6KsEht3G",
+      "folio_label": "Legal Research",
+      "branch": "legal_use_cases",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-022",
+      "folio_iri": "R83QdGrsILzbGVfk0bqF1kw",
+      "folio_label": "Interview",
+      "branch": "discovery_events",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-023",
+      "folio_iri": "RVZJBUCRB7cgWN1CIbeJJq",
+      "folio_label": "Fact Investigation and Development",
+      "branch": "services",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-024",
+      "folio_iri": "R83QdGrsILzbGVfk0bqF1kw",
+      "folio_label": "Interview",
+      "branch": "discovery_events",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-025",
+      "folio_iri": "RNlaIvo9pK9MgOcwKug5on",
+      "folio_label": "Case Assessment, Development, Administration",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-026",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-027",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-028",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-029",
+      "folio_iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+      "folio_label": "Settlement, Demand, and Collection Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-030",
+      "folio_iri": "RPzuFFXebWVvkhzE9KZ304",
+      "folio_label": "Letter Communication",
+      "branch": "communication",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-031",
+      "folio_iri": "RPzuFFXebWVvkhzE9KZ304",
+      "folio_label": "Letter Communication",
+      "branch": "communication",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-032",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-033",
+      "folio_iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+      "folio_label": "Opinion Memo Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-034",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-035",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-036",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-037",
+      "folio_iri": "R9p98NogvwJk1MnJgYzuiZd",
+      "folio_label": "Advisory Service",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-038",
+      "folio_iri": "R83QdGrsILzbGVfk0bqF1kw",
+      "folio_label": "Interview",
+      "branch": "discovery_events",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-039",
+      "no_folio_equivalent": true,
+      "note": "Establishing credibility before a tribunal is an interpersonal skill with no FOLIO service concept."
+    },
+    {
+      "id": "TSK-040",
+      "folio_iri": "R9PLqqxNIpwbQxLWPoLvR5n",
+      "folio_label": "CRM Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-041",
+      "folio_iri": "Ry2zpiHIeLctXWkmz2CO6C",
+      "folio_label": "New Business Intake Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-042",
+      "folio_iri": "R81n0uoiTFQMwwdzAskqkZD",
+      "folio_label": "Business Development Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-043",
+      "folio_iri": "R9PLqqxNIpwbQxLWPoLvR5n",
+      "folio_label": "CRM Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-044",
+      "folio_iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+      "folio_label": "Settlement, Demand, and Collection Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-045",
+      "folio_iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+      "folio_label": "Settlement, Demand, and Collection Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-046",
+      "folio_iri": "RCijZPAaPw0lgYwtl8qWG67",
+      "folio_label": "Purchase and Sale Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-047",
+      "folio_iri": "R9zgcjBBIdWMnwIR8nqsoS8",
+      "folio_label": "Mediation Practice",
+      "branch": "services",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-048",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-049",
+      "folio_iri": "R9hR0S1zExtgPQTzV0LeyD3",
+      "folio_label": "Discovery Practice",
+      "branch": "services",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-050",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-051",
+      "folio_iri": "RBgzWJQz52CrObfGXDKH1t7",
+      "folio_label": "Trial Court Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-052",
+      "folio_iri": "RXO2u2WBkUUcEG1jczLIcA",
+      "folio_label": "Arbitration Practice",
+      "branch": "services",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-053",
+      "folio_iri": "RBKT1I6J8ce2Gs6xwwFcUTr",
+      "folio_label": "Appellate Practice",
+      "branch": "services",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-054",
+      "folio_iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+      "folio_label": "Matter Management Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-055",
+      "folio_iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+      "folio_label": "Matter Management Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-056",
+      "folio_iri": "R8Ol92hxELxA00tCrZWrQDK",
+      "folio_label": "Work Allocation Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-057",
+      "folio_iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+      "folio_label": "Timekeeping Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-058",
+      "folio_iri": "RDpaN9hLN8jGKrKBnQ2kPbN",
+      "folio_label": "Conflicts Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-059",
+      "folio_iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+      "folio_label": "Risk Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-060",
+      "no_folio_equivalent": true,
+      "note": "FOLIO has no rules-of-professional-conduct service concept; compliance is embodied in the attorney-discipline matters as a Dispute Service."
+    },
+    {
+      "id": "TSK-061",
+      "folio_iri": "RgV0GDy1p5PQCXleadL2hV",
+      "folio_label": "Billing Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-062",
+      "folio_iri": "RCijZPAaPw0lgYwtl8qWG67",
+      "folio_label": "Purchase and Sale Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-063",
+      "folio_iri": "R9bCaZjWhV1f2PgQiwzAkDm",
+      "folio_label": "Estate Management Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-064",
+      "folio_iri": "RBwgCSrndWQriCjEO63iWbx",
+      "folio_label": "Engagement Letter",
+      "branch": "document_artifacts",
+      "mapping_confidence": "exact"
+    },
+    {
+      "id": "TSK-065",
+      "folio_iri": "R9JHul9FKmkFasxXopMmrpq",
+      "folio_label": "Affidavit / Declaration Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-066",
+      "folio_iri": "RBNIcoXeUcBXVeFvlXkbGaS",
+      "folio_label": "Written Discovery Practice",
+      "branch": "services",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-067",
+      "folio_iri": "R9RWwdyMp12ldMe0u2EZjhO",
+      "folio_label": "Pricing Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-068",
+      "folio_iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+      "folio_label": "Timekeeping Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-069",
+      "folio_iri": "RgV0GDy1p5PQCXleadL2hV",
+      "folio_label": "Billing Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-070",
+      "folio_iri": "RgV0GDy1p5PQCXleadL2hV",
+      "folio_label": "Billing Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-071",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-072",
+      "folio_iri": "R8Ol92hxELxA00tCrZWrQDK",
+      "folio_label": "Work Allocation Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-073",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-074",
+      "no_folio_equivalent": true,
+      "note": "FOLIO has no firm-capitalization concept; this is a business-formation planning task with no service equivalent."
+    },
+    {
+      "id": "TSK-075",
+      "folio_iri": "RW7P6EPg4NMe8dhyO52jzl",
+      "folio_label": "Budgeting Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-076",
+      "no_folio_equivalent": true,
+      "note": "Firm investment decisions have no FOLIO service equivalent; nearest adjacent is Budgeting Management."
+    },
+    {
+      "id": "TSK-077",
+      "folio_iri": "R9ScBHXlUfa31SlBnKmDarJ",
+      "folio_label": "Project Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-078",
+      "folio_iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+      "folio_label": "Timekeeping Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-079",
+      "folio_iri": "R9ScBHXlUfa31SlBnKmDarJ",
+      "folio_label": "Project Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-080",
+      "folio_iri": "RW7P6EPg4NMe8dhyO52jzl",
+      "folio_label": "Budgeting Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-081",
+      "folio_iri": "R8Ol92hxELxA00tCrZWrQDK",
+      "folio_label": "Work Allocation Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-082",
+      "folio_iri": "RW7P6EPg4NMe8dhyO52jzl",
+      "folio_label": "Budgeting Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-083",
+      "folio_iri": "R81n0uoiTFQMwwdzAskqkZD",
+      "folio_label": "Business Development Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-084",
+      "folio_iri": "R81n0uoiTFQMwwdzAskqkZD",
+      "folio_label": "Business Development Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-085",
+      "folio_iri": "R8MT8gA5gTVF6rbGoWbxYJw",
+      "folio_label": "Pitches and Proposals Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-086",
+      "no_folio_equivalent": true,
+      "note": "Selecting and using practice technology has no FOLIO service concept; FOLIO's technology concepts are narrow tooling categories."
+    },
+    {
+      "id": "TSK-087",
+      "folio_iri": "R9MD9rwRADsqy2eadoz5R8L",
+      "folio_label": "Records Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-088",
+      "folio_iri": "R97IEI6qOls8PLTHVBTaE0w",
+      "folio_label": "Information Governance Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-089",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-090",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-091",
+      "folio_iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+      "folio_label": "Risk Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-092",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-093",
+      "folio_iri": "RBJy3KoNBYSWUf4xdARMhYt",
+      "folio_label": "Practice Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "parent"
+    },
+    {
+      "id": "TSK-094",
+      "folio_iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+      "folio_label": "Risk Management",
+      "branch": "business_of_law",
+      "mapping_confidence": "near"
+    },
+    {
+      "id": "TSK-095",
+      "no_folio_equivalent": true,
+      "note": "Prompt formulation is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-096",
+      "no_folio_equivalent": true,
+      "note": "Prompt iteration is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-097",
+      "no_folio_equivalent": true,
+      "note": "Prompt templating is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-098",
+      "no_folio_equivalent": true,
+      "note": "AI-output fact verification is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-099",
+      "no_folio_equivalent": true,
+      "note": "AI citation checking is an AI-era skill adjacent to Legal Research but with no dedicated FOLIO concept."
+    },
+    {
+      "id": "TSK-100",
+      "no_folio_equivalent": true,
+      "note": "Hallucination detection is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-101",
+      "no_folio_equivalent": true,
+      "note": "Centaur delegation judgment is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-102",
+      "no_folio_equivalent": true,
+      "note": "The AI-plus-human revise loop is an AI-era workflow not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-103",
+      "no_folio_equivalent": true,
+      "note": "Supervising AI output is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-104",
+      "no_folio_equivalent": true,
+      "note": "Confidentiality in AI use is an AI-era skill adjacent to Risk Management but with no dedicated FOLIO concept."
+    },
+    {
+      "id": "TSK-105",
+      "no_folio_equivalent": true,
+      "note": "Privilege preservation in AI use is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-106",
+      "no_folio_equivalent": true,
+      "note": "AI-oriented matter-data hygiene is an AI-era skill adjacent to Records Management but with no dedicated FOLIO concept."
+    },
+    {
+      "id": "TSK-107",
+      "no_folio_equivalent": true,
+      "note": "Firm-wide AI governance is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "id": "TSK-108",
+      "no_folio_equivalent": true,
+      "note": "Retention of AI interactions is an AI-era skill adjacent to Records Management but with no dedicated FOLIO concept."
+    }
+  ]
+}

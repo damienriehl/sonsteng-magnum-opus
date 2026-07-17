@@ -1,0 +1,44 @@
+SEGMENT A TOKEN ESTIMATE — sonsteng persona system prompt
+=========================================================
+Measured: 2026-07-17
+File: app/worker/prompts/system-template.md
+Segment: the verbatim SHARED CACHEABLE PREFIX between the markers
+         <!-- ===== BEGIN SEGMENT A (verbatim) ===== --> ...
+         <!-- ===== END SEGMENT A ===== -->
+
+RAW SIZE
+  characters : 18010
+  words      : 3125
+
+TOKEN ESTIMATE
+  No real tokenizer (tiktoken / anthropic SDK) is installed in this environment,
+  so the chars/3.5 heuristic specified by the task is used, cross-checked with a
+  more conservative chars/4.0 (English prose typically runs ~3.5-4.2 chars/token;
+  the Anthropic tokenizer sits in that band for plain instructional prose).
+
+  chars / 3.5  = 5146 est. tokens   <-- primary heuristic
+  chars / 4.0  = 4502 est. tokens   <-- conservative cross-check
+
+HAIKU 4.5 CACHE FLOOR
+  Minimum cacheable prefix = 4096 tokens (docs/research/worker-llm-facts.md §2).
+
+  Primary heuristic margin : 1050 tokens  (25.6% over floor)
+  Conservative margin      : 406 tokens  (9.9% over floor)
+
+RESULT
+  PASS. Segment A clears the 4096-token cache floor under BOTH estimates, and
+  clears the task's >=4600 est.-token target (chars/3.5 = 5146) with the required
+  ~10% margin. Because even the conservative chars/4.0 estimate (4502) exceeds
+  4096, the shared prefix is expected to actually cache on Haiku 4.5 rather than
+  silently returning cache_creation_input_tokens: 0.
+
+VERIFY-AT-RUNTIME (red-team harness, not doable offline here)
+  The authoritative check is a live token count. Either:
+    (a) POST Segment A to the Anthropic /v1/messages/count_tokens endpoint, or
+    (b) assert usage.cache_read_input_tokens > 0 from interview turn 2 onward.
+  If a real count ever lands below 4096, add material (do NOT pad with filler) to
+  Segment A and DO NOT reorder — Segment A must stay byte-stable across renders.
+
+RENDERED GOLDEN (Segment A + Segment B for persona m00.per.tester)
+  app/worker/test/fixtures/rendered-system-prompt-m00.txt
+  total characters : 22186   (Segment A + blank line + Segment B tail)

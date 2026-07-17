@@ -1,6 +1,6 @@
 {
   "id": "FIRM",
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "@id": "https://sonsteng.damienriehl.com/spine/firm/FIRM",
   "identity": {
     "name": "Ansari & Boone LLP",
