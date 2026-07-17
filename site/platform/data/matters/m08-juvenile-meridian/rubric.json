@@ -1,0 +1,109 @@
+{
+  "id": "m08.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m08.rub",
+  "matter_id": "m08",
+  "declared_total": 220,
+  "criteria": [
+    {
+      "id": "m08.rub.c01",
+      "name": "Fact investigation & the minor-client interview",
+      "description": "Elicits the client's own account through developmentally appropriate, non-leading questioning; builds a chronology; identifies the conflicting accounts and the evidentiary gaps (obscured handoff, ambiguous doorway contact).",
+      "weight_points": 60,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m08.rub.c01.s01",
+          "name": "Eliciting the account without leading",
+          "description": "Uses open-ended prompts and secures Tobias's own version before the adults reshape it; reaches the rapport-gated facts through the proper triggers, not pressure.",
+          "weight_points": 32,
+          "task_id": "TSK-023"
+        },
+        {
+          "id": "m08.rub.c01.s02",
+          "name": "Chronology & proof-gap analysis",
+          "description": "Assembles an accurate chronology and expressly flags every conflict and evidentiary gap in the file.",
+          "weight_points": 28,
+          "task_id": "TSK-024"
+        }
+      ]
+    },
+    {
+      "id": "m08.rub.c02",
+      "name": "Counseling the distressed juvenile and parent",
+      "description": "Builds trust with a frightened minor and manages an overwhelmed parent, keeping the child's voice and priorities primary.",
+      "weight_points": 50,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037",
+      "subcriteria": [
+        {
+          "id": "m08.rub.c02.s01",
+          "name": "Rapport & developmentally appropriate communication",
+          "description": "Communicates with Tobias in a calm, non-judgmental, age-appropriate way that preserves his confidence.",
+          "weight_points": 30
+        },
+        {
+          "id": "m08.rub.c02.s02",
+          "name": "Managing the parent's role & expectations",
+          "description": "Handles Dana's distress and guilt, corrects misunderstandings, and keeps decision-making centered on the client.",
+          "weight_points": 20,
+          "task_id": "TSK-034"
+        }
+      ]
+    },
+    {
+      "id": "m08.rub.c03",
+      "name": "Disposition strategy: diversion vs. contested hearing",
+      "description": "Analyzes the diversion offer against a contested hearing and prepares a negotiation plan, including a restitution position grounded in the intact recovery.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-035",
+      "subcriteria": [
+        {
+          "id": "m08.rub.c03.s01",
+          "name": "Risk/benefit analysis of the diversion offer",
+          "description": "Weighs the no-record benefit against the responsibility requirement and the innocence claim; states best- and worst-case outcomes.",
+          "weight_points": 30,
+          "task_id": "TSK-044"
+        },
+        {
+          "id": "m08.rub.c03.s02",
+          "name": "Negotiation plan with the county attorney",
+          "description": "Prepares a concrete negotiation plan on terms and restitution, using the recovered-console leverage.",
+          "weight_points": 25,
+          "task_id": "TSK-045"
+        }
+      ]
+    },
+    {
+      "id": "m08.rub.c04",
+      "name": "Professional responsibility",
+      "description": "Identifies and correctly navigates the Rule 4.2 no-contact problem and the confidentiality dynamics of a minor client with a parent present.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m08.rub.c04.s01",
+          "name": "Rule 4.2 — the represented co-respondent",
+          "description": "Spots that Kellan is represented and does not contact him directly; routes any inquiry through his counsel.",
+          "weight_points": 30
+        },
+        {
+          "id": "m08.rub.c04.s02",
+          "name": "Confidentiality & the parent/child dynamic",
+          "description": "Handles privilege and confidentiality with a parent present, and the honesty question raised by concealed prior conduct.",
+          "weight_points": 25
+        }
+      ]
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 220 },
+    { "grade": "A-", "points": 209 },
+    { "grade": "B+", "points": 198 },
+    { "grade": "B", "points": 187 },
+    { "grade": "C", "points": 165 }
+  ]
+}

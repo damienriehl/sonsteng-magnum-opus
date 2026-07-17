@@ -1,0 +1,52 @@
+{
+  "id": "m06.ex",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/exercise/m06.ex",
+  "matter_id": "m06",
+  "role_id": "m06.role.defense",
+  "sections": {
+    "intro": {
+      "title": "Introduction",
+      "body_md": "You are an associate at Ellingboe & Ravndal LLP, and your firm has just been retained by Adaeze Okwuosa. For twelve years Ms. Okwuosa was a top medical-device sales engineer at Northlake Surgical Instruments, Inc., covering the company's largest territory. She resigned in January 2026 to take a job with a competitor, Verdant Medical Systems, in a different product line and a different territory. On her first day at Northlake, twelve years earlier, she signed an employment agreement containing a one-year non-competition covenant and an eighteen-month non-solicitation covenant. Northlake has now moved for a temporary injunction in Meridian District Court, Halden County, seeking to enforce those covenants, block her from working for Verdant, and force the return of a customer-pricing spreadsheet it says she stole. Your client is frightened: she cannot afford to lose the new job, and she is embarrassed about some of what she did on her way out the door. Your job is to oppose the injunction — and to figure out, honestly, how strong or weak your client's position really is before you ever stand up in court."
+    },
+    "objectives": {
+      "title": "Learning Objectives",
+      "body_md": "By completing this exercise you will practice the core skills a litigator needs when a former employer seeks to enforce a restrictive covenant on an emergency motion. Specifically, you will: (1) apply legal analysis and reasoning to the temporary-injunction standard and to the reasonableness of a non-compete, distinguishing the enforceability question from the trade-secret question [SK-LP-02; TSK-011]; (2) gather and organize the facts that actually decide the case — how the pricing spreadsheet was handled, what your client took, and whether she solicited anyone — from the client interview, the witnesses, and the exhibits [SK-LP-07; TSK-023, TSK-024]; (3) draft a persuasive memorandum opposing the injunction that is accurate about unhelpful facts [SK-LP-17; TSK-032]; (4) exercise professional-responsibility judgment, including recognizing that Northlake's director of sales is a represented adverse party you may not contact directly [SK-LP-16; TSK-060]; and (5) counsel a distressed client candidly about risk and options [SK-LP-10; TSK-002]. You will also do preliminary case analysis and build a working theory of the case [TSK-001, TSK-010]."
+    },
+    "activities": {
+      "title": "Activities",
+      "body_md": "This matter unfolds across several linked activities that mirror the real sequence of an injunction defense. First, you will conduct a client interview with Adaeze Okwuosa using the chat interface. She is guarded about the most damaging facts, and some of what you most need to know will surface only if you build trust, reassure her about confidentiality, and respond without judgment. Second, you will review the case file — the employment agreement, the resignation notice, the description of the pricing spreadsheet, the IT export log, the Verdant offer letter, the cease-and-desist letter, and the witness statements — and build a chronology. Third, you will interview the available fact witnesses, taking care not to contact anyone you are ethically barred from reaching. Fourth, you will analyze the temporary-injunction standard and the enforceability of the covenants, and develop a theory of the case. Fifth, you will draft a memorandum of law opposing the temporary injunction. Finally, you will meet with your client again to counsel her on the risks the case presents and on her realistic options, including narrowing or settling the dispute."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "body_md": "Work in the order the activities describe, and keep your student work product to the deliverables listed here. (1) Interview the client through the chat interface; capture the facts she volunteers, the facts she gives only when asked, and the facts she reveals only after you have earned her trust. Note where she is genuinely uncertain. (2) Prepare a one- to two-page chronology of events from the exhibits and statements. (3) Interview the fact witnesses who are available to you, and be prepared to explain, in writing, why you did or did not contact each person. (4) Draft a memorandum of law of no more than ten pages opposing Northlake's motion for a temporary injunction; state the facts fairly, including the facts that hurt your client, and argue the injunction standard and the reasonableness and protectability questions. (5) Prepare a short client-counseling memo advising Ms. Okwuosa of her risks and options. Cite only to the record in your student work; you are responsible for finding and applying the governing Meridian law yourself. Submit your memorandum, chronology, witness-contact explanation, and counseling memo together."
+    },
+    "case_file": {
+      "title": "Case File",
+      "files": [
+        "case-file/employment-agreement.md",
+        "case-file/resignation-notice.md",
+        "case-file/pricing-spreadsheet-description.md",
+        "case-file/it-export-log.md",
+        "case-file/verdant-offer-letter.md",
+        "case-file/cease-and-desist-letter.md",
+        "case-file/witness-hollis.md",
+        "case-file/witness-dupont.md",
+        "case-file/witness-bellweather.md",
+        "case-file/witness-calderaro.md"
+      ]
+    },
+    "history": {
+      "title": "Procedural and Factual History",
+      "body_md": "Adaeze Okwuosa joined Northlake Surgical Instruments in 2014 and signed her employment agreement, with its non-compete and non-solicitation covenants, on her first day. Over twelve years she became Northlake's senior sales engineer for the Lake Verdant metro accounts. In the spring of 2025 she was passed over for a regional sales-manager promotion, and she began interviewing elsewhere that fall. In December 2025 she accepted an offer from Verdant Medical Systems for a role in a different product line and territory, and she resigned effective January 5, 2026. In the last week of December 2025, before her resignation took effect, she copied Northlake's master customer-pricing spreadsheet onto a personal USB drive and forwarded one internal email to her personal account. After she left, a Northlake IT security analyst ran an off-boarding review and flagged the export. On January 20, 2026, Northlake's counsel sent a cease-and-desist letter. When Okwuosa did not resign from Verdant, Northlake filed a motion for a temporary injunction in Meridian District Court, Halden County, on February 10, 2026. The matter is assigned to Hon. Miriam T. Aldous. Okwuosa retained Ellingboe & Ravndal LLP on February 16, 2026. The injunction motion is the immediate posture; no answer or counterclaim has yet been filed."
+    },
+    "considerations": {
+      "title": "Considerations",
+      "body_md": "Several tensions make this matter harder than it first appears, and you should sit with each before you write. The equities cut both ways: your client did copy an entire pricing file and forward an internal email, and no amount of framing makes those facts disappear — but the same file was loosely guarded, lived on a drive many people could open, and was emailed around routinely, which bears directly on whether it is a protectable secret at all. The covenant is broad — a full year across a four-state region — and you should think hard about whether a court will enforce it as written, narrow it, or refuse it. Consider the difference between the non-compete and the non-solicitation clause: your client may have a much stronger position on solicitation, where the evidence is that she has contacted no one, than on the bare fact of competitive employment. Consider your client's candor and her fear; the facts she is most reluctant to share are the ones opposing counsel is most likely to surface. Consider, too, the professional-responsibility line: Northlake's director of sales is a represented adverse party, and you must plan your investigation around that limit. Finally, weigh whether an aggressive fight or an early, narrow resolution better serves a client who mainly wants to keep her job."
+    },
+    "substantive_info": {
+      "title": "Substantive Information",
+      "body_md": "This is a restrictive-covenant and trade-secret dispute arising on an emergency motion, and it sits at the intersection of employment law, unfair-competition law, and civil procedure. Two bodies of doctrine drive it. The first is the standard a court uses to decide whether to grant a temporary injunction before a full trial: the moving party generally must show a likelihood of success on the merits, a threat of irreparable harm that money cannot repair, that the balance of hardships favors an injunction, and that an injunction serves the public interest. Each element is contestable here, and the public-interest element in particular invites argument about a worker's right to earn a living. The second body of doctrine governs whether the covenants are enforceable and whether the pricing data is protectable. Restrictive covenants are typically scrutinized for reasonableness in scope, geography, and duration, and for whether they protect a legitimate business interest rather than merely suppress competition; some jurisdictions will 'blue-pencil' or otherwise narrow an overbroad covenant, while others will not. Trade-secret protection generally requires that the information derive value from not being generally known and that the owner took reasonable measures to keep it secret — a requirement that loosely guarded, widely shared data may not meet. Your task is to research the governing Meridian law on each of these questions and apply it to the specific, imperfect facts of your client's situation. The student packet states no legal rules for you; finding and applying them is the exercise."
+    }
+  }
+}

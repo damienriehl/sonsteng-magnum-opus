@@ -1,0 +1,110 @@
+{
+  "id": "m02.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m02.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m02",
+  "declared_total": 207,
+  "criteria": [
+    {
+      "id": "m02.rub.c01",
+      "name": "Trust-accounting and safekeeping analysis",
+      "description": "Correctly identifies and analyzes the safekeeping-of-property duties at issue: commingling, failure to keep funds intact, delayed disbursement, absent accounting, and inadequate trust records. Draws the sanction-defining distinction between negligent commingling/recordkeeping and misappropriation.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-061",
+      "subcriteria": [
+        {
+          "id": "m02.rub.c01.s01",
+          "name": "Commingling vs. misappropriation",
+          "description": "Distinguishes negligent commingling and recordkeeping violations from knowing use of client funds, and correctly locates the facts (including the borrowed funds) on that line.",
+          "weight_points": 30
+        },
+        {
+          "id": "m02.rub.c01.s02",
+          "name": "Restitution and remediation framing",
+          "description": "Accurately frames the absence of client loss, the voluntary interest, and the post-conduct remediation for their bearing on the violation and the sanction.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m02.rub.c02",
+      "name": "Diligence and communication analysis",
+      "description": "Analyzes the failure-to-communicate count arising from the unreturned Osei calls, and its relationship to the diligence and communication duties, including the absence of a missed deadline or client loss.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    },
+    {
+      "id": "m02.rub.c03",
+      "name": "Sanction analysis and proportionality",
+      "description": "Marshals the aggravating and mitigating factors and builds a reasoned, proportionate argument for the recommended sanction consistent with the protective (not punitive) purpose of discipline.",
+      "weight_points": 42,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-005",
+      "subcriteria": [
+        {
+          "id": "m02.rub.c03.s01",
+          "name": "Aggravating and mitigating factors",
+          "description": "Identifies and weighs prior discipline, absence of dishonest motive, personal and health difficulties, restitution, cooperation, and remorse.",
+          "weight_points": 22
+        },
+        {
+          "id": "m02.rub.c03.s02",
+          "name": "Proportionate sanction argument",
+          "description": "Argues persuasively for the least severe appropriate sanction and confronts the misappropriation framing head-on.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m02.rub.c04",
+      "name": "Client interview and counseling",
+      "description": "Conducts an interview that elicits the gated and concealed facts through rapport and confidentiality, handles the represented-witness contact question correctly, and counsels the distressed client candidly about disclosure versus concealment.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m02.rub.c04.s01",
+          "name": "Fact elicitation and Rule 4.2 handling",
+          "description": "Earns the rapport-gated and concealed facts and correctly routes contact with the represented complaining witness.",
+          "weight_points": 20,
+          "skill_id": "SK-LP-07"
+        },
+        {
+          "id": "m02.rub.c04.s02",
+          "name": "Counseling the distressed client",
+          "description": "Counsels an ashamed, frightened lawyer-client about realistic outcomes and about candor duties without either judging or enabling concealment.",
+          "weight_points": 20,
+          "skill_id": "SK-LP-10",
+          "task_id": "TSK-037"
+        }
+      ]
+    },
+    {
+      "id": "m02.rub.c05",
+      "name": "Respondent's pre-hearing brief",
+      "description": "Produces a clear, well-organized, persuasive brief that concedes what must be conceded, argues the recommended sanction, and complies with form and length limits.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-032"
+    },
+    {
+      "id": "m02.rub.c06",
+      "name": "Oral argument and negotiation",
+      "description": "Argues the sanction to the hearing panel, answers questions under pressure, and negotiates in good faith with disciplinary counsel toward a possible stipulated disposition.",
+      "weight_points": 15,
+      "skill_id": "SK-LP-08",
+      "task_id": "TSK-026"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 207 },
+    { "grade": "A-", "points": 197 },
+    { "grade": "B+", "points": 186 },
+    { "grade": "B", "points": 176 },
+    { "grade": "C", "points": 145 }
+  ]
+}

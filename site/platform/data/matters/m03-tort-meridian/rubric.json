@@ -1,0 +1,106 @@
+{
+  "id": "m03.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m03.rub",
+  "matter_id": "m03",
+  "declared_total": 325,
+  "criteria": [
+    {
+      "id": "m03.rub.c01",
+      "name": "Client interview & fact development",
+      "description": "Conducts an effective, humane client interview and develops the facts: opens with rapport and orientation, funnels from open-ended to targeted questions, surfaces legal and non-legal concerns, earns the reluctant and sensitive facts through genuine rapport rather than pressure, and builds a reliable chronology.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m03.rub.c01.s01",
+          "name": "Rapport, orientation & open-ended listening",
+          "description": "Puts the client at ease, frames confidentiality and the contingency arrangement, uses an open-ended funnel top, and listens without leading or interrupting.",
+          "weight_points": 35
+        },
+        {
+          "id": "m03.rub.c01.s02",
+          "name": "Gap-filling & sensitive-fact elicitation",
+          "description": "Develops the chronology and injury facts and earns the rapport-gated and concealed material (prior shoulder condition, treatment gap, reduced hours, continued side work) through proper preconditions.",
+          "weight_points": 35
+        }
+      ]
+    },
+    {
+      "id": "m03.rub.c02",
+      "name": "Case theory & liability analysis",
+      "description": "Frames a coherent negligence theory and anticipates and rebuts the icy-conditions / sudden-emergency defense, using the specific evidence in the record.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-001",
+      "subcriteria": [
+        {
+          "id": "m03.rub.c02.s01",
+          "name": "Negligence elements",
+          "description": "Correctly identifies and applies duty, breach, causation, and damages to the disputed facts.",
+          "weight_points": 35
+        },
+        {
+          "id": "m03.rub.c02.s02",
+          "name": "Meeting the conditions defense",
+          "description": "Addresses the weather/sudden-emergency argument, the missing citation, and the phone evidence with appropriate weight and candor.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m03.rub.c03",
+      "name": "Litigation execution",
+      "description": "Carries the litigation: drafts sound pleadings, plans and conducts targeted discovery, and prepares and delivers competent trial advocacy.",
+      "weight_points": 90,
+      "skill_id": "SK-LP-14",
+      "task_id": "TSK-049",
+      "subcriteria": [
+        {
+          "id": "m03.rub.c03.s01",
+          "name": "Pleadings & discovery plan",
+          "description": "Drafts a proper complaint and a focused discovery plan aimed at the cell-phone records, medical records, appraisal, and depositions.",
+          "weight_points": 40
+        },
+        {
+          "id": "m03.rub.c03.s02",
+          "name": "Trial advocacy",
+          "description": "Prepares and delivers a persuasive short opening and at least one direct and one cross examination grounded in the case file.",
+          "weight_points": 50
+        }
+      ]
+    },
+    {
+      "id": "m03.rub.c04",
+      "name": "Damages & causation proof",
+      "description": "Marshals and presents the medical and economic damages and meets the pre-existing-condition and treatment-gap challenges, using the treating and examining physicians appropriately.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-023"
+    },
+    {
+      "id": "m03.rub.c05",
+      "name": "Client counseling & settlement judgment",
+      "description": "Advises the client candidly on the strengths and weaknesses of the case and on the pending settlement offer against a realistic range of outcomes, respecting the client's authority to decide.",
+      "weight_points": 35,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-034"
+    },
+    {
+      "id": "m03.rub.c06",
+      "name": "Professional responsibility",
+      "description": "Handles the contingency engagement properly and observes the no-contact rule governing the represented adverse driver, treating the Rule 4.2 checkpoint as a decision point rather than proceeding.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 325 },
+    { "grade": "A-", "points": 309 },
+    { "grade": "B+", "points": 293 },
+    { "grade": "B", "points": 276 },
+    { "grade": "C", "points": 228 }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "id": "m13",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m13",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m13-tort-fl",
+  "shape": "auto_negligence",
+  "tier": "real",
+  "jurisdiction": "FL",
+  "caption": "Sofia Reyes v. Bradley Hutchins",
+  "sides": [
+    {
+      "role_id": "m13.role.plaintiff",
+      "label": "Plaintiff / Injured Driver",
+      "party_names": ["Sofia Reyes"],
+      "confidential_fact_refs": ["m13.fact.027", "m13.fact.029", "m13.fact.053"]
+    },
+    {
+      "role_id": "m13.role.defense",
+      "label": "Defendant / At-Fault Driver",
+      "party_names": ["Bradley Hutchins"],
+      "confidential_fact_refs": ["m13.fact.030"]
+    }
+  ],
+  "parties": [
+    { "name": "Sofia Reyes", "role": "plaintiff injured driver", "side_role_id": "m13.role.plaintiff" },
+    { "name": "Bradley Hutchins", "role": "defendant at-fault driver", "side_role_id": "m13.role.defense" }
+  ],
+  "client_id": "FIRM-C-13",
+  "fee_type": "contingency",
+  "skill_refs": ["SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-13", "SK-LP-02", "SK-LP-16"],
+  "task_refs": ["TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-001", "TSK-010", "TSK-034", "TSK-035", "TSK-044", "TSK-060"],
+  "personas": ["m13.per.reyes", "m13.per.hutchins"],
+  "witnesses": [
+    { "id": "m13.wit.reyes", "name": "Sofia Reyes" },
+    { "id": "m13.wit.hutchins", "name": "Bradley Hutchins" },
+    { "id": "m13.wit.fontaine", "name": "Gerald Fontaine" },
+    { "id": "m13.wit.sturdivant", "name": "Officer Elaine Sturdivant" },
+    { "id": "m13.wit.emerson", "name": "Dr. Nadia Emerson" }
+  ],
+  "exhibits": [
+    { "id": "m13.exh.001", "title": "Florida Traffic Crash Report (Belmar Springs PD)" },
+    { "id": "m13.exh.002", "title": "Intersection Diagram and Scene Photographs" },
+    { "id": "m13.exh.003", "title": "Emergency Department and Operative Medical Records" },
+    { "id": "m13.exh.004", "title": "Rideshare Earnings Statements" },
+    { "id": "m13.exh.005", "title": "PIP / No-Fault Insurance Correspondence Log" },
+    { "id": "m13.exh.006", "title": "Property-Damage Estimate and Total-Loss Valuation" },
+    { "id": "m13.exh.007", "title": "Settlement Demand Letter to Liability Insurer" }
+  ],
+  "open_date": "2025-03-10",
+  "as_of_date": "2026-06-30"
+}

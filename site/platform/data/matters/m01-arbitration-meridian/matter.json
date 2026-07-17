@@ -1,0 +1,50 @@
+{
+  "id": "m01",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m01",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m01-arbitration-meridian",
+  "shape": "employment_arbitration",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "Halden Regional Transit District v. Marceline Osgard and Meridian Alliance of Public Workers, Local 7 (Arbitration)",
+  "sides": [
+    {
+      "role_id": "m01.role.employer-counsel",
+      "label": "Employer / Halden Regional Transit District",
+      "party_names": ["Halden Regional Transit District"]
+    },
+    {
+      "role_id": "m01.role.employee-counsel",
+      "label": "Grievant & Union / Marceline Osgard and MAPW Local 7",
+      "party_names": ["Marceline Osgard", "Meridian Alliance of Public Workers, Local 7"]
+    }
+  ],
+  "parties": [
+    { "name": "Halden Regional Transit District", "role": "employer / respondent to grievance", "side_role_id": "m01.role.employer-counsel" },
+    { "name": "Marceline Osgard", "role": "grievant / discharged employee", "side_role_id": "m01.role.employee-counsel" },
+    { "name": "Meridian Alliance of Public Workers, Local 7", "role": "union / grievant representative", "side_role_id": "m01.role.employee-counsel" }
+  ],
+  "client_id": "FIRM-C-01",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-01", "SK-LP-02", "SK-LP-07", "SK-LP-08", "SK-LP-09", "SK-LP-14"],
+  "task_refs": ["TSK-001", "TSK-005", "TSK-016", "TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-027", "TSK-030", "TSK-052"],
+  "personas": ["m01.per.osgard", "m01.per.dellwood", "m01.per.rennick"],
+  "witnesses": [
+    { "id": "m01.wit.osgard", "name": "Marceline Osgard" },
+    { "id": "m01.wit.dellwood", "name": "Theo Dellwood" },
+    { "id": "m01.wit.rennick", "name": "Gerald Rennick" },
+    { "id": "m01.wit.bexley", "name": "Loretta Bexley" }
+  ],
+  "exhibits": [
+    { "id": "m01.exh.001", "title": "Collective-Bargaining Agreement (Article 22 grievance/arbitration and just-cause excerpts)" },
+    { "id": "m01.exh.002", "title": "Notice of Discharge dated October 15, 2025" },
+    { "id": "m01.exh.003", "title": "Osgard safety-complaint email of October 1, 2025 (with Oversight Board copy)" },
+    { "id": "m01.exh.004", "title": "Repair orders and red-tag records for units 411, 418, and 426" },
+    { "id": "m01.exh.005", "title": "Osgard personnel file excerpts (2023 reminder; 2024 supervisor note)" },
+    { "id": "m01.exh.006", "title": "Grievance form and Step 1-3 responses" },
+    { "id": "m01.exh.007", "title": "Contractor brake-inspection report and photographs (described)" }
+  ],
+  "open_date": "2025-11-05",
+  "as_of_date": "2026-06-30"
+}

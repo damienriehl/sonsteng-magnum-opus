@@ -1,0 +1,110 @@
+{
+  "id": "m18.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m18.rub",
+  "matter_id": "m18",
+  "declared_total": 210,
+  "criteria": [
+    {
+      "id": "m18.rub.c01",
+      "name": "Fact investigation & the minor-client interview",
+      "description": "Elicits the client's own account through developmentally appropriate, non-leading questioning; builds a chronology; identifies the conflicting accounts and evidentiary gaps (dim footage, missing phone video, incomplete text thread, single identifying administrator).",
+      "weight_points": 60,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m18.rub.c01.s01",
+          "name": "Eliciting the account without leading",
+          "description": "Uses open-ended prompts and secures Jasmine's own version before the adults reshape it; reaches the rapport-gated facts (the video, the panic attacks, Andre's keying) through proper triggers, not pressure.",
+          "weight_points": 32,
+          "task_id": "TSK-023"
+        },
+        {
+          "id": "m18.rub.c01.s02",
+          "name": "Chronology & proof-gap analysis",
+          "description": "Assembles an accurate chronology and expressly flags every conflict and evidentiary gap in the file, including the ambiguous surveillance and the incomplete group-chat export.",
+          "weight_points": 28,
+          "task_id": "TSK-025"
+        }
+      ]
+    },
+    {
+      "id": "m18.rub.c02",
+      "name": "Counseling the distressed juvenile and parent",
+      "description": "Builds trust with a frightened minor and manages an overwhelmed, self-blaming parent, keeping the child's voice and priorities primary.",
+      "weight_points": 50,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037",
+      "subcriteria": [
+        {
+          "id": "m18.rub.c02.s01",
+          "name": "Rapport & developmentally appropriate communication",
+          "description": "Communicates with Jasmine in a calm, non-judgmental, age-appropriate way that preserves her confidence and does not treat her as a troublemaker.",
+          "weight_points": 30
+        },
+        {
+          "id": "m18.rub.c02.s02",
+          "name": "Managing the parent's role & expectations",
+          "description": "Handles Ana's distress, guilt, and financial fear, corrects misunderstandings, and keeps decision-making centered on the client.",
+          "weight_points": 20,
+          "task_id": "TSK-034"
+        }
+      ]
+    },
+    {
+      "id": "m18.rub.c03",
+      "name": "Disposition strategy: diversion vs. contested jurisdictional hearing",
+      "description": "Analyzes the informal-diversion offer against a contested jurisdictional hearing and prepares a negotiation plan, including a restitution position grounded in Jasmine's disputed role and the eyewitness attribution of the keying to Andre.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-035",
+      "subcriteria": [
+        {
+          "id": "m18.rub.c03.s01",
+          "name": "Risk/benefit analysis of the diversion offer",
+          "description": "Weighs the no-record benefit against the responsibility-acknowledgment requirement and the innocence claim; states best- and worst-case outcomes.",
+          "weight_points": 30,
+          "task_id": "TSK-044"
+        },
+        {
+          "id": "m18.rub.c03.s02",
+          "name": "Negotiation plan on terms and restitution",
+          "description": "Prepares a concrete negotiation plan on diversion terms and apportioned restitution, using the proof gaps and the co-participant attribution as leverage.",
+          "weight_points": 25,
+          "task_id": "TSK-045"
+        }
+      ]
+    },
+    {
+      "id": "m18.rub.c04",
+      "name": "Professional responsibility",
+      "description": "Identifies and correctly navigates the Rule 4.2 no-contact problem with the represented co-participant and the confidentiality dynamics of a minor client with a parent present and prior un-counseled school questioning.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m18.rub.c04.s01",
+          "name": "Rule 4.2 — the represented co-participant",
+          "description": "Spots that Kayla is represented and does not contact her directly; routes any inquiry through her public defender.",
+          "weight_points": 25
+        },
+        {
+          "id": "m18.rub.c04.s02",
+          "name": "Confidentiality, privilege & the parent/child dynamic",
+          "description": "Handles privilege and confidentiality with a parent present, addresses the un-counseled school questioning, and counsels honestly on the concealed conduct.",
+          "weight_points": 20,
+          "task_id": "TSK-059"
+        }
+      ]
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 210 },
+    { "grade": "A-", "points": 200 },
+    { "grade": "B+", "points": 189 },
+    { "grade": "B", "points": 178 },
+    { "grade": "C", "points": 158 }
+  ]
+}

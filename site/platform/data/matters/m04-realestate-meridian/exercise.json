@@ -1,0 +1,56 @@
+{
+  "id": "m04.ex",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/exercise/m04.ex",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m04",
+  "role_id": "m04.role.buyer-counsel",
+  "sections": {
+    "intro": {
+      "title": "Introduction",
+      "body_md": "You are counsel to Talbot Meskin, a small residential developer who wants to buy a lakefront parcel — 4400 Kestrel Point, on Lake Verdant in Sable County, State of Meridian — and build four rental cabins on it. The seller is Ruth Renard, an elderly widow who has owned the parcel for over forty years and is represented by her own attorney. This is a transactional negotiation, not a lawsuit: your job is to get your client into a purchase agreement he can safely close on, not to win a trial. The catch is access. The only way to drive to 4400 is a gravel lane that crosses the neighbor's land, and the recorded paperwork is ambiguous about whether that access is a permanent easement that runs with the land or a mere revocable license the neighbor can pull. A never-built platted shoreline road and a pending city vacation add a second wrinkle. Each side also holds confidential facts the other does not know. Your task is to interview your client, work the access problem, and negotiate and paper a deal that protects him."
+    },
+    "objectives": {
+      "title": "Learning Objectives",
+      "body_md": "By completing this exercise you will practice the following surveyed skills and tasks:\n\n- **Negotiation (SK-LP-13)** via **Negotiate a transaction to agreement (TSK-046)** and **Prepare a strategic settlement and negotiation plan / SSNP (TSK-044)** — build and execute a plan that advances your client's interests while managing confidential facts.\n- **Diagnose and plan solutions for legal problems (SK-LP-01)** — frame the easement-versus-license question and the road-vacation question as issues to research and resolve, not to assume.\n- **Fact gathering (SK-LP-07)** via **Conduct a client intake interview (TSK-022)** and **Investigate and develop the facts (TSK-023)** — draw out your client's goals, deadlines, and confidential constraints, and develop the access history from the record and the witnesses.\n- **Counseling (SK-LP-10)** via **Advise the client on options and risks (TSK-034)** and **Counsel and communicate with the client orally (TSK-028)** — help Meskin weigh a recorded-easement cure, a road-vacation contingency, and a price adjustment.\n- **Drafting legal documents (SK-LP-17)** via **Draft transactional agreements (TSK-062)** — turn the deal into contingency language that actually protects the buyer.\n- **Sensitivity to professional and ethical concerns (SK-LP-16)** via **Comply with the rules of professional conduct (TSK-060)** and **Identify and resolve conflicts of interest (TSK-058)** — recognize the no-contact limits on the represented seller and the propriety of contacting the unrepresented neighbor."
+    },
+    "activities": {
+      "title": "Activities",
+      "body_md": "This exercise runs in four connected activities:\n\n1. **Client interview.** Interview Talbot Meskin using the chat engine. Elicit his objectives, his development plan, and — through good rapport and process explanation — the confidential facts that shape his real bottom line (his true ceiling price, his management letter of intent, his financing deadline, and his septic surprise). Notice what he volunteers versus what he holds back.\n\n2. **Fact and record development.** Work the case file: the ambiguous 1978 access instrument, the surveyor's report showing the lane is mislocated, the title commitment's access exception, the seller's disclosure, and the city's vacation notice. You may also interview the unrepresented neighbor, Corwin Delahaye, and the broker.\n\n3. **Strategic Settlement and Negotiation Plan (SSNP).** Prepare a written SSNP: interests, alternatives (BATNA), the confidential facts you will protect, and creative options for curing access.\n\n4. **Negotiate and paper the deal.** Conduct the negotiation with the seller's side and produce purchase-agreement language — especially the access contingency — that protects your client. A short client memo summarizing the recommended deal closes the exercise."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "body_md": "Work only from the facts in this case file; do not invent facts, and where the record is silent, treat the gap as something to negotiate or research rather than assume. Deliverables, in order: (1) a **client-interview record** from your chat session with Talbot Meskin, showing the confidential facts you surfaced and how; (2) a **Strategic Settlement and Negotiation Plan (SSNP)** of two to four pages identifying interests, your client's true priorities and constraints, the other side's likely interests, your BATNA, and at least three options for resolving the access problem; (3) **proposed purchase-agreement language** for the access contingency and the price/closing terms, drafted to protect the buyer; and (4) a **one-to-two-page client counseling memo** recommending a course of action and explaining the risks in plain English. Because the seller is represented by counsel, route any communication with the seller appropriately — do not contact her directly. This is a jurisdiction-designated Meridian matter; find and apply the relevant Meridian real-property and professional-conduct law yourself as part of your research. Keep all client confidential facts out of anything shared with the other side."
+    },
+    "case_file": {
+      "title": "Case File",
+      "files": [
+        "facts.md",
+        "case-file/witness-delahaye.md",
+        "case-file/witness-brummond.md",
+        "case-file/witness-achleitner.md",
+        "case-file/witness-vestergaard.md",
+        "case-file/exhibit-001-purchase-agreement-draft.md",
+        "case-file/exhibit-002-1978-access-instrument.md",
+        "case-file/exhibit-003-plat-and-survey.md",
+        "case-file/exhibit-004-title-commitment.md",
+        "case-file/exhibit-005-city-vacation-notice.md",
+        "case-file/exhibit-006-seller-disclosure.md",
+        "case-file/exhibit-007-email-meskin-achleitner.md",
+        "case-file/exhibit-008-sellercounsel-letter.md"
+      ]
+    },
+    "history": {
+      "title": "Procedural & Factual History",
+      "body_md": "There is no litigation pending; this is a transaction in negotiation. In January 2026, broker Roland Achleitner listed 4400 Kestrel Point for Ruth Renard at $415,000, describing access as a \"shared driveway easement.\" On February 10, 2026, Talbot Meskin submitted a written offer of $360,000 with a firm access contingency. Meskin retained Ellingboe & Ravndal LLP on February 18, 2026, to negotiate and paper the purchase. As buyer's counsel began diligence, the access description came under scrutiny: the recorded 1978 instrument grants a right of way over \"the existing cartway\" but contains no legal description and does not say whether the right is permanent or personal. Seller's counsel responded in a March 19 letter recharacterizing the access as \"a longstanding permissive use\" and declining to warrant its sufficiency. A March survey by Nadia Brummond found the traveled lane sits about fifteen feet off the record location, toward the neighbor's cabin. The title commitment lists the access instrument as a Schedule B exception and will not insure access without a cure. Meanwhile, the City of Brightwater noticed a public hearing, set for April 2026, on vacating the never-built Verdant Shore Road that runs behind the parcel. The parties are now negotiating toward a purchase agreement that resolves access."
+    },
+    "considerations": {
+      "title": "Considerations",
+      "body_md": "Several threads must be held together at once. **First, the character of the access right.** Everything turns on whether the 1978 instrument created a permanent access right that would pass to your client or only a personal permission the neighbor can revoke — and on whether an indefinitely located right can be enforced at all. This is the central question for your research; do not assume the answer. **Second, the record's silence.** The instrument has no legal description and the lane as built is mislocated, so even a favorable reading leaves the location uncertain; a curative recorded easement fixing centerline and width may be the cleanest fix. **Third, the neighbor's leverage and interests.** Corwin Delahaye maintains the lane, opposes development traffic, has floated selling a recorded easement for $25,000, and has his own reasons to want the parcel — but he is unrepresented, so you may deal with him directly. **Fourth, the city road.** The proposed vacation may or may not yield useful alternative access; it is a contingency to structure, not a solution to bank on. **Fifth, confidential-fact discipline.** Both sides hold private facts. Your job is to protect your client's (his ceiling price, his deadline, his management letter of intent, his septic cost) while probing the seller's motivations through her counsel. **Sixth, professional responsibility.** The seller is represented; the no-contact rule limits your dealings with her, and the difference between contacting a represented party and an unrepresented witness is itself a teaching point."
+    },
+    "substantive_info": {
+      "title": "Substantive Information",
+      "body_md": "This matter sits at the intersection of several real-property and transactional topics you will need to research and apply in the Meridian jurisdiction. **Easements versus licenses.** You should understand the difference between an easement appurtenant (a permanent interest in land that runs with both the benefited and burdened parcels and passes to successors) and a license (mere permission, generally revocable and personal), and what facts and instrument language distinguish them. Consider how an ambiguous or under-described grant is construed, and what role long, open, and continuous use may play. **Location and reformation.** Where a granted right of way lacks a definite location, consider how the law fixes location — by the parties' course of conduct, by the traveled way, or by a corrective instrument — and the risks of leaving location unresolved. **Recording and notice.** Meridian is a recording jurisdiction; consider how recording, constructive notice, and the title commitment's exceptions bear on what a buyer actually acquires and can insure. **Municipal vacation of platted roads.** Research the city's authority to vacate an unbuilt platted right of way and the general rule that vacated ground reverts to abutting owners, along with the practical limits of that reversion for access. **Transactional structuring.** Finally, this is a drafting-and-negotiation exercise: study how access contingencies, cure obligations, title objections, and closing conditions are used to allocate exactly this kind of risk in a purchase agreement. Student packets are facts-only; the governing Meridian authorities are yours to find."
+    }
+  }
+}

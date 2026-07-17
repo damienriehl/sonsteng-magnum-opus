@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deliverable Critique — Sonsteng Practicum</title>
+
+<!-- Same strict CSP as the interview room; see index.html for the directive-by-directive rationale.
+     script-src 'self' is required for critique.js; connect-src * because API_BASE is runtime-resolved. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="sonsteng-api" content="">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+  <div id="critique-root" data-mode="live"></div>
+  <noscript>
+    <div class="wrap">
+      <div class="stage-direction">The critique galley needs JavaScript enabled to run.</div>
+    </div>
+  </noscript>
+  <script src="byok.js"></script>
+  <script src="critique.js"></script>
+</body>
+</html>

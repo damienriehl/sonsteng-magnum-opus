@@ -1,0 +1,51 @@
+{
+  "id": "m10",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m10",
+  "slug": "m10-probate-meridian",
+  "shape": "wills_probate",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "In re the Estate of Mabel R. Thornquist",
+  "sides": [
+    {
+      "role_id": "m10.role.proponent-counsel",
+      "label": "Proponent / Estate (Personal Representative)",
+      "party_names": ["Estate of Mabel R. Thornquist", "Eleanor Thornquist-Reddick"],
+      "confidential_fact_refs": ["m10.fact.043", "m10.fact.044"]
+    },
+    {
+      "role_id": "m10.role.contestant-counsel",
+      "label": "Contestant / Objecting Heir",
+      "party_names": ["Ronald Thornquist"],
+      "confidential_fact_refs": ["m10.fact.050"]
+    }
+  ],
+  "parties": [
+    { "name": "Estate of Mabel R. Thornquist", "role": "decedent's estate (proponent of the will)", "side_role_id": "m10.role.proponent-counsel" },
+    { "name": "Eleanor Thornquist-Reddick", "role": "personal representative and principal devisee", "side_role_id": "m10.role.proponent-counsel" },
+    { "name": "Ronald Thornquist", "role": "objecting heir / will contestant", "side_role_id": "m10.role.contestant-counsel" }
+  ],
+  "client_id": "FIRM-C-10",
+  "fee_type": "flat",
+  "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-004", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-037", "TSK-048", "TSK-058", "TSK-060"],
+  "personas": ["m10.per.reddick", "m10.per.thornquist", "m10.per.sundberg"],
+  "witnesses": [
+    { "id": "m10.wit.grenfell", "name": "Harriet Grenfell" },
+    { "id": "m10.wit.brashear", "name": "Dr. Theodore Brashear" },
+    { "id": "m10.wit.sundberg", "name": "Lorna Sundberg" },
+    { "id": "m10.wit.ellingboe", "name": "Amara Ellingboe" }
+  ],
+  "exhibits": [
+    { "id": "m10.exh.001", "title": "Last Will and Testament of Mabel R. Thornquist (Oct. 18, 2024)" },
+    { "id": "m10.exh.002", "title": "Explanatory Letter of Mabel R. Thornquist (Oct. 18, 2024)" },
+    { "id": "m10.exh.003", "title": "Prior Last Will and Testament of Mabel R. Thornquist (2015)" },
+    { "id": "m10.exh.004", "title": "Drafting Attorney's File Memorandum" },
+    { "id": "m10.exh.005", "title": "Clinic Note and Capacity Letter of Dr. Theodore Brashear" },
+    { "id": "m10.exh.006", "title": "Objection and Petition to Contest Will" },
+    { "id": "m10.exh.007", "title": "Estate Asset and Account Summary" }
+  ],
+  "open_date": "2024-09-16",
+  "as_of_date": "2026-06-30"
+}

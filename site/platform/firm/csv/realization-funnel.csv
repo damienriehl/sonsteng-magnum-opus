@@ -1,0 +1,4 @@
+stage,amount,pct_of_worked,step_loss,step_rate
+worked,766350,100.0,,
+billed,673600,87.9,92750,87.9
+collected,627000,81.8,46600,93.1

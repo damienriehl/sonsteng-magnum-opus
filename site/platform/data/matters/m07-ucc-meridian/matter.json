@@ -1,0 +1,53 @@
+{
+  "id": "m07",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m07",
+  "slug": "m07-ucc-meridian",
+  "shape": "ucc_sale_of_goods",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "Cloverdyke Dairy Cooperative v. Brandt Refrigeration Systems, LLC",
+  "sides": [
+    {
+      "role_id": "m07.role.buyer",
+      "label": "Buyer / Claimant — Cloverdyke Dairy Cooperative",
+      "party_names": ["Cloverdyke Dairy Cooperative"],
+      "confidential_fact_refs": ["m07.fact.039"]
+    },
+    {
+      "role_id": "m07.role.seller",
+      "label": "Seller / Respondent — Brandt Refrigeration Systems, LLC",
+      "party_names": ["Brandt Refrigeration Systems, LLC"],
+      "confidential_fact_refs": ["m07.fact.040"]
+    }
+  ],
+  "parties": [
+    { "name": "Cloverdyke Dairy Cooperative", "role": "buyer / claimant dairy cooperative", "side_role_id": "m07.role.buyer" },
+    { "name": "Nils Aaberg", "role": "buyer's general manager and representative", "side_role_id": "m07.role.buyer" },
+    { "name": "Brandt Refrigeration Systems, LLC", "role": "seller / respondent equipment dealer-installer", "side_role_id": "m07.role.seller" },
+    { "name": "Sylvia Brandt", "role": "seller's operations manager and representative", "side_role_id": "m07.role.seller" }
+  ],
+  "client_id": "FIRM-C-07",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-01", "SK-LP-02", "SK-LP-03", "SK-LP-07", "SK-LP-13", "SK-LP-14"],
+  "task_refs": ["TSK-006", "TSK-009", "TSK-010", "TSK-022", "TSK-023", "TSK-035", "TSK-047", "TSK-048", "TSK-049", "TSK-052"],
+  "personas": ["m07.per.aaberg", "m07.per.brandt", "m07.per.tuvang"],
+  "witnesses": [
+    { "id": "m07.wit.tuvang", "name": "Reuben Tuvang" },
+    { "id": "m07.wit.pelletier", "name": "Darius Pelletier" },
+    { "id": "m07.wit.rask", "name": "Ingemar Rask, P.E." },
+    { "id": "m07.wit.callahan", "name": "Corinne Callahan" }
+  ],
+  "exhibits": [
+    { "id": "m07.exh.001", "title": "Equipment Purchase Agreement and Limited Warranty" },
+    { "id": "m07.exh.002", "title": "Delivery, Installation, and Commissioning Record" },
+    { "id": "m07.exh.003", "title": "Milk-House Temperature and Alarm Log (Excerpts)" },
+    { "id": "m07.exh.004", "title": "Brandt Field Service Call Reports (Three Visits)" },
+    { "id": "m07.exh.005", "title": "Larkspur Creamery Rejection Tickets and Credit Memos" },
+    { "id": "m07.exh.006", "title": "Warranty-Claim Demand Letter and Brandt Denial" },
+    { "id": "m07.exh.007", "title": "Independent Refrigeration Engineer Inspection Report" },
+    { "id": "m07.exh.008", "title": "Ostrowski Electrical Service Note (Pre-Purchase Panel Warning)" }
+  ],
+  "open_date": "2026-03-16",
+  "as_of_date": "2026-06-30"
+}

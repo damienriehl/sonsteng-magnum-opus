@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Client Interview — Sonsteng Practicum</title>
+
+<!--
+  Content-Security-Policy (strict, static-safe).
+  - default-src 'none'        : deny everything not explicitly allowed.
+  - script-src 'self'         : REQUIRED so chat.js loads; no inline script anywhere
+                                (the enumerated contract omitted script-src, but a JS app
+                                 cannot run under default-src 'none' — this is the strict,
+                                 same-origin-only reading of the intent: external files only,
+                                 zero inline execution).
+  - style-src 'self' 'unsafe-inline' : theme.css + the chat.js-injected <style> block.
+  - font-src 'self' data:     : embedded OFL woff2 + data-URI grain.
+  - connect-src *             : API_BASE is resolved at RUNTIME (?api= / localStorage /
+                                 <meta> / same-origin '/api') so the fetch origin is not
+                                 knowable when this static file is authored — a single
+                                 hard-coded origin would break BYOK deploy-your-own-Worker.
+                                 The Worker itself enforces a CORS allowlist; this is the
+                                 client half only.
+  - img-src 'self' data:      : local + data-URI only.
+  - base-uri 'none'; form-action 'none' : hardening (no <base> hijack, no form posts).
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+
+<!-- API base override (lowest precedence after '/api'); leave content empty by default. -->
+<meta name="sonsteng-api" content="">
+
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+
+<!-- shared assets: the generator copies app/chat/ -> site/platform/chat/, where ../assets resolves. -->
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/theme.css">
+</head>
+<body>
+  <!-- chat.js builds the entire consultation room into this root (createElement/textContent only). -->
+  <div id="chat-root" data-mode="live"></div>
+  <noscript>
+    <div class="wrap">
+      <div class="stage-direction">This client interview needs JavaScript enabled to run.</div>
+    </div>
+  </noscript>
+  <script src="byok.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>

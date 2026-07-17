@@ -1,0 +1,11 @@
+line,budget,actual,variance,variance_pct,favorable
+Fee revenue,660000,627000,-33000,-5.0,no
+Attorney compensation,300000,312000,12000,4.0,yes
+Office rent,48000,46800,-1200,-2.5,yes
+Technology & practice-management software,24000,27500,3500,14.6,yes
+Malpractice insurance,18000,17400,-600,-3.3,yes
+Marketing & client development,15000,11200,-3800,-25.3,yes
+CLE & bar dues,6000,6900,900,15.0,yes
+Filing fees & litigation costs,20000,23400,3400,17.0,yes
+Paralegal & support staff,40000,38500,-1500,-3.8,yes
+Miscellaneous & office supplies,9000,10300,1300,14.4,yes

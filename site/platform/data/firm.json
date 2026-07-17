@@ -1,0 +1,191 @@
+{
+  "id": "FIRM",
+  "schema_version": "1.1.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/firm/FIRM",
+  "identity": {
+    "name": "Ellingboe & Ravndal LLP",
+    "address": "310 Riverwalk Plaza, Suite 400, Norsholm, Meridian 55901",
+    "contact": "office@ellingboeravndal.example.com",
+    "letterhead_note": "A two-attorney general practice — the Practicum firm of record; partners named alphabetically."
+  },
+  "timekeepers": [
+    { "id": "FIRM-TK-01", "name": "Amara Ellingboe", "role": "senior attorney", "rate": 250 },
+    { "id": "FIRM-TK-02", "name": "Marcus Ravndal", "role": "associate attorney", "rate": 225 }
+  ],
+  "rate_card": [
+    { "role": "senior attorney", "rate": 250 },
+    { "role": "associate attorney", "rate": 225 },
+    { "role": "paralegal", "rate": 120 }
+  ],
+  "clients": [
+    { "id": "FIRM-C-01", "name": "Marceline Osgard" },
+    { "id": "FIRM-C-02", "name": "Gregor A. Winterhalt" },
+    { "id": "FIRM-C-03", "name": "Lorraine Petimeyer" },
+    { "id": "FIRM-C-04", "name": "Talbot Meskin" },
+    { "id": "FIRM-C-05", "name": "Devon R. Halvard" },
+    { "id": "FIRM-C-06", "name": "Adaeze Okwuosa" },
+    { "id": "FIRM-C-07", "name": "Cloverdyke Dairy Cooperative" },
+    { "id": "FIRM-C-08", "name": "Tobias Merrow, a minor (parent: Dana Merrow)" },
+    { "id": "FIRM-C-09", "name": "Renata Sitko" },
+    { "id": "FIRM-C-10", "name": "Estate of Mabel R. Thornquist (Eleanor Thornquist-Reddick, PR)" },
+    { "id": "FIRM-C-11", "name": "Yusuf Adeyemi" },
+    { "id": "FIRM-C-12", "name": "Delphine A. Karsgaard" },
+    { "id": "FIRM-C-13", "name": "Sofia Reyes" },
+    { "id": "FIRM-C-14", "name": "Kenji Nakamura" },
+    { "id": "FIRM-C-15", "name": "Travis O. Wenzloff" },
+    { "id": "FIRM-C-16", "name": "Priya Iyer" },
+    { "id": "FIRM-C-17", "name": "Empire Provisions Corp." },
+    { "id": "FIRM-C-18", "name": "Jasmine Cordero, a minor (parent: Ana Cordero)" },
+    { "id": "FIRM-C-19", "name": "Camille Beaumont" },
+    { "id": "FIRM-C-20", "name": "Estate of Harold W. Prewitt (Vivian Prewitt-Cole, PR)" }
+  ],
+  "book_of_business": [
+    { "matter_id": "m01", "client_id": "FIRM-C-01", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m02", "client_id": "FIRM-C-02", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m03", "client_id": "FIRM-C-03", "fee_type": "contingency", "status": "active" },
+    { "matter_id": "m04", "client_id": "FIRM-C-04", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m05", "client_id": "FIRM-C-05", "fee_type": "flat", "status": "active" },
+    { "matter_id": "m06", "client_id": "FIRM-C-06", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m07", "client_id": "FIRM-C-07", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m08", "client_id": "FIRM-C-08", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m09", "client_id": "FIRM-C-09", "fee_type": "retainer", "status": "active" },
+    { "matter_id": "m10", "client_id": "FIRM-C-10", "fee_type": "flat", "status": "active" },
+    { "matter_id": "m11", "client_id": "FIRM-C-11", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m12", "client_id": "FIRM-C-12", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m13", "client_id": "FIRM-C-13", "fee_type": "contingency", "status": "active" },
+    { "matter_id": "m14", "client_id": "FIRM-C-14", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m15", "client_id": "FIRM-C-15", "fee_type": "flat", "status": "active" },
+    { "matter_id": "m16", "client_id": "FIRM-C-16", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m17", "client_id": "FIRM-C-17", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m18", "client_id": "FIRM-C-18", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m19", "client_id": "FIRM-C-19", "fee_type": "retainer", "status": "active" },
+    { "matter_id": "m20", "client_id": "FIRM-C-20", "fee_type": "flat", "status": "active" }
+  ],
+  "closed_matters": [
+    { "matter_id": "m21", "client_id": "FIRM-C-03", "fee_type": "hourly", "closed_date": "2024-05-31", "total_billed": 12400 },
+    { "matter_id": "m22", "client_id": "FIRM-C-07", "fee_type": "hourly", "closed_date": "2024-08-15", "total_billed": 9800 },
+    { "matter_id": "m23", "client_id": "FIRM-C-11", "fee_type": "contingency", "closed_date": "2024-10-31", "total_billed": 41000 },
+    { "matter_id": "m24", "client_id": "FIRM-C-05", "fee_type": "flat", "closed_date": "2024-12-20", "total_billed": 3500 },
+    { "matter_id": "m25", "client_id": "FIRM-C-14", "fee_type": "hourly", "closed_date": "2025-02-28", "total_billed": 15600 },
+    { "matter_id": "m26", "client_id": "FIRM-C-09", "fee_type": "retainer", "closed_date": "2025-04-30", "total_billed": 22300 },
+    { "matter_id": "m27", "client_id": "FIRM-C-17", "fee_type": "hourly", "closed_date": "2025-06-30", "total_billed": 18900 },
+    { "matter_id": "m28", "client_id": "FIRM-C-01", "fee_type": "hourly", "closed_date": "2025-09-30", "total_billed": 7200 },
+    { "matter_id": "m29", "client_id": "FIRM-C-20", "fee_type": "flat", "closed_date": "2025-11-15", "total_billed": 4000 },
+    { "matter_id": "m30", "client_id": "FIRM-C-13", "fee_type": "contingency", "closed_date": "2025-12-31", "total_billed": 33500 }
+  ],
+  "ar_aging": {
+    "current": 31630,
+    "days_1_30": 34815,
+    "days_31_60": 19260,
+    "days_61_90": 7300,
+    "days_over_90": 10290
+  },
+  "realization_target": 0.9,
+  "collection_target": 0.95,
+  "budget": [
+    { "id": "FIRM-B-01", "name": "Fee revenue", "budget": 660000, "actual": 627000, "variance_is_good": false },
+    { "id": "FIRM-B-02", "name": "Attorney compensation", "budget": 300000, "actual": 312000, "variance_is_good": true },
+    { "id": "FIRM-B-03", "name": "Office rent", "budget": 48000, "actual": 46800, "variance_is_good": true },
+    { "id": "FIRM-B-04", "name": "Technology & practice-management software", "budget": 24000, "actual": 27500, "variance_is_good": true },
+    { "id": "FIRM-B-05", "name": "Malpractice insurance", "budget": 18000, "actual": 17400, "variance_is_good": true },
+    { "id": "FIRM-B-06", "name": "Marketing & client development", "budget": 15000, "actual": 11200, "variance_is_good": true },
+    { "id": "FIRM-B-07", "name": "CLE & bar dues", "budget": 6000, "actual": 6900, "variance_is_good": true },
+    { "id": "FIRM-B-08", "name": "Filing fees & litigation costs", "budget": 20000, "actual": 23400, "variance_is_good": true },
+    { "id": "FIRM-B-09", "name": "Paralegal & support staff", "budget": 40000, "actual": 38500, "variance_is_good": true },
+    { "id": "FIRM-B-10", "name": "Miscellaneous & office supplies", "budget": 9000, "actual": 10300, "variance_is_good": true }
+  ],
+  "funnel": {
+    "worked": 766350,
+    "billed": 673600,
+    "collected": 627000,
+    "period": "trailing_12m"
+  },
+  "utilization_monthly": [
+    { "month": "2025-07", "timekeeper_id": "FIRM-TK-01", "billable_hours": 127, "target_hours": 150 },
+    { "month": "2025-07", "timekeeper_id": "FIRM-TK-02", "billable_hours": 121, "target_hours": 150 },
+    { "month": "2025-08", "timekeeper_id": "FIRM-TK-01", "billable_hours": 132, "target_hours": 150 },
+    { "month": "2025-08", "timekeeper_id": "FIRM-TK-02", "billable_hours": 138, "target_hours": 150 },
+    { "month": "2025-09", "timekeeper_id": "FIRM-TK-01", "billable_hours": 141, "target_hours": 150 },
+    { "month": "2025-09", "timekeeper_id": "FIRM-TK-02", "billable_hours": 146, "target_hours": 150 },
+    { "month": "2025-10", "timekeeper_id": "FIRM-TK-01", "billable_hours": 152, "target_hours": 150 },
+    { "month": "2025-10", "timekeeper_id": "FIRM-TK-02", "billable_hours": 158, "target_hours": 150 },
+    { "month": "2025-11", "timekeeper_id": "FIRM-TK-01", "billable_hours": 138, "target_hours": 150 },
+    { "month": "2025-11", "timekeeper_id": "FIRM-TK-02", "billable_hours": 143, "target_hours": 150 },
+    { "month": "2025-12", "timekeeper_id": "FIRM-TK-01", "billable_hours": 112, "target_hours": 150 },
+    { "month": "2025-12", "timekeeper_id": "FIRM-TK-02", "billable_hours": 108, "target_hours": 150 },
+    { "month": "2026-01", "timekeeper_id": "FIRM-TK-01", "billable_hours": 135, "target_hours": 150 },
+    { "month": "2026-01", "timekeeper_id": "FIRM-TK-02", "billable_hours": 139, "target_hours": 150 },
+    { "month": "2026-02", "timekeeper_id": "FIRM-TK-01", "billable_hours": 149, "target_hours": 150 },
+    { "month": "2026-02", "timekeeper_id": "FIRM-TK-02", "billable_hours": 152, "target_hours": 150 },
+    { "month": "2026-03", "timekeeper_id": "FIRM-TK-01", "billable_hours": 155, "target_hours": 150 },
+    { "month": "2026-03", "timekeeper_id": "FIRM-TK-02", "billable_hours": 147, "target_hours": 150 },
+    { "month": "2026-04", "timekeeper_id": "FIRM-TK-01", "billable_hours": 116, "target_hours": 150 },
+    { "month": "2026-04", "timekeeper_id": "FIRM-TK-02", "billable_hours": 131, "target_hours": 150 },
+    { "month": "2026-05", "timekeeper_id": "FIRM-TK-01", "billable_hours": 117, "target_hours": 150 },
+    { "month": "2026-05", "timekeeper_id": "FIRM-TK-02", "billable_hours": 122, "target_hours": 150 },
+    { "month": "2026-06", "timekeeper_id": "FIRM-TK-01", "billable_hours": 128, "target_hours": 150 },
+    { "month": "2026-06", "timekeeper_id": "FIRM-TK-02", "billable_hours": 121, "target_hours": 150 }
+  ],
+  "ar_top_matters": [
+    {
+      "matter_id": "m07",
+      "client_name": "Cloverdyke Dairy Cooperative",
+      "buckets": { "b0_30": 12300, "b31_60": 3200, "b61_90": 2400, "b90_plus": 0 },
+      "total": 17900
+    },
+    {
+      "matter_id": "m16",
+      "client_name": "Priya Iyer",
+      "buckets": { "b0_30": 10600, "b31_60": 2600, "b61_90": 2100, "b90_plus": 0 },
+      "total": 15300
+    },
+    {
+      "matter_id": "m17",
+      "client_name": "Empire Provisions Corp.",
+      "buckets": { "b0_30": 11200, "b31_60": 2100, "b61_90": 0, "b90_plus": 0 },
+      "total": 13300
+    },
+    {
+      "matter_id": "m01",
+      "client_name": "Marceline Osgard",
+      "buckets": { "b0_30": 9900, "b31_60": 1900, "b61_90": 1200, "b90_plus": 0 },
+      "total": 13000
+    },
+    {
+      "matter_id": "m14",
+      "client_name": "Kenji Nakamura",
+      "buckets": { "b0_30": 5395, "b31_60": 4915, "b61_90": 0, "b90_plus": 2690 },
+      "total": 13000
+    },
+    {
+      "matter_id": "m06",
+      "client_name": "Adaeze Okwuosa",
+      "buckets": { "b0_30": 9100, "b31_60": 1800, "b61_90": 1600, "b90_plus": 0 },
+      "total": 12500
+    },
+    {
+      "matter_id": "m27",
+      "client_name": "Empire Provisions Corp.",
+      "buckets": { "b0_30": 0, "b31_60": 0, "b61_90": 0, "b90_plus": 4600 },
+      "total": 4600
+    },
+    {
+      "matter_id": "m28",
+      "client_name": "Marceline Osgard",
+      "buckets": { "b0_30": 0, "b31_60": 0, "b61_90": 0, "b90_plus": 3000 },
+      "total": 3000
+    }
+  ],
+  "trust": {
+    "balance": 21000,
+    "three_way_reconciled": true,
+    "last_reconciled": "2026-06-30",
+    "holdings": [
+      { "matter_id": "m09", "amount": 8500, "kind": "retainer" },
+      { "matter_id": "m19", "amount": 7000, "kind": "retainer" },
+      { "matter_id": "m05", "amount": 2500, "kind": "advance" },
+      { "matter_id": "m15", "amount": 3000, "kind": "advance" }
+    ]
+  },
+  "as_of_date": "2026-06-30"
+}

@@ -1,0 +1,1905 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/platform/data/index.json",
+  "title": "Sonsteng Practicum — machine catalog",
+  "description": "Agent/LMS entry point for the practicum data spine. All paths are relative to this file. Instructor-side materials (master fact patterns, instructor notes, persona disclosure tiers) are intentionally absent.",
+  "generated_by": "tools/build_site.py",
+  "matters": [
+    {
+      "id": "m01",
+      "slug": "m01-arbitration-meridian",
+      "caption": "Halden Regional Transit District v. Marceline Osgard and Meridian Alliance of Public Workers, Local 7 (Arbitration)",
+      "shape": "employment_arbitration",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m01.role.employer-counsel",
+          "label": "Employer / Halden Regional Transit District"
+        },
+        {
+          "role_id": "m01.role.employee-counsel",
+          "label": "Grievant & Union / Marceline Osgard and MAPW Local 7"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m01.per.dellwood",
+          "name": "Theo Dellwood",
+          "role": "fact witness (coworker mechanic)",
+          "interviewable_by": [
+            "m01.role.employee-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m01.per.osgard",
+          "name": "Marceline Osgard",
+          "role": "client",
+          "interviewable_by": [
+            "m01.role.employee-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m01.per.rennick",
+          "name": "Gerald Rennick",
+          "role": "adverse party representative (maintenance superintendent)",
+          "interviewable_by": [
+            "m01.role.employer-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m01-arbitration-meridian/index.html",
+      "data": {
+        "matter": "matters/m01-arbitration-meridian/matter.json",
+        "exercise": "matters/m01-arbitration-meridian/exercise.json",
+        "rubric": "matters/m01-arbitration-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m01.rub",
+        "declared_total": 202,
+        "criteria": [
+          {
+            "id": "m01.rub.c01",
+            "name": "Case theory and just-cause analysis",
+            "weight_points": 45,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-001"
+          },
+          {
+            "id": "m01.rub.c02",
+            "name": "Fact investigation and chronology",
+            "weight_points": 35,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m01.rub.c03",
+            "name": "Client and witness interviewing",
+            "weight_points": 40,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m01.rub.c04",
+            "name": "Written advocacy: statement of the case",
+            "weight_points": 32,
+            "skill_id": "SK-LP-09",
+            "task_id": "TSK-005"
+          },
+          {
+            "id": "m01.rub.c05",
+            "name": "Hearing advocacy: direct and cross",
+            "weight_points": 35,
+            "skill_id": "SK-LP-08",
+            "task_id": "TSK-027"
+          },
+          {
+            "id": "m01.rub.c06",
+            "name": "Professional responsibility and judgment",
+            "weight_points": 15,
+            "skill_id": "SK-LP-16",
+            "task_id": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "m02",
+      "slug": "m02-discipline-meridian",
+      "caption": "In re Petition for Disciplinary Action against Gregor A. Winterhalt, a Meridian Attorney",
+      "shape": "attorney_discipline",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m02.role.disciplinary-counsel",
+          "label": "Petitioner / Disciplinary Counsel (Meridian Office of Lawyer Conduct)"
+        },
+        {
+          "role_id": "m02.role.respondent-counsel",
+          "label": "Respondent / Gregor A. Winterhalt"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m02.per.fenwick",
+          "name": "Nadia Fenwick",
+          "role": "fact witness (former legal assistant)",
+          "interviewable_by": [
+            "m02.role.respondent-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m02.per.marchetti",
+          "name": "Delia Marchetti",
+          "role": "complaining witness (former client)",
+          "interviewable_by": [
+            "m02.role.disciplinary-counsel",
+            "m02.role.respondent-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m02.per.winterhalt",
+          "name": "Gregor A. Winterhalt",
+          "role": "client (respondent attorney)",
+          "interviewable_by": [
+            "m02.role.respondent-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m02-discipline-meridian/index.html",
+      "data": {
+        "matter": "matters/m02-discipline-meridian/matter.json",
+        "exercise": "matters/m02-discipline-meridian/exercise.json",
+        "rubric": "matters/m02-discipline-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m02.rub",
+        "declared_total": 207,
+        "criteria": [
+          {
+            "id": "m02.rub.c01",
+            "name": "Trust-accounting and safekeeping analysis",
+            "weight_points": 55,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-061"
+          },
+          {
+            "id": "m02.rub.c02",
+            "name": "Diligence and communication analysis",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m02.rub.c03",
+            "name": "Sanction analysis and proportionality",
+            "weight_points": 42,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-005"
+          },
+          {
+            "id": "m02.rub.c04",
+            "name": "Client interview and counseling",
+            "weight_points": 40,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m02.rub.c05",
+            "name": "Respondent's pre-hearing brief",
+            "weight_points": 25,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-032"
+          },
+          {
+            "id": "m02.rub.c06",
+            "name": "Oral argument and negotiation",
+            "weight_points": 15,
+            "skill_id": "SK-LP-08",
+            "task_id": "TSK-026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m03",
+      "slug": "m03-tort-meridian",
+      "caption": "Lorraine Petimeyer v. Douglas Ashcombe",
+      "shape": "auto_negligence",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "contingency",
+      "sides": [
+        {
+          "role_id": "m03.role.plaintiff",
+          "label": "Plaintiff / Lorraine Petimeyer"
+        },
+        {
+          "role_id": "m03.role.defense",
+          "label": "Defendant / Douglas Ashcombe"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m03.per.ashcombe",
+          "name": "Douglas Ashcombe",
+          "role": "defendant driver",
+          "interviewable_by": [
+            "m03.role.plaintiff",
+            "m03.role.defense"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m03.per.petimeyer",
+          "name": "Lorraine Petimeyer",
+          "role": "client",
+          "interviewable_by": [
+            "m03.role.plaintiff"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m03.per.quesada",
+          "name": "Rafael Quesada",
+          "role": "independent eyewitness",
+          "interviewable_by": [
+            "m03.role.plaintiff",
+            "m03.role.defense"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m03-tort-meridian/index.html",
+      "data": {
+        "matter": "matters/m03-tort-meridian/matter.json",
+        "exercise": "matters/m03-tort-meridian/exercise.json",
+        "rubric": "matters/m03-tort-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m03.rub",
+        "declared_total": 325,
+        "criteria": [
+          {
+            "id": "m03.rub.c01",
+            "name": "Client interview & fact development",
+            "weight_points": 70,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m03.rub.c02",
+            "name": "Case theory & liability analysis",
+            "weight_points": 60,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-001"
+          },
+          {
+            "id": "m03.rub.c03",
+            "name": "Litigation execution",
+            "weight_points": 90,
+            "skill_id": "SK-LP-14",
+            "task_id": "TSK-049"
+          },
+          {
+            "id": "m03.rub.c04",
+            "name": "Damages & causation proof",
+            "weight_points": 45,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m03.rub.c05",
+            "name": "Client counseling & settlement judgment",
+            "weight_points": 35,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-034"
+          },
+          {
+            "id": "m03.rub.c06",
+            "name": "Professional responsibility",
+            "weight_points": 25,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m04",
+      "slug": "m04-realestate-meridian",
+      "caption": "In re Purchase of 4400 Kestrel Point, Sable County (Renard–Meskin)",
+      "shape": "real_estate_negotiation",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m04.role.buyer-counsel",
+          "label": "Buyer's Counsel (Talbot Meskin)"
+        },
+        {
+          "role_id": "m04.role.seller-counsel",
+          "label": "Seller's Counsel (Ruth Renard)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m04.per.delahaye",
+          "name": "Corwin Delahaye",
+          "role": "adjoining landowner (fact witness)",
+          "interviewable_by": [
+            "m04.role.buyer-counsel",
+            "m04.role.seller-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m04.per.meskin",
+          "name": "Talbot Meskin",
+          "role": "client",
+          "interviewable_by": [
+            "m04.role.buyer-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m04.per.renard",
+          "name": "Ruth Renard",
+          "role": "seller / opposing party",
+          "interviewable_by": [
+            "m04.role.seller-counsel",
+            "m04.role.buyer-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m04-realestate-meridian/index.html",
+      "data": {
+        "matter": "matters/m04-realestate-meridian/matter.json",
+        "exercise": "matters/m04-realestate-meridian/exercise.json",
+        "rubric": "matters/m04-realestate-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m04.rub",
+        "declared_total": 185.5,
+        "criteria": [
+          {
+            "id": "m04.rub.c01",
+            "name": "Strategic negotiation plan (SSNP)",
+            "weight_points": 50,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-044"
+          },
+          {
+            "id": "m04.rub.c02",
+            "name": "Access-rights analysis (easement vs. license)",
+            "weight_points": 45,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m04.rub.c03",
+            "name": "Purchase-agreement drafting",
+            "weight_points": 40.5,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-062"
+          },
+          {
+            "id": "m04.rub.c04",
+            "name": "Client counseling and fact-gathering",
+            "weight_points": 30,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-034"
+          },
+          {
+            "id": "m04.rub.c05",
+            "name": "Professional responsibility",
+            "weight_points": 20,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m05",
+      "slug": "m05-dwi-meridian",
+      "caption": "State of Meridian v. Devon R. Halvard",
+      "shape": "criminal_dwi",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "flat",
+      "sides": [
+        {
+          "role_id": "m05.role.defense",
+          "label": "Defense / Defendant"
+        },
+        {
+          "role_id": "m05.role.prosecution",
+          "label": "Prosecution / State of Meridian"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m05.per.broshears",
+          "name": "Officer Curtis Broshears",
+          "role": "arresting officer (State's witness)",
+          "interviewable_by": [
+            "m05.role.prosecution"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m05.per.halvard",
+          "name": "Devon R. Halvard",
+          "role": "client (criminal defendant)",
+          "interviewable_by": [
+            "m05.role.defense"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m05-dwi-meridian/index.html",
+      "data": {
+        "matter": "matters/m05-dwi-meridian/matter.json",
+        "exercise": "matters/m05-dwi-meridian/exercise.json",
+        "rubric": "matters/m05-dwi-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m05.rub",
+        "declared_total": 316.5,
+        "criteria": [
+          {
+            "id": "m05.rub.c01",
+            "name": "Client interview and fact development",
+            "weight_points": 90,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m05.rub.c02",
+            "name": "Issue-spotting: stop, field tests, and breath sample",
+            "weight_points": 80,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-001"
+          },
+          {
+            "id": "m05.rub.c03",
+            "name": "Counseling a distressed client",
+            "weight_points": 56.5,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m05.rub.c04",
+            "name": "Plea and charge negotiation strategy",
+            "weight_points": 60,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-045"
+          },
+          {
+            "id": "m05.rub.c05",
+            "name": "Professional responsibility",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m06",
+      "slug": "m06-noncompete-meridian",
+      "caption": "Northlake Surgical Instruments, Inc. v. Adaeze Okwuosa",
+      "shape": "noncompete_trade_secret",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m06.role.plaintiff",
+          "label": "Plaintiff / Former Employer"
+        },
+        {
+          "role_id": "m06.role.defense",
+          "label": "Defendant / Former Employee (our client)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m06.per.calderaro",
+          "name": "Dr. Elena Calderaro",
+          "role": "hospital purchasing director (non-party fact witness)",
+          "interviewable_by": [
+            "m06.role.plaintiff",
+            "m06.role.defense"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m06.per.danneker",
+          "name": "Priscilla Danneker",
+          "role": "director of sales, Northlake Surgical Instruments (adverse party representative)",
+          "interviewable_by": [
+            "m06.role.plaintiff",
+            "m06.role.defense"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m06.per.okwuosa",
+          "name": "Adaeze Okwuosa",
+          "role": "client",
+          "interviewable_by": [
+            "m06.role.defense"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m06-noncompete-meridian/index.html",
+      "data": {
+        "matter": "matters/m06-noncompete-meridian/matter.json",
+        "exercise": "matters/m06-noncompete-meridian/exercise.json",
+        "rubric": "matters/m06-noncompete-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m06.rub",
+        "declared_total": 189,
+        "criteria": [
+          {
+            "id": "m06.rub.c01",
+            "name": "Temporary-injunction standard analysis",
+            "weight_points": 70,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-011"
+          },
+          {
+            "id": "m06.rub.c02",
+            "name": "Fact development and investigation",
+            "weight_points": 35,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m06.rub.c03",
+            "name": "Persuasive written advocacy",
+            "weight_points": 44,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-032"
+          },
+          {
+            "id": "m06.rub.c04",
+            "name": "Professional-responsibility and client-counseling judgment",
+            "weight_points": 40,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m07",
+      "slug": "m07-ucc-meridian",
+      "caption": "Cloverdyke Dairy Cooperative v. Brandt Refrigeration Systems, LLC",
+      "shape": "ucc_sale_of_goods",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m07.role.buyer",
+          "label": "Buyer / Claimant — Cloverdyke Dairy Cooperative"
+        },
+        {
+          "role_id": "m07.role.seller",
+          "label": "Seller / Respondent — Brandt Refrigeration Systems, LLC"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m07.per.aaberg",
+          "name": "Nils Aaberg",
+          "role": "client",
+          "interviewable_by": [
+            "m07.role.buyer"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m07.per.brandt",
+          "name": "Sylvia Brandt",
+          "role": "opposing party representative",
+          "interviewable_by": [
+            "m07.role.seller"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m07.per.tuvang",
+          "name": "Reuben Tuvang",
+          "role": "fact witness",
+          "interviewable_by": [
+            "m07.role.buyer"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m07-ucc-meridian/index.html",
+      "data": {
+        "matter": "matters/m07-ucc-meridian/matter.json",
+        "exercise": "matters/m07-ucc-meridian/exercise.json",
+        "rubric": "matters/m07-ucc-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m07.rub",
+        "declared_total": 200,
+        "criteria": [
+          {
+            "id": "m07.rub.c01",
+            "name": "Client interview and fact development",
+            "weight_points": 50,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m07.rub.c02",
+            "name": "Warranty and remedies analysis",
+            "weight_points": 60,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-010"
+          },
+          {
+            "id": "m07.rub.c03",
+            "name": "Remedies, damages, and causation strategy",
+            "weight_points": 40,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-006"
+          },
+          {
+            "id": "m07.rub.c04",
+            "name": "ADR strategy and client counseling",
+            "weight_points": 30,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-047"
+          },
+          {
+            "id": "m07.rub.c05",
+            "name": "Professional responsibility and written communication",
+            "weight_points": 20,
+            "skill_id": "SK-LP-16",
+            "task_id": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "m08",
+      "slug": "m08-juvenile-meridian",
+      "caption": "In re the Welfare of T.M., a Minor",
+      "shape": "juvenile_delinquency",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m08.role.prosecution",
+          "label": "Prosecution / State (Halden County Attorney)"
+        },
+        {
+          "role_id": "m08.role.defense",
+          "label": "Juvenile Defense Counsel (Respondent)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m08.per.dubourg",
+          "name": "Kellan Dubourg",
+          "role": "co-respondent charged separately (represented party)",
+          "interviewable_by": [
+            "m08.role.defense"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m08.per.merrow-d",
+          "name": "Dana Merrow",
+          "role": "parent / guardian of the client",
+          "interviewable_by": [
+            "m08.role.defense"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m08.per.merrow-t",
+          "name": "Tobias Merrow",
+          "role": "client (juvenile respondent)",
+          "interviewable_by": [
+            "m08.role.defense"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m08-juvenile-meridian/index.html",
+      "data": {
+        "matter": "matters/m08-juvenile-meridian/matter.json",
+        "exercise": "matters/m08-juvenile-meridian/exercise.json",
+        "rubric": "matters/m08-juvenile-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m08.rub",
+        "declared_total": 220,
+        "criteria": [
+          {
+            "id": "m08.rub.c01",
+            "name": "Fact investigation & the minor-client interview",
+            "weight_points": 60,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m08.rub.c02",
+            "name": "Counseling the distressed juvenile and parent",
+            "weight_points": 50,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m08.rub.c03",
+            "name": "Disposition strategy: diversion vs. contested hearing",
+            "weight_points": 55,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-035"
+          },
+          {
+            "id": "m08.rub.c04",
+            "name": "Professional responsibility",
+            "weight_points": 55,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m09",
+      "slug": "m09-dissolution-meridian",
+      "caption": "In re the Marriage of Renata Sitko and Harlan Aldergrove",
+      "shape": "marriage_dissolution",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "retainer",
+      "sides": [
+        {
+          "role_id": "m09.role.petitioner-counsel",
+          "label": "Petitioner's Counsel (Renata Sitko)"
+        },
+        {
+          "role_id": "m09.role.respondent-counsel",
+          "label": "Respondent's Counsel (Harlan Aldergrove)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m09.per.aldergrove",
+          "name": "Harlan Aldergrove",
+          "role": "respondent / husband",
+          "interviewable_by": [
+            "m09.role.respondent-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m09.per.ferreira",
+          "name": "Marisol Ferreira",
+          "role": "fact witness (petitioner's sister)",
+          "interviewable_by": [
+            "m09.role.petitioner-counsel",
+            "m09.role.respondent-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m09.per.sitko",
+          "name": "Renata Sitko",
+          "role": "client / petitioner",
+          "interviewable_by": [
+            "m09.role.petitioner-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m09-dissolution-meridian/index.html",
+      "data": {
+        "matter": "matters/m09-dissolution-meridian/matter.json",
+        "exercise": "matters/m09-dissolution-meridian/exercise.json",
+        "rubric": "matters/m09-dissolution-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m09.rub",
+        "declared_total": 220,
+        "criteria": [
+          {
+            "id": "m09.rub.c01",
+            "name": "Client interview and fact-gathering",
+            "weight_points": 70,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m09.rub.c02",
+            "name": "Counseling the distressed client",
+            "weight_points": 40,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m09.rub.c03",
+            "name": "Settlement strategy and negotiation",
+            "weight_points": 55,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-044"
+          },
+          {
+            "id": "m09.rub.c04",
+            "name": "Professional responsibility",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m09.rub.c05",
+            "name": "Drafting the initiating documents",
+            "weight_points": 25,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-048"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m10",
+      "slug": "m10-probate-meridian",
+      "caption": "In re the Estate of Mabel R. Thornquist",
+      "shape": "wills_probate",
+      "tier": "meridian",
+      "jurisdiction": "meridian",
+      "fee_type": "flat",
+      "sides": [
+        {
+          "role_id": "m10.role.proponent-counsel",
+          "label": "Proponent / Estate (Personal Representative)"
+        },
+        {
+          "role_id": "m10.role.contestant-counsel",
+          "label": "Contestant / Objecting Heir"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m10.per.reddick",
+          "name": "Eleanor Thornquist-Reddick",
+          "role": "client (personal representative and principal devisee)",
+          "interviewable_by": [
+            "m10.role.proponent-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m10.per.sundberg",
+          "name": "Lorna Sundberg",
+          "role": "fact witness (home health aide)",
+          "interviewable_by": [
+            "m10.role.proponent-counsel",
+            "m10.role.contestant-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m10.per.thornquist",
+          "name": "Ronald Thornquist",
+          "role": "will contestant (objecting heir)",
+          "interviewable_by": [
+            "m10.role.contestant-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m10-probate-meridian/index.html",
+      "data": {
+        "matter": "matters/m10-probate-meridian/matter.json",
+        "exercise": "matters/m10-probate-meridian/exercise.json",
+        "rubric": "matters/m10-probate-meridian/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m10.rub",
+        "declared_total": 210,
+        "criteria": [
+          {
+            "id": "m10.rub.c01",
+            "name": "Client interview and fact gathering",
+            "weight_points": 60,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m10.rub.c02",
+            "name": "Capacity and undue-influence analysis",
+            "weight_points": 70,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-010"
+          },
+          {
+            "id": "m10.rub.c03",
+            "name": "Professional responsibility",
+            "weight_points": 40,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m10.rub.c04",
+            "name": "Counseling the distressed client",
+            "weight_points": 25,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m10.rub.c05",
+            "name": "Interview memo and litigation posture",
+            "weight_points": 15,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-048"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m11",
+      "slug": "m11-arbitration-il",
+      "caption": "Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)",
+      "shape": "employment_arbitration",
+      "tier": "real",
+      "jurisdiction": "IL",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m11.role.employee-counsel",
+          "label": "Claimant / Employee (firm's client)"
+        },
+        {
+          "role_id": "m11.role.employer-counsel",
+          "label": "Respondent / Employer"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m11.per.adeyemi",
+          "name": "Yusuf Adeyemi",
+          "role": "client",
+          "interviewable_by": [
+            "m11.role.employee-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m11.per.pfeiffer",
+          "name": "Roland Pfeiffer",
+          "role": "adverse witness / director of operations (Respondent employer)",
+          "interviewable_by": [
+            "m11.role.employee-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m11.per.ruvalcaba",
+          "name": "Tomás Ruvalcaba",
+          "role": "fact witness / co-worker",
+          "interviewable_by": [
+            "m11.role.employee-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m11-arbitration-il/index.html",
+      "data": {
+        "matter": "matters/m11-arbitration-il/matter.json",
+        "exercise": "matters/m11-arbitration-il/exercise.json",
+        "rubric": "matters/m11-arbitration-il/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m11.rub",
+        "declared_total": 202,
+        "criteria": [
+          {
+            "id": "m11.rub.c01",
+            "name": "Statement of the Case (written advocacy)",
+            "weight_points": 56,
+            "skill_id": "SK-LP-09",
+            "task_id": "TSK-032"
+          },
+          {
+            "id": "m11.rub.c02",
+            "name": "Fact development and witness interviews",
+            "weight_points": 46,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m11.rub.c03",
+            "name": "Case theory and legal analysis",
+            "weight_points": 40,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-002"
+          },
+          {
+            "id": "m11.rub.c04",
+            "name": "Arbitration hearing advocacy",
+            "weight_points": 44,
+            "skill_id": "SK-LP-14",
+            "task_id": "TSK-052"
+          },
+          {
+            "id": "m11.rub.c05",
+            "name": "Professional responsibility and counseling",
+            "weight_points": 16,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m12",
+      "slug": "m12-discipline-mn",
+      "caption": "In re Petition for Disciplinary Action against Delphine A. Karsgaard, a Minnesota Attorney",
+      "shape": "attorney_discipline",
+      "tier": "real",
+      "jurisdiction": "MN",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m12.role.disciplinary-counsel",
+          "label": "Petitioner / Office of Lawyers Professional Responsibility"
+        },
+        {
+          "role_id": "m12.role.respondent-counsel",
+          "label": "Respondent / Delphine A. Karsgaard (defense)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m12.per.dieterle",
+          "name": "Marguerite Dieterle",
+          "role": "complaining client (adverse; represented by malpractice counsel)",
+          "interviewable_by": [
+            "m12.role.respondent-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m12.per.emberly",
+          "name": "Jonas Emberly",
+          "role": "fact witness (associate at respondent's firm)",
+          "interviewable_by": [
+            "m12.role.respondent-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m12.per.karsgaard",
+          "name": "Delphine A. Karsgaard",
+          "role": "client (respondent attorney)",
+          "interviewable_by": [
+            "m12.role.respondent-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m12-discipline-mn/index.html",
+      "data": {
+        "matter": "matters/m12-discipline-mn/matter.json",
+        "exercise": "matters/m12-discipline-mn/exercise.json",
+        "rubric": "matters/m12-discipline-mn/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m12.rub",
+        "declared_total": 207,
+        "criteria": [
+          {
+            "id": "m12.rub.c01",
+            "name": "Misconduct analysis across the three charges",
+            "weight_points": 70,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m12.rub.c02",
+            "name": "Sanction analysis and proportionality",
+            "weight_points": 45,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-007"
+          },
+          {
+            "id": "m12.rub.c03",
+            "name": "Respondent's pre-hearing brief",
+            "weight_points": 45,
+            "skill_id": "SK-LP-09",
+            "task_id": "TSK-032"
+          },
+          {
+            "id": "m12.rub.c04",
+            "name": "Fact development and client counseling",
+            "weight_points": 27,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m12.rub.c05",
+            "name": "Oral argument readiness",
+            "weight_points": 20,
+            "skill_id": "SK-LP-08",
+            "task_id": "TSK-026"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m13",
+      "slug": "m13-tort-fl",
+      "caption": "Sofia Reyes v. Bradley Hutchins",
+      "shape": "auto_negligence",
+      "tier": "real",
+      "jurisdiction": "FL",
+      "fee_type": "contingency",
+      "sides": [
+        {
+          "role_id": "m13.role.plaintiff",
+          "label": "Plaintiff / Injured Driver"
+        },
+        {
+          "role_id": "m13.role.defense",
+          "label": "Defendant / At-Fault Driver"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m13.per.hutchins",
+          "name": "Bradley Hutchins",
+          "role": "defendant driver",
+          "interviewable_by": [
+            "m13.role.plaintiff",
+            "m13.role.defense"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m13.per.reyes",
+          "name": "Sofia Reyes",
+          "role": "client",
+          "interviewable_by": [
+            "m13.role.plaintiff"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m13-tort-fl/index.html",
+      "data": {
+        "matter": "matters/m13-tort-fl/matter.json",
+        "exercise": "matters/m13-tort-fl/exercise.json",
+        "rubric": "matters/m13-tort-fl/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m13.rub",
+        "declared_total": 325,
+        "criteria": [
+          {
+            "id": "m13.rub.c01",
+            "name": "Fact investigation and chronology",
+            "weight_points": 70,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m13.rub.c02",
+            "name": "Liability and comparative-fault analysis",
+            "weight_points": 80,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-010"
+          },
+          {
+            "id": "m13.rub.c03",
+            "name": "Damages and no-fault / PIP analysis",
+            "weight_points": 55,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-001"
+          },
+          {
+            "id": "m13.rub.c04",
+            "name": "Client counseling and expectation management",
+            "weight_points": 45,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-034"
+          },
+          {
+            "id": "m13.rub.c05",
+            "name": "Settlement strategy and negotiation",
+            "weight_points": 45,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-044"
+          },
+          {
+            "id": "m13.rub.c06",
+            "name": "Professional responsibility — no-contact rule",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m14",
+      "slug": "m14-realestate-tx",
+      "caption": "In re Purchase of the Cimarron Tract (Whitfield–Nakamura)",
+      "shape": "real_estate_negotiation",
+      "tier": "real",
+      "jurisdiction": "TX",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m14.role.buyer-counsel",
+          "label": "Buyer's Counsel (Nakamura)"
+        },
+        {
+          "role_id": "m14.role.seller-counsel",
+          "label": "Seller's Counsel (Whitfield)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m14.per.nakamura",
+          "name": "Kenji Nakamura",
+          "role": "client / buyer",
+          "interviewable_by": [
+            "m14.role.buyer-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m14.per.whitfield",
+          "name": "Garrett Whitfield",
+          "role": "seller / opposing party",
+          "interviewable_by": [
+            "m14.role.seller-counsel",
+            "m14.role.buyer-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m14-realestate-tx/index.html",
+      "data": {
+        "matter": "matters/m14-realestate-tx/matter.json",
+        "exercise": "matters/m14-realestate-tx/exercise.json",
+        "rubric": "matters/m14-realestate-tx/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m14.rub",
+        "declared_total": 185.5,
+        "criteria": [
+          {
+            "id": "m14.rub.c01",
+            "name": "Fact development & title-issue diagnosis",
+            "weight_points": 40,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m14.rub.c02",
+            "name": "Negotiation strategy & execution",
+            "weight_points": 60,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-046"
+          },
+          {
+            "id": "m14.rub.c03",
+            "name": "Client counseling on options & risk",
+            "weight_points": 35,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-034"
+          },
+          {
+            "id": "m14.rub.c04",
+            "name": "Drafting deed & access terms",
+            "weight_points": 30,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-062"
+          },
+          {
+            "id": "m14.rub.c05",
+            "name": "Professional responsibility — no-contact rule",
+            "weight_points": 20.5,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m15",
+      "slug": "m15-dwi-mn",
+      "caption": "State of Minnesota v. Travis O. Wenzloff",
+      "shape": "criminal_dwi",
+      "tier": "real",
+      "jurisdiction": "MN",
+      "fee_type": "flat",
+      "sides": [
+        {
+          "role_id": "m15.role.defense",
+          "label": "Defense / Defendant"
+        },
+        {
+          "role_id": "m15.role.prosecution",
+          "label": "Prosecution / State of Minnesota"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m15.per.kallestad",
+          "name": "Deputy Reid Kallestad",
+          "role": "arresting deputy (State's witness)",
+          "interviewable_by": [
+            "m15.role.prosecution"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m15.per.wenzloff",
+          "name": "Travis O. Wenzloff",
+          "role": "client (criminal defendant)",
+          "interviewable_by": [
+            "m15.role.defense"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m15-dwi-mn/index.html",
+      "data": {
+        "matter": "matters/m15-dwi-mn/matter.json",
+        "exercise": "matters/m15-dwi-mn/exercise.json",
+        "rubric": "matters/m15-dwi-mn/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m15.rub",
+        "declared_total": 316.5,
+        "criteria": [
+          {
+            "id": "m15.rub.c01",
+            "name": "Client interview and fact development",
+            "weight_points": 90,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m15.rub.c02",
+            "name": "Issue-spotting: stop, field tests, and breath sample",
+            "weight_points": 80,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-001"
+          },
+          {
+            "id": "m15.rub.c03",
+            "name": "Counseling a client whose livelihood is at stake",
+            "weight_points": 56.5,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m15.rub.c04",
+            "name": "Plea and charge negotiation strategy",
+            "weight_points": 60,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-045"
+          },
+          {
+            "id": "m15.rub.c05",
+            "name": "Professional responsibility",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m16",
+      "slug": "m16-noncompete-ny",
+      "caption": "Hudson Valley Biometrics, Inc. v. Priya Iyer",
+      "shape": "noncompete_trade_secret",
+      "tier": "real",
+      "jurisdiction": "NY",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m16.role.plaintiff",
+          "label": "Plaintiff / Former Employer"
+        },
+        {
+          "role_id": "m16.role.defense",
+          "label": "Defendant / Former Employee (our client)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m16.per.iyer",
+          "name": "Priya Iyer",
+          "role": "client",
+          "interviewable_by": [
+            "m16.role.defense"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m16.per.steinhauer",
+          "name": "Roland Steinhauer",
+          "role": "co-founder and chief technology officer, Hudson Valley Biometrics (adverse party representative)",
+          "interviewable_by": [
+            "m16.role.plaintiff",
+            "m16.role.defense"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m16-noncompete-ny/index.html",
+      "data": {
+        "matter": "matters/m16-noncompete-ny/matter.json",
+        "exercise": "matters/m16-noncompete-ny/exercise.json",
+        "rubric": "matters/m16-noncompete-ny/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m16.rub",
+        "declared_total": 189,
+        "criteria": [
+          {
+            "id": "m16.rub.c01",
+            "name": "Preliminary-injunction standard and covenant reasonableness",
+            "weight_points": 70,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-011"
+          },
+          {
+            "id": "m16.rub.c02",
+            "name": "Fact development and investigation",
+            "weight_points": 35,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m16.rub.c03",
+            "name": "Persuasive written advocacy",
+            "weight_points": 44,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-032"
+          },
+          {
+            "id": "m16.rub.c04",
+            "name": "Professional-responsibility and client-counseling judgment",
+            "weight_points": 40,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m17",
+      "slug": "m17-ucc-ny",
+      "caption": "Empire Provisions Corp. v. Ostervold Packing Co.",
+      "shape": "ucc_sale_of_goods",
+      "tier": "real",
+      "jurisdiction": "NY",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m17.role.buyer-counsel",
+          "label": "Buyer / Defendant — Empire Provisions Corp."
+        },
+        {
+          "role_id": "m17.role.seller-counsel",
+          "label": "Seller / Plaintiff — Ostervold Packing Co."
+        }
+      ],
+      "personas": [
+        {
+          "id": "m17.per.beltran",
+          "name": "Marisol Beltran",
+          "role": "client",
+          "interviewable_by": [
+            "m17.role.buyer-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m17.per.ostervold",
+          "name": "Roland Ostervold",
+          "role": "opposing party representative",
+          "interviewable_by": [
+            "m17.role.seller-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m17.per.renfrew",
+          "name": "Tobias Renfrew",
+          "role": "client-side fact witness",
+          "interviewable_by": [
+            "m17.role.buyer-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m17-ucc-ny/index.html",
+      "data": {
+        "matter": "matters/m17-ucc-ny/matter.json",
+        "exercise": "matters/m17-ucc-ny/exercise.json",
+        "rubric": "matters/m17-ucc-ny/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m17.rub",
+        "declared_total": 200,
+        "criteria": [
+          {
+            "id": "m17.rub.c01",
+            "name": "Client interview and fact development",
+            "weight_points": 50,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m17.rub.c02",
+            "name": "Conformity, rejection, and acceptance analysis",
+            "weight_points": 60,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-010"
+          },
+          {
+            "id": "m17.rub.c03",
+            "name": "Seller's price claim and remedies strategy",
+            "weight_points": 40,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-006"
+          },
+          {
+            "id": "m17.rub.c04",
+            "name": "Litigation posture and client counseling",
+            "weight_points": 30,
+            "skill_id": "SK-LP-14",
+            "task_id": "TSK-034"
+          },
+          {
+            "id": "m17.rub.c05",
+            "name": "Professional responsibility and written communication",
+            "weight_points": 20,
+            "skill_id": "SK-LP-16",
+            "task_id": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "m18",
+      "slug": "m18-juvenile-ca",
+      "caption": "In re J.C., a Minor (Cal. Welf. & Inst. Code § 602)",
+      "shape": "juvenile_delinquency",
+      "tier": "real",
+      "jurisdiction": "CA",
+      "fee_type": "hourly",
+      "sides": [
+        {
+          "role_id": "m18.role.prosecution",
+          "label": "Prosecution / People (Alta Mesa County District Attorney)"
+        },
+        {
+          "role_id": "m18.role.juvenile-defense-counsel",
+          "label": "Juvenile Defense Counsel (for the minor, J.C.)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m18.per.cordero-a",
+          "name": "Ana Cordero",
+          "role": "parent / guardian of the minor client",
+          "interviewable_by": [
+            "m18.role.juvenile-defense-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m18.per.cordero-j",
+          "name": "Jasmine Cordero (\"Jaz\")",
+          "role": "client (minor / respondent to the wardship petition)",
+          "interviewable_by": [
+            "m18.role.juvenile-defense-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m18.per.trejo",
+          "name": "Kayla Trejo",
+          "role": "co-participant charged separately (represented party)",
+          "interviewable_by": [
+            "m18.role.juvenile-defense-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m18-juvenile-ca/index.html",
+      "data": {
+        "matter": "matters/m18-juvenile-ca/matter.json",
+        "exercise": "matters/m18-juvenile-ca/exercise.json",
+        "rubric": "matters/m18-juvenile-ca/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m18.rub",
+        "declared_total": 210,
+        "criteria": [
+          {
+            "id": "m18.rub.c01",
+            "name": "Fact investigation & the minor-client interview",
+            "weight_points": 60,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m18.rub.c02",
+            "name": "Counseling the distressed juvenile and parent",
+            "weight_points": 50,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m18.rub.c03",
+            "name": "Disposition strategy: diversion vs. contested jurisdictional hearing",
+            "weight_points": 55,
+            "skill_id": "SK-LP-01",
+            "task_id": "TSK-035"
+          },
+          {
+            "id": "m18.rub.c04",
+            "name": "Professional responsibility",
+            "weight_points": 45,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m19",
+      "slug": "m19-dissolution-ca",
+      "caption": "In re the Marriage of Camille Beaumont and Andre Lassiter",
+      "shape": "marriage_dissolution",
+      "tier": "real",
+      "jurisdiction": "CA",
+      "fee_type": "retainer",
+      "sides": [
+        {
+          "role_id": "m19.role.petitioner-counsel",
+          "label": "Petitioner's Counsel (Camille Beaumont)"
+        },
+        {
+          "role_id": "m19.role.respondent-counsel",
+          "label": "Respondent's Counsel (Andre Lassiter)"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m19.per.beaumont",
+          "name": "Camille Beaumont",
+          "role": "client / petitioner",
+          "interviewable_by": [
+            "m19.role.petitioner-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m19.per.lassiter",
+          "name": "Andre Lassiter",
+          "role": "respondent / husband",
+          "interviewable_by": [
+            "m19.role.respondent-counsel"
+          ],
+          "represented": true
+        },
+        {
+          "id": "m19.per.tessier",
+          "name": "Marguerite Tessier",
+          "role": "fact witness (restaurant general manager and bookkeeper)",
+          "interviewable_by": [
+            "m19.role.petitioner-counsel",
+            "m19.role.respondent-counsel"
+          ],
+          "represented": false
+        }
+      ],
+      "packet_url": "../matters/m19-dissolution-ca/index.html",
+      "data": {
+        "matter": "matters/m19-dissolution-ca/matter.json",
+        "exercise": "matters/m19-dissolution-ca/exercise.json",
+        "rubric": "matters/m19-dissolution-ca/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m19.rub",
+        "declared_total": 210,
+        "criteria": [
+          {
+            "id": "m19.rub.c01",
+            "name": "Client interview and fact-gathering",
+            "weight_points": 65,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-022"
+          },
+          {
+            "id": "m19.rub.c02",
+            "name": "Counseling the distressed client",
+            "weight_points": 40,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          },
+          {
+            "id": "m19.rub.c03",
+            "name": "Community-property analysis and settlement strategy",
+            "weight_points": 60,
+            "skill_id": "SK-LP-13",
+            "task_id": "TSK-044"
+          },
+          {
+            "id": "m19.rub.c04",
+            "name": "Professional responsibility",
+            "weight_points": 25,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m19.rub.c05",
+            "name": "Drafting the initiating documents",
+            "weight_points": 20,
+            "skill_id": "SK-LP-17",
+            "task_id": "TSK-048"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m20",
+      "slug": "m20-probate-fl",
+      "caption": "In re the Estate of Harold W. Prewitt",
+      "shape": "wills_probate",
+      "tier": "real",
+      "jurisdiction": "FL",
+      "fee_type": "flat",
+      "sides": [
+        {
+          "role_id": "m20.role.proponent-counsel",
+          "label": "Proponent / Estate (Personal Representative)"
+        },
+        {
+          "role_id": "m20.role.contestant-counsel",
+          "label": "Contestant / Objecting Heir"
+        }
+      ],
+      "personas": [
+        {
+          "id": "m20.per.bastien",
+          "name": "Marisol Bastien",
+          "role": "fact witness (home health aide)",
+          "interviewable_by": [
+            "m20.role.proponent-counsel",
+            "m20.role.contestant-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m20.per.cole",
+          "name": "Vivian Prewitt-Cole",
+          "role": "client (surviving spouse, personal representative, and principal devisee)",
+          "interviewable_by": [
+            "m20.role.proponent-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m20.per.prewitt",
+          "name": "Dale Prewitt",
+          "role": "will contestant (objecting heir)",
+          "interviewable_by": [
+            "m20.role.contestant-counsel"
+          ],
+          "represented": true
+        }
+      ],
+      "packet_url": "../matters/m20-probate-fl/index.html",
+      "data": {
+        "matter": "matters/m20-probate-fl/matter.json",
+        "exercise": "matters/m20-probate-fl/exercise.json",
+        "rubric": "matters/m20-probate-fl/rubric.json"
+      },
+      "rubric_summary": {
+        "id": "m20.rub",
+        "declared_total": 210,
+        "criteria": [
+          {
+            "id": "m20.rub.c01",
+            "name": "Fact gathering and client interview",
+            "weight_points": 55,
+            "skill_id": "SK-LP-07",
+            "task_id": "TSK-023"
+          },
+          {
+            "id": "m20.rub.c02",
+            "name": "Capacity and undue-influence analysis",
+            "weight_points": 60,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-010"
+          },
+          {
+            "id": "m20.rub.c03",
+            "name": "Homestead-devise analysis",
+            "weight_points": 40,
+            "skill_id": "SK-LP-02",
+            "task_id": "TSK-011"
+          },
+          {
+            "id": "m20.rub.c04",
+            "name": "Professional responsibility",
+            "weight_points": 30,
+            "skill_id": "SK-LP-16",
+            "task_id": "TSK-060"
+          },
+          {
+            "id": "m20.rub.c05",
+            "name": "Counseling a distressed client",
+            "weight_points": 25,
+            "skill_id": "SK-LP-10",
+            "task_id": "TSK-037"
+          }
+        ]
+      }
+    }
+  ],
+  "taxonomy": {
+    "skills_count": 31,
+    "surveyed_count": 26,
+    "extension_count": 5,
+    "tasks_count": 108,
+    "files": {
+      "skills": "taxonomy/skills.json",
+      "tasks": "taxonomy/tasks.json",
+      "folio_crosswalk": "taxonomy/folio-crosswalk.json"
+    }
+  },
+  "firm": {
+    "file": "firm.json",
+    "name": "Ellingboe & Ravndal LLP",
+    "as_of_date": "2026-06-30"
+  },
+  "chat": {
+    "ui": "../chat/index.html",
+    "critique_ui": "../chat/critique.html",
+    "api_contracts": "api-contracts.md"
+  },
+  "pages": {
+    "home": "../index.html",
+    "skills_browser": "../skills/index.html",
+    "matter_library": "../matters/index.html",
+    "firm_dashboard": "../firm/index.html"
+  }
+}

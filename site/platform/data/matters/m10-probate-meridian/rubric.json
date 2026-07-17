@@ -1,0 +1,98 @@
+{
+  "id": "m10.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m10.rub",
+  "matter_id": "m10",
+  "declared_total": 210,
+  "criteria": [
+    {
+      "id": "m10.rub.c01",
+      "name": "Client interview and fact gathering",
+      "description": "Conducts a thorough, well-structured interview of the personal representative and develops the full factual record, including the facts adverse to the estate.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m10.rub.c01.s01",
+          "name": "Rapport and eliciting difficult facts",
+          "description": "Builds genuine rapport and reassurance sufficient to surface the rapport-gated and concealed facts (the client's role in arranging the will, the phone fight, the account withdrawals) without pressure or leading.",
+          "weight_points": 35
+        },
+        {
+          "id": "m10.rub.c01.s02",
+          "name": "Chronology and completeness",
+          "description": "Assembles an accurate chronology and covers capacity, caregiving, finances, and family history without material gaps.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m10.rub.c02",
+      "name": "Capacity and undue-influence analysis",
+      "description": "Separates testamentary capacity from undue influence and maps the record evidence to the elements of each.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-010",
+      "subcriteria": [
+        {
+          "id": "m10.rub.c02.s01",
+          "name": "Testamentary capacity",
+          "description": "Correctly frames capacity as measured at execution and weighs the physician's assessment, attorney and witness observations, and the cognitive diagnosis.",
+          "weight_points": 35
+        },
+        {
+          "id": "m10.rub.c02.s02",
+          "name": "Undue influence and presumption",
+          "description": "Identifies the confidential-relationship / suspicious-circumstances / active-participation factors, the possible burden-shifting presumption, and the estate's independence-of-execution counter-facts.",
+          "weight_points": 35
+        }
+      ]
+    },
+    {
+      "id": "m10.rub.c03",
+      "name": "Professional responsibility",
+      "description": "Spots and addresses the ethics issues raised by the firm's role and the adverse party's representation.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m10.rub.c03.s01",
+          "name": "Lawyer-as-witness",
+          "description": "Recognizes that the drafting attorney is a likely necessary witness and analyzes how the firm may proceed.",
+          "weight_points": 20,
+          "task_id": "TSK-058"
+        },
+        {
+          "id": "m10.rub.c03.s02",
+          "name": "No-contact with represented party",
+          "description": "Recognizes that the contestant is represented and that direct contact is prohibited; routes contact through counsel.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m10.rub.c04",
+      "name": "Counseling the distressed client",
+      "description": "Counsels the grieving personal representative with candor and care, managing her fear of being cast as a manipulator while still addressing the adverse facts and her fiduciary duties.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037"
+    },
+    {
+      "id": "m10.rub.c05",
+      "name": "Interview memo and litigation posture",
+      "description": "Produces a clear, well-organized interview memo that states the estate's problem, the analysis, the ethics issues, and next steps in defending the contest.",
+      "weight_points": 15,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-048"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 210 },
+    { "grade": "A-", "points": 200 },
+    { "grade": "B+", "points": 189 },
+    { "grade": "B", "points": 178 }
+  ]
+}

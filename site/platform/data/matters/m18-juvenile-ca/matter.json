@@ -1,0 +1,53 @@
+{
+  "id": "m18",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m18",
+  "slug": "m18-juvenile-ca",
+  "shape": "juvenile_delinquency",
+  "tier": "real",
+  "jurisdiction": "CA",
+  "caption": "In re J.C., a Minor (Cal. Welf. & Inst. Code § 602)",
+  "sides": [
+    {
+      "role_id": "m18.role.prosecution",
+      "label": "Prosecution / People (Alta Mesa County District Attorney)",
+      "party_names": ["The People of the State of California"],
+      "confidential_fact_refs": ["m18.fact.048"]
+    },
+    {
+      "role_id": "m18.role.juvenile-defense-counsel",
+      "label": "Juvenile Defense Counsel (for the minor, J.C.)",
+      "party_names": ["Jasmine Cordero (J.C.)"],
+      "confidential_fact_refs": ["m18.fact.041"]
+    }
+  ],
+  "parties": [
+    { "name": "The People of the State of California (Alta Mesa County District Attorney)", "role": "petitioner / prosecuting authority", "side_role_id": "m18.role.prosecution" },
+    { "name": "Jasmine Cordero (J.C.)", "role": "minor / respondent to the wardship petition", "side_role_id": "m18.role.juvenile-defense-counsel" },
+    { "name": "Ana Cordero", "role": "parent / guardian of the minor", "side_role_id": "m18.role.juvenile-defense-counsel" },
+    { "name": "Kayla Trejo", "role": "co-participant charged separately (represented)", "side_role_id": "m18.role.prosecution" },
+    { "name": "Andre Sotelo", "role": "co-participant charged separately", "side_role_id": "m18.role.prosecution" }
+  ],
+  "client_id": "FIRM-C-18",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-01", "SK-LP-07", "SK-LP-10", "SK-LP-13", "SK-LP-16"],
+  "task_refs": ["TSK-004", "TSK-022", "TSK-023", "TSK-025", "TSK-034", "TSK-035", "TSK-037", "TSK-044", "TSK-045", "TSK-059", "TSK-060"],
+  "personas": ["m18.per.cordero-j", "m18.per.cordero-a", "m18.per.trejo"],
+  "witnesses": [
+    { "id": "m18.wit.haddad", "name": "Deputy Omar Haddad" },
+    { "id": "m18.wit.corvino", "name": "Gerald Corvino" },
+    { "id": "m18.wit.villareal", "name": "Tomás Villareal" },
+    { "id": "m18.wit.sundaram", "name": "Priyanka Sundaram" }
+  ],
+  "exhibits": [
+    { "id": "m18.exh.001", "title": "Alta Mesa County Sheriff's Department SRO Incident Report" },
+    { "id": "m18.exh.002", "title": "Juvenile Wardship Petition (In re J.C., a Minor; Welf. & Inst. Code § 602)" },
+    { "id": "m18.exh.003", "title": "Informal Juvenile Diversion Offer Letter" },
+    { "id": "m18.exh.004", "title": "Parking-Lot Surveillance & Phone-Video Still-Frame Log" },
+    { "id": "m18.exh.005", "title": "Property Damage & Repair Estimate Summary" },
+    { "id": "m18.exh.006", "title": "Prior School Dress-Code Disciplinary Referral (Feb. 2026)" },
+    { "id": "m18.exh.007", "title": "Group-Chat Text Message Excerpt" }
+  ],
+  "open_date": "2026-04-20",
+  "as_of_date": "2026-06-30"
+}

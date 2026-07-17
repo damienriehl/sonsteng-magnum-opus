@@ -1,0 +1,21 @@
+matter_id,caption,client,fee_type,fees,cumulative_pct
+m17,Empire Provisions Corp. v. Ostervold Packing Co.,Empire Provisions Corp.,hourly,19400.00,12.5
+m07,"Cloverdyke Dairy Cooperative v. Brandt Refrigeration Systems, LLC",Cloverdyke Dairy Cooperative,hourly,18600.00,24.5
+m01,"Halden Regional Transit District v. Marceline Osgard and Meridian Alliance of Public Workers, Local 7 (Arbitration)",Marceline Osgard,hourly,17630.00,35.9
+m16,"Hudson Valley Biometrics, Inc. v. Priya Iyer",Priya Iyer,hourly,15300.00,45.8
+m14,In re Purchase of the Cimarron Tract (Whitfield–Nakamura),Kenji Nakamura,hourly,14350.00,55.0
+m06,"Northlake Surgical Instruments, Inc. v. Adaeze Okwuosa",Adaeze Okwuosa,hourly,12500.00,63.1
+m11,"Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)",Yusuf Adeyemi,hourly,7900.00,68.2
+m02,"In re Petition for Disciplinary Action against Gregor A. Winterhalt, a Meridian Attorney",Gregor A. Winterhalt,hourly,6625.00,72.5
+m12,"In re Petition for Disciplinary Action against Delphine A. Karsgaard, a Minnesota Attorney",Delphine A. Karsgaard,hourly,6557.50,76.7
+m09,In re the Marriage of Renata Sitko and Harlan Aldergrove,Renata Sitko,retainer,4467.50,79.6
+m04,"In re Purchase of 4400 Kestrel Point, Sable County (Renard–Meskin)",Talbot Meskin,hourly,4327.50,82.4
+m19,In re the Marriage of Camille Beaumont and Andre Lassiter,Camille Beaumont,retainer,4262.50,85.1
+m13,Sofia Reyes v. Bradley Hutchins,Sofia Reyes,contingency,4180.00,87.8
+m03,Lorraine Petimeyer v. Douglas Ashcombe,Lorraine Petimeyer,contingency,3537.50,90.1
+m15,State of Minnesota v. Travis O. Wenzloff,Travis O. Wenzloff,flat,3245.00,92.2
+m18,"In re J.C., a Minor (Cal. Welf. & Inst. Code § 602)","Jasmine Cordero, a minor (parent: Ana Cordero)",hourly,2837.50,94.0
+m05,State of Meridian v. Devon R. Halvard,Devon R. Halvard,flat,2570.00,95.7
+m08,"In re the Welfare of T.M., a Minor","Tobias Merrow, a minor (parent: Dana Merrow)",hourly,2512.50,97.3
+m20,In re the Estate of Harold W. Prewitt,"Estate of Harold W. Prewitt (Vivian Prewitt-Cole, PR)",flat,2400.00,98.8
+m10,In re the Estate of Mabel R. Thornquist,"Estate of Mabel R. Thornquist (Eleanor Thornquist-Reddick, PR)",flat,1800.00,100.0

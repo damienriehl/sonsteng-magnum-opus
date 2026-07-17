@@ -1,0 +1,49 @@
+{
+  "id": "m12",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m12",
+  "slug": "m12-discipline-mn",
+  "shape": "attorney_discipline",
+  "tier": "real",
+  "jurisdiction": "MN",
+  "caption": "In re Petition for Disciplinary Action against Delphine A. Karsgaard, a Minnesota Attorney",
+  "sides": [
+    {
+      "role_id": "m12.role.disciplinary-counsel",
+      "label": "Petitioner / Office of Lawyers Professional Responsibility",
+      "party_names": ["Director of the Office of Lawyers Professional Responsibility"]
+    },
+    {
+      "role_id": "m12.role.respondent-counsel",
+      "label": "Respondent / Delphine A. Karsgaard (defense)",
+      "party_names": ["Delphine A. Karsgaard"]
+    }
+  ],
+  "parties": [
+    { "name": "Director of the Office of Lawyers Professional Responsibility", "role": "petitioner / disciplinary authority", "side_role_id": "m12.role.disciplinary-counsel" },
+    { "name": "Delphine A. Karsgaard", "role": "respondent attorney", "side_role_id": "m12.role.respondent-counsel" }
+  ],
+  "client_id": "FIRM-C-12",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-02", "SK-LP-04", "SK-LP-07", "SK-LP-08", "SK-LP-09", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-002", "TSK-007", "TSK-015", "TSK-022", "TSK-023", "TSK-026", "TSK-032", "TSK-034", "TSK-037", "TSK-060"],
+  "personas": ["m12.per.karsgaard", "m12.per.emberly", "m12.per.dieterle"],
+  "witnesses": [
+    { "id": "m12.wit.delacroix", "name": "Marnie Delacroix" },
+    { "id": "m12.wit.emberly", "name": "Jonas Emberly" },
+    { "id": "m12.wit.dieterle", "name": "Marguerite Dieterle" }
+  ],
+  "exhibits": [
+    { "id": "m12.exh.001", "title": "Petition for Disciplinary Action" },
+    { "id": "m12.exh.002", "title": "Respondent's Answer to Petition" },
+    { "id": "m12.exh.003", "title": "Motion to Vacate Dismissal and Supporting Affidavit of D. Karsgaard (underlying matter)" },
+    { "id": "m12.exh.004", "title": "Firm Docketing Record and Calendar-Handoff Log" },
+    { "id": "m12.exh.005", "title": "Client Correspondence — Karsgaard-Dieterle Emails" },
+    { "id": "m12.exh.006", "title": "Affidavit of Marnie Delacroix" },
+    { "id": "m12.exh.007", "title": "Statement of Jonas Emberly" },
+    { "id": "m12.exh.008", "title": "Complaint Statement of Marguerite Dieterle to OLPR" },
+    { "id": "m12.exh.009", "title": "OLPR Charge Letter and Investigation Summary" }
+  ],
+  "open_date": "2025-12-01",
+  "as_of_date": "2026-06-30"
+}

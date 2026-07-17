@@ -1,0 +1,98 @@
+{
+  "id": "m01.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m01.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m01",
+  "declared_total": 202,
+  "criteria": [
+    {
+      "id": "m01.rub.c01",
+      "name": "Case theory and just-cause analysis",
+      "description": "Frames a coherent theory of the grievance, identifies the elements the District must establish to show just cause for discharge, and diagnoses the strengths and weaknesses of the retaliation-versus-insubordination dispute.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-001"
+    },
+    {
+      "id": "m01.rub.c02",
+      "name": "Fact investigation and chronology",
+      "description": "Builds an accurate timeline from the case file, surfaces the seams (the mixed inspection result, the shifting rationale, the timing of the 2024 note), and ties each fact to the element it supports or defeats.",
+      "weight_points": 35,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023"
+    },
+    {
+      "id": "m01.rub.c03",
+      "name": "Client and witness interviewing",
+      "description": "Conducts an effective interview of the grievant and cooperating witnesses, earning disclosure of the rapport-gated facts and identifying the professional-responsibility limits on contacting management witnesses.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m01.rub.c03.s01",
+          "name": "Rapport and opening",
+          "description": "Puts the client at ease; frames confidentiality, scope, and fees; opens topics before probing.",
+          "weight_points": 15
+        },
+        {
+          "id": "m01.rub.c03.s02",
+          "name": "Listening and the T-funnel",
+          "description": "Uses open-ended questions before closed gap-fillers; reflects understanding; does not interrupt or lead.",
+          "weight_points": 15
+        },
+        {
+          "id": "m01.rub.c03.s03",
+          "name": "Goals and next steps",
+          "description": "Surfaces the client's legal and non-legal goals and closes with a clear roadmap.",
+          "weight_points": 10
+        }
+      ]
+    },
+    {
+      "id": "m01.rub.c04",
+      "name": "Written advocacy: statement of the case",
+      "description": "Drafts a clear, well-organized statement of the case and a legal analysis of just cause, integrating the record and anticipating the District's arguments.",
+      "weight_points": 32,
+      "skill_id": "SK-LP-09",
+      "task_id": "TSK-005"
+    },
+    {
+      "id": "m01.rub.c05",
+      "name": "Hearing advocacy: direct and cross",
+      "description": "Plans and delivers a direct examination that lets the grievant and cooperating witness tell the story, and a cross of the management witness that controls the account.",
+      "weight_points": 35,
+      "skill_id": "SK-LP-08",
+      "task_id": "TSK-027",
+      "subcriteria": [
+        {
+          "id": "m01.rub.c05.s01",
+          "name": "Direct examination",
+          "description": "Non-leading questions that elicit the story and lay foundation for the exhibits.",
+          "weight_points": 18
+        },
+        {
+          "id": "m01.rub.c05.s02",
+          "name": "Cross-examination",
+          "description": "Controlled, leading questions that expose the shifting rationale and the timing of the 2024 note.",
+          "weight_points": 17
+        }
+      ]
+    },
+    {
+      "id": "m01.rub.c06",
+      "name": "Professional responsibility and judgment",
+      "description": "Recognizes the no-contact limit on the represented management witness, handles the client's disclosure about the phone recording with sound judgment, and maintains candor.",
+      "weight_points": 15,
+      "skill_id": "SK-LP-16"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 202 },
+    { "grade": "A-", "points": 192 },
+    { "grade": "B+", "points": 182 },
+    { "grade": "B", "points": 172 },
+    { "grade": "C", "points": 152 }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "id": "m04",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m04",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m04-realestate-meridian",
+  "shape": "real_estate_negotiation",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "In re Purchase of 4400 Kestrel Point, Sable County (Renard–Meskin)",
+  "sides": [
+    {
+      "role_id": "m04.role.buyer-counsel",
+      "label": "Buyer's Counsel (Talbot Meskin)",
+      "party_names": ["Talbot Meskin"],
+      "confidential_fact_refs": [
+        "m04.fact.024",
+        "m04.fact.025",
+        "m04.fact.026",
+        "m04.fact.027",
+        "m04.fact.028"
+      ]
+    },
+    {
+      "role_id": "m04.role.seller-counsel",
+      "label": "Seller's Counsel (Ruth Renard)",
+      "party_names": ["Ruth Renard"],
+      "confidential_fact_refs": [
+        "m04.fact.029",
+        "m04.fact.030",
+        "m04.fact.031",
+        "m04.fact.032",
+        "m04.fact.033"
+      ]
+    }
+  ],
+  "parties": [
+    { "name": "Talbot Meskin", "role": "buyer / developer", "side_role_id": "m04.role.buyer-counsel" },
+    { "name": "Ruth Renard", "role": "seller / landowner", "side_role_id": "m04.role.seller-counsel" },
+    { "name": "Corwin Delahaye", "role": "adjoining landowner (servient parcel)" }
+  ],
+  "client_id": "FIRM-C-04",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-13", "SK-LP-17", "SK-LP-10", "SK-LP-01", "SK-LP-07", "SK-LP-16"],
+  "task_refs": ["TSK-046", "TSK-044", "TSK-062", "TSK-034", "TSK-022", "TSK-023", "TSK-058", "TSK-060", "TSK-028"],
+  "personas": ["m04.per.meskin", "m04.per.renard", "m04.per.delahaye"],
+  "witnesses": [
+    { "id": "m04.wit.delahaye", "name": "Corwin Delahaye" },
+    { "id": "m04.wit.brummond", "name": "Nadia Brummond" },
+    { "id": "m04.wit.achleitner", "name": "Roland Achleitner" },
+    { "id": "m04.wit.vestergaard", "name": "Harlan Vestergaard" }
+  ],
+  "exhibits": [
+    { "id": "m04.exh.001", "title": "Purchase Agreement (Working Draft)" },
+    { "id": "m04.exh.002", "title": "1978 Access Instrument (Recorded)" },
+    { "id": "m04.exh.003", "title": "Plat Map and Surveyor's Diagram" },
+    { "id": "m04.exh.004", "title": "Title Commitment (Excerpt)" },
+    { "id": "m04.exh.005", "title": "City of Brightwater Notice of Proposed Street Vacation" },
+    { "id": "m04.exh.006", "title": "Seller's Property Disclosure and Listing Sheet" },
+    { "id": "m04.exh.007", "title": "Email Correspondence, Meskin – Achleitner" },
+    { "id": "m04.exh.008", "title": "Letter from Seller's Counsel re: Access" }
+  ],
+  "open_date": "2026-02-18",
+  "as_of_date": "2026-06-30"
+}

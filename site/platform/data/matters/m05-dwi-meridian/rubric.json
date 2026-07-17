@@ -1,0 +1,90 @@
+{
+  "id": "m05.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m05.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m05",
+  "declared_total": 316.5,
+  "criteria": [
+    {
+      "id": "m05.rub.c01",
+      "name": "Client interview and fact development",
+      "description": "Elicits a complete, reliable account of the night and the arrest, including the sensitive facts that only surface with rapport.",
+      "weight_points": 90,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m05.rub.c01.s01",
+          "name": "Arrest narrative and drinking timeline",
+          "description": "Builds an ordered timeline of the dinner, the drinking, the stop, the field tests, and the breath test.",
+          "weight_points": 45,
+          "task_id": "TSK-025"
+        },
+        {
+          "id": "m05.rub.c01.s02",
+          "name": "Surfacing gated and concealed facts",
+          "description": "Earns the vestibular condition, the double-shift fatigue, the reflux/burp, and the omitted toast shot through rapport rather than pressure.",
+          "weight_points": 45,
+          "task_id": "TSK-023"
+        }
+      ]
+    },
+    {
+      "id": "m05.rub.c02",
+      "name": "Issue-spotting: stop, field tests, and breath sample",
+      "description": "Identifies the legal vulnerabilities that drive the defense theory of the case.",
+      "weight_points": 80,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-001",
+      "subcriteria": [
+        {
+          "id": "m05.rub.c02.s01",
+          "name": "Legality of the stop",
+          "description": "Spots the reasonable-suspicion/pretext question raised by the taillight stop.",
+          "weight_points": 40,
+          "task_id": "TSK-004"
+        },
+        {
+          "id": "m05.rub.c02.s02",
+          "name": "Test reliability and suppression theory",
+          "description": "Spots the icy-slope field-test and mouth-alcohol / margin-of-error breath-test issues and frames a suppression theory.",
+          "weight_points": 40,
+          "task_id": "TSK-050"
+        }
+      ]
+    },
+    {
+      "id": "m05.rub.c03",
+      "name": "Counseling a distressed client",
+      "description": "Manages Devon's fear about his license and record, explains the process, and sets realistic expectations without over-promising.",
+      "weight_points": 56.5,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037"
+    },
+    {
+      "id": "m05.rub.c04",
+      "name": "Plea and charge negotiation strategy",
+      "description": "Develops a defensible negotiation plan, including a realistic path to a reduced charge such as careless driving.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-045"
+    },
+    {
+      "id": "m05.rub.c05",
+      "name": "Professional responsibility",
+      "description": "Respects the no-contact rule with the represented State's witness and keeps within the scope of the engagement.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 316.5 },
+    { "grade": "A-", "points": 300 },
+    { "grade": "B+", "points": 285 },
+    { "grade": "B", "points": 268 },
+    { "grade": "B-", "points": 250 },
+    { "grade": "C", "points": 220 }
+  ]
+}

@@ -1,0 +1,3263 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/taxonomy/tasks",
+  "spine_version": "1.0.0",
+  "description": "Primary-task -> subtask decomposition for each of the 26 surveyed skills and 5 AI-era extension skills, grounded in the master-outline deliverable set and standard practice-of-law task inventories. exercise_refs point to manifest matters that exercise the task.",
+  "task_count": 108,
+  "tasks": [
+    {
+      "id": "TSK-001",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-001",
+      "skill_id": "SK-LP-01",
+      "name": "Conduct a preliminary case analysis",
+      "description": "Analyze a new matter to identify governing law and the relative strengths and weaknesses of each side.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-001.01",
+          "name": "Identify the governing law",
+          "description": "Determine which statutes, rules, and cases control the matter."
+        },
+        {
+          "id": "TSK-001.02",
+          "name": "Assess strengths and weaknesses",
+          "description": "Weigh the strong and weak points of both sides."
+        },
+        {
+          "id": "TSK-001.03",
+          "name": "Frame the legal issues",
+          "description": "State the dispositive issues the matter presents."
+        }
+      ],
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m03.ex",
+        "m05.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-002",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-002",
+      "skill_id": "SK-LP-01",
+      "name": "Develop a case theory and strategy",
+      "description": "Synthesize the facts and law into a coherent theory of the case and a plan to prevail.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-002.01",
+          "name": "Articulate theory and themes",
+          "description": "State the persuasive theory and supporting themes."
+        },
+        {
+          "id": "TSK-002.02",
+          "name": "Identify elements to prevail",
+          "description": "List the elements that must be proven or defeated."
+        },
+        {
+          "id": "TSK-002.03",
+          "name": "Map liabilities and remedies",
+          "description": "Identify exposure and the remedies available."
+        }
+      ],
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m05.ex",
+        "m14.ex"
+      ]
+    },
+    {
+      "id": "TSK-003",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-003",
+      "skill_id": "SK-LP-01",
+      "name": "Create a strategic plan of action",
+      "description": "Translate the case theory into a sequenced plan with objectives, steps, and deadlines.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-003.01",
+          "name": "Define client objectives",
+          "description": "Capture what the client wants to achieve."
+        },
+        {
+          "id": "TSK-003.02",
+          "name": "Sequence steps and deadlines",
+          "description": "Order the tasks and key dates."
+        },
+        {
+          "id": "TSK-003.03",
+          "name": "Select the forum and approach",
+          "description": "Choose litigation, negotiation, or transaction path."
+        }
+      ],
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m01.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-004",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-004",
+      "skill_id": "SK-LP-01",
+      "name": "Diagnose the client's legal problem at intake",
+      "description": "Classify the client's problem into the correct area(s) of law and spot threshold issues.",
+      "bloom_level": "comprehension",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-004.01",
+          "name": "Classify the problem",
+          "description": "Place the problem within one or more areas of law."
+        },
+        {
+          "id": "TSK-004.02",
+          "name": "Spot threshold and jurisdiction issues",
+          "description": "Identify limitations, standing, and forum questions."
+        }
+      ],
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m08.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-005",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-005",
+      "skill_id": "SK-LP-02",
+      "name": "Write a legal analysis memorandum",
+      "description": "Produce a written IRAC analysis of a legal question in a matter.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-005.01",
+          "name": "State the issue and rule",
+          "description": "Frame the question and the controlling rule."
+        },
+        {
+          "id": "TSK-005.02",
+          "name": "Apply the law to the facts",
+          "description": "Reason from rule to the matter's facts."
+        },
+        {
+          "id": "TSK-005.03",
+          "name": "Reach a reasoned conclusion",
+          "description": "State a supported conclusion and its confidence."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m03.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-006",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-006",
+      "skill_id": "SK-LP-02",
+      "name": "Apply governing law to disputed facts",
+      "description": "Match the elements of the governing law to the contested facts of the matter.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-006.01",
+          "name": "Extract the legal elements",
+          "description": "Break the rule into its required elements."
+        },
+        {
+          "id": "TSK-006.02",
+          "name": "Match facts to elements",
+          "description": "Line up the facts against each element."
+        },
+        {
+          "id": "TSK-006.03",
+          "name": "Weigh counterarguments",
+          "description": "Test the analysis against the opposing view."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m07.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-007",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-007",
+      "skill_id": "SK-LP-02",
+      "name": "Construct and evaluate legal arguments",
+      "description": "Build affirmative arguments and critically evaluate their strength against the opposition.",
+      "bloom_level": "evaluation",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-007.01",
+          "name": "Build the affirmative argument",
+          "description": "Assemble facts and authority into an argument."
+        },
+        {
+          "id": "TSK-007.02",
+          "name": "Anticipate the opposing argument",
+          "description": "Predict and address the counterposition."
+        },
+        {
+          "id": "TSK-007.03",
+          "name": "Assess relative strength",
+          "description": "Judge which arguments are strongest."
+        }
+      ],
+      "folio": {
+        "iri": "R77n3Z14OcgllZTAx8sw9xZ",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m06.ex",
+        "m03.ex"
+      ]
+    },
+    {
+      "id": "TSK-008",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-008",
+      "skill_id": "SK-LP-02",
+      "name": "Synthesize authority into a working rule",
+      "description": "Reconcile multiple, possibly conflicting, authorities into a usable statement of the rule.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-008.01",
+          "name": "Reconcile conflicting authority",
+          "description": "Harmonize or distinguish competing sources."
+        },
+        {
+          "id": "TSK-008.02",
+          "name": "Derive a rule statement",
+          "description": "State the synthesized rule for the file."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m07.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-009",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-009",
+      "skill_id": "SK-LP-03",
+      "name": "Identify the controlling substantive rules",
+      "description": "Locate and state the substantive rules that govern the matter.",
+      "bloom_level": "comprehension",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-009.01",
+          "name": "Locate governing statutes and code",
+          "description": "Find the controlling primary law."
+        },
+        {
+          "id": "TSK-009.02",
+          "name": "Identify controlling elements",
+          "description": "State the substantive elements at issue."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m07.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-010",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-010",
+      "skill_id": "SK-LP-03",
+      "name": "Analyze the elements of a claim or defense",
+      "description": "Break a claim or defense into its prima facie elements and available defenses.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-010.01",
+          "name": "Enumerate prima facie elements",
+          "description": "List each element of the claim."
+        },
+        {
+          "id": "TSK-010.02",
+          "name": "Identify affirmative defenses",
+          "description": "List defenses that may defeat the claim."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m07.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-011",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-011",
+      "skill_id": "SK-LP-03",
+      "name": "Apply area-specific doctrine to the facts",
+      "description": "Apply the doctrine of the matter's practice area to its particular facts, noting jurisdictional variation.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-011.01",
+          "name": "Apply doctrine to matter facts",
+          "description": "Work the doctrine through the facts."
+        },
+        {
+          "id": "TSK-011.02",
+          "name": "Note jurisdictional variations",
+          "description": "Flag differences across the real-tier states."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m10.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-012",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-012",
+      "skill_id": "SK-LP-04",
+      "name": "Determine the governing procedural framework",
+      "description": "Identify the court, forum, and rule set that will govern the matter's procedure.",
+      "bloom_level": "comprehension",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-012.01",
+          "name": "Identify court, forum, and rules",
+          "description": "Determine the tribunal and its rules."
+        },
+        {
+          "id": "TSK-012.02",
+          "name": "Determine filing deadlines",
+          "description": "Calendar the controlling deadlines."
+        }
+      ],
+      "folio": {
+        "iri": "R79LjWBKHCdmQKEW6zPY8Co",
+        "mapping_confidence": "parent"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-013",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-013",
+      "skill_id": "SK-LP-04",
+      "name": "Apply the rules of civil procedure to a filing",
+      "description": "Ensure a filing satisfies jurisdiction, venue, and service requirements.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-013.01",
+          "name": "Confirm jurisdiction and venue",
+          "description": "Verify the forum is proper."
+        },
+        {
+          "id": "TSK-013.02",
+          "name": "Comply with service requirements",
+          "description": "Effect and document proper service."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-014",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-014",
+      "skill_id": "SK-LP-04",
+      "name": "Apply the rules of evidence in preparation",
+      "description": "Assess admissibility and lay foundation for key evidence before a hearing or trial.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-014.01",
+          "name": "Assess admissibility of exhibits",
+          "description": "Test exhibits against the evidence rules."
+        },
+        {
+          "id": "TSK-014.02",
+          "name": "Prepare foundation for key evidence",
+          "description": "Plan how each item will be admitted."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex"
+      ]
+    },
+    {
+      "id": "TSK-015",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-015",
+      "skill_id": "SK-LP-04",
+      "name": "Navigate appellate procedure",
+      "description": "Comply with appellate rules, format, and deadlines for a review proceeding.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-015.01",
+          "name": "Confirm appellate rules and format",
+          "description": "Meet the format and length requirements."
+        },
+        {
+          "id": "TSK-015.02",
+          "name": "Calendar briefing deadlines",
+          "description": "Track the appellate briefing schedule."
+        }
+      ],
+      "folio": {
+        "iri": "RBKT1I6J8ce2Gs6xwwFcUTr",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-016",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-016",
+      "skill_id": "SK-LP-05",
+      "name": "Formulate a research plan",
+      "description": "Plan a library research effort: issues, sources, and search terms.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-016.01",
+          "name": "Identify issues to research",
+          "description": "List the questions to answer."
+        },
+        {
+          "id": "TSK-016.02",
+          "name": "Select sources and search terms",
+          "description": "Choose the tools and vocabulary."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m06.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-017",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-017",
+      "skill_id": "SK-LP-05",
+      "name": "Locate and read primary authority in print",
+      "description": "Find and read the controlling statutes and case law in library sources.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-017.01",
+          "name": "Find controlling statutes",
+          "description": "Locate the governing code sections."
+        },
+        {
+          "id": "TSK-017.02",
+          "name": "Find on-point case law",
+          "description": "Locate cases on the issue."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-018",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-018",
+      "skill_id": "SK-LP-05",
+      "name": "Validate and update authority",
+      "description": "Confirm that authority is still good law and note subsequent history.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-018.01",
+          "name": "Confirm authority is good law",
+          "description": "Check that the source is still valid."
+        },
+        {
+          "id": "TSK-018.02",
+          "name": "Note subsequent history",
+          "description": "Record later treatment of the source."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m02.ex"
+      ]
+    },
+    {
+      "id": "TSK-019",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-019",
+      "skill_id": "SK-LP-06",
+      "name": "Run electronic database searches",
+      "description": "Search online legal databases with effective queries filtered to the jurisdiction.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-019.01",
+          "name": "Build boolean and natural-language queries",
+          "description": "Construct effective search strings."
+        },
+        {
+          "id": "TSK-019.02",
+          "name": "Filter by jurisdiction",
+          "description": "Restrict results to the governing jurisdiction."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m11.ex",
+        "m13.ex",
+        "m16.ex"
+      ]
+    },
+    {
+      "id": "TSK-020",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-020",
+      "skill_id": "SK-LP-06",
+      "name": "Cite-check using online tools",
+      "description": "Use citator tools to verify citations and check their treatment.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-020.01",
+          "name": "Verify citation validity",
+          "description": "Confirm each cite exists and is accurate."
+        },
+        {
+          "id": "TSK-020.02",
+          "name": "Check treatment flags",
+          "description": "Review negative or cautionary treatment."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m12.ex",
+        "m16.ex"
+      ]
+    },
+    {
+      "id": "TSK-021",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-021",
+      "skill_id": "SK-LP-06",
+      "name": "Assemble a research trail and report",
+      "description": "Record the sources found and summarize the findings for the file.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-021.01",
+          "name": "Record sources found",
+          "description": "Log the authorities located."
+        },
+        {
+          "id": "TSK-021.02",
+          "name": "Summarize findings for the file",
+          "description": "Write a short research summary."
+        }
+      ],
+      "folio": {
+        "iri": "R7TB5AJsngthjmL6KsEht3G",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-022",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-022",
+      "skill_id": "SK-LP-07",
+      "name": "Conduct a client intake interview",
+      "description": "Interview a new client to elicit their story, goals, and concerns while building trust.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-022.01",
+          "name": "Use open-ended then focused questions",
+          "description": "Move from broad to narrow (T-funnel)."
+        },
+        {
+          "id": "TSK-022.02",
+          "name": "Build rapport and trust",
+          "description": "Establish a working relationship."
+        },
+        {
+          "id": "TSK-022.03",
+          "name": "Elicit the client's goals and concerns",
+          "description": "Capture what the client wants and fears."
+        }
+      ],
+      "folio": {
+        "iri": "R83QdGrsILzbGVfk0bqF1kw",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m02.ex",
+        "m03.ex",
+        "m04.ex",
+        "m05.ex",
+        "m06.ex",
+        "m07.ex",
+        "m08.ex",
+        "m09.ex",
+        "m10.ex",
+        "m11.ex",
+        "m12.ex",
+        "m13.ex",
+        "m14.ex",
+        "m15.ex",
+        "m16.ex",
+        "m17.ex",
+        "m18.ex",
+        "m19.ex",
+        "m20.ex"
+      ]
+    },
+    {
+      "id": "TSK-023",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-023",
+      "skill_id": "SK-LP-07",
+      "name": "Investigate and develop the facts",
+      "description": "Gather documents and witness information and assess factual gaps and inconsistencies.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-023.01",
+          "name": "Gather documents and records",
+          "description": "Collect the relevant records."
+        },
+        {
+          "id": "TSK-023.02",
+          "name": "Identify and interview witnesses",
+          "description": "Find and question fact witnesses."
+        },
+        {
+          "id": "TSK-023.03",
+          "name": "Assess gaps and inconsistencies",
+          "description": "Test the facts for holes and conflicts."
+        }
+      ],
+      "folio": {
+        "iri": "RVZJBUCRB7cgWN1CIbeJJq",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex",
+        "m05.ex"
+      ]
+    },
+    {
+      "id": "TSK-024",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-024",
+      "skill_id": "SK-LP-07",
+      "name": "Interview fact witnesses",
+      "description": "Prepare for and conduct interviews of fact witnesses and memorialize their statements.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-024.01",
+          "name": "Prepare a witness question outline",
+          "description": "Plan the areas to cover."
+        },
+        {
+          "id": "TSK-024.02",
+          "name": "Capture and memorialize statements",
+          "description": "Record the witness account."
+        }
+      ],
+      "folio": {
+        "iri": "R83QdGrsILzbGVfk0bqF1kw",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m08.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-025",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-025",
+      "skill_id": "SK-LP-07",
+      "name": "Build and maintain a chronology of facts",
+      "description": "Order events into a timeline and link facts to the legal elements they support.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-025.01",
+          "name": "Order events on a timeline",
+          "description": "Place events in sequence."
+        },
+        {
+          "id": "TSK-025.02",
+          "name": "Link facts to legal elements",
+          "description": "Connect each fact to an element."
+        }
+      ],
+      "folio": {
+        "iri": "RNlaIvo9pK9MgOcwKug5on",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m02.ex"
+      ]
+    },
+    {
+      "id": "TSK-026",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-026",
+      "skill_id": "SK-LP-08",
+      "name": "Deliver an opening statement or oral argument",
+      "description": "Present a structured, theme-driven oral argument and respond to questions from the bench.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-026.01",
+          "name": "Structure the argument",
+          "description": "Organize the oral presentation."
+        },
+        {
+          "id": "TSK-026.02",
+          "name": "Use theory and themes",
+          "description": "Anchor the argument in the case theory."
+        },
+        {
+          "id": "TSK-026.03",
+          "name": "Respond to questions from the bench",
+          "description": "Handle questioning under pressure."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m02.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-027",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-027",
+      "skill_id": "SK-LP-08",
+      "name": "Conduct direct and cross-examination",
+      "description": "Plan and deliver direct examination to elicit the story and cross to control the witness.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-027.01",
+          "name": "Plan direct to elicit the story",
+          "description": "Design questions that let the witness tell it."
+        },
+        {
+          "id": "TSK-027.02",
+          "name": "Plan cross to control the witness",
+          "description": "Design leading questions that limit the witness."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m01.ex"
+      ]
+    },
+    {
+      "id": "TSK-028",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-028",
+      "skill_id": "SK-LP-08",
+      "name": "Counsel and communicate with the client orally",
+      "description": "Explain options and confirm understanding in plain, accessible language.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-028.01",
+          "name": "Explain options in plain language",
+          "description": "Translate legal choices for the client."
+        },
+        {
+          "id": "TSK-028.02",
+          "name": "Confirm client understanding",
+          "description": "Check that the client understood."
+        }
+      ],
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m05.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-029",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-029",
+      "skill_id": "SK-LP-08",
+      "name": "Present a negotiation position orally",
+      "description": "State interests and positions and make and respond to offers in real time.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-029.01",
+          "name": "State interests and positions",
+          "description": "Present the client's goals and stance."
+        },
+        {
+          "id": "TSK-029.02",
+          "name": "Make and respond to offers",
+          "description": "Advance and react to proposals."
+        }
+      ],
+      "folio": {
+        "iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m05.ex",
+        "m06.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-030",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-030",
+      "skill_id": "SK-LP-09",
+      "name": "Draft client correspondence and letters",
+      "description": "Write clear client-facing letters, including status and advice letters.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-030.01",
+          "name": "Write an engagement or status letter",
+          "description": "Communicate scope or progress."
+        },
+        {
+          "id": "TSK-030.02",
+          "name": "Write a client advice letter",
+          "description": "Convey advice in writing."
+        }
+      ],
+      "folio": {
+        "iri": "RPzuFFXebWVvkhzE9KZ304",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m05.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-031",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-031",
+      "skill_id": "SK-LP-09",
+      "name": "Draft correspondence to opposing counsel and the court",
+      "description": "Write professional correspondence to opposing counsel and the clerk, with proof of service.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-031.01",
+          "name": "Draft a meet-and-confer letter",
+          "description": "Communicate with opposing counsel."
+        },
+        {
+          "id": "TSK-031.02",
+          "name": "Include proof of service",
+          "description": "Document service on the other side."
+        }
+      ],
+      "folio": {
+        "iri": "RPzuFFXebWVvkhzE9KZ304",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-032",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-032",
+      "skill_id": "SK-LP-09",
+      "name": "Write a persuasive brief or memorandum of law",
+      "description": "Draft a persuasive brief with organized argument headings and integrated citations.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-032.01",
+          "name": "Organize argument headings",
+          "description": "Structure the brief's point headings."
+        },
+        {
+          "id": "TSK-032.02",
+          "name": "Integrate authority and record cites",
+          "description": "Weave in citations to law and record."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m06.ex",
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-033",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-033",
+      "skill_id": "SK-LP-09",
+      "name": "Edit and revise written work against a rubric",
+      "description": "Self-edit and revise a draft for clarity, concision, and page limits against the rubric.",
+      "bloom_level": "evaluation",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-033.01",
+          "name": "Self-edit for clarity and concision",
+          "description": "Tighten and clarify the prose."
+        },
+        {
+          "id": "TSK-033.02",
+          "name": "Revise to meet page limits",
+          "description": "Cut to the required length."
+        }
+      ],
+      "folio": {
+        "iri": "R8Gc3Ce7YAbKZLOUs4pCQuA",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m03.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-034",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-034",
+      "skill_id": "SK-LP-10",
+      "name": "Advise the client on options and risks",
+      "description": "Lay out the alternatives and their consequences and give a candid recommendation.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-034.01",
+          "name": "Lay out alternatives and consequences",
+          "description": "Present the realistic options."
+        },
+        {
+          "id": "TSK-034.02",
+          "name": "Give a candid recommendation",
+          "description": "Recommend a course of action."
+        }
+      ],
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m05.ex",
+        "m08.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-035",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-035",
+      "skill_id": "SK-LP-10",
+      "name": "Counsel on settlement versus proceeding",
+      "description": "Help the client weigh settling against proceeding, using BATNA and cost-benefit.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-035.01",
+          "name": "Evaluate the client's BATNA",
+          "description": "Assess the best alternative to agreement."
+        },
+        {
+          "id": "TSK-035.02",
+          "name": "Explain cost, benefit, and risk",
+          "description": "Frame the tradeoffs clearly."
+        }
+      ],
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m09.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-036",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-036",
+      "skill_id": "SK-LP-10",
+      "name": "Manage client expectations and decisions",
+      "description": "Clarify that the client owns key decisions and document the advice given.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-036.01",
+          "name": "Clarify decision ownership",
+          "description": "Confirm the client decides."
+        },
+        {
+          "id": "TSK-036.02",
+          "name": "Document the advice given",
+          "description": "Memorialize the counseling."
+        }
+      ],
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m08.ex",
+        "m09.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-037",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-037",
+      "skill_id": "SK-LP-10",
+      "name": "Counsel a distressed or vulnerable client",
+      "description": "Acknowledge emotion, rebuild focus, and coordinate with a guardian or parent where needed.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-037.01",
+          "name": "Acknowledge emotion and rebuild focus",
+          "description": "Respond to distress and refocus."
+        },
+        {
+          "id": "TSK-037.02",
+          "name": "Coordinate with a guardian or parent",
+          "description": "Involve a caregiver appropriately."
+        }
+      ],
+      "folio": {
+        "iri": "R9p98NogvwJk1MnJgYzuiZd",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m08.ex",
+        "m09.ex",
+        "m05.ex"
+      ]
+    },
+    {
+      "id": "TSK-038",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-038",
+      "skill_id": "SK-LP-11",
+      "name": "Build client trust and rapport",
+      "description": "Earn the client's confidence through competence, preparation, and reliable follow-through.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-038.01",
+          "name": "Demonstrate competence and preparation",
+          "description": "Show mastery of the matter."
+        },
+        {
+          "id": "TSK-038.02",
+          "name": "Communicate reliably and follow through",
+          "description": "Do what you say, when you say it."
+        }
+      ],
+      "folio": {
+        "iri": "R83QdGrsILzbGVfk0bqF1kw",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-039",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-039",
+      "skill_id": "SK-LP-11",
+      "name": "Establish credibility with the tribunal and opposing counsel",
+      "description": "Build a reputation for candor and preparedness before the court and opposing counsel.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-039.01",
+          "name": "Demonstrate candor and preparedness",
+          "description": "Be straight and ready."
+        },
+        {
+          "id": "TSK-039.02",
+          "name": "Honor commitments and deadlines",
+          "description": "Keep your professional word."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m02.ex",
+        "m06.ex",
+        "m03.ex"
+      ]
+    },
+    {
+      "id": "TSK-040",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-040",
+      "skill_id": "SK-LP-11",
+      "name": "Maintain the attorney-client relationship over time",
+      "description": "Keep an ongoing client informed and responsive to sustain the relationship.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-040.01",
+          "name": "Keep the client informed",
+          "description": "Provide regular updates."
+        },
+        {
+          "id": "TSK-040.02",
+          "name": "Respond promptly to communications",
+          "description": "Answer the client quickly."
+        }
+      ],
+      "folio": {
+        "iri": "R9PLqqxNIpwbQxLWPoLvR5n",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m09.ex",
+        "m10.ex",
+        "m19.ex"
+      ]
+    },
+    {
+      "id": "TSK-041",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-041",
+      "skill_id": "SK-LP-12",
+      "name": "Conduct a new-client intake and screening",
+      "description": "Gather intake information and run a preliminary conflicts screen before accepting a client.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-041.01",
+          "name": "Gather intake information",
+          "description": "Collect the client and matter details."
+        },
+        {
+          "id": "TSK-041.02",
+          "name": "Run a preliminary conflicts check",
+          "description": "Screen for conflicts before engaging."
+        }
+      ],
+      "folio": {
+        "iri": "Ry2zpiHIeLctXWkmz2CO6C",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m06.ex",
+        "m08.ex"
+      ]
+    },
+    {
+      "id": "TSK-042",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-042",
+      "skill_id": "SK-LP-12",
+      "name": "Develop business and generate referrals",
+      "description": "Identify prospective clients and communicate the firm's value to win work.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-042.01",
+          "name": "Identify prospective clients",
+          "description": "Find likely sources of work."
+        },
+        {
+          "id": "TSK-042.02",
+          "name": "Communicate the firm's value",
+          "description": "Explain why to hire the firm."
+        }
+      ],
+      "folio": {
+        "iri": "R81n0uoiTFQMwwdzAskqkZD",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m04.ex"
+      ]
+    },
+    {
+      "id": "TSK-043",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-043",
+      "skill_id": "SK-LP-12",
+      "name": "Retain clients through service and relationship",
+      "description": "Keep clients by delivering responsive service and acting on their feedback.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-043.01",
+          "name": "Deliver responsive service",
+          "description": "Serve clients promptly and well."
+        },
+        {
+          "id": "TSK-043.02",
+          "name": "Solicit and act on feedback",
+          "description": "Ask for and use client feedback."
+        }
+      ],
+      "folio": {
+        "iri": "R9PLqqxNIpwbQxLWPoLvR5n",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m09.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-044",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-044",
+      "skill_id": "SK-LP-13",
+      "name": "Prepare a strategic settlement and negotiation plan (SSNP)",
+      "description": "Plan a negotiation: interests, positions, BATNA, targets, and confidential concessions.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-044.01",
+          "name": "Identify interests, positions, and BATNA",
+          "description": "Map the negotiation landscape."
+        },
+        {
+          "id": "TSK-044.02",
+          "name": "Set target and reservation points",
+          "description": "Fix the goal and walk-away."
+        },
+        {
+          "id": "TSK-044.03",
+          "name": "Plan confidential concessions",
+          "description": "Decide what can be traded and when."
+        }
+      ],
+      "folio": {
+        "iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m05.ex",
+        "m06.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-045",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-045",
+      "skill_id": "SK-LP-13",
+      "name": "Conduct a settlement or plea negotiation",
+      "description": "Exchange and evaluate offers using principled bargaining and document the terms reached.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-045.01",
+          "name": "Exchange and evaluate offers",
+          "description": "Advance and assess proposals."
+        },
+        {
+          "id": "TSK-045.02",
+          "name": "Use principled bargaining",
+          "description": "Negotiate on interests, not positions."
+        },
+        {
+          "id": "TSK-045.03",
+          "name": "Document the terms reached",
+          "description": "Record the agreement."
+        }
+      ],
+      "folio": {
+        "iri": "RDa0Qu7gpJEIhpO0REOfc1p",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m05.ex",
+        "m03.ex",
+        "m06.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-046",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-046",
+      "skill_id": "SK-LP-13",
+      "name": "Negotiate a transaction to agreement",
+      "description": "Reconcile competing deal terms and draft the negotiated agreement.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-046.01",
+          "name": "Reconcile competing deal terms",
+          "description": "Bridge the parties' positions."
+        },
+        {
+          "id": "TSK-046.02",
+          "name": "Draft the negotiated agreement",
+          "description": "Reduce the deal to writing."
+        }
+      ],
+      "folio": {
+        "iri": "RCijZPAaPw0lgYwtl8qWG67",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m14.ex",
+        "m07.ex",
+        "m17.ex"
+      ]
+    },
+    {
+      "id": "TSK-047",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-047",
+      "skill_id": "SK-LP-13",
+      "name": "Participate in mediation",
+      "description": "Prepare a mediation position and engage the neutral to explore options.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-047.01",
+          "name": "Prepare a mediation position or statement",
+          "description": "Set out the client's case for the neutral."
+        },
+        {
+          "id": "TSK-047.02",
+          "name": "Engage the neutral and explore options",
+          "description": "Work with the mediator toward resolution."
+        }
+      ],
+      "folio": {
+        "iri": "R9zgcjBBIdWMnwIR8nqsoS8",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m07.ex",
+        "m17.ex",
+        "m09.ex",
+        "m19.ex"
+      ]
+    },
+    {
+      "id": "TSK-048",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-048",
+      "skill_id": "SK-LP-14",
+      "name": "Draft pleadings to initiate or respond",
+      "description": "Draft the complaint or petition and the answer and counterclaim.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-048.01",
+          "name": "Draft the complaint or petition",
+          "description": "Plead the claim."
+        },
+        {
+          "id": "TSK-048.02",
+          "name": "Draft the answer and counterclaim",
+          "description": "Respond and assert counterclaims."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m07.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-049",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-049",
+      "skill_id": "SK-LP-14",
+      "name": "Conduct discovery",
+      "description": "Propound and respond to written discovery and take and defend depositions.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-049.01",
+          "name": "Draft interrogatories and document requests",
+          "description": "Propound written discovery."
+        },
+        {
+          "id": "TSK-049.02",
+          "name": "Respond to written discovery",
+          "description": "Answer the other side's requests."
+        },
+        {
+          "id": "TSK-049.03",
+          "name": "Take or defend a deposition",
+          "description": "Conduct deposition practice."
+        }
+      ],
+      "folio": {
+        "iri": "R9hR0S1zExtgPQTzV0LeyD3",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-050",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-050",
+      "skill_id": "SK-LP-14",
+      "name": "Engage in motion practice",
+      "description": "Draft and argue a motion with supporting and opposing memoranda and a proposed order.",
+      "bloom_level": "analysis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-050.01",
+          "name": "Draft the motion and supporting memo",
+          "description": "Write the moving papers."
+        },
+        {
+          "id": "TSK-050.02",
+          "name": "Draft the opposition",
+          "description": "Write the responsive papers."
+        },
+        {
+          "id": "TSK-050.03",
+          "name": "Prepare a proposed order",
+          "description": "Draft the order for the court."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m05.ex",
+        "m03.ex"
+      ]
+    },
+    {
+      "id": "TSK-051",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-051",
+      "skill_id": "SK-LP-14",
+      "name": "Try a case to verdict",
+      "description": "Prepare and present a trial from openings through witnesses to closings and jury instructions.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-051.01",
+          "name": "Prepare the trial notebook",
+          "description": "Assemble the trial materials."
+        },
+        {
+          "id": "TSK-051.02",
+          "name": "Present openings, witnesses, and closings",
+          "description": "Deliver the trial presentation."
+        },
+        {
+          "id": "TSK-051.03",
+          "name": "Propose jury instructions and verdict form",
+          "description": "Draft the instructions and verdict."
+        }
+      ],
+      "folio": {
+        "iri": "RBgzWJQz52CrObfGXDKH1t7",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m13.ex",
+        "m05.ex",
+        "m15.ex"
+      ]
+    },
+    {
+      "id": "TSK-052",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-052",
+      "skill_id": "SK-LP-14",
+      "name": "Conduct an arbitration hearing",
+      "description": "Draft the statement of the case and present evidence to the arbitrator.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-052.01",
+          "name": "Draft the statement of the case",
+          "description": "Prepare the arbitration statement."
+        },
+        {
+          "id": "TSK-052.02",
+          "name": "Present evidence to the arbitrator",
+          "description": "Try the matter before the arbitrator."
+        }
+      ],
+      "folio": {
+        "iri": "RXO2u2WBkUUcEG1jczLIcA",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m11.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-053",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-053",
+      "skill_id": "SK-LP-14",
+      "name": "Handle an appeal",
+      "description": "Frame issues and standard of review, write the appellate brief, and argue the appeal.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-053.01",
+          "name": "Frame issues and standard of review",
+          "description": "Define the appellate questions."
+        },
+        {
+          "id": "TSK-053.02",
+          "name": "Write the appellate brief",
+          "description": "Draft the brief."
+        },
+        {
+          "id": "TSK-053.03",
+          "name": "Present oral argument",
+          "description": "Argue before the court."
+        }
+      ],
+      "folio": {
+        "iri": "RBKT1I6J8ce2Gs6xwwFcUTr",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-054",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-054",
+      "skill_id": "SK-LP-15",
+      "name": "Manage the matter file and documents",
+      "description": "Organize the case file, exhibits, and document versions for a matter.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-054.01",
+          "name": "Organize the case file and exhibits",
+          "description": "Keep the file orderly."
+        },
+        {
+          "id": "TSK-054.02",
+          "name": "Track key documents and versions",
+          "description": "Control document versions."
+        }
+      ],
+      "folio": {
+        "iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-055",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-055",
+      "skill_id": "SK-LP-15",
+      "name": "Calendar deadlines and manage the docket",
+      "description": "Docket court and discovery deadlines with reminders and buffers.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-055.01",
+          "name": "Docket court and discovery deadlines",
+          "description": "Enter every controlling date."
+        },
+        {
+          "id": "TSK-055.02",
+          "name": "Set reminders and buffers",
+          "description": "Add lead-time alerts."
+        }
+      ],
+      "folio": {
+        "iri": "RDCyhgZrQPH8YgEp0C1Jtvb",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-056",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-056",
+      "skill_id": "SK-LP-15",
+      "name": "Coordinate the two-person firm's division of labor",
+      "description": "Allocate tasks between the two partners and balance the workload realistically.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-056.01",
+          "name": "Allocate tasks between partners",
+          "description": "Split the work fairly."
+        },
+        {
+          "id": "TSK-056.02",
+          "name": "Balance the workload realistically",
+          "description": "Avoid overloading either partner."
+        }
+      ],
+      "folio": {
+        "iri": "R8Ol92hxELxA00tCrZWrQDK",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m03.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-057",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-057",
+      "skill_id": "SK-LP-15",
+      "name": "Track time and prepare for billing",
+      "description": "Record contemporaneous time entries and categorize the work for the invoice.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-057.01",
+          "name": "Record contemporaneous time entries",
+          "description": "Log time as work is done."
+        },
+        {
+          "id": "TSK-057.02",
+          "name": "Categorize work for the invoice",
+          "description": "Code entries for billing."
+        }
+      ],
+      "folio": {
+        "iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-058",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-058",
+      "skill_id": "SK-LP-16",
+      "name": "Identify and resolve conflicts of interest",
+      "description": "Run a conflicts check and evaluate waiver or withdrawal where a conflict appears.",
+      "bloom_level": "analysis",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-058.01",
+          "name": "Run a conflicts check",
+          "description": "Screen the matter for conflicts."
+        },
+        {
+          "id": "TSK-058.02",
+          "name": "Evaluate waiver or withdrawal options",
+          "description": "Decide how to cure a conflict."
+        }
+      ],
+      "folio": {
+        "iri": "RDpaN9hLN8jGKrKBnQ2kPbN",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m04.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-059",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-059",
+      "skill_id": "SK-LP-16",
+      "name": "Safeguard client confidences and privilege",
+      "description": "Protect privileged material and avoid improper disclosures.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-059.01",
+          "name": "Protect privileged material",
+          "description": "Keep privileged content secure."
+        },
+        {
+          "id": "TSK-059.02",
+          "name": "Avoid improper disclosures",
+          "description": "Prevent inadvertent waiver."
+        }
+      ],
+      "folio": {
+        "iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m02.ex",
+        "m16.ex"
+      ]
+    },
+    {
+      "id": "TSK-060",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-060",
+      "skill_id": "SK-LP-16",
+      "name": "Comply with the rules of professional conduct",
+      "description": "Honor duties such as the no-contact rule and candor to the tribunal.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-060.01",
+          "name": "Honor the no-contact (Rule 4.2) rule",
+          "description": "Avoid contact with represented parties."
+        },
+        {
+          "id": "TSK-060.02",
+          "name": "Maintain candor to the tribunal",
+          "description": "Be truthful with the court."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m02.ex",
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-061",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-061",
+      "skill_id": "SK-LP-16",
+      "name": "Handle client funds and trust duties ethically",
+      "description": "Keep client funds in trust, avoid commingling, and reconcile the trust ledger.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-061.01",
+          "name": "Keep client funds in trust",
+          "description": "Segregate client money."
+        },
+        {
+          "id": "TSK-061.02",
+          "name": "Avoid commingling and reconcile the ledger",
+          "description": "Balance and separate the trust account."
+        }
+      ],
+      "folio": {
+        "iri": "RgV0GDy1p5PQCXleadL2hV",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m02.ex",
+        "m12.ex",
+        "m09.ex",
+        "m19.ex"
+      ]
+    },
+    {
+      "id": "TSK-062",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-062",
+      "skill_id": "SK-LP-17",
+      "name": "Draft transactional agreements",
+      "description": "Draft a purchase or sale agreement and its protective clauses.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-062.01",
+          "name": "Draft a purchase or sale agreement",
+          "description": "Reduce the deal to a contract."
+        },
+        {
+          "id": "TSK-062.02",
+          "name": "Draft protective clauses",
+          "description": "Add easement, warranty, or similar protections."
+        }
+      ],
+      "folio": {
+        "iri": "RCijZPAaPw0lgYwtl8qWG67",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m04.ex",
+        "m14.ex",
+        "m07.ex",
+        "m17.ex"
+      ]
+    },
+    {
+      "id": "TSK-063",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-063",
+      "skill_id": "SK-LP-17",
+      "name": "Draft a will and estate-planning documents",
+      "description": "Draft a will to the client's instructions with an explanatory client letter.",
+      "bloom_level": "synthesis",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-063.01",
+          "name": "Draft the will per client instructions",
+          "description": "Prepare the testamentary document."
+        },
+        {
+          "id": "TSK-063.02",
+          "name": "Draft the explanatory client letter",
+          "description": "Explain the will to the client."
+        }
+      ],
+      "folio": {
+        "iri": "R9bCaZjWhV1f2PgQiwzAkDm",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m10.ex",
+        "m20.ex"
+      ]
+    },
+    {
+      "id": "TSK-064",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-064",
+      "skill_id": "SK-LP-17",
+      "name": "Draft an engagement letter and fee agreement",
+      "description": "Draft the engagement letter stating scope, fee structure, and required billing terms.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-064.01",
+          "name": "State scope and fee structure",
+          "description": "Define the engagement and fee."
+        },
+        {
+          "id": "TSK-064.02",
+          "name": "Include required billing terms",
+          "description": "Add the billing and payment terms."
+        }
+      ],
+      "folio": {
+        "iri": "RBwgCSrndWQriCjEO63iWbx",
+        "mapping_confidence": "exact"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m09.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-065",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-065",
+      "skill_id": "SK-LP-17",
+      "name": "Draft pleadings and litigation documents",
+      "description": "Draft pleadings, motions, affidavits, and proposed orders.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-065.01",
+          "name": "Draft pleadings and motions",
+          "description": "Prepare the litigation papers."
+        },
+        {
+          "id": "TSK-065.02",
+          "name": "Draft affidavits and proposed orders",
+          "description": "Prepare supporting documents."
+        }
+      ],
+      "folio": {
+        "iri": "R9JHul9FKmkFasxXopMmrpq",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m05.ex"
+      ]
+    },
+    {
+      "id": "TSK-066",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-066",
+      "skill_id": "SK-LP-17",
+      "name": "Draft discovery instruments",
+      "description": "Draft interrogatories and requests for production.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-066.01",
+          "name": "Draft interrogatories",
+          "description": "Prepare written questions."
+        },
+        {
+          "id": "TSK-066.02",
+          "name": "Draft requests for production",
+          "description": "Prepare document requests."
+        }
+      ],
+      "folio": {
+        "iri": "RBNIcoXeUcBXVeFvlXkbGaS",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-067",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-067",
+      "skill_id": "SK-PM-01",
+      "name": "Select and structure the fee arrangement",
+      "description": "Match the fee type to the matter and document it in the agreement.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-067.01",
+          "name": "Match fee type to matter",
+          "description": "Choose hourly, flat, contingency, or retainer."
+        },
+        {
+          "id": "TSK-067.02",
+          "name": "Document the fee in the agreement",
+          "description": "Record the fee terms."
+        }
+      ],
+      "folio": {
+        "iri": "R9RWwdyMp12ldMe0u2EZjhO",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex",
+        "m09.ex",
+        "m10.ex"
+      ]
+    },
+    {
+      "id": "TSK-068",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-068",
+      "skill_id": "SK-PM-01",
+      "name": "Record time and expenses",
+      "description": "Keep contemporaneous time sheets and capture disbursements.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-068.01",
+          "name": "Keep contemporaneous time sheets",
+          "description": "Log time as it is spent."
+        },
+        {
+          "id": "TSK-068.02",
+          "name": "Capture disbursements and expenses",
+          "description": "Record costs advanced."
+        }
+      ],
+      "folio": {
+        "iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m06.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-069",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-069",
+      "skill_id": "SK-PM-01",
+      "name": "Prepare a client billing statement",
+      "description": "Compile time entries into an invoice, compute the balance due, and enclose a cover letter.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-069.01",
+          "name": "Compile time entries into an invoice",
+          "description": "Assemble the billing statement."
+        },
+        {
+          "id": "TSK-069.02",
+          "name": "Compute fees, expenses, and balance due",
+          "description": "Total the amounts owed."
+        },
+        {
+          "id": "TSK-069.03",
+          "name": "Enclose a billing cover letter",
+          "description": "Send the statement with a letter."
+        }
+      ],
+      "folio": {
+        "iri": "RgV0GDy1p5PQCXleadL2hV",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m04.ex",
+        "m07.ex",
+        "m16.ex"
+      ]
+    },
+    {
+      "id": "TSK-070",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-070",
+      "skill_id": "SK-PM-01",
+      "name": "Manage retainers and trust accounting",
+      "description": "Deposit funds to trust and reconcile the trust ledger so it is never negative.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-070.01",
+          "name": "Deposit funds to trust",
+          "description": "Place advance funds in trust."
+        },
+        {
+          "id": "TSK-070.02",
+          "name": "Reconcile the trust ledger",
+          "description": "Balance the trust account."
+        }
+      ],
+      "folio": {
+        "iri": "RgV0GDy1p5PQCXleadL2hV",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m09.ex",
+        "m19.ex",
+        "m02.ex",
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-071",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-071",
+      "skill_id": "SK-PM-02",
+      "name": "Define staffing needs and roles",
+      "description": "Identify the support-staff roles the firm needs and write role expectations.",
+      "bloom_level": "comprehension",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-071.01",
+          "name": "Identify support-staff roles",
+          "description": "Determine needed positions."
+        },
+        {
+          "id": "TSK-071.02",
+          "name": "Write role expectations",
+          "description": "Define what each role does."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      }
+    },
+    {
+      "id": "TSK-072",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-072",
+      "skill_id": "SK-PM-02",
+      "name": "Supervise and delegate to non-lawyer staff",
+      "description": "Delegate appropriate tasks and supervise staff for competence and ethical compliance.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-072.01",
+          "name": "Delegate appropriate tasks",
+          "description": "Assign suitable work to staff."
+        },
+        {
+          "id": "TSK-072.02",
+          "name": "Supervise for competence and ethics",
+          "description": "Oversee quality and conduct."
+        }
+      ],
+      "folio": {
+        "iri": "R8Ol92hxELxA00tCrZWrQDK",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m12.ex"
+      ]
+    },
+    {
+      "id": "TSK-073",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-073",
+      "skill_id": "SK-PM-02",
+      "name": "Onboard and manage support staff",
+      "description": "Train new staff on firm systems and set performance expectations.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-073.01",
+          "name": "Train on firm systems",
+          "description": "Bring staff up to speed."
+        },
+        {
+          "id": "TSK-073.02",
+          "name": "Set performance expectations",
+          "description": "Define success for the role."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      }
+    },
+    {
+      "id": "TSK-074",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-074",
+      "skill_id": "SK-PM-03",
+      "name": "Plan the firm's startup capitalization",
+      "description": "Estimate startup costs and identify sources of capital for the firm.",
+      "bloom_level": "comprehension",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-074.01",
+          "name": "Estimate startup costs",
+          "description": "Project what launch will cost."
+        },
+        {
+          "id": "TSK-074.02",
+          "name": "Identify capital sources",
+          "description": "Find funding options."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-075",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-075",
+      "skill_id": "SK-PM-03",
+      "name": "Manage cash flow and reserves",
+      "description": "Forecast cash flow and maintain operating reserves.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-075.01",
+          "name": "Forecast cash flow",
+          "description": "Project inflows and outflows."
+        },
+        {
+          "id": "TSK-075.02",
+          "name": "Maintain operating reserves",
+          "description": "Hold a cushion for lean months."
+        }
+      ],
+      "folio": {
+        "iri": "RW7P6EPg4NMe8dhyO52jzl",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-076",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-076",
+      "skill_id": "SK-PM-03",
+      "name": "Evaluate investment in tools and growth",
+      "description": "Assess the return on a purchase and prioritize investments.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-076.01",
+          "name": "Assess ROI of a purchase",
+          "description": "Weigh cost against benefit."
+        },
+        {
+          "id": "TSK-076.02",
+          "name": "Prioritize investments",
+          "description": "Rank competing investments."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-077",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-077",
+      "skill_id": "SK-PM-04",
+      "name": "Plan and scope a matter as a project",
+      "description": "Define deliverables and milestones and estimate the effort and time required.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-077.01",
+          "name": "Define deliverables and milestones",
+          "description": "Set the outputs and checkpoints."
+        },
+        {
+          "id": "TSK-077.02",
+          "name": "Estimate effort and time",
+          "description": "Project the work required."
+        }
+      ],
+      "folio": {
+        "iri": "R9ScBHXlUfa31SlBnKmDarJ",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex",
+        "m09.ex"
+      ]
+    },
+    {
+      "id": "TSK-078",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-078",
+      "skill_id": "SK-PM-04",
+      "name": "Manage personal and firm time",
+      "description": "Prioritize tasks and track billable versus non-billable time.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-078.01",
+          "name": "Prioritize tasks",
+          "description": "Order work by importance and deadline."
+        },
+        {
+          "id": "TSK-078.02",
+          "name": "Track billable versus non-billable time",
+          "description": "Separate the two categories."
+        }
+      ],
+      "folio": {
+        "iri": "RDDsp1sHEeFoxTQnJeEyPPh",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m01.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-079",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-079",
+      "skill_id": "SK-PM-04",
+      "name": "Improve process efficiency",
+      "description": "Identify bottlenecks and standardize repeatable work.",
+      "bloom_level": "analysis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-079.01",
+          "name": "Identify bottlenecks",
+          "description": "Find where work stalls."
+        },
+        {
+          "id": "TSK-079.02",
+          "name": "Standardize repeatable work",
+          "description": "Templatize recurring tasks."
+        }
+      ],
+      "folio": {
+        "iri": "R9ScBHXlUfa31SlBnKmDarJ",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-080",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-080",
+      "skill_id": "SK-PM-05",
+      "name": "Prepare a matter or firm budget",
+      "description": "Estimate fees and costs and set a budget baseline.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-080.01",
+          "name": "Estimate fees and costs",
+          "description": "Project the numbers."
+        },
+        {
+          "id": "TSK-080.02",
+          "name": "Set a budget baseline",
+          "description": "Fix the plan of record."
+        }
+      ],
+      "folio": {
+        "iri": "RW7P6EPg4NMe8dhyO52jzl",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m03.ex",
+        "m01.ex"
+      ]
+    },
+    {
+      "id": "TSK-081",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-081",
+      "skill_id": "SK-PM-05",
+      "name": "Allocate resources across the docket",
+      "description": "Match resources to matter priority and rebalance as needs change.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-081.01",
+          "name": "Match resources to matter priority",
+          "description": "Assign effort to what matters most."
+        },
+        {
+          "id": "TSK-081.02",
+          "name": "Rebalance as needs change",
+          "description": "Adjust allocations over time."
+        }
+      ],
+      "folio": {
+        "iri": "R8Ol92hxELxA00tCrZWrQDK",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-082",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-082",
+      "skill_id": "SK-PM-05",
+      "name": "Monitor budget versus actuals",
+      "description": "Compare actuals to budget and adjust the plan.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-082.01",
+          "name": "Compare actuals to budget",
+          "description": "Track variance."
+        },
+        {
+          "id": "TSK-082.02",
+          "name": "Adjust the plan",
+          "description": "Revise the budget as needed."
+        }
+      ],
+      "folio": {
+        "iri": "RW7P6EPg4NMe8dhyO52jzl",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-083",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-083",
+      "skill_id": "SK-PM-06",
+      "name": "Develop a marketing and client-development plan",
+      "description": "Define the target clients and niche and choose outreach channels.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-083.01",
+          "name": "Define target clients and niche",
+          "description": "Pick who to serve."
+        },
+        {
+          "id": "TSK-083.02",
+          "name": "Choose outreach channels",
+          "description": "Select how to reach them."
+        }
+      ],
+      "folio": {
+        "iri": "R81n0uoiTFQMwwdzAskqkZD",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-084",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-084",
+      "skill_id": "SK-PM-06",
+      "name": "Build the firm's brand and network",
+      "description": "Cultivate referral relationships and maintain a professional presence.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-084.01",
+          "name": "Cultivate referral relationships",
+          "description": "Grow a referral network."
+        },
+        {
+          "id": "TSK-084.02",
+          "name": "Maintain a professional presence",
+          "description": "Keep a credible public profile."
+        }
+      ],
+      "folio": {
+        "iri": "R81n0uoiTFQMwwdzAskqkZD",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-085",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-085",
+      "skill_id": "SK-PM-06",
+      "name": "Prepare pitches and proposals",
+      "description": "Scope a prospective engagement and present fees and value.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-085.01",
+          "name": "Scope the prospective engagement",
+          "description": "Define the proposed work."
+        },
+        {
+          "id": "TSK-085.02",
+          "name": "Present fees and value",
+          "description": "Explain price and worth."
+        }
+      ],
+      "folio": {
+        "iri": "R8MT8gA5gTVF6rbGoWbxYJw",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-086",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-086",
+      "skill_id": "SK-PM-07",
+      "name": "Adopt and use practice technology",
+      "description": "Select case-management tools and use document and billing software.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-086.01",
+          "name": "Select case-management tools",
+          "description": "Choose the firm's systems."
+        },
+        {
+          "id": "TSK-086.02",
+          "name": "Use document and billing software",
+          "description": "Operate the core tools."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-087",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-087",
+      "skill_id": "SK-PM-07",
+      "name": "Manage electronic communications and records",
+      "description": "Organize email and files and retain records per policy.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-087.01",
+          "name": "Organize email and files",
+          "description": "Keep communications orderly."
+        },
+        {
+          "id": "TSK-087.02",
+          "name": "Retain records per policy",
+          "description": "Apply the retention schedule."
+        }
+      ],
+      "folio": {
+        "iri": "R9MD9rwRADsqy2eadoz5R8L",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-088",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-088",
+      "skill_id": "SK-PM-07",
+      "name": "Protect data security and client information",
+      "description": "Secure devices and accounts and guard against data loss.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-088.01",
+          "name": "Secure devices and accounts",
+          "description": "Lock down access."
+        },
+        {
+          "id": "TSK-088.02",
+          "name": "Guard against data loss",
+          "description": "Back up and protect data."
+        }
+      ],
+      "folio": {
+        "iri": "R97IEI6qOls8PLTHVBTaE0w",
+        "mapping_confidence": "near"
+      },
+      "exercise_refs": [
+        "m06.ex",
+        "m16.ex"
+      ]
+    },
+    {
+      "id": "TSK-089",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-089",
+      "skill_id": "SK-PM-08",
+      "name": "Establish firm governance and decision rules",
+      "description": "Define partner decision rights and document firm policies.",
+      "bloom_level": "comprehension",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-089.01",
+          "name": "Define partner decision rights",
+          "description": "Decide who decides what."
+        },
+        {
+          "id": "TSK-089.02",
+          "name": "Document firm policies",
+          "description": "Write the firm's rules."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      }
+    },
+    {
+      "id": "TSK-090",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-090",
+      "skill_id": "SK-PM-08",
+      "name": "Set long-range strategy",
+      "description": "Set multi-year goals and align resources to the strategy.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-090.01",
+          "name": "Set multi-year goals",
+          "description": "Define where the firm is going."
+        },
+        {
+          "id": "TSK-090.02",
+          "name": "Align resources to strategy",
+          "description": "Point resources at the goals."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      }
+    },
+    {
+      "id": "TSK-091",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-091",
+      "skill_id": "SK-PM-08",
+      "name": "Make and review firm-level decisions",
+      "description": "Weigh options and risks and review outcomes to adjust.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-091.01",
+          "name": "Weigh options and risks",
+          "description": "Assess the choices."
+        },
+        {
+          "id": "TSK-091.02",
+          "name": "Review outcomes and adjust",
+          "description": "Learn from results."
+        }
+      ],
+      "folio": {
+        "iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-092",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-092",
+      "skill_id": "SK-PM-09",
+      "name": "Communicate effectively within the firm",
+      "description": "Hold regular partner check-ins and give constructive feedback.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-092.01",
+          "name": "Hold regular partner check-ins",
+          "description": "Keep the partnership aligned."
+        },
+        {
+          "id": "TSK-092.02",
+          "name": "Give constructive feedback",
+          "description": "Coach and correct helpfully."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      },
+      "exercise_refs": [
+        "m01.ex"
+      ]
+    },
+    {
+      "id": "TSK-093",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-093",
+      "skill_id": "SK-PM-09",
+      "name": "Manage partner and staff relationships",
+      "description": "Align on expectations and address friction early.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-093.01",
+          "name": "Align on expectations",
+          "description": "Set shared expectations."
+        },
+        {
+          "id": "TSK-093.02",
+          "name": "Address friction early",
+          "description": "Handle tension before it grows."
+        }
+      ],
+      "folio": {
+        "iri": "RBJy3KoNBYSWUf4xdARMhYt",
+        "mapping_confidence": "parent"
+      }
+    },
+    {
+      "id": "TSK-094",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-094",
+      "skill_id": "SK-PM-09",
+      "name": "Resolve internal conflict",
+      "description": "Surface disagreements constructively and reach a workable resolution.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-094.01",
+          "name": "Surface disagreements constructively",
+          "description": "Bring conflict into the open."
+        },
+        {
+          "id": "TSK-094.02",
+          "name": "Reach a workable resolution",
+          "description": "Settle on a path forward."
+        }
+      ],
+      "folio": {
+        "iri": "Ru8IZ0c4FPR4BSj4MyRQT3",
+        "mapping_confidence": "near"
+      }
+    },
+    {
+      "id": "TSK-095",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-095",
+      "skill_id": "SK-LP-18",
+      "name": "Formulate an effective legal prompt",
+      "description": "Write a prompt that specifies role, task, context, and the governing facts and constraints.",
+      "bloom_level": "application",
+      "module": "M1",
+      "subtasks": [
+        {
+          "id": "TSK-095.01",
+          "name": "Specify role, task, and context",
+          "description": "Frame the request precisely."
+        },
+        {
+          "id": "TSK-095.02",
+          "name": "Supply governing facts and constraints",
+          "description": "Give the model what it needs."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m03.ex",
+        "m05.ex"
+      ]
+    },
+    {
+      "id": "TSK-096",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-096",
+      "skill_id": "SK-LP-18",
+      "name": "Iterate and refine prompts",
+      "description": "Diagnose weak outputs and revise the prompt to improve results.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-096.01",
+          "name": "Diagnose weak outputs",
+          "description": "Identify what went wrong."
+        },
+        {
+          "id": "TSK-096.02",
+          "name": "Revise the prompt and re-test",
+          "description": "Adjust and try again."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-097",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-097",
+      "skill_id": "SK-LP-18",
+      "name": "Build reusable prompt templates for tasks",
+      "description": "Template recurring prompts for memos or interviews and document their usage and limits.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-097.01",
+          "name": "Template a memo or interview prompt",
+          "description": "Create a reusable prompt."
+        },
+        {
+          "id": "TSK-097.02",
+          "name": "Document usage and limits",
+          "description": "Note when and how to use it."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-098",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-098",
+      "skill_id": "SK-LP-19",
+      "name": "Verify AI-asserted facts against the record",
+      "description": "Cross-check AI claims to the case file and flag unsupported assertions.",
+      "bloom_level": "evaluation",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-098.01",
+          "name": "Cross-check claims to the case file",
+          "description": "Verify against source facts."
+        },
+        {
+          "id": "TSK-098.02",
+          "name": "Flag unsupported assertions",
+          "description": "Mark what cannot be verified."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m03.ex",
+        "m07.ex"
+      ]
+    },
+    {
+      "id": "TSK-099",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-099",
+      "skill_id": "SK-LP-19",
+      "name": "Check AI-provided citations and authority",
+      "description": "Confirm each AI citation exists and says what the output claims.",
+      "bloom_level": "evaluation",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-099.01",
+          "name": "Confirm each citation exists",
+          "description": "Verify the source is real."
+        },
+        {
+          "id": "TSK-099.02",
+          "name": "Confirm it says what is claimed",
+          "description": "Read the source for support."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-100",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-100",
+      "skill_id": "SK-LP-19",
+      "name": "Detect and correct hallucinations and errors",
+      "description": "Identify fabricated content and correct it before relying on or filing the work.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-100.01",
+          "name": "Identify fabricated content",
+          "description": "Spot invented facts or law."
+        },
+        {
+          "id": "TSK-100.02",
+          "name": "Correct before relying or filing",
+          "description": "Fix errors before use."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-101",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-101",
+      "skill_id": "SK-LP-20",
+      "name": "Decide which tasks to delegate to AI versus retain",
+      "description": "Assess task risk and reversibility and keep judgment-heavy work with the human.",
+      "bloom_level": "evaluation",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-101.01",
+          "name": "Assess task risk and reversibility",
+          "description": "Judge what is safe to delegate."
+        },
+        {
+          "id": "TSK-101.02",
+          "name": "Keep judgment-heavy work human",
+          "description": "Retain the hard calls."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-102",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-102",
+      "skill_id": "SK-LP-20",
+      "name": "Integrate AI first-pass into the revise-and-repeat loop",
+      "description": "Obtain an AI first-pass critique and revise the work against the rubric.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-102.01",
+          "name": "Get an AI first-pass critique",
+          "description": "Run the draft through AI."
+        },
+        {
+          "id": "TSK-102.02",
+          "name": "Revise against the rubric",
+          "description": "Improve using the rubric."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m03.ex",
+        "m06.ex"
+      ]
+    },
+    {
+      "id": "TSK-103",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-103",
+      "skill_id": "SK-LP-20",
+      "name": "Supervise AI as you would a junior",
+      "description": "Set the assignment clearly and review AI work before it leaves the firm.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-103.01",
+          "name": "Set the assignment clearly",
+          "description": "Give the model a clear brief."
+        },
+        {
+          "id": "TSK-103.02",
+          "name": "Review before it leaves the firm",
+          "description": "Check the work before use."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-104",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-104",
+      "skill_id": "SK-LP-21",
+      "name": "Avoid disclosing client confidences to AI tools",
+      "description": "Strip or avoid identifiers and use only approved tools when working with AI.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-104.01",
+          "name": "Strip or avoid PII and identifiers",
+          "description": "Keep client identity out of prompts."
+        },
+        {
+          "id": "TSK-104.02",
+          "name": "Use approved tools only",
+          "description": "Restrict to vetted systems."
+        }
+      ],
+      "no_folio_equivalent": true,
+      "exercise_refs": [
+        "m06.ex",
+        "m02.ex"
+      ]
+    },
+    {
+      "id": "TSK-105",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-105",
+      "skill_id": "SK-LP-21",
+      "name": "Preserve privilege when using AI",
+      "description": "Assess waiver risk and document the safeguards taken.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-105.01",
+          "name": "Assess waiver risk",
+          "description": "Judge the privilege exposure."
+        },
+        {
+          "id": "TSK-105.02",
+          "name": "Document safeguards",
+          "description": "Record the protections used."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-106",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-106",
+      "skill_id": "SK-PM-10",
+      "name": "Maintain clean matter data for AI use",
+      "description": "Keep the record complete and current and separate facts from work product.",
+      "bloom_level": "application",
+      "module": "M2",
+      "subtasks": [
+        {
+          "id": "TSK-106.01",
+          "name": "Keep the record complete and current",
+          "description": "Maintain accurate matter data."
+        },
+        {
+          "id": "TSK-106.02",
+          "name": "Separate facts from work product",
+          "description": "Distinguish source facts from analysis."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-107",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-107",
+      "skill_id": "SK-PM-10",
+      "name": "Govern AI use across the firm",
+      "description": "Set an AI-use policy and log the tools and data flows.",
+      "bloom_level": "synthesis",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-107.01",
+          "name": "Set an AI-use policy",
+          "description": "Define acceptable AI use."
+        },
+        {
+          "id": "TSK-107.02",
+          "name": "Log tools and data flows",
+          "description": "Track what is used and how."
+        }
+      ],
+      "no_folio_equivalent": true
+    },
+    {
+      "id": "TSK-108",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-108",
+      "skill_id": "SK-PM-10",
+      "name": "Manage retention and deletion of AI interactions",
+      "description": "Retain AI interactions per policy and delete transient prompts and outputs.",
+      "bloom_level": "application",
+      "module": "M3",
+      "subtasks": [
+        {
+          "id": "TSK-108.01",
+          "name": "Retain per policy",
+          "description": "Keep what policy requires."
+        },
+        {
+          "id": "TSK-108.02",
+          "name": "Delete transient prompts and outputs",
+          "description": "Purge ephemeral data."
+        }
+      ],
+      "no_folio_equivalent": true
+    }
+  ]
+}

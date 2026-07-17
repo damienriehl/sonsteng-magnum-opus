@@ -1,0 +1,54 @@
+{
+  "id": "m15",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m15",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m15-dwi-mn",
+  "shape": "criminal_dwi",
+  "tier": "real",
+  "jurisdiction": "MN",
+  "caption": "State of Minnesota v. Travis O. Wenzloff",
+  "sides": [
+    {
+      "role_id": "m15.role.defense",
+      "label": "Defense / Defendant",
+      "party_names": ["Travis O. Wenzloff"],
+      "confidential_fact_refs": ["m15.fact.007", "m15.fact.008", "m15.fact.027"]
+    },
+    {
+      "role_id": "m15.role.prosecution",
+      "label": "Prosecution / State of Minnesota",
+      "party_names": ["State of Minnesota"]
+    }
+  ],
+  "parties": [
+    { "name": "Travis O. Wenzloff", "role": "defendant", "side_role_id": "m15.role.defense" },
+    { "name": "State of Minnesota", "role": "prosecuting authority", "side_role_id": "m15.role.prosecution" }
+  ],
+  "client_id": "FIRM-C-15",
+  "fee_type": "flat",
+  "skill_refs": ["SK-LP-07", "SK-LP-01", "SK-LP-04", "SK-LP-10", "SK-LP-13", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-004", "TSK-022", "TSK-023", "TSK-025", "TSK-034", "TSK-037", "TSK-044", "TSK-045", "TSK-050", "TSK-060"],
+  "personas": ["m15.per.wenzloff", "m15.per.kallestad"],
+  "witnesses": [
+    { "id": "m15.wit.kallestad", "name": "Deputy Reid Kallestad" },
+    { "id": "m15.wit.vandersteen", "name": "Corinne Vandersteen" },
+    { "id": "m15.wit.skovgaard", "name": "Gwen Skovgaard" },
+    { "id": "m15.wit.zavaleta", "name": "Marisol Zavaleta" },
+    { "id": "m15.wit.petrossian", "name": "Sergeant Alina Petrossian" }
+  ],
+  "exhibits": [
+    { "id": "m15.exh.001", "title": "Sherburne County Sheriff's Office Incident and Arrest Report (Deputy Kallestad)" },
+    { "id": "m15.exh.002", "title": "DataMaster DMT Evidentiary Breath-Test Record (0.09)" },
+    { "id": "m15.exh.003", "title": "Standardized Field Sobriety Test Worksheet" },
+    { "id": "m15.exh.004", "title": "Peace Officer's Certificate and Implied Consent Advisory / Notice of Revocation" },
+    { "id": "m15.exh.005", "title": "Squad Dashcam and Body-Worn Camera Index" },
+    { "id": "m15.exh.006", "title": "911 Dispatch / CAD Call Log (weaving report)" },
+    { "id": "m15.exh.007", "title": "Travis Wenzloff Driving Record (DVS abstract)" },
+    { "id": "m15.exh.008", "title": "Cedarloop Mechanical Work Order and Timesheet (double shift)" },
+    { "id": "m15.exh.009", "title": "Medication and Mouthwash Summary (described)" },
+    { "id": "m15.exh.010", "title": "Sherburne County Weather and Road-Condition Report" }
+  ],
+  "open_date": "2025-01-22",
+  "as_of_date": "2026-06-30"
+}

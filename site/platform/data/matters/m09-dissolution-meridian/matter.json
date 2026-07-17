@@ -1,0 +1,51 @@
+{
+  "id": "m09",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m09",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m09-dissolution-meridian",
+  "shape": "marriage_dissolution",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "In re the Marriage of Renata Sitko and Harlan Aldergrove",
+  "sides": [
+    {
+      "role_id": "m09.role.petitioner-counsel",
+      "label": "Petitioner's Counsel (Renata Sitko)",
+      "party_names": ["Renata Sitko"],
+      "confidential_fact_refs": ["m09.fact.043", "m09.fact.045", "m09.fact.046"]
+    },
+    {
+      "role_id": "m09.role.respondent-counsel",
+      "label": "Respondent's Counsel (Harlan Aldergrove)",
+      "party_names": ["Harlan Aldergrove"],
+      "confidential_fact_refs": ["m09.fact.027"]
+    }
+  ],
+  "parties": [
+    { "name": "Renata Sitko", "role": "petitioner / wife", "side_role_id": "m09.role.petitioner-counsel" },
+    { "name": "Harlan Aldergrove", "role": "respondent / husband", "side_role_id": "m09.role.respondent-counsel" }
+  ],
+  "client_id": "FIRM-C-09",
+  "fee_type": "retainer",
+  "skill_refs": ["SK-LP-07", "SK-LP-10", "SK-LP-13", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-004", "TSK-022", "TSK-023", "TSK-024", "TSK-034", "TSK-035", "TSK-037", "TSK-044", "TSK-045", "TSK-048", "TSK-060"],
+  "personas": ["m09.per.sitko", "m09.per.aldergrove", "m09.per.ferreira"],
+  "witnesses": [
+    { "id": "m09.wit.ferreira", "name": "Marisol Ferreira" },
+    { "id": "m09.wit.kilbane", "name": "Warren Kilbane" },
+    { "id": "m09.wit.yamada", "name": "Colette Yamada" },
+    { "id": "m09.wit.bempah", "name": "Nadia Bempah" }
+  ],
+  "exhibits": [
+    { "id": "m09.exh.001", "title": "Petition for Dissolution of Marriage" },
+    { "id": "m09.exh.002", "title": "Marital Home Records (Appraisal & Mortgage Statement)" },
+    { "id": "m09.exh.003", "title": "Aldergrove Remodeling & Restoration LLC Financial Summary" },
+    { "id": "m09.exh.004", "title": "Renata Sitko's Parenting-Time Journal" },
+    { "id": "m09.exh.005", "title": "Co-Parenting Text-Message Thread" },
+    { "id": "m09.exh.006", "title": "Income & Benefits Summary (Both Parties)" },
+    { "id": "m09.exh.007", "title": "Photographs of the Marital Home (Described)" }
+  ],
+  "open_date": "2026-02-18",
+  "as_of_date": "2026-06-30"
+}
