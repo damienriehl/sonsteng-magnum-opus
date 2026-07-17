@@ -31,6 +31,18 @@
 | ![m03 packet](EP-2026-07-17/ep-packet.png) | ![Firm dashboard](EP-2026-07-17/ep-firm.png) |
 | ![Consultation room](EP-2026-07-17/ep-chat.png) | |
 
+## UAT (2026-07-17 evening — three lanes, driven in real browsers against live DEV + Worker)
+
+| Lane | Scenarios | Result |
+|---|---|---|
+| **Site flows** (student + faculty scripts, desktop + mobile 390×844, print, a11y) | 10 | 9 PASS · 1 FIXED (chat-page favicon 404) |
+| **Chat/critique vs live Worker** (no-key flow, fake-key decline, CORS probes, per-tab sessions, key-leak checks, full mock interview + debrief + export, all race paths, bfcache, mobile) | 6 live + 12 mock | **1 HIGH FIXED** — critique page never minted a session (its packet deep-link flow was dead on `session_invalid`); + 2 a11y fixes (large-type input scaling; 44px type toggle). All others PASS |
+| **Clean-clone adopter** (literal `git clone` → README followed as a stranger; secret sweep) | 8 | PASS — validator green, generator idempotent, 56/56 tests no-npm, dry-run credential-less; FIXED: README test command, `.gitignore` + untracked `.wrangler` cache (exposed account_id, low severity) |
+
+**Post-fix re-verification (live DEV):** critique page mints `GET /v1/session` on load; submit round-trips `OPTIONS`+`POST /v1/critique`; no-key path opens the BYOK drawer with the house-key explainer. Full `validate_spine.py` + `build_site.py --check` green after all fixes.
+
+**Report-only observations (design calls, not defects):** no chart hover tooltips (table twins expose all figures); the viz-spec "Patterns" toggle wasn't built; doc-card heading nesting; sub-24px inline links on mobile (WCAG 2.5.8 inline exception).
+
 ## Deferred (pending an API key — one command each)
 
 - **Live red-team gate (D3/D4):** `WORKER_URL=… PROVIDER=… API_KEY=… node app/worker/test/redteam.mjs` — concealed-leak, fact-fidelity + verification-pressure, sycophancy, debrief-oracle probes.
