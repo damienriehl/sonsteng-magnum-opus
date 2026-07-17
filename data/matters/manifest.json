@@ -1,0 +1,402 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "MANIFEST-matters",
+  "id": "MANIFEST-matters",
+  "type": "matter_manifest",
+  "spine_version": "1.0.0",
+  "as_of_date": "2026-06-30",
+  "timeline_window": { "earliest": "2024-01-01", "latest": "2026-06-30" },
+  "frozen": true,
+  "purpose": "THE FROZEN 20-matter registry — the single interface between the firm dataset, the 20 matter-authoring agents, and the site. Every id, slug, side-role, client_id, jurisdiction, shape, and fee_type below is FROZEN in Phase 0 and handed to each matter agent verbatim. Agents MUST NOT rename, renumber, re-slug, change parties/surnames, change sides, or change fee_type. Agents author only inside their own matter-prefixed ID namespace (e.g., m06.*). The firm dataset's book of business IS these 20 matters (plus closed-matter history the firm agent adds). Where an entry supplies a party name, that spelling is canonical.",
+  "id_conventions": {
+    "matter_id": "m01..m20 (fictional tier m01-m10 = Meridian; real tier m11-m20 = same shape order in the six real states)",
+    "slug": "mNN-<shape>-<jurisdiction> (lowercase; jurisdiction is 'meridian' or the two-letter real code lowercased)",
+    "matter_prefixed_ids": "All matter-scoped ids carry the matter prefix, e.g., m06.per.iyer (persona), m06.wit.<name>, m06.ex.003 (exercise part), m06.te.0007 (time entry), m06.rub.c01 (rubric criterion), m06.fact.014 (fact anchor).",
+    "client_id": "FIRM-C-01..FIRM-C-20, one client per matter (global FIRM-* namespace, defined here + in the firm dataset)."
+  },
+  "jurisdiction_matrix_note": "Locked shape x jurisdiction matrix per the plan (Workstream 2). Fictional tier = Meridian; real tier assignments: IL arbitration, MN discipline + MN DWI, FL tort + FL probate, TX real estate, NY non-compete + NY UCC, CA juvenile + CA dissolution.",
+  "fee_type_policy": "All four fee types are represented across the corpus (validator-checkable): contingency = auto-negligence tort shapes; flat = DWI and the wills/estate-planning (drafting-side) shapes; retainer = marriage-dissolution shapes; hourly = every other shape. fee_type is FROZEN per entry.",
+  "shape_keys": [
+    "employment_arbitration",
+    "attorney_discipline",
+    "auto_negligence",
+    "real_estate_negotiation",
+    "criminal_dwi",
+    "noncompete_trade_secret",
+    "ucc_sale_of_goods",
+    "juvenile_delinquency",
+    "marriage_dissolution",
+    "wills_probate"
+  ],
+  "matters": [
+    {
+      "id": "m01",
+      "slug": "m01-arbitration-meridian",
+      "shape": "employment_arbitration",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "Halden Regional Transit District v. Marceline Osgard and Meridian Alliance of Public Workers, Local 7 (Arbitration)",
+      "sides": ["employer_counsel", "employee_counsel"],
+      "client_id": "FIRM-C-01",
+      "client_persona_hint": {
+        "name": "Marceline Osgard",
+        "who": "A veteran transit-system diesel mechanic discharged for alleged insubordination after she filed a series of internal safety complaints; her union grieves the termination to arbitration."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "employee_counsel",
+      "premise": "Marceline Osgard, an eleven-year mechanic for the Halden Regional Transit District, was fired after refusing to return three buses to service she flagged as having failing brake lines, then emailing the safety complaint chain to a regional oversight board. Management says she was discharged for repeated insubordination and leaving her post; the union says the discharge was retaliation lacking just cause under the collective-bargaining agreement. The grievance goes to binding labor arbitration."
+    },
+    {
+      "id": "m02",
+      "slug": "m02-discipline-meridian",
+      "shape": "attorney_discipline",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "In re Petition for Disciplinary Action against Gregor A. Winterhalt, a Meridian Attorney",
+      "sides": ["disciplinary_counsel", "respondent_counsel"],
+      "client_id": "FIRM-C-02",
+      "client_persona_hint": {
+        "name": "Gregor A. Winterhalt",
+        "who": "A solo practitioner facing a disciplinary petition over commingled client trust funds and missed client communications during a stretch of personal crisis; he retains the firm to defend the proceeding."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "respondent_counsel",
+      "premise": "The Meridian Office of Lawyer Conduct petitions to discipline solo practitioner Gregor Winterhalt, alleging he deposited a client's settlement funds into his operating account, was slow to disburse, and failed to answer two clients' calls for months. Winterhalt says a hospitalization and a bookkeeping-software failure caused the lapse, that no client lost money, and that he has since hired a bookkeeper. The matter turns on trust-accounting duties, self-reporting, and the appropriate sanction."
+    },
+    {
+      "id": "m03",
+      "slug": "m03-tort-meridian",
+      "shape": "auto_negligence",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "Lorraine Petimeyer v. Douglas Ashcombe",
+      "sides": ["plaintiff_counsel", "defense_counsel"],
+      "client_id": "FIRM-C-03",
+      "client_persona_hint": {
+        "name": "Lorraine Petimeyer",
+        "who": "A part-time school-bus driver rear-ended at a winter intersection, now with a disputed neck/shoulder injury and mounting therapy bills; she seeks the firm on a contingency to sue the other driver."
+      },
+      "fee_type": "contingency",
+      "interview_focus": "plaintiff_counsel",
+      "premise": "On an icy February morning at the Elleston Road intersection, Douglas Ashcombe's pickup struck Lorraine Petimeyer's stopped sedan. Ashcombe says he was traveling below the limit and slid on black ice with no time to stop; Petimeyer says he was following too closely and looking at his phone. Liability, the icy-conditions defense, and the extent and cause of her soft-tissue injuries are all contested, heading toward a jury trial."
+    },
+    {
+      "id": "m04",
+      "slug": "m04-realestate-meridian",
+      "shape": "real_estate_negotiation",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "In re Purchase of 4400 Kestrel Point, Sable County (Renard–Meskin)",
+      "sides": ["buyer_counsel", "seller_counsel"],
+      "client_id": "FIRM-C-04",
+      "client_persona_hint": {
+        "name": "Talbot Meskin",
+        "who": "A small residential developer trying to buy a lakefront parcel to build four cabins; the deal hinges on whether a shared gravel access lane is a recorded easement or a revocable license the seller can pull."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "buyer_counsel",
+      "premise": "Developer Talbot Meskin wants to buy 4400 Kestrel Point on Lake Verdant from Ruth Renard to build four rental cabins. Access runs over a gravel lane crossing the neighbor's land, and the plat is ambiguous about whether it is a recorded easement or a revocable license; the city has also floated vacating part of the abutting shoreline road. Each side holds confidential facts, and the transaction must be negotiated into a purchase agreement rather than litigated."
+    },
+    {
+      "id": "m05",
+      "slug": "m05-dwi-meridian",
+      "shape": "criminal_dwi",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "State of Meridian v. Devon R. Halvard",
+      "sides": ["prosecution", "defense_counsel"],
+      "client_id": "FIRM-C-05",
+      "client_persona_hint": {
+        "name": "Devon R. Halvard",
+        "who": "A first-time DWI arrestee — a line cook stopped after leaving a coworker's birthday dinner — worried about losing the license he needs to get to work; he hires the firm on a flat fee."
+      },
+      "fee_type": "flat",
+      "interview_focus": "defense_counsel",
+      "premise": "Devon Halvard was stopped in Norsholm for a broken taillight after leaving a restaurant, failed field sobriety tests the officer describes as clearly impaired, and a later breath sample allegedly read at or near the per-se limit. Halvard says he had two beers over three hours, that the roadside was sloped ice, and that the stop was pretextual. The case turns on the stop, the reliability of the tests, and whether the sample can be suppressed or the charge negotiated down."
+    },
+    {
+      "id": "m06",
+      "slug": "m06-noncompete-meridian",
+      "shape": "noncompete_trade_secret",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "Northlake Surgical Instruments, Inc. v. Adaeze Okwuosa",
+      "sides": ["plaintiff_counsel", "defense_counsel"],
+      "client_id": "FIRM-C-06",
+      "client_persona_hint": {
+        "name": "Adaeze Okwuosa",
+        "who": "A departed medical-device sales engineer whose former employer seeks a temporary injunction to enforce a one-year non-compete and block her new job, alleging she took a customer list; she retains the firm to fight the injunction."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "defense_counsel",
+      "premise": "Adaeze Okwuosa left Northlake Surgical Instruments to join a competitor after twelve years as a sales engineer. Northlake moves for a temporary injunction to enforce her non-compete and non-solicitation covenant, claiming she downloaded a customer-pricing spreadsheet before resigning. Okwuosa says the covenant is overbroad, the pricing data was hers to reference, and she has solicited no one; the fight is over the injunction standard and whether anything was truly a protectable trade secret."
+    },
+    {
+      "id": "m07",
+      "slug": "m07-ucc-meridian",
+      "shape": "ucc_sale_of_goods",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "Cloverdyke Dairy Cooperative v. Brandt Refrigeration Systems, LLC",
+      "sides": ["buyer_counsel", "seller_counsel"],
+      "client_id": "FIRM-C-07",
+      "client_persona_hint": {
+        "name": "Cloverdyke Dairy Cooperative (rep: Nils Aaberg, general manager)",
+        "who": "A farmer-owned dairy co-op whose new bulk milk-cooling unit repeatedly failed, spoiling several tank-loads of milk; the co-op hires the firm to recover under warranty against the equipment seller."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "buyer_counsel",
+      "premise": "Cloverdyke Dairy Cooperative bought a large bulk milk-cooling and refrigeration unit from Brandt Refrigeration Systems, which allegedly failed to hold temperature three times in its first two months, spoiling milk and forcing emergency repairs. Brandt says the co-op's electrical service and delayed maintenance caused the failures and points to a limited-remedy warranty disclaiming consequential damages. The dispute is a UCC Article 2 breach-of-warranty and remedies fight, with arbitration/mediation contemplated."
+    },
+    {
+      "id": "m08",
+      "slug": "m08-juvenile-meridian",
+      "shape": "juvenile_delinquency",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "In re the Welfare of T.M., a Minor",
+      "sides": ["prosecution", "juvenile_defense_counsel"],
+      "client_id": "FIRM-C-08",
+      "client_persona_hint": {
+        "name": "Tobias Merrow (T.M.), age 15, appearing with parent Dana Merrow",
+        "who": "A fifteen-year-old charged with delinquency after a big-box-store theft that escalated when a loss-prevention guard was shoved; the firm represents the juvenile, working with his anxious single parent."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "juvenile_defense_counsel",
+      "premise": "Fifteen-year-old Tobias Merrow is charged in the Juvenile Division after allegedly walking out of a Norsholm electronics store with an unpaid gaming console; a loss-prevention guard was knocked down in the doorway scuffle, adding an assault allegation. Tobias says two older kids handed him the box and ran, and that he only pushed past the guard in panic. Defense must weigh a diversion/negotiated disposition against a contested delinquency hearing, coordinating with a frightened parent."
+    },
+    {
+      "id": "m09",
+      "slug": "m09-dissolution-meridian",
+      "shape": "marriage_dissolution",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "In re the Marriage of Renata Sitko and Harlan Aldergrove",
+      "sides": ["petitioner_counsel", "respondent_counsel"],
+      "client_id": "FIRM-C-09",
+      "client_persona_hint": {
+        "name": "Renata Sitko",
+        "who": "A nurse-manager petitioning to dissolve a fourteen-year marriage, seeking primary custody of two children and a fair split of a jointly built home and her spouse's small contracting business; she engages the firm on a retainer."
+      },
+      "fee_type": "retainer",
+      "interview_focus": "petitioner_counsel",
+      "premise": "After fourteen years, Renata Sitko petitions to dissolve her marriage to Harlan Aldergrove, who owns a small home-remodeling business. They dispute custody and a parenting schedule for their two children, the value and division of the marital home and the business, and whether spousal maintenance is warranted given Renata's steadier income. Emotions and the children's schedules complicate an otherwise negotiable property and custody matter."
+    },
+    {
+      "id": "m10",
+      "slug": "m10-probate-meridian",
+      "shape": "wills_probate",
+      "tier": "fictional",
+      "jurisdiction": "meridian",
+      "caption": "In re the Estate of Mabel R. Thornquist",
+      "sides": ["proponent_counsel", "contestant_counsel"],
+      "client_id": "FIRM-C-10",
+      "client_persona_hint": {
+        "name": "Eleanor Thornquist-Reddick",
+        "who": "The daughter named personal representative under her late mother's most recent will, which a disinherited brother now contests as the product of undue influence; the firm drafted the will and represents the estate."
+      },
+      "fee_type": "flat",
+      "fee_note": "Flat-fee estate-planning/will-drafting engagement (the firm drafted Mabel Thornquist's will and letter for a fixed fee); the contest is defended within that estate-planning relationship. Track flat-fee structure per the fee-type/structure validator rule.",
+      "interview_focus": "proponent_counsel",
+      "premise": "Mabel Thornquist signed a new will eight months before her death leaving her lake home and most of her estate to her daughter Eleanor, naming Eleanor personal representative and largely cutting out her son Ronald. Ronald contests the will, alleging their mother lacked capacity and that Eleanor exercised undue influence while serving as caregiver. The estate must defend the will's validity, the drafting attorney's file, and the disposition of a homestead-type lake property."
+    },
+    {
+      "id": "m11",
+      "slug": "m11-arbitration-il",
+      "shape": "employment_arbitration",
+      "tier": "real",
+      "jurisdiction": "IL",
+      "caption": "Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)",
+      "sides": ["employer_counsel", "employee_counsel"],
+      "client_id": "FIRM-C-11",
+      "client_persona_hint": {
+        "name": "Yusuf Adeyemi",
+        "who": "A warehouse operations supervisor fired weeks after reporting wage-and-hour and safety violations; his employment agreement forces the dispute into private arbitration, where the firm represents him."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "employee_counsel",
+      "premise": "Yusuf Adeyemi, an operations supervisor at Prairie State Logistics in Illinois, was terminated a few weeks after reporting off-the-clock work and blocked fire exits to HR and a state hotline. The company cites a documented performance plan and a headcount reduction; Adeyemi says the timing and shifting reasons show retaliation. His signed arbitration agreement sends the wrongful-discharge and retaliation claims to a private arbitral forum rather than court."
+    },
+    {
+      "id": "m12",
+      "slug": "m12-discipline-mn",
+      "shape": "attorney_discipline",
+      "tier": "real",
+      "jurisdiction": "MN",
+      "caption": "In re Petition for Disciplinary Action against Delphine A. Karsgaard, a Minnesota Attorney",
+      "sides": ["disciplinary_counsel", "respondent_counsel"],
+      "client_id": "FIRM-C-12",
+      "client_persona_hint": {
+        "name": "Delphine A. Karsgaard",
+        "who": "A small-firm attorney facing a Minnesota disciplinary petition over a neglected client matter and a candor-to-the-tribunal allegation; she retains the firm to defend and to argue for a lesser sanction."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "respondent_counsel",
+      "premise": "The Minnesota Office of Lawyers Professional Responsibility petitions to discipline attorney Delphine Karsgaard, alleging she let a client's claim lapse past a deadline, then filed a motion overstating when she had learned of the problem. Karsgaard says the deadline was blown by a departed paralegal's calendaring error and that her filing was a good-faith reconstruction, not a misrepresentation. The matter tests neglect, candor, supervision duties, and the proportional sanction before a referee and the Minnesota Supreme Court."
+    },
+    {
+      "id": "m13",
+      "slug": "m13-tort-fl",
+      "shape": "auto_negligence",
+      "tier": "real",
+      "jurisdiction": "FL",
+      "caption": "Sofia Reyes v. Bradley Hutchins",
+      "sides": ["plaintiff_counsel", "defense_counsel"],
+      "client_id": "FIRM-C-13",
+      "client_persona_hint": {
+        "name": "Sofia Reyes",
+        "who": "A rideshare driver T-boned at a Florida intersection, left with a knee injury and lost income; she comes to the firm on a contingency to pursue the at-fault driver and sort out the PIP/insurance layer."
+      },
+      "fee_type": "contingency",
+      "interview_focus": "plaintiff_counsel",
+      "premise": "Rideshare driver Sofia Reyes was struck in the side by Bradley Hutchins's SUV when, she says, he ran a stale yellow-turning-red at a Florida intersection; Hutchins says Reyes accelerated into the intersection late and shares fault. Reyes has a torn meniscus, surgery, and weeks of lost fares, complicated by Florida's no-fault/PIP insurance layer and a comparative-fault defense. The case is built toward a civil jury trial in the Circuit Court."
+    },
+    {
+      "id": "m14",
+      "slug": "m14-realestate-tx",
+      "shape": "real_estate_negotiation",
+      "tier": "real",
+      "jurisdiction": "TX",
+      "caption": "In re Purchase of the Cimarron Tract (Whitfield–Nakamura)",
+      "sides": ["buyer_counsel", "seller_counsel"],
+      "client_id": "FIRM-C-14",
+      "client_persona_hint": {
+        "name": "Kenji Nakamura",
+        "who": "A buyer under contract for a Texas rural tract for a small solar-and-cattle operation; the deal is snagged on a disputed access easement and a mineral/surface-rights reservation the seller wants to keep."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "buyer_counsel",
+      "premise": "Kenji Nakamura is under an earnest-money contract to buy the Cimarron Tract from Garrett Whitfield in Texas for a combined solar array and small cattle operation. Title turns up a questionable shared-road easement and a prior mineral reservation, and Whitfield now wants to reserve surface access for an existing well. Each side holds confidential priorities, and the parties must renegotiate the deed terms and access provisions into a closeable agreement rather than walk."
+    },
+    {
+      "id": "m15",
+      "slug": "m15-dwi-mn",
+      "shape": "criminal_dwi",
+      "tier": "real",
+      "jurisdiction": "MN",
+      "caption": "State of Minnesota v. Travis O. Wenzloff",
+      "sides": ["prosecution", "defense_counsel"],
+      "client_id": "FIRM-C-15",
+      "client_persona_hint": {
+        "name": "Travis O. Wenzloff",
+        "who": "A commercial HVAC technician charged with DWI in Minnesota whose CDL and livelihood are on the line; he hires the firm on a flat fee to fight the test and the license consequences."
+      },
+      "fee_type": "flat",
+      "interview_focus": "defense_counsel",
+      "premise": "Travis Wenzloff was pulled over in Minnesota after a report of a weaving vehicle, showed signs the deputy attributed to impairment, and provided a breath sample near the per-se threshold; a prior incident several years back raises the stakes. Wenzloff says he was tired from a double shift, that a prescription and mouthwash may have skewed the reading, and that the stop lacked a real basis. The defense targets the reasonable-suspicion stop, the test's reliability, and the implied-consent license revocation."
+    },
+    {
+      "id": "m16",
+      "slug": "m16-noncompete-ny",
+      "shape": "noncompete_trade_secret",
+      "tier": "real",
+      "jurisdiction": "NY",
+      "caption": "Hudson Valley Biometrics, Inc. v. Priya Iyer",
+      "sides": ["plaintiff_counsel", "defense_counsel"],
+      "client_id": "FIRM-C-16",
+      "client_persona_hint": {
+        "name": "Priya Iyer",
+        "who": "A senior algorithms engineer whose New York employer seeks a preliminary injunction to enforce a non-compete and stop her from joining a rival, alleging she carries proprietary source code in her head; the firm defends her."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "defense_counsel",
+      "premise": "Priya Iyer resigned from Hudson Valley Biometrics in New York to join a competitor building similar face-and-gait recognition software. The company seeks a preliminary injunction enforcing her non-compete and trade-secret covenants, arguing her knowledge of its matching algorithm makes disclosure 'inevitable.' Iyer says the covenant is unreasonable, she took no files, and general skill is not a trade secret; the fight is over New York's reasonableness standard and the inevitable-disclosure theory."
+    },
+    {
+      "id": "m17",
+      "slug": "m17-ucc-ny",
+      "shape": "ucc_sale_of_goods",
+      "tier": "real",
+      "jurisdiction": "NY",
+      "caption": "Empire Provisions Corp. v. Ostervold Packing Co.",
+      "sides": ["buyer_counsel", "seller_counsel"],
+      "client_id": "FIRM-C-17",
+      "client_persona_hint": {
+        "name": "Empire Provisions Corp. (rep: Marisol Beltran, procurement director)",
+        "who": "A New York food distributor that rejected several truckloads of packaged goods as non-conforming and now faces a seller's suit for the price; the firm represents the buyer on the rejection and warranty defenses."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "buyer_counsel",
+      "premise": "Empire Provisions Corp., a New York distributor, ordered multiple truckloads of packaged specialty foods from Ostervold Packing Co. and rejected several deliveries as mislabeled and short-dated, refusing payment. Ostervold sues for the contract price, claiming the goods conformed, that rejection was untimely, and that Empire resold part of the shipment. The dispute is a UCC Article 2 fight over conformity, rightful rejection versus acceptance, cure, and the seller's price-versus-damages remedy."
+    },
+    {
+      "id": "m18",
+      "slug": "m18-juvenile-ca",
+      "shape": "juvenile_delinquency",
+      "tier": "real",
+      "jurisdiction": "CA",
+      "caption": "In re J.C., a Minor (Cal. Welf. & Inst. Code § 602)",
+      "sides": ["prosecution", "juvenile_defense_counsel"],
+      "client_id": "FIRM-C-18",
+      "client_persona_hint": {
+        "name": "Jasmine Cordero (J.C.), age 16, appearing with parent Ana Cordero",
+        "who": "A sixteen-year-old alleged to have participated in a school-parking-lot vandalism-and-graffiti incident in California; the firm represents the minor in the Juvenile Division, working with her worried mother."
+      },
+      "fee_type": "hourly",
+      "interview_focus": "juvenile_defense_counsel",
+      "premise": "Sixteen-year-old Jasmine Cordero is the subject of a California juvenile petition alleging she helped tag and damage cars in a school parking lot with two friends. Jasmine says she was present and filmed it on her phone but never sprayed anything, and that the school pulled her in first because of a prior dress-code dispute. Defense must navigate a WIC delinquency proceeding — informal diversion versus a contested jurisdictional hearing — while managing an anxious parent and the minor's record."
+    },
+    {
+      "id": "m19",
+      "slug": "m19-dissolution-ca",
+      "shape": "marriage_dissolution",
+      "tier": "real",
+      "jurisdiction": "CA",
+      "caption": "In re the Marriage of Camille Beaumont and Andre Lassiter",
+      "sides": ["petitioner_counsel", "respondent_counsel"],
+      "client_id": "FIRM-C-19",
+      "client_persona_hint": {
+        "name": "Camille Beaumont",
+        "who": "A restaurant co-owner petitioning to dissolve an eight-year California marriage, needing to untangle a community-property business, a home, and a parenting plan for one child; she engages the firm on a retainer."
+      },
+      "fee_type": "retainer",
+      "interview_focus": "petitioner_counsel",
+      "premise": "After eight years, Camille Beaumont petitions to dissolve her California marriage to Andre Lassiter, with whom she co-owns a restaurant started during the marriage. They dispute how to characterize and divide the business and home under community-property rules, whether Andre's separate pre-marital contribution is traceable, and a custody schedule for their young child. The matter is a community-property and custody negotiation with a live business-valuation dimension."
+    },
+    {
+      "id": "m20",
+      "slug": "m20-probate-fl",
+      "shape": "wills_probate",
+      "tier": "real",
+      "jurisdiction": "FL",
+      "caption": "In re the Estate of Harold W. Prewitt",
+      "sides": ["proponent_counsel", "contestant_counsel"],
+      "client_id": "FIRM-C-20",
+      "client_persona_hint": {
+        "name": "Vivian Prewitt-Cole",
+        "who": "The surviving second spouse and named beneficiary of a Florida decedent's will, facing a contest by an adult child over the family homestead and a late change to the will; the firm drafted the estate plan and represents her."
+      },
+      "fee_type": "flat",
+      "fee_note": "Flat-fee estate-planning/will-drafting engagement (the firm prepared Harold Prewitt's will, trust, and client letter for a fixed fee); the contest is defended within that estate-planning relationship. Track flat-fee structure per the fee-type/structure validator rule.",
+      "interview_focus": "proponent_counsel",
+      "premise": "Harold Prewitt's Florida will, updated a year before his death, leaves the marital home and much of his estate to his second wife Vivian, largely bypassing his adult son Dale from an earlier marriage. Dale contests, alleging undue influence and that the homestead could not lawfully be devised away from him. The estate must defend the will's validity and confront Florida's constitutional homestead-devise restrictions over the family residence."
+    }
+  ],
+  "name_collision_sweep": {
+    "performed": true,
+    "method": "Manual sweep at manifest-freeze: every party/client surname across all 20 matters is unique; none reuses a Meridian judge-pool surname, county, or city name; discipline (m02/m12) and DWI (m05/m15) respondent/defendant names were given extra scrutiny to avoid distinctive real-attorney/defendant collisions, using uncommon surname+given combinations. The validator's automated A6/A1 sweep is the backstop; matter agents must not introduce a surname already used by another matter (see per-matter surname ledger below).",
+    "surname_ledger": {
+      "m01": ["Osgard"],
+      "m02": ["Winterhalt"],
+      "m03": ["Petimeyer", "Ashcombe"],
+      "m04": ["Meskin", "Renard"],
+      "m05": ["Halvard"],
+      "m06": ["Okwuosa"],
+      "m07": ["Brandt", "Aaberg"],
+      "m08": ["Merrow"],
+      "m09": ["Sitko", "Aldergrove"],
+      "m10": ["Thornquist", "Reddick"],
+      "m11": ["Adeyemi"],
+      "m12": ["Karsgaard"],
+      "m13": ["Reyes", "Hutchins"],
+      "m14": ["Nakamura", "Whitfield"],
+      "m15": ["Wenzloff"],
+      "m16": ["Iyer"],
+      "m17": ["Beltran", "Ostervold"],
+      "m18": ["Cordero"],
+      "m19": ["Beaumont", "Lassiter"],
+      "m20": ["Prewitt", "Cole"]
+    },
+    "entity_names": ["Halden Regional Transit District", "Meridian Alliance of Public Workers, Local 7", "Northlake Surgical Instruments, Inc.", "Cloverdyke Dairy Cooperative", "Brandt Refrigeration Systems, LLC", "Prairie State Logistics, Inc.", "Del Rio Ranch Holdings, LLC", "Hudson Valley Biometrics, Inc.", "Empire Provisions Corp.", "Ostervold Packing Co."]
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/task.schema.json",
+  "title": "Task",
+  "description": "A primary task under a skill, decomposed into subtasks, placed in a curriculum module, FOLIO-mapped (or no-equivalent), and cross-referenced to the exercises that practice it.",
+  "version": "1.0.0",
+  "$defs": {
+    "folio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iri", "mapping_confidence"],
+      "properties": {
+        "iri": {
+          "type": "string",
+          "pattern": "^(https://folio\\.openlegalstandard\\.org/R[A-Za-z0-9]+|R[A-Za-z0-9]+)$"
+        },
+        "mapping_confidence": { "type": "string", "enum": ["exact", "near", "parent"] }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_version", "@id", "skill_id", "name", "description", "bloom_level", "module", "subtasks"],
+  "oneOf": [
+    { "required": ["folio"], "not": { "required": ["no_folio_equivalent"] } },
+    {
+      "required": ["no_folio_equivalent"],
+      "not": { "required": ["folio"] },
+      "properties": { "no_folio_equivalent": { "const": true } }
+    }
+  ],
+  "description": "Exactly one of folio XOR no_folio_equivalent:true.",
+  "properties": {
+    "id": { "type": "string", "pattern": "^TSK-\\d{3}$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "skill_id": { "type": "string", "pattern": "^SK-(LP|PM)-\\d{2}$" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "bloom_level": {
+      "type": "string",
+      "enum": ["knowledge", "comprehension", "application", "analysis", "synthesis", "evaluation"],
+      "description": "Bloom cognitive level (master-outline §II.3)."
+    },
+    "module": { "type": "string", "enum": ["M1", "M2", "M3"] },
+    "subtasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TSK-\\d{3}\\.\\d{2}$" },
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "folio": { "$ref": "#/$defs/folio" },
+    "no_folio_equivalent": { "type": "boolean" },
+    "exercise_refs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^m\\d{2}\\.ex$" },
+      "description": "Exercises that practice this task; each resolves to a matter's exercise packet."
+    }
+  }
+}

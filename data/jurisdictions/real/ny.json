@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-NY",
+  "id": "JUR-NY",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "NY",
+  "name": "State of New York",
+  "short_name": "New York",
+  "adjective": "New York",
+  "used_by_shapes": ["noncompete_trade_secret (m16)", "ucc_sale_of_goods (m17)"],
+  "policy_note": "Structural research pointer only. NO substantive statutory rules — student packets are facts-only; finding the controlling law is the exercise. Chapter/code locators are navigational aids. Instructor notes may cite specifics, verified at publish. NOTE: New York's court naming is famously counterintuitive — see below.",
+  "court_structure": {
+    "naming_caution": "In New York the 'Supreme Court' is the TRIAL court of general jurisdiction, NOT the highest court. The highest court is the 'Court of Appeals.' Do not confuse students by treating 'Supreme Court' as final.",
+    "trial_court": {
+      "name": "Supreme Court of the State of New York",
+      "note": "Trial court of general jurisdiction, organized by county. A specialized Commercial Division hears complex commercial/business disputes in many counties (relevant to the m16 non-compete and m17 UCC shapes).",
+      "related_trial_courts": {
+        "county_court": "County Court (criminal and some civil, outside NYC)",
+        "surrogates_court": "Surrogate's Court (probate and estates)",
+        "family_court": "Family Court (custody, support, juvenile)"
+      }
+    },
+    "intermediate_appellate": {
+      "name": "Appellate Division of the Supreme Court",
+      "note": "Intermediate appellate court, organized into four Judicial Departments."
+    },
+    "highest_court": {
+      "name": "New York Court of Appeals",
+      "note": "The court of last resort in New York."
+    }
+  },
+  "noncompete_teaching_note": "New York enforces reasonable employee non-compete covenants under a common-law reasonableness test (a legitimate protectable interest, reasonable in time and scope, not unduly burdensome, not harmful to the public). This is a deliberate contrast with California, which broadly voids employee non-competes by statute — the cross-jurisdiction teaching point flagged in the plan for the m16 vs. CA discussion. Students research the current NY standard themselves.",
+  "citation_formats": {
+    "statutes": { "template": "N.Y. <Subject> Law § <n> (McKinney)", "example": "N.Y. Gen. Oblig. Law § <n> (McKinney)" },
+    "ucc": { "template": "N.Y. U.C.C. Law § <n> (McKinney)", "note": "New York has enacted the Uniform Commercial Code as the 'Uniform Commercial Code' consolidated law; sale-of-goods issues live in Article 2." },
+    "procedure": { "template": "N.Y. C.P.L.R. <n> (McKinney)", "note": "Civil Practice Law and Rules governs civil procedure." },
+    "rules": {
+      "professional_conduct": "N.Y. R. Prof. Conduct <n.n> (22 NYCRR Part 1200)",
+      "court_rules": "22 NYCRR § <n> (Uniform Rules for the Trial Courts / Commercial Division Rules)"
+    },
+    "cases": {
+      "reporters": "N.Y.S.3d (New York Supplement) and N.E.3d (North Eastern Reporter); official N.Y.3d / A.D.3d",
+      "template": "<Case Name>, <vol> N.Y.3d <page> (<year>)",
+      "appellate_division_parenthetical": "(App. Div. <Dept> <year>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only.",
+    "statutes_official": "https://www.nysenate.gov/legislation/laws/CONSOLIDATED",
+    "statutes_alt_official": "https://public.leginfo.state.ny.us/",
+    "court_rules_official": "https://www.nycourts.gov/legacypdfs/RULES/",
+    "commercial_division_rules": "https://www.nycourts.gov/courts/comdiv/",
+    "judicial_branch": "https://www.nycourts.gov/",
+    "attorney_discipline": "https://www.nycourts.gov/attorneys/discipline.shtml",
+    "navigational_code_areas": [
+      "Sale-of-goods disputes: N.Y. U.C.C. Law, Article 2 — a starting point for m17.",
+      "Restrictive-covenant enforceability is largely common-law in New York; begin with Court of Appeals case law rather than a single statute — a starting point for m16."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above; nothing here is legal advice."
+}

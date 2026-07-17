@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-CA",
+  "id": "JUR-CA",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "CA",
+  "name": "State of California",
+  "short_name": "California",
+  "adjective": "California",
+  "used_by_shapes": ["juvenile_delinquency (m18)", "marriage_dissolution (m19)"],
+  "policy_note": "Structural research pointer only. NO substantive statutory rules — student packets are facts-only; finding the controlling law is the exercise. Code-level locators are navigational aids. Instructor notes may cite specifics, verified at publish.",
+  "court_structure": {
+    "trial_court": {
+      "name": "Superior Court of California",
+      "note": "The single trial court of general jurisdiction, organized by county (e.g., 'Superior Court of California, County of ___'). Operates specialized divisions for juvenile and family matters.",
+      "specialty_divisions": {
+        "juvenile": "Juvenile Division of the Superior Court — delinquency proceedings under Welfare & Institutions Code (petitions typically brought under WIC § 602). Records confidential; minors identified by initials.",
+        "family": "Family Law Division of the Superior Court — dissolution, custody, support, and community-property division."
+      }
+    },
+    "intermediate_appellate": {
+      "name": "California Court of Appeal",
+      "note": "Intermediate appellate court, organized into six Appellate Districts."
+    },
+    "highest_court": {
+      "name": "Supreme Court of California",
+      "note": "The court of last resort."
+    }
+  },
+  "shape_specific_notes": {
+    "juvenile": "California juvenile delinquency proceedings run under the Welfare & Institutions Code (WIC), not the adult Penal Code process; dispositions, wardship, and sealing follow WIC. Cases captioned 'In re <initials>, a Minor.' Students research current WIC procedure themselves.",
+    "dissolution": "California is a COMMUNITY-PROPERTY state — property and debt acquired during marriage are presumptively community property divided equally at dissolution; this is the deliberate contrast the m19 shape teaches. Dissolution captioned 'In re the Marriage of <A> and <B>.' Students research the current Family Code framework themselves.",
+    "noncompete_crossref": "California broadly voids employee non-compete covenants by statute — the contrast point referenced by the m16 (NY) shape."
+  },
+  "citation_formats": {
+    "statutes": { "template": "Cal. <Code> Code § <n>", "examples": ["Cal. Welf. & Inst. Code § 602", "Cal. Fam. Code § <n>"] },
+    "rules": {
+      "court_rules": "Cal. Rules of Court, rule <n>",
+      "professional_conduct": "Cal. R. Prof. Conduct <n>"
+    },
+    "cases": {
+      "reporters": "Cal. Rptr. 3d and P.3d; official Cal.5th / Cal. App. 5th",
+      "template": "<Case Name>, <vol> Cal.5th <page> (<year>)",
+      "court_of_appeal_parenthetical": "(Ct. App. <year>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only.",
+    "statutes_official": "https://leginfo.legislature.ca.gov/",
+    "court_rules_official": "https://www.courts.ca.gov/rules.htm",
+    "judicial_branch": "https://www.courts.ca.gov/",
+    "self_help_official": "https://selfhelp.courts.ca.gov/",
+    "attorney_regulation": "https://www.calbar.ca.gov/",
+    "navigational_code_areas": [
+      "Juvenile delinquency: Cal. Welf. & Inst. Code, Part 1, Chapter 2 (Juvenile Court Law) — a starting point for m18.",
+      "Dissolution and community property: Cal. Fam. Code (Divisions 6 and 7) — a starting point for m19."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above; nothing here is legal advice."
+}

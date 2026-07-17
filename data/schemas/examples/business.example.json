@@ -1,0 +1,71 @@
+{
+  "id": "m06.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m06.biz",
+  "matter_id": "m06",
+  "intake": {
+    "client_name": "Dana Baines",
+    "contact": { "email": "dana.baines@example.com", "phone": "555-0142" },
+    "matter_summary": "Former employer seeks to enforce a non-compete against a new hire.",
+    "intake_date": "2026-01-10",
+    "referral_source": "existing client referral"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Dana Baines", "Silverline Health Corp."],
+    "result": "clear",
+    "checked_date": "2026-01-11"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 300,
+    "engagement_date": "2026-01-12",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    {
+      "id": "m06.te.0001",
+      "date": "2026-01-14",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 2.0,
+      "rate": 300,
+      "narrative": "Initial client interview and case assessment."
+    },
+    {
+      "id": "m06.te.0002",
+      "date": "2026-01-20",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.5,
+      "rate": 300,
+      "narrative": "Research New York non-compete enforceability."
+    }
+  ],
+  "invoices": [
+    {
+      "id": "m06.inv.001",
+      "date": "2026-02-01",
+      "period": { "start": "2026-01-12", "end": "2026-01-31" },
+      "fees": 1050,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1050,
+      "line_refs": ["m06.te.0001", "m06.te.0002"]
+    }
+  ],
+  "trust_entries": [
+    {
+      "id": "m06.tr.001",
+      "date": "2026-01-12",
+      "type": "deposit",
+      "amount": 2000,
+      "running_balance": 2000
+    },
+    {
+      "id": "m06.tr.002",
+      "date": "2026-02-05",
+      "type": "disbursement",
+      "amount": 1050,
+      "related_invoice_id": "m06.inv.001",
+      "running_balance": 950
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "matter_id": "m06",
+  "rubric_id": "m06.rub",
+  "criteria": [
+    {
+      "criterion_id": "m06.rub.c01",
+      "score": 74,
+      "weight_points": 100,
+      "evidence": "Correctly states the injunction standard but under-develops irreparable harm.",
+      "suggestions": "Add a paragraph analyzing why money damages are inadequate here."
+    },
+    {
+      "criterion_id": "m06.rub.c02",
+      "score": 70,
+      "weight_points": 89,
+      "evidence": "Clear structure; a few conclusory topic sentences.",
+      "suggestions": "Lead each section with the rule, then apply the facts."
+    }
+  ],
+  "total": { "earned": 144, "possible": 189 },
+  "narrative": "A promising draft that argues the standard but needs deeper harm analysis.",
+  "revise_resubmit_note": "Revise the irreparable-harm section and resubmit against the rubric within one week."
+}

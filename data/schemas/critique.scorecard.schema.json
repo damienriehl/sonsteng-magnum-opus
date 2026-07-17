@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/critique.scorecard.schema.json",
+  "title": "Critique Scorecard",
+  "description": "Typed output of the /critique endpoint: a criterion-by-criterion, point-weighted first-pass critique of a pasted deliverable against a matter's rubric (Sonsteng revise-against-the-rubric loop).",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "matter_id", "rubric_id", "criteria", "total", "narrative", "revise_resubmit_note"],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "rubric_id": { "type": "string", "pattern": "^m\\d{2}\\.rub$" },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion_id", "score", "weight_points", "evidence", "suggestions"],
+        "properties": {
+          "criterion_id": {
+            "type": "string",
+            "pattern": "^m\\d{2}\\.rub\\.c\\d{2}(\\.s\\d{2})*$",
+            "description": "Resolves to a criterion in the matter's rubric."
+          },
+          "score": { "type": "number", "minimum": 0, "description": "Points earned on this criterion." },
+          "weight_points": { "type": "number", "minimum": 0, "description": "Points available (mirrors the rubric)." },
+          "evidence": { "type": "string", "description": "What in the deliverable supports the score." },
+          "suggestions": { "type": "string", "description": "Concrete revise-and-resubmit guidance." }
+        }
+      }
+    },
+    "total": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["earned", "possible"],
+      "properties": {
+        "earned": { "type": "number", "minimum": 0 },
+        "possible": { "type": "number", "minimum": 0 }
+      }
+    },
+    "narrative": { "type": "string" },
+    "revise_resubmit_note": {
+      "type": "string",
+      "description": "Sonsteng re-write-loop framing: what to fix and resubmit."
+    }
+  }
+}

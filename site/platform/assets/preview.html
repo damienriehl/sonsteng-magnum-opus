@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practicum Press — Primitives Gallery</title>
+<!-- self-contained: links the two shared assets; theme.css @imports fonts.css -->
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* preview-only scaffolding — not part of the design system */
+  .gallery{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}
+  .section{margin:var(--sp-12) 0}
+  .section > h2{margin-bottom:var(--sp-2)}
+  .demo-note{color:var(--ink-faint);font-size:var(--fs-sm);margin:0 0 var(--sp-6)}
+  .grid-2{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
+  .chip-wrap{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center}
+</style>
+</head>
+<body>
+
+<!-- ===== CHROME: masthead ===== -->
+<header class="masthead">
+  <div class="masthead__inner">
+    <span class="masthead__brand">SONSTENG PRACTICUM</span>
+    <span class="masthead__docket" aria-label="docket">M2 · MATTERS · REAGAN-V-JACOBSON</span>
+  </div>
+</header>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="#">Practicum</a><span class="sep">/</span>
+  <a href="#">Design System</a><span class="sep">/</span>
+  Primitives Gallery
+</nav>
+
+<main class="gallery">
+
+  <div class="running-head">
+    <span>PRIMITIVES GALLERY</span>
+    <span class="rh-spacer"></span>
+    <span class="rh-right">THEME.CSS · 20 SECTIONS · TURN 01 / 01</span>
+  </div>
+
+  <div style="display:flex;gap:var(--sp-6);align-items:center;flex-wrap:wrap;margin:var(--sp-6) 0">
+    <h1 style="margin:0">The Practicum Press</h1>
+    <div class="segmented-toggle" role="group" aria-label="Type size mode" id="typeToggle">
+      <button type="button" aria-pressed="true" data-lg="off">STANDARD</button>
+      <button type="button" aria-pressed="false" data-lg="on">LARGE TYPE</button>
+    </div>
+  </div>
+  <p class="prose">A living casebook: warm letterpressed law-review authority with the
+  machine spine — <span class="mono">FOLIO IRIs</span>, disclosure-tier meters, turn counters,
+  and ledger math — rendered as legal machinery in the margins. Toggle large-type above
+  (persisted). Every interactive primitive below carries a visible claret focus ring; reduced-motion
+  disables all transforms.</p>
+
+  <!-- ===== 1. Brass rule + running head ===== -->
+  <section class="section">
+    <h2>Brass rule &amp; running head</h2>
+    <p class="demo-note">Thin brass hairline with a 2px claret left tick — the unforgettable binding.</p>
+    <hr class="brass-rule">
+    <div class="running-head">
+      <span>M2 · MATTERS</span>
+      <span class="rh-spacer"></span>
+      <span class="rh-right">IRI R07tQM · TURN 03 / 20</span>
+    </div>
+  </section>
+
+  <!-- ===== 2. Chips ===== -->
+  <section class="section">
+    <h2>Chips</h2>
+    <p class="demo-note">Never color-alone — every hue carries a label. Radius 3px, never a pill.</p>
+    <div class="chip-wrap">
+      <span class="chip chip--folio">FOLIO · R07tQM</span>
+      <span class="chip chip--tier-volunteered">✓ VOLUNTEERED</span>
+      <span class="chip chip--tier-revealed">REVEALED</span>
+      <span class="chip chip--tier-rapport">RAPPORT-GATED</span>
+      <span class="chip chip--tier-concealed">CONCEALED</span>
+      <span class="chip chip--tier-unknown">UNKNOWN</span>
+      <span class="chip chip--state">MN</span>
+      <span class="chip chip--state">NY</span>
+      <span class="chip chip--meridian">MERIDIAN</span>
+      <span class="chip chip--coming-soon">COMING SOON</span>
+    </div>
+  </section>
+
+  <!-- ===== 3. Card + doc-card ===== -->
+  <section class="section">
+    <h2>Card &amp; document card</h2>
+    <p class="demo-note">Hover a card to see the 2px lift. Doc-card is the inset case-file well.</p>
+    <div class="grid-2">
+      <article class="card">
+        <div class="running-head" style="margin-bottom:var(--sp-3)">
+          <span>SKILL</span><span class="rh-spacer"></span><span class="rh-right">EXACT</span>
+        </div>
+        <h3>Client Interviewing</h3>
+        <p>Elicit facts, build rapport, and honor the bounds of professional responsibility
+        across a twenty-turn consultation.</p>
+        <div class="chip-wrap">
+          <span class="chip chip--folio">FOLIO · R2xK9</span>
+          <span class="chip chip--tier-volunteered">✓ MAPPED</span>
+        </div>
+      </article>
+      <aside class="doc-card">
+        <div class="doc-card__meta">CASE FILE · EXHIBIT A</div>
+        <h3>Retainer Agreement</h3>
+        <p>Draft engagement letter for review. Instructor materials are never rendered on
+        the packet page — one muted link only.</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===== 4. Stage direction ===== -->
+  <section class="section">
+    <h2>Stage direction</h2>
+    <p class="demo-note">In-fiction moments — italic Spectral in a paper-3 well with a claret tick.</p>
+    <p class="stage-direction">[The client glances at their watch, then folds their hands on the table.]</p>
+  </section>
+
+  <!-- ===== 5. Ethics flag ===== -->
+  <section class="section">
+    <h2>Ethics flag</h2>
+    <p class="demo-note">Claret reserved for Rule 4.2 and real errors. Rendered with role="status".</p>
+    <div class="ethics-flag" role="status">
+      <p class="ethics-flag__head">Professional Responsibility — Rule 4.2 · No Contact</p>
+      <p class="ethics-flag__note">The person you are attempting to contact is represented by counsel
+      in this matter. You may not communicate with them directly about the subject of the representation.</p>
+      <span class="ethics-flag__tag">Logged to debrief</span>
+    </div>
+  </section>
+
+  <!-- ===== 6. Meters ===== -->
+  <section class="section">
+    <h2>Meters</h2>
+    <p class="demo-note">Disclosure and rubric weights — animate width on first view; tabular mono labels.</p>
+    <div style="display:flex;flex-direction:column;gap:var(--sp-6);max-width:var(--maxw-read)">
+      <div>
+        <div class="meter__label">DISCLOSURE · 7 / 10 FACTS</div>
+        <span class="meter"><span class="meter__fill" style="--meter-value:70%"></span></span>
+      </div>
+      <div>
+        <div class="meter__label">RAPPORT · 4 / 10</div>
+        <span class="meter meter--warn"><span class="meter__fill" style="--meter-value:40%"></span></span>
+      </div>
+      <div>
+        <div class="meter__label">RULE 4.2 EXPOSURE · STOP</div>
+        <span class="meter meter--stop"><span class="meter__fill" style="--meter-value:90%"></span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 7. Segmented toggle ===== -->
+  <section class="section">
+    <h2>Segmented toggle</h2>
+    <p class="demo-note">Meridian ⇄ real-state. Accent family brass↔green; cross-fade, no layout shift.</p>
+    <div class="segmented-toggle" role="group" aria-label="Matter universe" id="universeToggle">
+      <button type="button" aria-pressed="true">MERIDIAN</button>
+      <button type="button" aria-pressed="false">REAL-STATE</button>
+    </div>
+  </section>
+
+  <!-- ===== 8. KPI tiles ===== -->
+  <section class="section">
+    <h2>KPI tiles</h2>
+    <p class="demo-note">Practice-ledger broadsheet — Fraunces big numbers, mono deltas, tabular-nums.</p>
+    <div class="kpi-row">
+      <div class="kpi-tile">
+        <p class="kpi-tile__label">Matters Open</p>
+        <p class="kpi-tile__value">24</p>
+        <p class="kpi-tile__delta is-up">▲ +3 this week</p>
+      </div>
+      <div class="kpi-tile">
+        <p class="kpi-tile__label">Avg. Rubric Score</p>
+        <p class="kpi-tile__value">7.8</p>
+        <p class="kpi-tile__delta is-up">▲ +0.4</p>
+      </div>
+      <div class="kpi-tile">
+        <p class="kpi-tile__label">Rule 4.2 Flags</p>
+        <p class="kpi-tile__value">2</p>
+        <p class="kpi-tile__delta is-down">▼ −1</p>
+      </div>
+      <div class="kpi-tile">
+        <p class="kpi-tile__label">Spend (BYO Key)</p>
+        <p class="kpi-tile__value">$0.42</p>
+        <p class="kpi-tile__delta">per interview</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 9. Ledger ===== -->
+  <section class="section">
+    <h2>Ledger</h2>
+    <p class="demo-note">Real &lt;table&gt; — mono, right-aligned numbers, tabular-nums, brass rules.</p>
+    <table class="ledger">
+      <caption>Rubric — Reagan v. Jacobson</caption>
+      <thead>
+        <tr><th scope="col">Criterion</th><th scope="col">Weight</th><th scope="col" class="num">Points</th><th scope="col" class="num">Earned</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Fact elicitation</td><td>High</td><td class="num">30</td><td class="num">24</td></tr>
+        <tr><td>Rapport &amp; relational (Axis-B)</td><td>Medium</td><td class="num">20</td><td class="num">14</td></tr>
+        <tr><td>Professional responsibility</td><td>High</td><td class="num">30</td><td class="num">30</td></tr>
+        <tr><td>Closing &amp; next steps</td><td>Low</td><td class="num">20</td><td class="num">16</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Total</td><td></td><td class="num">100</td><td class="num">84</td></tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <!-- ===== 10. Type modes + links ===== -->
+  <section class="section">
+    <h2>Type modes &amp; links</h2>
+    <p class="demo-note">The toggle at the top sets <code>.type-lg</code> on &lt;html&gt; (localStorage).</p>
+    <p class="prose">Standard body prose in Spectral at the base measure. Here is an
+    <a href="#" class="link">underline-wipe link</a> and an
+    <a href="https://folio.openlegalstandard.org" class="link">external reference</a>
+    (its URL prints in the galley). Machine voice stays mono:
+    <span class="mono">2026-07-17T14:32Z · $0.42 · 03 / 20</span>.</p>
+  </section>
+
+</main>
+
+<!-- ===== CHROME: green cloth footer ===== -->
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span>MIT licensed · No platform fees; bring your own key.</span>
+    <span class="mono"><a href="../../../THIRD-PARTY.md">THIRD-PARTY.md</a> · Fraunces · Spectral · Fragment Mono</span>
+  </div>
+</footer>
+
+<script>
+/* ---- large-type mode: persisted on <html> ---- */
+(function(){
+  var KEY='sonsteng-type-lg';
+  var root=document.documentElement;
+  function apply(on){
+    root.classList.toggle('type-lg', on);
+    var btns=document.querySelectorAll('#typeToggle button');
+    btns.forEach(function(b){b.setAttribute('aria-pressed', String((b.dataset.lg==='on')===on));});
+  }
+  try{ apply(localStorage.getItem(KEY)==='1'); }catch(e){ apply(false); }
+  document.getElementById('typeToggle').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    var on=b.dataset.lg==='on'; apply(on);
+    try{ localStorage.setItem(KEY, on?'1':'0'); }catch(e){}
+  });
+})();
+
+/* ---- generic segmented-toggle (Meridian ⇄ real) ---- */
+document.getElementById('universeToggle').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var group=e.currentTarget;
+  group.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed','false');});
+  b.setAttribute('aria-pressed','true');
+  group.dataset.side = (b.textContent.trim()==='REAL-STATE') ? 'real' : 'meridian';
+});
+
+/* ---- meters: animate from 0 → value on first view (respects reduced-motion) ---- */
+(function(){
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var fills = document.querySelectorAll('.meter__fill');
+  if(reduce || !('IntersectionObserver' in window)) return; /* CSS shows final value */
+  fills.forEach(function(f){
+    var target=f.style.getPropertyValue('--meter-value');
+    f.style.setProperty('--meter-value','0%');
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){ f.style.setProperty('--meter-value',target); io.unobserve(f); }
+      });
+    },{threshold:.4});
+    io.observe(f);
+  });
+})();
+</script>
+</body>
+</html>

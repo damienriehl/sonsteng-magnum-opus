@@ -1,0 +1,27 @@
+{
+  "id": "TSK-042",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/task/TSK-042",
+  "skill_id": "SK-LP-13",
+  "name": "Conduct a settlement negotiation",
+  "description": "Plan and conduct a settlement negotiation, identifying interests, BATNA, and creative options.",
+  "bloom_level": "synthesis",
+  "module": "M2",
+  "subtasks": [
+    {
+      "id": "TSK-042.01",
+      "name": "Prepare a strategic settlement & negotiation plan",
+      "description": "Draft an SSNP identifying interests, positions, and confidentiality boundaries."
+    },
+    {
+      "id": "TSK-042.02",
+      "name": "Exchange and evaluate offers",
+      "description": "Make, evaluate, and counter settlement offers against the client's goals."
+    }
+  ],
+  "folio": {
+    "iri": "R8pSettlementExample",
+    "mapping_confidence": "parent"
+  },
+  "exercise_refs": ["m06.ex"]
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "matter_id": "m06",
+  "persona_id": "m06.per.baines",
+  "axis_a": {
+    "facts_elicited": ["m06.fact.001", "m06.fact.007"],
+    "revealed_if_asked_missed": ["the timing of the resignation"],
+    "rapport_gated_unearned": [
+      { "topic": "the client's handling of company data before leaving", "trigger_needed": "confidentiality_reassurance" }
+    ],
+    "rule_4_2_flags": []
+  },
+  "axis_b": {
+    "rapport_opening": { "score": 7, "comment": "Warm greeting; briefly framed confidentiality." },
+    "listening_t_funnel": { "score": 5, "comment": "Jumped to closed questions before letting the client narrate." },
+    "understanding_goals": { "score": 8, "comment": "Surfaced the client's fear about the new job offer." },
+    "explanation_next_steps": { "score": 6, "comment": "Explained next steps but left timelines vague." },
+    "overall_confidence": { "score": 7, "comment": "Client would likely return." }
+  },
+  "ethics_score": 0,
+  "narrative": "A solid first interview with room to widen the funnel before probing.",
+  "self_reflection_prompt": "Where did you narrow to specific questions too soon, and what might a broader opening have surfaced?"
+}

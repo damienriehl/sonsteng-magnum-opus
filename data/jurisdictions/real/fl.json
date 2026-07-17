@@ -1,0 +1,68 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-FL",
+  "id": "JUR-FL",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "FL",
+  "name": "State of Florida",
+  "short_name": "Florida",
+  "adjective": "Florida",
+  "used_by_shapes": ["auto_negligence (m13)", "wills_probate (m20)"],
+  "policy_note": "Structural research pointer only. NO substantive statutory rules — student packets are facts-only; finding the controlling law is the exercise. Chapter-level locators are navigational aids. Instructor notes may cite specifics, verified at publish.",
+  "court_structure": {
+    "trial_courts": {
+      "circuit_court": {
+        "name": "Florida Circuit Court",
+        "note": "Trial court of general jurisdiction, organized into 20 judicial circuits by county. Handles higher-value civil (incl. the m13 auto-negligence jury trial), felony criminal, family, and probate matters. Probate is heard in the Probate Division of the Circuit Court."
+      },
+      "county_court": {
+        "name": "Florida County Court",
+        "note": "Limited jurisdiction (lower-value civil, misdemeanors, traffic)."
+      }
+    },
+    "intermediate_appellate": {
+      "name": "Florida District Court of Appeal",
+      "abbrev": "DCA",
+      "note": "Intermediate appellate court, organized into six districts."
+    },
+    "highest_court": {
+      "name": "Supreme Court of Florida",
+      "note": "The court of last resort."
+    },
+    "specialty_divisions": {
+      "probate": "Probate Division of the Circuit Court — estate administration and will contests; captioned 'In re Estate of <Decedent>.'"
+    }
+  },
+  "shape_specific_notes": {
+    "auto_negligence": "Florida negligence practice involves distinctive doctrines students should research (e.g., the state's comparative-fault approach and no-fault/PIP motor-vehicle insurance framework). Civil jury trial in the Circuit Court. Students research the current standard themselves.",
+    "wills_probate": "Florida's constitutional and statutory HOMESTEAD protections sharply constrain how a homestead may be devised and shield it from creditors — the deliberate teaching hook for the m20 probate contest. Students research the current homestead-devise restrictions themselves."
+  },
+  "citation_formats": {
+    "statutes": { "template": "Fla. Stat. § <n>", "examples": ["Fla. Stat. § 768.<n>", "Fla. Stat. § 732.<n>"] },
+    "constitution": { "template": "Art. <roman>, § <n>, Fla. Const." },
+    "rules": {
+      "civil_procedure": "Fla. R. Civ. P. 1.<n>",
+      "probate": "Fla. Prob. R. <n>",
+      "professional_conduct": "R. Regulating Fla. Bar 4-<n.n>"
+    },
+    "cases": {
+      "reporter": "So. 3d (Southern Reporter)",
+      "template": "<Case Name>, <vol> So. 3d <page> (Fla. <year>)",
+      "dca_parenthetical": "(Fla. <n>th DCA <year>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only.",
+    "statutes_official": "https://www.leg.state.fl.us/Statutes/",
+    "constitution_official": "https://www.flsenate.gov/Laws/Constitution",
+    "court_rules_official": "https://www.floridasupremecourt.org/Rules",
+    "judicial_branch": "https://www.flcourts.gov/",
+    "bar_regulation": "https://www.floridabar.org/",
+    "navigational_code_areas": [
+      "Negligence / damages and comparative fault: Fla. Stat. ch. 768 — a starting point for m13.",
+      "Wills, probate, and homestead devise: Fla. Stat. chs. 732 and 733, plus Art. X, § 4, Fla. Const. — a starting point for m20."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above; nothing here is legal advice."
+}

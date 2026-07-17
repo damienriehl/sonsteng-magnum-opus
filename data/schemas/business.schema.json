@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/business.schema.json",
+  "title": "Business",
+  "description": "The consolidated per-matter business-of-law layer: intake, conflicts check, engagement/fee agreement, time entries, invoices, and trust-ledger entries. Money-math is validated in validate_spine.py (Decimal arithmetic).",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "@id",
+    "matter_id",
+    "intake",
+    "conflicts_check",
+    "engagement",
+    "time_entries",
+    "invoices",
+    "trust_entries"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^m\\d{2}\\.biz$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "intake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_name", "matter_summary", "intake_date"],
+      "properties": {
+        "client_name": { "type": "string" },
+        "contact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "email": { "type": "string" },
+            "phone": { "type": "string" },
+            "address": { "type": "string" }
+          }
+        },
+        "matter_summary": { "type": "string" },
+        "intake_date": { "type": "string", "format": "date" },
+        "referral_source": { "type": "string" }
+      }
+    },
+    "conflicts_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parties_checked", "result", "checked_date"],
+      "properties": {
+        "parties_checked": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "result": {
+          "type": "string",
+          "enum": ["clear", "waivable", "conflict"]
+        },
+        "notes": { "type": "string" },
+        "checked_date": { "type": "string", "format": "date" }
+      }
+    },
+    "engagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fee_type", "engagement_date", "letter_md"],
+      "description": "Fee agreement. The fee-type-appropriate amount field is required by the matching conditional.",
+      "properties": {
+        "fee_type": {
+          "type": "string",
+          "enum": ["hourly", "contingency", "flat", "retainer"]
+        },
+        "rate": { "type": "number", "exclusiveMinimum": 0, "description": "Hourly rate (fee_type=hourly)." },
+        "contingency_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "description": "Contingency percent (fee_type=contingency)." },
+        "flat_fee": { "type": "number", "exclusiveMinimum": 0, "description": "Fixed fee (fee_type=flat)." },
+        "retainer_amount": { "type": "number", "exclusiveMinimum": 0, "description": "Retainer deposited to trust (fee_type=retainer)." },
+        "engagement_date": { "type": "string", "format": "date" },
+        "letter_md": {
+          "type": "string",
+          "description": "Relative path to the engagement-letter Markdown file."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "fee_type": { "const": "hourly" } } },
+          "then": { "required": ["rate"] }
+        },
+        {
+          "if": { "properties": { "fee_type": { "const": "contingency" } } },
+          "then": { "required": ["contingency_pct"] }
+        },
+        {
+          "if": { "properties": { "fee_type": { "const": "flat" } } },
+          "then": { "required": ["flat_fee"] }
+        },
+        {
+          "if": { "properties": { "fee_type": { "const": "retainer" } } },
+          "then": { "required": ["retainer_amount"] }
+        }
+      ]
+    },
+    "time_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "date", "timekeeper_id", "hours", "rate", "narrative"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^m\\d{2}\\.te\\.\\d{4}$" },
+          "date": { "type": "string", "format": "date" },
+          "timekeeper_id": { "type": "string", "pattern": "^FIRM-TK-\\d{2}$" },
+          "hours": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Billed hours. 0.1-increment invariant is enforced in validate_spine.py (Decimal-safe; JSON Schema multipleOf:0.1 is unreliable under float)."
+          },
+          "rate": { "type": "number", "minimum": 0 },
+          "narrative": { "type": "string" }
+        }
+      }
+    },
+    "invoices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "date", "period", "fees", "expenses", "payments_received", "balance_due", "line_refs"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^m\\d{2}\\.inv\\.\\d{3}$" },
+          "date": { "type": "string", "format": "date" },
+          "period": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end"],
+            "properties": {
+              "start": { "type": "string", "format": "date" },
+              "end": { "type": "string", "format": "date" }
+            }
+          },
+          "fees": { "type": "number", "minimum": 0 },
+          "expenses": { "type": "number", "minimum": 0 },
+          "payments_received": { "type": "number", "minimum": 0 },
+          "balance_due": { "type": "number", "description": "fees + expenses − payments_received, recomputed exactly by the validator." },
+          "line_refs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^m\\d{2}\\.te\\.\\d{4}$" },
+            "description": "Time entries billed on this invoice."
+          }
+        }
+      }
+    },
+    "trust_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "date", "type", "amount", "running_balance"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^m\\d{2}\\.tr\\.\\d{3}$" },
+          "date": { "type": "string", "format": "date" },
+          "type": { "type": "string", "enum": ["deposit", "disbursement"] },
+          "amount": { "type": "number", "exclusiveMinimum": 0 },
+          "related_invoice_id": { "type": "string", "pattern": "^m\\d{2}\\.inv\\.\\d{3}$" },
+          "running_balance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Trust balance after this entry; must never go negative (validator-checked in date order)."
+          }
+        }
+      }
+    }
+  }
+}

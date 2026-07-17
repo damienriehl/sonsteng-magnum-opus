@@ -1,0 +1,16 @@
+{
+  "id": "SK-LP-13",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/skill/SK-LP-13",
+  "name": "Negotiation",
+  "category": "legal_practice",
+  "extension": false,
+  "folio": {
+    "iri": "https://folio.openlegalstandard.org/R8pNegExample",
+    "mapping_confidence": "near"
+  },
+  "survey": {
+    "importance": 86.2,
+    "preparedness": 43.6
+  }
+}

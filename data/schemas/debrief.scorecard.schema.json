@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/debrief.scorecard.schema.json",
+  "title": "Debrief Scorecard",
+  "description": "Typed output of the /debrief endpoint. Two axes: (A) disclosure-tier fact/task coverage and (B) standardized-client relational scoring, plus a signed ethics score. Debrief-oracle rule: MISSED items are named by topic label ONLY, never by fact text.",
+  "version": "1.0.0",
+  "$defs": {
+    "rating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "comment"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "comment": { "type": "string" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "matter_id",
+    "persona_id",
+    "axis_a",
+    "axis_b",
+    "ethics_score",
+    "narrative",
+    "self_reflection_prompt"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "persona_id": { "type": "string", "pattern": "^m\\d{2}\\.per\\.[a-z0-9-]+$" },
+    "axis_a": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["facts_elicited", "revealed_if_asked_missed", "rapport_gated_unearned", "rule_4_2_flags"],
+      "description": "Axis A — fact/task coverage.",
+      "properties": {
+        "facts_elicited": {
+          "type": "array",
+          "description": "Facts the student surfaced (elicited facts may be named by fact_ref).",
+          "items": { "type": "string", "pattern": "^m\\d{2}\\.fact\\.\\d{3}$" }
+        },
+        "revealed_if_asked_missed": {
+          "type": "array",
+          "description": "TOPIC LABELS ONLY for revealed-if-asked facts the student never asked about. NEVER the fact text.",
+          "items": { "type": "string" }
+        },
+        "rapport_gated_unearned": {
+          "type": "array",
+          "description": "Rapport-gated facts left unearned, named by topic + the trigger that was needed.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["topic", "trigger_needed"],
+            "properties": {
+              "topic": { "type": "string", "description": "Topic label only — never the concealed fact text." },
+              "trigger_needed": {
+                "type": "string",
+                "enum": [
+                  "open_ended_invitation",
+                  "wellbeing_question",
+                  "acknowledged_emotion",
+                  "no_interruption_streak",
+                  "confidentiality_reassurance",
+                  "nonjudgmental_response",
+                  "follow_up_on_hint",
+                  "explained_process"
+                ]
+              }
+            }
+          }
+        },
+        "rule_4_2_flags": {
+          "type": "array",
+          "description": "Professional-responsibility (no-contact) violations flagged during the interview.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "axis_b": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rapport_opening", "listening_t_funnel", "understanding_goals", "explanation_next_steps", "overall_confidence"],
+      "description": "Axis B — standardized-client relational scoring, rated by the persona in character (0-10 each).",
+      "properties": {
+        "rapport_opening": { "$ref": "#/$defs/rating" },
+        "listening_t_funnel": { "$ref": "#/$defs/rating" },
+        "understanding_goals": { "$ref": "#/$defs/rating" },
+        "explanation_next_steps": { "$ref": "#/$defs/rating" },
+        "overall_confidence": { "$ref": "#/$defs/rating" }
+      }
+    },
+    "ethics_score": {
+      "type": "integer",
+      "minimum": -2,
+      "maximum": 2,
+      "description": "Signed −2..+2 ethics score; a Rule 4.2 violation can push it negative."
+    },
+    "narrative": { "type": "string" },
+    "self_reflection_prompt": {
+      "type": "string",
+      "description": "One free-text reflection question posed to the student post-debrief."
+    }
+  }
+}

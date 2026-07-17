@@ -1,0 +1,45 @@
+{
+  "id": "FIRM",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/firm/FIRM",
+  "identity": {
+    "name": "Ansari & Boone LLP",
+    "address": "100 Practicum Way, Suite 200",
+    "contact": "firm@ansariboone.example.com",
+    "letterhead_note": "A two-partner general practice."
+  },
+  "timekeepers": [
+    { "id": "FIRM-TK-01", "name": "Priya Ansari", "role": "partner", "rate": 300 },
+    { "id": "FIRM-TK-02", "name": "Marcus Boone", "role": "partner", "rate": 300 }
+  ],
+  "rate_card": [
+    { "role": "partner", "rate": 300 },
+    { "role": "associate", "rate": 200 },
+    { "role": "paralegal", "rate": 110 }
+  ],
+  "clients": [
+    { "id": "FIRM-C-06", "name": "Dana Baines" },
+    { "id": "FIRM-C-03", "name": "Reagan Household" }
+  ],
+  "book_of_business": [
+    { "matter_id": "m06", "client_id": "FIRM-C-06", "fee_type": "hourly", "status": "active" },
+    { "matter_id": "m03", "client_id": "FIRM-C-03", "fee_type": "contingency", "status": "active" }
+  ],
+  "closed_matters": [
+    { "matter_id": "m01", "client_id": "FIRM-C-06", "fee_type": "hourly", "closed_date": "2025-11-30", "total_billed": 8400 }
+  ],
+  "ar_aging": {
+    "current": 4200,
+    "days_1_30": 1050,
+    "days_31_60": 0,
+    "days_61_90": 0,
+    "days_over_90": 0
+  },
+  "realization_target": 0.9,
+  "collection_target": 0.95,
+  "budget": [
+    { "id": "FIRM-B-01", "name": "Fee revenue", "budget": 240000, "actual": 198000, "variance_is_good": false },
+    { "id": "FIRM-B-02", "name": "Office overhead", "budget": 60000, "actual": 55000, "variance_is_good": true }
+  ],
+  "as_of_date": "2026-06-30"
+}

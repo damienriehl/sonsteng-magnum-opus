@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-TX",
+  "id": "JUR-TX",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "TX",
+  "name": "State of Texas",
+  "short_name": "Texas",
+  "adjective": "Texas",
+  "used_by_shapes": ["real_estate_negotiation (m14)"],
+  "policy_note": "Structural research pointer only. NO substantive statutory rules — student packets are facts-only; finding the controlling law is the exercise. Code-level locators are navigational aids. Instructor notes may cite specifics, verified at publish.",
+  "court_structure": {
+    "trial_courts": {
+      "district_court": {
+        "name": "Texas District Court",
+        "note": "Trial court of general jurisdiction (higher-value civil, felony criminal, family, and land-title disputes)."
+      },
+      "county_courts_at_law": {
+        "name": "Texas County Courts at Law / Constitutional County Courts",
+        "note": "Limited and probate jurisdiction; some counties have statutory Probate Courts."
+      }
+    },
+    "intermediate_appellate": {
+      "name": "Texas Court of Appeals",
+      "note": "Intermediate appellate courts, organized into 14 districts."
+    },
+    "highest_courts": {
+      "note": "Texas has a bifurcated high court.",
+      "civil": "Supreme Court of Texas (highest court for civil and juvenile matters)",
+      "criminal": "Texas Court of Criminal Appeals (highest court for criminal matters)"
+    }
+  },
+  "real_estate_conventions": {
+    "note": "The m14 shape is a Texas real-estate purchase negotiation. Instruments affecting title are recorded with the County Clerk of the county where the land lies; acknowledgment before a Texas notary public is required for recording. Texas is a notice jurisdiction. Students research the current conveyancing and title framework themselves.",
+    "recording_office": "County Clerk (real property records)",
+    "notary": "Texas Notary Public, commissioned by the Secretary of State; acknowledgment required for recordable instruments.",
+    "common_documents": ["Earnest Money Contract / Purchase Agreement", "Title Commitment", "General Warranty Deed or Special Warranty Deed", "Deed of Trust (Texas uses deeds of trust, not mortgages)", "Closing Disclosure / Settlement Statement"]
+  },
+  "citation_formats": {
+    "statutes": { "template": "Tex. <Subject> Code § <n>", "examples": ["Tex. Prop. Code § <n>", "Tex. Bus. & Com. Code § <n>"] },
+    "rules": {
+      "civil_procedure": "Tex. R. Civ. P. <n>",
+      "professional_conduct": "Tex. Disciplinary R. Prof. Conduct <n.n>"
+    },
+    "cases": {
+      "reporter": "S.W.3d (South Western Reporter)",
+      "template": "<Case Name>, <vol> S.W.3d <page> (Tex. <year>)",
+      "appeals_parenthetical": "(Tex. App.—<City> <year>, <writ history>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only.",
+    "statutes_official": "https://statutes.capitol.texas.gov/",
+    "court_rules_official": "https://www.txcourts.gov/rules-forms/rules-standards/",
+    "judicial_branch": "https://www.txcourts.gov/",
+    "bar_regulation": "https://www.texasbar.com/",
+    "navigational_code_areas": [
+      "Conveyances, recording, and title: Tex. Prop. Code (Title 2 Conveyances; Title 3 Public Records) — a starting point for m14.",
+      "Real-estate contracts and the statute of frauds appear in the Tex. Bus. & Com. Code — a starting point for m14."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above; nothing here is legal advice."
+}

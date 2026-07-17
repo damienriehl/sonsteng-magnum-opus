@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/exercise.schema.json",
+  "title": "Exercise",
+  "description": "The 8-part exercise packet (Sonsteng anatomy). All eight section keys are FIXED and REQUIRED; the site generator and validator key off them. Each section carries Markdown body and/or file references.",
+  "version": "1.0.0",
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title"],
+      "anyOf": [
+        { "required": ["body_md"] },
+        { "required": ["files"] }
+      ],
+      "description": "One anatomy section. Must carry body_md and/or a non-empty files[].",
+      "properties": {
+        "title": { "type": "string" },
+        "body_md": { "type": "string", "description": "Markdown content for this section." },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "description": "Relative path (within the matter dir) to an included document."
+          }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_version", "@id", "matter_id", "sections"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^m\\d{2}\\.ex$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "role_id": {
+      "type": "string",
+      "pattern": "^m\\d{2}\\.role\\.[a-z0-9-]+$",
+      "description": "Optional: for two-sided matters, the side this packet is authored for."
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intro",
+        "objectives",
+        "activities",
+        "instructions",
+        "case_file",
+        "history",
+        "considerations",
+        "substantive_info"
+      ],
+      "description": "The 8 FIXED section keys, all required.",
+      "properties": {
+        "intro": { "$ref": "#/$defs/section" },
+        "objectives": { "$ref": "#/$defs/section" },
+        "activities": { "$ref": "#/$defs/section" },
+        "instructions": { "$ref": "#/$defs/section" },
+        "case_file": { "$ref": "#/$defs/section" },
+        "history": { "$ref": "#/$defs/section" },
+        "considerations": { "$ref": "#/$defs/section" },
+        "substantive_info": { "$ref": "#/$defs/section" }
+      }
+    }
+  }
+}

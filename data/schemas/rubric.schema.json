@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/rubric.schema.json",
+  "title": "Rubric",
+  "description": "A point-weighted grading rubric for one matter. Criteria (and nested subcriteria) carry weight_points that sum to the declared total; /critique is generic code over 20 of these.",
+  "version": "1.0.0",
+  "$defs": {
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "weight_points"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^m\\d{2}\\.rub\\.c\\d{2}(\\.s\\d{2})*$",
+          "description": "Criterion id (m06.rub.c01) or subcriterion id (m06.rub.c01.s01)."
+        },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "weight_points": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Points for this criterion. Subcriteria weight_points sum to this (validator-checked)."
+        },
+        "skill_id": { "type": "string", "pattern": "^SK-(LP|PM)-\\d{2}$" },
+        "task_id": { "type": "string", "pattern": "^TSK-\\d{3}$" },
+        "subcriteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/criterion" }
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_version", "@id", "matter_id", "declared_total", "criteria"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^m\\d{2}\\.rub$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "declared_total": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Stated rubric total; Σ(criterion weight_points) must equal it (validator ERROR otherwise)."
+    },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/criterion" }
+    },
+    "letter_grade_map": {
+      "type": "array",
+      "description": "Optional grade->points map for letter-graded events; must be monotonic (validator-checked).",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["grade", "points"],
+        "properties": {
+          "grade": { "type": "string", "description": "e.g. 'A', 'A-', 'B+'." },
+          "points": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

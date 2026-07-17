@@ -1,0 +1,37 @@
+{
+  "id": "m06",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m06",
+  "slug": "m06-noncompete-ny",
+  "shape": "non-compete",
+  "tier": "real",
+  "jurisdiction": "NY",
+  "caption": "Silverline Health Corp. v. Baines",
+  "sides": [
+    {
+      "role_id": "m06.role.plaintiff",
+      "label": "Plaintiff / Employer",
+      "party_names": ["Silverline Health Corp."],
+      "confidential_fact_refs": ["m06.fact.014"]
+    },
+    {
+      "role_id": "m06.role.defendant",
+      "label": "Defendant / Former Employee",
+      "party_names": ["Dana Baines"],
+      "confidential_fact_refs": ["m06.fact.021"]
+    }
+  ],
+  "parties": [
+    { "name": "Silverline Health Corp.", "role": "plaintiff employer", "side_role_id": "m06.role.plaintiff" },
+    { "name": "Dana Baines", "role": "defendant employee", "side_role_id": "m06.role.defendant" }
+  ],
+  "client_id": "FIRM-C-06",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-13", "SK-LP-17"],
+  "task_refs": ["TSK-042"],
+  "personas": ["m06.per.baines"],
+  "witnesses": [{ "id": "m06.wit.okafor", "name": "Sam Okafor" }],
+  "exhibits": [{ "id": "m06.exh.001", "title": "Employment Agreement" }],
+  "open_date": "2026-01-12",
+  "as_of_date": "2026-06-30"
+}

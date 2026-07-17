@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-IL",
+  "id": "JUR-IL",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "IL",
+  "name": "State of Illinois",
+  "short_name": "Illinois",
+  "adjective": "Illinois",
+  "used_by_shapes": ["employment_arbitration (m11)"],
+  "policy_note": "Structural research pointer only. NO substantive statutory rules — student packets are facts-only; finding the controlling law is the exercise. Chapter/act locators are navigational aids. Instructor notes may cite specifics, verified at publish.",
+  "court_structure": {
+    "trial_court": {
+      "name": "Illinois Circuit Court",
+      "note": "The single trial court of general jurisdiction, organized into judicial circuits by county (e.g., 'Circuit Court of Cook County'). Many circuits run a mandatory court-annexed arbitration program for lower-value civil claims; private employment arbitration proceeds outside the courts under the parties' agreement, with the court's role limited to compelling arbitration and confirming/vacating awards."
+    },
+    "intermediate_appellate": {
+      "name": "Illinois Appellate Court",
+      "note": "Intermediate appellate court, organized into five districts."
+    },
+    "highest_court": {
+      "name": "Supreme Court of Illinois",
+      "note": "The court of last resort."
+    }
+  },
+  "shape_specific_notes": {
+    "employment_arbitration": "The m11 shape is a PRIVATE employment arbitration (not a court trial): the parties' agreement and the arbitral forum's rules govern procedure, and the Federal Arbitration Act and the Illinois Uniform Arbitration Act frame enforceability, compelling arbitration, and confirming or vacating an award. Students research the governing arbitration framework and the substantive employment law themselves."
+  },
+  "citation_formats": {
+    "statutes": { "template": "<chapter> ILCS <act>/<section>", "examples": ["735 ILCS 5/<n> (Code of Civil Procedure)", "710 ILCS 5/<n> (Uniform Arbitration Act)"] },
+    "rules": {
+      "supreme_court_rules": "Ill. Sup. Ct. R. <n>",
+      "professional_conduct": "Ill. R. Prof. Conduct <n.n> (2010)"
+    },
+    "cases": {
+      "reporter": "N.E.3d (North Eastern Reporter); official Ill. 2d / Ill. App. 3d (older) and public-domain neutral cites (e.g., 2019 IL 123456)",
+      "template": "<Case Name>, <year> IL <docket> or <vol> N.E.3d <page> (Ill. <year>)",
+      "appellate_parenthetical": "(Ill. App. Ct. <year>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only.",
+    "statutes_official": "https://www.ilga.gov/legislation/ilcs/ilcs.asp",
+    "court_rules_official": "https://www.illinoiscourts.gov/rules/supreme-court-rules/",
+    "judicial_branch": "https://www.illinoiscourts.gov/",
+    "attorney_registration_discipline": "https://www.iardc.org/",
+    "navigational_code_areas": [
+      "Arbitration enforceability and confirming/vacating awards: 710 ILCS 5 (Uniform Arbitration Act) and the Federal Arbitration Act — a starting point for m11.",
+      "Substantive employment claims may arise under the Illinois Human Rights Act (775 ILCS 5) and related acts — a starting point for m11."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above; nothing here is legal advice."
+}

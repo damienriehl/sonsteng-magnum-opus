@@ -1,0 +1,17 @@
+{
+  "spine_version": "1.0.0",
+  "description": "Data-spine version + per-entity-type schema versions. Validator check F29/versioning: entity.schema_version must equal schemas[entity_type].",
+  "jsonld_context_base": "https://sonsteng.damienriehl.com/spine/",
+  "schemas": {
+    "matter": "1.0.0",
+    "persona": "1.0.0",
+    "rubric": "1.0.0",
+    "exercise": "1.0.0",
+    "business": "1.0.0",
+    "skill": "1.0.0",
+    "task": "1.0.0",
+    "firm": "1.0.0",
+    "debrief_scorecard": "1.0.0",
+    "critique_scorecard": "1.0.0"
+  }
+}

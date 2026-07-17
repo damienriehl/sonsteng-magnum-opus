@@ -1,0 +1,16 @@
+{
+  "id": "m06.ex",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/exercise/m06.ex",
+  "matter_id": "m06",
+  "sections": {
+    "intro": { "title": "Introduction", "body_md": "You represent Dana Baines in a non-compete dispute." },
+    "objectives": { "title": "Objectives", "body_md": "Draft and argue a memorandum opposing a temporary injunction." },
+    "activities": { "title": "Activities", "body_md": "Client interview, motion drafting, oral argument, settlement conference." },
+    "instructions": { "title": "Instructions", "body_md": "Prepare a 10-page memorandum with proposed order." },
+    "case_file": { "title": "Case File", "files": ["case-file/employment-agreement.md", "case-file/resignation-email.md"] },
+    "history": { "title": "Procedural & Factual History", "body_md": "Silverline moved for a temporary injunction after Baines resigned." },
+    "considerations": { "title": "Considerations", "body_md": "New York enforceability standards; blue-pencil doctrine; consideration." },
+    "substantive_info": { "title": "Substantive Information", "body_md": "Overview of restrictive-covenant law and the injunction standard." }
+  }
+}

@@ -1,0 +1,229 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-meridian",
+  "id": "JUR-meridian",
+  "type": "jurisdiction",
+  "tier": "fictional",
+  "code": "meridian",
+  "name": "State of Meridian",
+  "short_name": "Meridian",
+  "adjective": "Meridian",
+  "canon_note": "Meridian is a wholly fictional U.S. state invented for the Sonsteng Practicum corpus. Every name, court, statute number, reporter, judge, and place below is original and does not refer to any real jurisdiction, court, official, or person. All ten fictional-tier matters (m01-m10) are set here. Matter agents MUST draw courts, judges, citation formats, county/city names, and procedural framing from this file rather than improvising — this is the single source of Meridian truth. Where a Meridian matter needs a fact this file does not supply (e.g., a specific street address), the matter agent may invent it consistently with the geography and naming flavor established here, using only its own matter-prefixed IDs.",
+  "government": {
+    "capital_city": "Norsholm",
+    "capital_county": "Halden County",
+    "largest_city": "Norsholm",
+    "populous_note": "Norsholm, on the south shore of Lake Verdant, is both the capital and the largest city; the Kettleridge iron range anchors the north.",
+    "flavor": "Upper-Midwest character: glacial prairie-pothole lakes country in the south and center, boreal pine forest and a played-out iron range in the north, row-crop and dairy agriculture through the river valleys. Scandinavian, German, and more recent Somali, Hmong, and Latino settlement. Long winters, ice-fishing, lake cabins, county fairs, and a strong tradition of civic volunteerism. Two principal rivers: the Vasser (running south through Norsholm) and the Kettle (draining the northern range). Time zone: Central."
+  },
+  "counties": [
+    {
+      "id": "JUR-meridian.county.halden",
+      "name": "Halden County",
+      "seat": "Norsholm",
+      "note": "Most populous county; contains the state capital, the Meridian Supreme Court, the Court of Appeals, and the state's busiest District Court. Urban and suburban."
+    },
+    {
+      "id": "JUR-meridian.county.marrick",
+      "name": "Marrick County",
+      "seat": "Elleston",
+      "note": "Second-tier city and university town (Meridian State University at Elleston); mixed suburban and agricultural."
+    },
+    {
+      "id": "JUR-meridian.county.voss",
+      "name": "Voss County",
+      "seat": "Danforth",
+      "note": "Rural river-valley county; dairy and row crops; small-town practice."
+    },
+    {
+      "id": "JUR-meridian.county.kettleridge",
+      "name": "Kettleridge County",
+      "seat": "Ironwood",
+      "note": "Northern county on the old iron range; forest, mining legacy, tourism, and Lake-country cabins."
+    },
+    {
+      "id": "JUR-meridian.county.sable",
+      "name": "Sable County",
+      "seat": "Brightwater",
+      "note": "Lake-resort and exurban county; fast-growing lakeshore development (relevant to the real-estate shape)."
+    }
+  ],
+  "court_structure": {
+    "trial_courts": {
+      "name": "Meridian District Court",
+      "note": "The court of general jurisdiction, organized by county (e.g., 'Meridian District Court, Halden County'). Handles civil, criminal, family, and probate matters. The state is divided into five judicial districts, one per county.",
+      "caption_style": "STATE OF MERIDIAN\\nDISTRICT COURT\\nCOUNTY OF <COUNTY>          <JUDICIAL DISTRICT>",
+      "divisions": [
+        {
+          "id": "JUR-meridian.court.district.juvenile",
+          "name": "Juvenile Division of the Meridian District Court",
+          "note": "Hears delinquency and child-protection matters; records confidential; minors referred to by initials in public filings. Delinquency petitions are captioned 'In re the Welfare of <initials>, a Minor.'"
+        },
+        {
+          "id": "JUR-meridian.court.district.family",
+          "name": "Family Division of the Meridian District Court",
+          "note": "Dissolution, custody, support, and related family matters. Dissolutions captioned 'In re the Marriage of <A> and <B>.'"
+        },
+        {
+          "id": "JUR-meridian.court.district.probate",
+          "name": "Probate Division of the Meridian District Court",
+          "note": "Estate administration and will contests. Captioned 'In re the Estate of <Decedent>.'"
+        }
+      ]
+    },
+    "municipal_courts": {
+      "name": "Meridian Municipal Court",
+      "note": "City-level courts hearing ordinance violations, petty misdemeanors, traffic, and small-claims matters within incorporated cities (e.g., 'Norsholm Municipal Court'). No jury; appeal to the District Court."
+    },
+    "intermediate_appellate": {
+      "id": "JUR-meridian.court.appeals",
+      "name": "Meridian Court of Appeals",
+      "seat": "Norsholm",
+      "note": "Intermediate appellate court; hears appeals from the District Court in three-judge panels. Cited '(Mer. App. YYYY).'"
+    },
+    "highest_court": {
+      "id": "JUR-meridian.court.supreme",
+      "name": "Meridian Supreme Court",
+      "seat": "Norsholm",
+      "note": "Court of last resort; seven justices; also exercises original jurisdiction over attorney discipline and admission. Cited '(Mer. YYYY).'"
+    },
+    "appellate_ladder": "Meridian District Court -> Meridian Court of Appeals -> Meridian Supreme Court"
+  },
+  "attorney_discipline": {
+    "regulator": {
+      "id": "JUR-meridian.discipline.office",
+      "name": "Meridian Office of Lawyer Conduct",
+      "abbrev": "MOLC",
+      "head_title": "Director of the Office of Lawyer Conduct",
+      "note": "Investigates and prosecutes attorney-misconduct complaints. Analogous in function to Minnesota's Office of Lawyers Professional Responsibility. The Director files a Petition for Disciplinary Action."
+    },
+    "board": {
+      "id": "JUR-meridian.discipline.board",
+      "name": "Lawyers Professional Responsibility Board of Meridian",
+      "abbrev": "LPRB",
+      "note": "Volunteer board of lawyers and public members; district ethics committees screen complaints; a three-member hearing panel (two lawyers, one public member, or a referee appointed by the Supreme Court) takes evidence and files findings."
+    },
+    "ultimate_authority": {
+      "name": "Meridian Supreme Court",
+      "note": "Final decision-maker on all discipline; imposes admonition, private/public reprimand, probation, suspension, or disbarment. Discipline matters are captioned 'In re Petition for Disciplinary Action against <Respondent>, a Meridian Attorney.'"
+    },
+    "process_flow": "Complaint -> MOLC investigation -> district ethics committee -> Director's Petition for Disciplinary Action -> LPRB hearing panel / referee -> Meridian Supreme Court",
+    "rules_of_conduct": {
+      "name": "Meridian Rules of Professional Conduct",
+      "citation": "Mer. R. Prof. Conduct <N.N>",
+      "note": "Numbering mirrors the ABA Model Rules of Professional Conduct (e.g., Rule 1.15 safekeeping property/trust accounting; Rule 4.2 communication with represented persons; Rule 8.4 misconduct). Use Model-Rule numbering when referencing a Meridian professional-conduct rule."
+    }
+  },
+  "citation_formats": {
+    "statutes": {
+      "template": "Mer. Stat. § NNN.NN",
+      "example": "Mer. Stat. § 210.05",
+      "note": "Meridian statutes are compiled by chapter and section; the number left of the decimal is the chapter, right of the decimal the section."
+    },
+    "rules": {
+      "civil_procedure": "Mer. R. Civ. P. NN",
+      "criminal_procedure": "Mer. R. Crim. P. NN",
+      "evidence": "Mer. R. Evid. NNN",
+      "appellate_procedure": "Mer. R. App. P. NNN",
+      "professional_conduct": "Mer. R. Prof. Conduct N.N",
+      "general_practice": "Mer. R. Gen. Prac. NN",
+      "note": "Civil, criminal, and evidence rule numbering broadly tracks the corresponding Federal Rules; professional-conduct numbering tracks the ABA Model Rules."
+    },
+    "cases": {
+      "reporter_name": "North Western Meridian Reports",
+      "reporter_abbrev": "N.W. Mer.",
+      "supreme_template": "<Case Name>, <vol> N.W. Mer. <page> (Mer. <year>)",
+      "supreme_example": "Ellstrom v. Vandermeer, 412 N.W. Mer. 88 (Mer. 2019)",
+      "appeals_template": "<Case Name>, <vol> N.W. Mer. <page> (Mer. App. <year>)",
+      "appeals_example": "Sable Cty. Title Co. v. Renk, 361 N.W. Mer. 540 (Mer. App. 2021)",
+      "note": "'N.W. Mer.' is the fictional official reporter for both the Supreme Court and Court of Appeals; the parenthetical distinguishes the court. Cited-case names above are illustrative placeholders only."
+    },
+    "constitution": {
+      "template": "Mer. Const. art. <roman>, § <n>",
+      "example": "Mer. Const. art. I, § 7"
+    }
+  },
+  "judge_pool": {
+    "note": "A collision-resistant, deliberately diverse pool of ~15 sitting Meridian judges. Matter agents SHOULD assign judges from this pool (by id) rather than inventing new names, to keep the corpus internally consistent. None of these surnames matches a prominent real jurist. Court level is a suggestion, not a constraint; reassign as a matter requires.",
+    "judges": [
+      { "id": "JUR-meridian.judge.aldous", "name": "Hon. Miriam T. Aldous", "typical_bench": "District Court, Halden County (civil)" },
+      { "id": "JUR-meridian.judge.voll", "name": "Hon. Terrence R. Voll", "typical_bench": "District Court, Halden County (criminal)" },
+      { "id": "JUR-meridian.judge.nandakumar", "name": "Hon. Priya Nandakumar", "typical_bench": "District Court, Marrick County (civil)" },
+      { "id": "JUR-meridian.judge.ostbey", "name": "Hon. Gerald P. Ostbey", "typical_bench": "District Court, Voss County (general)" },
+      { "id": "JUR-meridian.judge.breck", "name": "Hon. Yolanda Breck", "typical_bench": "District Court, Halden County (family)" },
+      { "id": "JUR-meridian.judge.ferris", "name": "Hon. Malcolm Ferris", "typical_bench": "District Court, Sable County (general)" },
+      { "id": "JUR-meridian.judge.solvang", "name": "Hon. Ingrid Solvang", "typical_bench": "District Court, Kettleridge County (general)" },
+      { "id": "JUR-meridian.judge.whitcomb", "name": "Hon. Darnell Whitcomb", "typical_bench": "District Court, Halden County (criminal / DWI)" },
+      { "id": "JUR-meridian.judge.escamilla", "name": "Hon. Consuela Escamilla", "typical_bench": "District Court, Marrick County (juvenile)" },
+      { "id": "JUR-meridian.judge.lindqvist", "name": "Hon. Howard Lindqvist", "typical_bench": "District Court, Halden County (probate)" },
+      { "id": "JUR-meridian.judge.okonkwo", "name": "Hon. Fatima Okonkwo", "typical_bench": "Meridian Court of Appeals" },
+      { "id": "JUR-meridian.judge.tolliver", "name": "Hon. Bernard Tolliver", "typical_bench": "Meridian Court of Appeals" },
+      { "id": "JUR-meridian.judge.achterberg", "name": "Hon. Rosalind Achterberg", "typical_bench": "Meridian Court of Appeals" },
+      { "id": "JUR-meridian.judge.halloran", "name": "Hon. Wei Halloran", "typical_bench": "Meridian Supreme Court (Associate Justice)" },
+      { "id": "JUR-meridian.judge.reinholt", "name": "Hon. August Reinholt", "typical_bench": "Meridian Supreme Court (Chief Justice)" }
+    ]
+  },
+  "bar": {
+    "id": "JUR-meridian.bar",
+    "name": "State Bar of Meridian",
+    "note": "The unified (integrated) state bar; admission and licensure through the Meridian Board of Law Examiners; discipline through the MOLC/LPRB above. Attorneys hold a Meridian license number formatted 'MER-<6 digits>.'",
+    "cle": "Meridian Continuing Legal Education Board"
+  },
+  "statute_of_limitations": {
+    "note": "A plausible, internally consistent limitations table for the shapes this corpus uses. Numbers are original to Meridian. Chapter 210 collects general civil limitations. These are provided for canon consistency; STUDENT-FACING packets remain facts-only and do NOT cite these — students research the analogous real-tier law themselves. Instructor notes may cite them.",
+    "limitations": [
+      { "claim": "Personal injury / general negligence (incl. auto negligence)", "period_years": 3, "citation": "Mer. Stat. § 210.05" },
+      { "claim": "Wrongful death", "period_years": 3, "citation": "Mer. Stat. § 210.06" },
+      { "claim": "Injury to property / trespass", "period_years": 6, "citation": "Mer. Stat. § 210.07" },
+      { "claim": "Contract in writing", "period_years": 6, "citation": "Mer. Stat. § 210.10" },
+      { "claim": "Oral contract", "period_years": 4, "citation": "Mer. Stat. § 210.11" },
+      { "claim": "Sale of goods (UCC Art. 2 breach of warranty)", "period_years": 4, "citation": "Mer. Stat. § 305.20", "note": "Mirrors UCC § 2-725; accrues on tender of delivery." },
+      { "claim": "Fraud / misrepresentation (discovery rule)", "period_years": 6, "citation": "Mer. Stat. § 210.13" },
+      { "claim": "Defamation (libel / slander)", "period_years": 2, "citation": "Mer. Stat. § 210.15" },
+      { "claim": "Legal malpractice", "period_years": 4, "citation": "Mer. Stat. § 210.18" },
+      { "claim": "Misappropriation of trade secrets", "period_years": 3, "citation": "Mer. Stat. § 512.09", "note": "Meridian Uniform Trade Secrets Act; discovery rule." },
+      { "claim": "Wage / employment claims", "period_years": 3, "citation": "Mer. Stat. § 181.20" },
+      { "claim": "Recovery of real property / adverse possession", "period_years": 15, "citation": "Mer. Stat. § 541.02" },
+      { "claim": "Will contest (after order admitting will to probate)", "period_years": 1, "citation": "Mer. Stat. § 524.16", "note": "Also barred earlier if not raised within the objection window after notice of the probate petition." }
+    ]
+  },
+  "criminal_dwi": {
+    "note": "Meridian's impaired-driving scheme, original numbering, modeled functionally on a modern gross-misdemeanor/felony DWI code. STUDENT packets remain facts-only; instructor notes may cite.",
+    "primary_statute": "Mer. Stat. § 787.11",
+    "offense_name": "Driving While Impaired (DWI)",
+    "per_se_limit_bac": 0.08,
+    "per_se_note": "It is a per-se offense to drive with an alcohol concentration of 0.08 or more within two hours of driving.",
+    "implied_consent_statute": "Mer. Stat. § 787.15",
+    "implied_consent_note": "Refusal of a lawfully requested test is a separate offense; a warrant is required for a blood or urine test absent a recognized exception.",
+    "degrees": [
+      { "degree": "Fourth-degree DWI", "level": "misdemeanor", "note": "First offense, no aggravating factors." },
+      { "degree": "Third-degree DWI", "level": "gross misdemeanor", "note": "One aggravating factor (e.g., prior within ten years, or test refusal)." },
+      { "degree": "Second-degree DWI", "level": "gross misdemeanor", "note": "Two aggravating factors." },
+      { "degree": "First-degree DWI", "level": "felony", "note": "Three prior impaired-driving incidents within ten years, or a prior felony DWI." }
+    ],
+    "aggravating_factors": ["Alcohol concentration of 0.16 or more", "Prior impaired-driving incident within ten years", "A child under 16 in the vehicle", "Test refusal"],
+    "hearing_flow": "Arraignment -> plea negotiation -> contested omnibus (probable-cause / suppression) hearing -> bench or jury trial",
+    "presiding_note": "DWI matters in Halden County are typically heard by Hon. Darnell Whitcomb; in other counties assign from the judge pool."
+  },
+  "real_estate_conventions": {
+    "note": "Recording, notary, and conveyancing conventions for the Meridian real-estate shape. Original to Meridian; functionally similar to an Upper-Midwest recording state with a dual abstract/Torrens system.",
+    "recording_office": {
+      "name": "County Recorder",
+      "note": "Deeds, mortgages, easements, and other instruments affecting title are recorded with the Recorder of the county where the land lies (e.g., 'Sable County Recorder'). Torrens (registered) land is handled by the County Registrar; the same office in most counties.",
+      "constructive_notice": "Proper recording gives constructive notice to subsequent purchasers; Meridian is a race-notice jurisdiction (Mer. Stat. § 507.34)."
+    },
+    "title_system": "Dual system: most land is 'abstract' property (chain of title via recorded instruments and an abstract of title); some parcels are Torrens 'registered' land evidenced by a Certificate of Title.",
+    "notary": {
+      "authority": "Meridian Notary Public, commissioned by the Secretary of State under the Meridian Notary Act (Mer. Stat. ch. 358).",
+      "acknowledgment_required": true,
+      "note": "A deed or mortgage must be acknowledged before a notary (or other authorized officer) to be recordable. Standard acknowledgment certificate and notary seal/stamp required."
+    },
+    "conveyancing_documents": ["Purchase Agreement", "Title Commitment (from a licensed title company)", "Warranty Deed or Quitclaim Deed", "Certificate of Real Estate Value (CRV) for transfers over $3,000", "Closing/Settlement Statement", "Well Disclosure Certificate where applicable"],
+    "transfer_taxes": {
+      "deed_transfer_tax": "State deed transfer tax on the consideration (Mer. Stat. § 287.21).",
+      "mortgage_registry_tax": "Mortgage registry tax on the principal debt secured (Mer. Stat. § 287.05)."
+    },
+    "common_disputes": "Easements, revocable licenses, boundary/curb-cut and access rights, and municipal authority over abutting roads and rights-of-way are recurring Meridian conveyancing issues (relevant to the real-estate shape)."
+  },
+  "sources_and_disclaimer": "All content in this file is fictional and created for legal-education simulation. Meridian, its counties, cities, courts, reporter, judges, bar, statutes, and rules do not exist. Any resemblance to a real jurisdiction, court, official, attorney, or person is coincidental and unintended."
+}

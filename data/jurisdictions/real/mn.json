@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0.0",
+  "@id": "JUR-MN",
+  "id": "JUR-MN",
+  "type": "jurisdiction",
+  "tier": "real",
+  "code": "MN",
+  "name": "State of Minnesota",
+  "short_name": "Minnesota",
+  "adjective": "Minnesota",
+  "used_by_shapes": ["attorney_discipline (m12)", "criminal_dwi (m15)"],
+  "policy_note": "This file is a STRUCTURAL research pointer for students, not a source of substantive law. It states only court-structure facts, citation-format templates, and links to official government research sites. It deliberately contains NO substantive statutory rules — student-facing packets are facts-only, and finding and reading the controlling law is the legal-research exercise. Chapter-level 'where to look' locators are navigational aids only. Instructor notes (separate files) may cite specific provisions, verified at publish.",
+  "court_structure": {
+    "trial_court": {
+      "name": "Minnesota District Court",
+      "note": "Court of general jurisdiction, organized into ten judicial districts by county. Handles civil, criminal, family, juvenile, and probate matters.",
+      "criminal_note": "Hears DWI/impaired-driving prosecutions."
+    },
+    "intermediate_appellate": {
+      "name": "Minnesota Court of Appeals",
+      "note": "Intermediate appellate court; three-judge panels."
+    },
+    "highest_court": {
+      "name": "Minnesota Supreme Court",
+      "note": "Court of last resort; also has original/ultimate jurisdiction over attorney discipline and admission."
+    },
+    "specialty_divisions": {
+      "juvenile": "Juvenile Division of the District Court",
+      "family": "Family Court Division of the District Court",
+      "probate": "Probate/Mental Health Division of the District Court"
+    }
+  },
+  "attorney_discipline": {
+    "regulator": {
+      "name": "Office of Lawyers Professional Responsibility",
+      "abbrev": "OLPR",
+      "head_title": "Director of the Office of Lawyers Professional Responsibility",
+      "note": "Investigates and prosecutes attorney-misconduct complaints; the Director files a Petition for Disciplinary Action. This is the real-tier analog of the fictional MOLC."
+    },
+    "board": {
+      "name": "Lawyers Professional Responsibility Board",
+      "abbrev": "LPRB",
+      "note": "Board of lawyers and public members; district ethics committees screen complaints; a referee (often a retired judge) is appointed to hold the hearing and make findings."
+    },
+    "ultimate_authority": "Minnesota Supreme Court",
+    "process_flow": "Complaint -> OLPR investigation -> district ethics committee -> Director's Petition for Disciplinary Action -> referee hearing -> Minnesota Supreme Court",
+    "rules_of_conduct_name": "Minnesota Rules of Professional Conduct",
+    "caption_style": "In re Petition for Disciplinary Action against <Respondent>, a Minnesota Attorney, Registration No. <#>"
+  },
+  "citation_formats": {
+    "statutes": { "template": "Minn. Stat. § <chapter>.<section>", "example": "Minn. Stat. § 481.15" },
+    "session_laws": { "template": "<year> Minn. Laws ch. <n>" },
+    "rules": {
+      "civil_procedure": "Minn. R. Civ. P. <n>",
+      "criminal_procedure": "Minn. R. Crim. P. <n>",
+      "evidence": "Minn. R. Evid. <n>",
+      "appellate_procedure": "Minn. R. Civ. App. P. <n>",
+      "professional_conduct": "Minn. R. Prof. Conduct <n.n>",
+      "rules_on_lawyers_discipline": "Minn. R. Prof. Resp. (RLPR) <n>"
+    },
+    "cases": {
+      "reporter": "N.W.2d / N.W.3d (North Western Reporter)",
+      "template": "<Case Name>, <vol> N.W.<ed> <page> (Minn. <year>)",
+      "appeals_parenthetical": "(Minn. Ct. App. <year>)"
+    }
+  },
+  "research_pointers": {
+    "note": "Official government sources only. Use these to locate and read the controlling law yourselves.",
+    "statutes_official": "https://www.revisor.mn.gov/statutes/",
+    "court_rules_official": "https://www.revisor.mn.gov/court_rules/",
+    "judicial_branch": "https://www.mncourts.gov/",
+    "legislature": "https://www.leg.mn.gov/",
+    "attorney_discipline_board": "https://lprb.mncourts.gov/",
+    "navigational_code_areas": [
+      "Impaired driving (DWI) offenses are collected in Minn. Stat. ch. 169A — a starting point for the m15 research exercise.",
+      "Attorney licensing and discipline authority appears around Minn. Stat. ch. 481 and the Rules on Lawyers Professional Responsibility — a starting point for m12."
+    ]
+  },
+  "disclaimer": "Structural/navigational reference only, current as of 2026. Verify all law against the official sources above before relying on it; nothing here is legal advice."
+}

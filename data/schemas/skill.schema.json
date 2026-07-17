@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/skill.schema.json",
+  "title": "Skill",
+  "description": "One Sonsteng skill (17 Legal Practice + 9 Practice Management surveyed, plus clearly-marked AI-era extension skills). FOLIO-mapped or explicitly no-equivalent.",
+  "version": "1.0.0",
+  "$defs": {
+    "folio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iri", "mapping_confidence"],
+      "properties": {
+        "iri": {
+          "type": "string",
+          "pattern": "^(https://folio\\.openlegalstandard\\.org/R[A-Za-z0-9]+|R[A-Za-z0-9]+)$",
+          "description": "FOLIO concept IRI (full or bare R-id)."
+        },
+        "mapping_confidence": {
+          "type": "string",
+          "enum": ["exact", "near", "parent"]
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_version", "@id", "name", "category", "extension"],
+  "oneOf": [
+    { "required": ["folio"], "not": { "required": ["no_folio_equivalent"] } },
+    {
+      "required": ["no_folio_equivalent"],
+      "not": { "required": ["folio"] },
+      "properties": { "no_folio_equivalent": { "const": true } }
+    }
+  ],
+  "description": "Exactly one of folio {iri, mapping_confidence} XOR no_folio_equivalent:true (validator ERROR on neither/both).",
+  "properties": {
+    "id": { "type": "string", "pattern": "^SK-(LP|PM)-\\d{2}$" },
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "@id": { "type": "string" },
+    "@context": { "type": ["string", "object"] },
+    "name": {
+      "type": "string",
+      "description": "Exact skill name per docs/research/skills-survey.md."
+    },
+    "alt_name": {
+      "type": "string",
+      "description": "Alternate phrasing (survey narrative vs. table label), where the source carries two."
+    },
+    "category": {
+      "type": "string",
+      "enum": ["legal_practice", "practice_management"]
+    },
+    "extension": {
+      "type": "boolean",
+      "description": "true only for AI-era extension skills; must be excluded from the surveyed-26 count."
+    },
+    "folio": { "$ref": "#/$defs/folio" },
+    "no_folio_equivalent": { "type": "boolean" },
+    "survey": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Survey data where reliably recoverable from the scans (percentages 0-100).",
+      "properties": {
+        "importance": { "type": "number", "minimum": 0, "maximum": 100 },
+        "preparedness": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    }
+  }
+}

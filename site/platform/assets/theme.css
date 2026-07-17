@@ -1,0 +1,570 @@
+/* ============================================================
+   Sonsteng Practicum — theme.css
+   "The Practicum Press" — the single shared tokens + primitives
+   partial. Compose pages from these primitives; never invent
+   per-page palettes, fonts, radii, or shadows.
+   Contract: docs/research/design-direction.md §§2-4, 8-10.
+
+   TABLE OF CONTENTS
+     1. Fonts import
+     2. Tokens  — palette, spacing/shape, type scale
+     3. Large-type mode (.type-lg)
+     4. Reset + body washes + paper grain
+     5. Base typography
+     6. Focus rings (a11y)
+     7. Primitive — .brass-rule + .running-head
+     8. Primitive — .card / .doc-card
+     9. Primitive — .chip (+ variants)
+    10. Primitive — .meter
+    11. Primitive — .stage-direction
+    12. Primitive — .ethics-flag
+    13. Primitive — .toc-rail
+    14. Primitive — .kpi-tile
+    15. Primitive — .ledger
+    16. Primitive — .segmented-toggle
+    17. Chrome — masthead / breadcrumb / footer
+    18. Motion
+    19. prefers-reduced-motion / prefers-contrast
+    20. Print
+   ============================================================ */
+
+/* ---------- 1. Fonts import (same-origin, embedded) ---------- */
+@import url("fonts.css");
+
+/* ---------- 2. Tokens ---------- */
+:root{
+  /* palette — inherited (do not alter) */
+  --paper:#f4efe4; --ink:#1d1a16; --ink-soft:#544d43; --ink-faint:#8a7f6d;
+  --brass:#a9822f; --brass-lite:#c19a44; --claret:#7c1e2b; --claret-deep:#5c141d;
+  --green:#2c4636; --line:rgba(29,26,22,.16); --line-soft:rgba(29,26,22,.09);
+  --shadow:0 22px 60px -28px rgba(40,20,10,.55);
+  /* palette — platform extensions */
+  --paper-2:#efe8d9; --paper-3:#e8dfcc; --paper-edge:#dcd0b8;
+  --brass-wash:rgba(169,130,47,.10); --claret-wash:rgba(124,30,43,.07); --green-wash:rgba(44,70,54,.09);
+  /* palette — semantic */
+  --tier-volunteered:#2c4636; --tier-revealed:#a9822f; --tier-rapport:#7c1e2b;
+  --tier-concealed:#544d43; --tier-unknown:#8a7f6d; --flag-ethics:#7c1e2b;
+  --meter-track:rgba(29,26,22,.10);
+  --ok:#2c4636; --warn:#a9822f; --stop:#7c1e2b; --ink-invert:#f4efe4;
+
+  /* spacing + shape */
+  --space:1rem; --sp-2:.5rem; --sp-3:.75rem; --sp-6:1.5rem; --sp-8:2rem; --sp-12:3rem; --sp-16:4rem;
+  --maxw:72rem; --maxw-read:44rem; --gutter:clamp(1.1rem,3vw,2.5rem);
+  --radius:3px; --radius-card:5px;      /* print-crisp, never pill */
+  --rule:1px; --rule-bold:2.5px;
+  --ease:cubic-bezier(.2,.7,.2,1); --dur-fast:140ms; --dur:260ms; --dur-slow:520ms;
+
+  /* type families (never Inter/Roboto/Arial/system-ui) */
+  --font-display:'Fraunces', Georgia, serif;
+  --font-body:'Spectral', Georgia, serif;
+  --font-mono:'Fragment Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  /* type scale (rem, fluid) */
+  --fs-mono-xs:.72rem; --fs-xs:.82rem; --fs-sm:.92rem; --fs-base:1.06rem;
+  --fs-md:1.2rem; --fs-lg:1.45rem;
+  --fs-xl:clamp(1.7rem,1.2rem+2vw,2.3rem);
+  --fs-2xl:clamp(2.2rem,1.4rem+3.5vw,3.4rem);
+  --fs-display:clamp(2.8rem,1.6rem+5vw,5rem);
+
+  /* paper grain — inline feTurbulence, data-URI (no requests) */
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+/* ---------- 3. Large-type mode (first-class; John & Roger) ---------- */
+html.type-lg{
+  --fs-mono-xs:.86rem; --fs-xs:.98rem; --fs-sm:1.1rem; --fs-base:1.28rem;
+  --fs-md:1.45rem; --fs-lg:1.72rem;
+  --fs-xl:clamp(2rem,1.4rem+2.4vw,2.7rem);
+  --fs-2xl:clamp(2.6rem,1.6rem+4vw,3.9rem);
+  --fs-display:clamp(3.2rem,1.8rem+5.5vw,5.6rem);
+}
+
+/* ---------- 4. Reset + body washes + paper grain ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  margin:0;
+  min-height:100vh;
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-size:var(--fs-base);
+  line-height:1.65;
+  font-synthesis:none;
+  -webkit-font-smoothing:antialiased;
+  /* two fixed radial washes: brass top-right, claret top-left */
+  background:
+    radial-gradient(58rem 40rem at 108% -8%, var(--brass-wash), transparent 60%),
+    radial-gradient(48rem 36rem at -8% -6%, var(--claret-wash), transparent 55%),
+    var(--paper);
+  background-attachment:fixed;
+}
+body::before{                    /* letterpress paper grain */
+  content:"";
+  position:fixed;inset:0;
+  z-index:-1;pointer-events:none;
+  background:var(--grain);
+  background-size:140px 140px;
+  opacity:.03;
+  mix-blend-mode:multiply;
+}
+img,svg{max-width:100%;height:auto;vertical-align:middle}
+
+/* ---------- 5. Base typography ---------- */
+h1,h2,h3,h4{
+  font-family:var(--font-display);
+  line-height:1.12;
+  font-weight:600;
+  margin:0 0 var(--sp-3);
+  text-wrap:balance;
+}
+h1{font-size:var(--fs-2xl);font-weight:900;letter-spacing:-.02em}
+h2{font-size:var(--fs-xl);letter-spacing:-.015em}
+h3{font-size:var(--fs-lg)}
+h4{font-size:var(--fs-md)}
+p{margin:0 0 var(--space)}
+.prose{max-width:var(--maxw-read)}
+.prose p,.measure{max-width:68ch}         /* prose measure ≤68ch */
+strong,b{font-weight:600}
+em,i,.stage,cite{font-style:italic}
+small{font-size:var(--fs-sm)}
+
+/* machine voice only — codes, IRIs, counts, money, timestamps, tags */
+.mono,code,kbd,samp{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+}
+.label{                          /* uppercase mono micro-label */
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--ink-soft);
+}
+.num{font-variant-numeric:tabular-nums}
+
+/* links — brass, underline wipes left→right on hover/focus */
+a{color:var(--claret);text-decoration:none}
+a.link,.link{
+  color:var(--ink);
+  background-image:linear-gradient(var(--brass),var(--brass));
+  background-repeat:no-repeat;
+  background-position:0 100%;
+  background-size:0% var(--rule-bold);
+  transition:background-size var(--dur) var(--ease);
+  padding-bottom:1px;
+}
+a.link:hover,.link:hover,a.link:focus-visible,.link:focus-visible{
+  background-size:100% var(--rule-bold);
+}
+
+/* ---------- 6. Focus rings (every interactive element) ---------- */
+a,button,input,textarea,select,summary,[tabindex]{outline:none}
+a:focus-visible,button:focus-visible,input:focus-visible,
+textarea:focus-visible,select:focus-visible,summary:focus-visible,
+[tabindex]:focus-visible,.segmented-toggle button:focus-visible{
+  outline:var(--rule-bold) solid var(--claret);
+  outline-offset:2px;
+  border-radius:var(--radius);
+}
+
+/* ---------- 7. Primitive — .brass-rule + .running-head ---------- */
+.brass-rule{                     /* 1px brass divider + 2px claret left tick */
+  position:relative;
+  height:var(--rule);
+  background:var(--brass);
+  border:0;margin:var(--sp-6) 0;
+  transform-origin:left center;
+  transition:transform var(--dur-slow) var(--ease);
+}
+.brass-rule::before{
+  content:"";
+  position:absolute;left:0;top:50%;
+  width:var(--rule-bold);height:12px;
+  transform:translateY(-50%);
+  background:var(--claret);
+}
+.brass-rule--bold{height:var(--rule-bold)}
+
+/* running head — mono small-caps sitting IN the rule (printed-brief header) */
+.running-head{
+  display:flex;align-items:center;gap:var(--sp-3);
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:var(--ink-soft);
+  font-variant-numeric:tabular-nums;
+  padding:0 0 var(--sp-2);
+  border-bottom:var(--rule) solid var(--brass);
+  position:relative;
+}
+.running-head::before{
+  content:"";position:absolute;left:0;bottom:-1px;
+  width:var(--rule-bold);height:12px;background:var(--claret);
+}
+.running-head .rh-spacer{flex:1}
+.running-head .rh-right{color:var(--ink-faint)}
+
+/* ---------- 8. Primitive — .card / .doc-card ---------- */
+.card{
+  background:var(--paper-2);
+  border:var(--rule) solid var(--line);
+  border-radius:var(--radius-card);
+  padding:var(--sp-6);
+  box-shadow:inset 0 0 0 var(--rule) var(--paper-edge);   /* hairline bevel */
+  transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.card:hover{                     /* lift 2px */
+  transform:translateY(-2px);
+  box-shadow:inset 0 0 0 var(--rule) var(--paper-edge), var(--shadow);
+}
+.card > :last-child{margin-bottom:0}
+
+/* inset case-file document card */
+.doc-card{
+  background:var(--paper-3);
+  border:var(--rule) solid var(--line);
+  border-left:var(--rule-bold) solid var(--brass);
+  border-radius:var(--radius);
+  padding:var(--sp-6);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35);         /* data-well inset */
+}
+.doc-card > :last-child{margin-bottom:0}
+.doc-card .doc-card__meta{
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-faint);margin-bottom:var(--sp-2);
+}
+
+/* ---------- 9. Primitive — .chip (+ variants) ---------- */
+.chip{
+  display:inline-flex;align-items:center;gap:.4em;
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  line-height:1;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;
+  color:var(--ink);
+  background:var(--paper);
+  border:var(--rule) solid var(--line);
+  border-left:var(--rule-bold) solid var(--ink-faint);
+  border-radius:var(--radius);              /* never pill */
+  padding:.34em .6em;
+  white-space:nowrap;
+}
+.chip::before{content:attr(data-dot);}       /* optional glyph/label prefix */
+.chip--folio{border-left-color:var(--ink-faint);color:var(--ink-soft);background:var(--paper-3)}
+.chip--tier-volunteered{border-left-color:var(--tier-volunteered);color:var(--green)}
+.chip--tier-revealed{border-left-color:var(--tier-revealed);color:var(--ink)}   /* brass = decorative border; text stays ink */
+.chip--tier-rapport{border-left-color:var(--tier-rapport);color:var(--claret)}
+.chip--tier-concealed{border-left-color:var(--tier-concealed);color:var(--ink-soft)}
+.chip--tier-unknown{border-left-color:var(--tier-unknown);color:var(--ink-faint)}
+.chip--state{border-left-color:var(--green);color:var(--green);background:var(--green-wash)}
+.chip--meridian{border-left-color:var(--brass);color:var(--ink);background:var(--brass-wash)}
+.chip--meridian::before{content:"⌘";color:var(--brass);margin-right:.15em}
+.chip--coming-soon{border-left-color:var(--ink-faint);color:var(--ink-faint);background:var(--paper-3);font-style:normal;opacity:.85}
+
+/* ---------- 10. Primitive — .meter (disclosure / rubric) ---------- */
+.meter{
+  display:block;
+  width:100%;height:8px;
+  background:var(--meter-track);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+.meter__fill{
+  display:block;height:100%;
+  width:var(--meter-value,0%);
+  background:var(--brass);
+  border-radius:var(--radius);
+  transition:width var(--dur-slow) var(--ease);   /* animate on first view */
+}
+.meter--ok .meter__fill{background:var(--ok)}
+.meter--warn .meter__fill{background:var(--warn)}
+.meter--stop .meter__fill{background:var(--stop)}
+.meter__label{
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  font-variant-numeric:tabular-nums;color:var(--ink-soft);
+}
+
+/* ---------- 11. Primitive — .stage-direction (in-fiction) ---------- */
+.stage-direction{
+  font-family:var(--font-body);
+  font-style:italic;
+  color:var(--ink-soft);
+  background:var(--paper-3);
+  border-left:var(--rule-bold) solid var(--claret);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:var(--sp-3) var(--sp-6);
+  margin:var(--sp-6) 0;
+  max-width:var(--maxw-read);
+}
+
+/* ---------- 12. Primitive — .ethics-flag (Rule 4.2 etc.) ---------- */
+.ethics-flag{                    /* role="status" in markup */
+  border:var(--rule-bold) solid var(--claret);
+  border-radius:var(--radius);
+  background:var(--claret-wash);
+  padding:var(--sp-6);
+  margin:var(--sp-6) 0;
+  max-width:var(--maxw-read);
+}
+.ethics-flag__head{
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--claret);font-weight:400;
+  margin:0 0 var(--sp-2);
+}
+.ethics-flag__note{margin:0;color:var(--ink)}
+.ethics-flag__tag{
+  display:inline-block;margin-top:var(--sp-3);
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--claret-deep);
+}
+
+/* ---------- 13. Primitive — .toc-rail (scroll-spied) ---------- */
+.toc-rail{
+  position:sticky;top:var(--sp-8);
+  align-self:start;
+  font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  border-left:var(--rule) solid var(--line);
+  padding-left:var(--sp-3);
+  display:flex;flex-direction:column;gap:var(--sp-2);
+}
+.toc-rail a{
+  color:var(--ink-faint);
+  padding:.2em 0 .2em var(--sp-2);
+  margin-left:calc(-1 * var(--sp-3) - var(--rule));
+  border-left:var(--rule-bold) solid transparent;
+  font-variant-numeric:tabular-nums;
+}
+.toc-rail a:hover{color:var(--ink-soft)}
+.toc-rail a[aria-current="true"],
+.toc-rail a[aria-current="page"]{
+  color:var(--claret);
+  border-left-color:var(--claret);
+}
+
+/* ---------- 14. Primitive — .kpi-tile (practice ledger) ---------- */
+.kpi-tile{
+  background:var(--paper-2);
+  border:var(--rule) solid var(--line);
+  border-top:var(--rule-bold) solid var(--brass);
+  border-radius:var(--radius-card);
+  padding:var(--sp-6);
+}
+.kpi-tile__label{
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+  margin:0 0 var(--sp-2);
+}
+.kpi-tile__value{
+  font-family:var(--font-display);
+  font-size:var(--fs-2xl);font-weight:900;line-height:1;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  color:var(--ink);margin:0;
+}
+.kpi-tile__delta{
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  font-variant-numeric:tabular-nums;letter-spacing:.04em;
+  margin-top:var(--sp-2);color:var(--ink-soft);
+}
+.kpi-tile__delta.is-up{color:var(--green)}
+.kpi-tile__delta.is-down{color:var(--claret)}
+.kpi-row{
+  display:grid;gap:var(--sp-6);
+  grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));
+}
+
+/* ---------- 15. Primitive — .ledger (mono, right-aligned) ---------- */
+.ledger{
+  width:100%;
+  border-collapse:collapse;
+  font-family:var(--font-body);
+  font-size:var(--fs-sm);
+}
+.ledger caption{
+  text-align:left;
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+  padding-bottom:var(--sp-2);
+}
+.ledger th,.ledger td{
+  padding:var(--sp-2) var(--sp-3);
+  border-bottom:var(--rule) solid var(--line-soft);
+}
+.ledger thead th{
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-soft);text-align:left;font-weight:400;
+  border-bottom:var(--rule) solid var(--brass);
+}
+.ledger .num,
+.ledger td.num,.ledger th.num{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+}
+.ledger tbody tr:hover,.ledger tbody tr:hover{background:var(--brass-wash)}
+.ledger tfoot td{
+  border-top:var(--rule-bold) solid var(--brass);
+  border-bottom:0;font-weight:600;
+}
+
+/* ---------- 16. Primitive — .segmented-toggle (Meridian ⇄ real) ---------- */
+.segmented-toggle{
+  display:inline-flex;
+  border:var(--rule) solid var(--line);
+  border-radius:var(--radius);
+  background:var(--paper-3);
+  padding:2px;gap:2px;
+}
+.segmented-toggle button{
+  appearance:none;cursor:pointer;
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-soft);
+  background:transparent;border:0;
+  border-radius:var(--radius);
+  padding:.5em .9em;min-height:2.4em;
+  transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.segmented-toggle button[aria-pressed="true"],
+.segmented-toggle button[aria-selected="true"]{
+  color:var(--ink);
+  background:var(--paper);
+  box-shadow:inset 0 0 0 var(--rule) var(--brass);
+}
+.segmented-toggle[data-side="real"] button[aria-pressed="true"]{
+  box-shadow:inset 0 0 0 var(--rule) var(--green);color:var(--green);
+}
+
+/* ---------- 17. Chrome — masthead / breadcrumb / footer ---------- */
+.masthead{
+  position:sticky;top:0;z-index:20;
+  border-top:var(--rule-bold) solid var(--brass);
+  border-bottom:var(--rule) solid var(--line);
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:none;
+}
+.masthead__inner{
+  max-width:var(--maxw);margin:0 auto;
+  padding:var(--sp-3) var(--gutter);
+  display:flex;align-items:center;gap:var(--sp-6);
+}
+.masthead__brand{
+  font-family:var(--font-display);
+  font-weight:900;letter-spacing:-.01em;
+  font-size:var(--fs-md);color:var(--ink);
+}
+.masthead__docket{
+  margin-left:auto;
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-faint);font-variant-numeric:tabular-nums;
+}
+.breadcrumb{
+  max-width:var(--maxw);margin:0 auto;
+  padding:var(--sp-3) var(--gutter);
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+}
+.breadcrumb a{color:var(--brass)}
+.breadcrumb .sep{color:var(--line);margin:0 .5em}
+
+.site-footer{                    /* forest-green cloth binding */
+  margin-top:var(--sp-16);
+  background:var(--green);
+  color:var(--ink-invert);
+  border-top:var(--rule-bold) solid var(--brass);
+}
+.site-footer__inner{
+  max-width:var(--maxw);margin:0 auto;
+  padding:var(--sp-8) var(--gutter);
+  display:flex;flex-wrap:wrap;gap:var(--sp-6);
+  align-items:center;justify-content:space-between;
+  font-size:var(--fs-sm);
+}
+.site-footer a{color:var(--ink-invert);text-decoration:underline;text-underline-offset:3px}
+.site-footer .mono{color:var(--brass-lite)}
+
+/* layout helper */
+.wrap{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}
+
+/* ---------- 18. Motion ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes msg-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.reveal{animation:rise var(--dur-slow) var(--ease) both}
+.stagger > *{animation:rise var(--dur) var(--ease) both}
+.stagger > *:nth-child(1){animation-delay:0ms}
+.stagger > *:nth-child(2){animation-delay:60ms}
+.stagger > *:nth-child(3){animation-delay:120ms}
+.stagger > *:nth-child(4){animation-delay:180ms}
+.stagger > *:nth-child(5){animation-delay:240ms}
+.stagger > *:nth-child(6){animation-delay:300ms}
+.stagger > *:nth-child(7){animation-delay:360ms}
+.stagger > *:nth-child(8){animation-delay:420ms}
+.stagger > *:nth-child(n+9){animation-delay:480ms}
+
+/* brass rules draw in (scaleX 0→1); add .is-in when in view */
+.brass-rule.draw{transform:scaleX(0)}
+.brass-rule.draw.is-in{transform:scaleX(1)}
+
+/* client (in-fiction) messages fade + rise */
+.msg-client{animation:msg-rise var(--dur) var(--ease) both}
+
+/* claret ruled-tick "considering" indicator (not bouncing dots) */
+.considering{
+  display:inline-block;width:var(--rule-bold);height:1em;
+  background:var(--claret);vertical-align:-.15em;
+  animation:consider 1s steps(2,jump-none) infinite;
+}
+@keyframes consider{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* ---------- 19. prefers-reduced-motion / prefers-contrast ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  .card:hover{transform:none}         /* disable all transforms */
+  .brass-rule,.brass-rule.draw{transform:none}
+  .brass-rule.draw{transform:scaleX(1)}
+  .reveal,.stagger > *,.msg-client{animation:none;opacity:1;transform:none}
+  .considering{animation:none;opacity:.6}
+}
+@media (prefers-contrast: more){
+  :root{                              /* darken brass→ink/claret for text */
+    --brass:#6b5216; --brass-lite:#7c1e2b; --ink-faint:#544d43;
+    --line:rgba(29,26,22,.32); --line-soft:rgba(29,26,22,.2);
+  }
+}
+
+/* ---------- 20. Print (galley/packet output) ---------- */
+@media print{
+  :root{--shadow:none}
+  html,body{
+    background:#fff !important;color:#000;
+  }
+  body::before{display:none}          /* strip grain + washes */
+  .masthead,.breadcrumb,.site-footer,.toc-rail,.segmented-toggle,
+  .no-print{display:none !important}
+  a{color:#000;text-decoration:underline}
+  a[href^="http"]::after{content:" <" attr(href) ">";font-family:var(--font-mono);font-size:.85em}
+  .card,.doc-card,.kpi-tile,.ethics-flag,.stage-direction{
+    background:#fff !important;box-shadow:none !important;
+    border-color:#000;break-inside:avoid;
+  }
+  .brass-rule{background:#000;transform:none}
+  .part{break-before:page}            /* page-break per packet part */
+  .instructor-notes{display:none !important}   /* never in print */
+}

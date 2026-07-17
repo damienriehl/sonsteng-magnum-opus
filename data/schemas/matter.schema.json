@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/matter.schema.json",
+  "title": "Matter",
+  "description": "A single synthetic legal matter: metadata, jurisdiction, sides/parties, skill/task mappings, and listings of its child artifacts (personas, witnesses, exhibits). One per data/matters/<slug>/matter.json.",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "@id",
+    "slug",
+    "shape",
+    "tier",
+    "jurisdiction",
+    "caption",
+    "sides",
+    "parties",
+    "client_id",
+    "fee_type",
+    "skill_refs",
+    "task_refs",
+    "personas",
+    "witnesses",
+    "exhibits",
+    "open_date",
+    "as_of_date"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^m\\d{2}$",
+      "description": "Matter id, frozen in the Phase 0 registry: m01 .. m20."
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Must equal spine-manifest.json schemas.matter."
+    },
+    "@id": {
+      "type": "string",
+      "description": "Canonical JSON-LD @id; base https://sonsteng.damienriehl.com/spine/ (see @context)."
+    },
+    "@context": {
+      "type": ["string", "object"],
+      "description": "Optional JSON-LD context mapping @id to the spine base IRI."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^m\\d{2}-[a-z0-9-]+$",
+      "description": "Directory slug, e.g. m06-noncompete-ny."
+    },
+    "shape": {
+      "type": "string",
+      "description": "Pedagogical shape / Sonsteng analog, e.g. 'non-compete', 'auto-negligence'."
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["meridian", "real"]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "enum": ["meridian", "MN", "NY", "CA", "FL", "IL", "TX"],
+      "description": "Meridian canon for the fictional tier; a real state code for the real tier."
+    },
+    "caption": {
+      "type": "string",
+      "description": "Case caption, e.g. 'Silverline Health Corp. v. Baines'."
+    },
+    "sides": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role_id", "label", "party_names"],
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "pattern": "^m\\d{2}\\.role\\.[a-z0-9-]+$",
+            "description": "e.g. m06.role.plaintiff. Referenced by persona.interviewable_by."
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable side label, e.g. 'Plaintiff / Employer'."
+          },
+          "party_names": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "confidential_fact_refs": {
+            "type": "array",
+            "description": "Per-side confidential facts (e.g. two-sided RE negotiation).",
+            "items": {
+              "type": "string",
+              "pattern": "^m\\d{2}\\.fact\\.\\d{3}$"
+            }
+          }
+        }
+      }
+    },
+    "parties": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "role"],
+        "properties": {
+          "name": { "type": "string" },
+          "role": {
+            "type": "string",
+            "description": "Party's substantive role, e.g. 'defendant employee', 'buyer'."
+          },
+          "side_role_id": {
+            "type": "string",
+            "pattern": "^m\\d{2}\\.role\\.[a-z0-9-]+$",
+            "description": "Optional link to the side this party belongs to."
+          }
+        }
+      }
+    },
+    "client_id": {
+      "type": "string",
+      "pattern": "^FIRM-C-\\d{2}$",
+      "description": "The firm's client for this matter; resolves in firm.clients."
+    },
+    "fee_type": {
+      "type": "string",
+      "enum": ["hourly", "contingency", "flat", "retainer"]
+    },
+    "skill_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^SK-(LP|PM)-\\d{2}$" },
+      "description": "Skills exercised by this matter; resolve in taxonomy."
+    },
+    "task_refs": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^TSK-\\d{3}$" },
+      "description": "Tasks exercised by this matter; resolve in taxonomy."
+    },
+    "personas": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "pattern": "^m\\d{2}\\.per\\.[a-z0-9-]+$" },
+      "description": "Listing of interviewable personas (bidirectional with each persona file)."
+    },
+    "witnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^m\\d{2}\\.wit\\.[a-z0-9-]+$" },
+          "name": { "type": "string" }
+        }
+      }
+    },
+    "exhibits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^m\\d{2}\\.exh\\.\\d{3}$" },
+          "title": { "type": "string" }
+        }
+      }
+    },
+    "open_date": { "type": "string", "format": "date" },
+    "as_of_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Simulation 'now'; nothing in the matter may be dated after this."
+    }
+  }
+}

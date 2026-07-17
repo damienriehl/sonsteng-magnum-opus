@@ -1,0 +1,43 @@
+{
+  "id": "m06.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m06.rub",
+  "matter_id": "m06",
+  "declared_total": 189,
+  "criteria": [
+    {
+      "id": "m06.rub.c01",
+      "name": "Injunction-standard analysis",
+      "description": "Correctly applies the temporary-injunction standard and non-compete enforceability factors.",
+      "weight_points": 100,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-042",
+      "subcriteria": [
+        {
+          "id": "m06.rub.c01.s01",
+          "name": "Likelihood of success",
+          "description": "Analyzes likelihood of success on the merits.",
+          "weight_points": 60
+        },
+        {
+          "id": "m06.rub.c01.s02",
+          "name": "Irreparable harm",
+          "description": "Analyzes irreparable harm and balance of equities.",
+          "weight_points": 40
+        }
+      ]
+    },
+    {
+      "id": "m06.rub.c02",
+      "name": "Persuasive motion writing",
+      "description": "Clear, well-organized, rule-compliant memorandum.",
+      "weight_points": 89,
+      "skill_id": "SK-LP-17"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 189 },
+    { "grade": "A-", "points": 180 },
+    { "grade": "B+", "points": 170 }
+  ]
+}
