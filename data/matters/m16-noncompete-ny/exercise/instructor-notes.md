@@ -1,0 +1,26 @@
+# Instructor Notes — m16 Hudson Valley Biometrics v. Iyer (Non-Compete / Trade Secret, New York)
+
+*Instructor-facing only. Never distribute with the student packet. Citations below are navigational pointers to official New York sources, marked instructor-verified-at-publish. No answer key or intentional-error set is included in this build.*
+
+## What the exercise is testing
+
+This is a restrictive-covenant defense arising on an emergency motion built on an **inevitable-disclosure** theory — the New York counterpart to the fictional-tier m06 (a deliberate real-vs.-Meridian pairing, and a further contrast with California, which broadly voids employee non-competes by statute). It exercises legal analysis and reasoning (SK-LP-02), fact gathering (SK-LP-07), counseling (SK-LP-10), litigation (SK-LP-14), professional-responsibility sensitivity (SK-LP-16), and legal drafting (SK-LP-17). The rubric total is 189, matching the master-outline pin for the non-compete shape.
+
+## Governing New York authorities (instructor-verified pointers)
+
+- **Preliminary injunctions.** N.Y. C.P.L.R. Article 63 (§§ 6301, 6312) governs preliminary injunctive relief; the movant must show likelihood of success, irreparable injury absent the injunction, and a balance of equities in its favor. The Commercial Division of Supreme Court, Dutchess County, hears the motion (see 22 NYCRR § 202.70, Commercial Division Rules).
+- **Restrictive covenants / reasonableness.** New York applies a common-law reasonableness test rooted in Court of Appeals case law: a covenant is enforceable only to the extent it (1) is no greater than necessary to protect a legitimate interest (trade secrets, confidential customer lists, or unique/extraordinary services), (2) is not unreasonably burdensome to the employee, and (3) is not injurious to the public. Students should research the current standard and the treatment of overbroad covenants (partial enforcement / "blue pencil"), and evaluate the two-year, geographically unlimited clause (facts 007–008) as a strong overbreadth target. Note the § 12 blue-pencil clause in Exhibit 001.
+- **Trade secrets and "inevitable disclosure."** New York recognizes trade-secret misappropriation at common law (and, for later-accruing claims, under the federal Defend Trade Secrets Act, 18 U.S.C. § 1836, where jurisdictional requirements are met). New York courts have been **cautious and skeptical** toward the inevitable-disclosure doctrine, generally requiring more than an employee's general knowledge. The reasonable-measures and "generally known" prongs are the pressure points here: the engine rests on published research and open-source libraries, lived in shared repositories, and was discussed openly, with no confidential marking (facts 009–011, 032). General skill and knowledge in the employee's memory are ordinarily hers to use (facts 022, 037).
+- **Professional responsibility.** N.Y. R. Prof. Conduct 4.2 (22 NYCRR Part 1200) — communication with represented persons. Roland Steinhauer is a co-founder/management-level representative of represented adverse party HVB; direct contact by defense counsel is barred without opposing counsel's consent. The chat persona fires an in-app 4.2 teaching moment, not a silent block. Note also the pro-hac-vice / local-counsel issue flagged in the engagement letter for a Meridian firm appearing in New York.
+
+## Teaching arc and the hard facts
+
+The pedagogical spine is the tension between an **overbroad covenant plus a weak trade-secret record** and a **client with a few genuinely awkward facts**: the emailed personal folder containing one hand-drawn architecture diagram (fact 021), the personal engineering notebook she took (fact 022), the recruiting-flavored conversation with Vandermeer (fact 023), and — most dangerous — a year-old boastful remark that she could "rebuild the engine anywhere" (fact 024, concealed). Strong students will (1) attack protectability and reasonable measures, (2) argue New York's skepticism of inevitable disclosure against a clean forensic record (facts 018–019), (3) distinguish the different-product/different-market new role (facts 015–016) and the ethical wall (fact 033), and (4) counsel candidly about the soft facts rather than bury them. The rapport-gated client facts (021–023) surface only with confidentiality reassurance and a non-judgmental posture — a counseling lesson in itself. The concealed remark (024) is designed to test whether the student earns enough trust to learn the worst fact before opposing counsel does.
+
+## Common student errors to probe in debrief
+
+- Conflating covenant enforceability with trade-secret misappropriation, and treating inevitable disclosure as a settled, employer-friendly rule.
+- Overlooking the Rule 4.2 problem and "interviewing" Steinhauer directly.
+- Failing to surface or confront the emailed diagram and the offhand remark in the fact statement (candor and credibility).
+- Treating the engine as obviously secret without engaging the public-foundations, shared-repository, and no-marking evidence on the reasonable-measures prong.
+- Missing the geographic-scope and duration overbreadth and the absence of independent consideration for an at-will covenant.

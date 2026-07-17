@@ -1,0 +1,48 @@
+{
+  "id": "m03",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m03",
+  "slug": "m03-tort-meridian",
+  "shape": "auto_negligence",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "Lorraine Petimeyer v. Douglas Ashcombe",
+  "sides": [
+    {
+      "role_id": "m03.role.plaintiff",
+      "label": "Plaintiff / Lorraine Petimeyer",
+      "party_names": ["Lorraine Petimeyer"]
+    },
+    {
+      "role_id": "m03.role.defense",
+      "label": "Defendant / Douglas Ashcombe",
+      "party_names": ["Douglas Ashcombe"]
+    }
+  ],
+  "parties": [
+    { "name": "Lorraine Petimeyer", "role": "plaintiff / injured motorist", "side_role_id": "m03.role.plaintiff" },
+    { "name": "Douglas Ashcombe", "role": "defendant / striking driver", "side_role_id": "m03.role.defense" }
+  ],
+  "client_id": "FIRM-C-03",
+  "fee_type": "contingency",
+  "skill_refs": ["SK-LP-01", "SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-004", "TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-034", "TSK-048", "TSK-049", "TSK-051", "TSK-060"],
+  "personas": ["m03.per.petimeyer", "m03.per.quesada", "m03.per.ashcombe"],
+  "witnesses": [
+    { "id": "m03.wit.harmon", "name": "Officer Denise Harmon" },
+    { "id": "m03.wit.quesada", "name": "Rafael Quesada" },
+    { "id": "m03.wit.ekwueme", "name": "Dr. Ifeoma Ekwueme" },
+    { "id": "m03.wit.bexley", "name": "Dr. Alan Bexley" }
+  ],
+  "exhibits": [
+    { "id": "m03.exh.001", "title": "Elleston Police Traffic Crash Report" },
+    { "id": "m03.exh.002", "title": "Intersection & Scene Diagram" },
+    { "id": "m03.exh.003", "title": "Vehicle-Damage Photographs (Described)" },
+    { "id": "m03.exh.004", "title": "Medical Records & Billing Summary" },
+    { "id": "m03.exh.005", "title": "Cellular-Records Excerpt (Described)" },
+    { "id": "m03.exh.006", "title": "Vehicle Repair Appraisal" },
+    { "id": "m03.exh.007", "title": "Wage-Loss Statement" }
+  ],
+  "open_date": "2025-02-13",
+  "as_of_date": "2026-06-30"
+}

@@ -1,0 +1,70 @@
+{
+  "id": "m08.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m08.biz",
+  "matter_id": "m08",
+  "intake": {
+    "client_name": "Tobias Merrow, a minor (parent: Dana Merrow)",
+    "contact": {
+      "email": "dana.merrow@example.com",
+      "phone": "555-0173",
+      "address": "1408 Cedarloft Lane, Apt. B, Norsholm, Meridian 55902"
+    },
+    "matter_summary": "Represent a 15-year-old in a Juvenile Division delinquency petition alleging theft and fifth-degree assault arising from a March 14, 2026 incident at a Norsholm electronics store; evaluate a diversion offer against a contested hearing.",
+    "intake_date": "2026-03-18",
+    "referral_source": "referral from the school counselor at Larkmont High School"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Tobias Merrow",
+      "Dana Merrow",
+      "VoltHaus Electronics",
+      "Curtis Vanderhoek",
+      "Kellan Dubourg",
+      "State of Meridian (Halden County Attorney)"
+    ],
+    "result": "clear",
+    "notes": "No current or former firm client appears among the parties or witnesses. The firm does not and will not represent the separately charged co-respondent, Kellan Dubourg, who has appointed counsel; noted to avoid any adverse-representation issue.",
+    "checked_date": "2026-03-18"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-03-19",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m08.te.0001", "date": "2026-03-18", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial intake interview with Tobias and Dana Merrow; preliminary case assessment; conflicts screen." },
+    { "id": "m08.te.0002", "date": "2026-03-19", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Draft engagement letter; open matter file; calendar first appearance and key deadlines." },
+    { "id": "m08.te.0003", "date": "2026-03-24", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Review police report, loss-prevention report, and CCTV still-frame log; issue-spot theft value and assault-intent questions; note evidentiary gaps." },
+    { "id": "m08.te.0004", "date": "2026-03-27", "timekeeper_id": "FIRM-TK-02", "hours": 1.2, "rate": 225, "narrative": "Telephone interview of store associate witness (N. Quintero); memo to file." },
+    { "id": "m08.te.0005", "date": "2026-04-02", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Appear at first appearance in Juvenile Division; enter denial on behalf of the child; obtain scheduling order." },
+    { "id": "m08.te.0006", "date": "2026-04-10", "timekeeper_id": "FIRM-TK-02", "hours": 0.9, "rate": 225, "narrative": "Obtain school records; confer with school counselor (A. Nwosu) regarding disposition supports and character statement." },
+    { "id": "m08.te.0007", "date": "2026-04-21", "timekeeper_id": "FIRM-TK-01", "hours": 1.3, "rate": 250, "narrative": "Negotiation call with Assistant County Attorney regarding diversion eligibility and restitution given intact recovery of console." },
+    { "id": "m08.te.0008", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-01", "hours": 1.1, "rate": 250, "narrative": "Client counseling session with Tobias and Dana Merrow: diversion offer versus contested hearing; risks and priorities." },
+    { "id": "m08.te.0009", "date": "2026-05-19", "timekeeper_id": "FIRM-TK-02", "hours": 0.6, "rate": 225, "narrative": "Draft strategic settlement-and-negotiation plan memo; outline restitution position." }
+  ],
+  "invoices": [
+    {
+      "id": "m08.inv.001",
+      "date": "2026-05-01",
+      "period": { "start": "2026-03-18", "end": "2026-04-30" },
+      "fees": 1777.50,
+      "expenses": 40.00,
+      "payments_received": 1000.00,
+      "balance_due": 817.50,
+      "line_refs": ["m08.te.0001", "m08.te.0002", "m08.te.0003", "m08.te.0004", "m08.te.0005", "m08.te.0006"]
+    },
+    {
+      "id": "m08.inv.002",
+      "date": "2026-06-02",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 735.00,
+      "expenses": 0.00,
+      "payments_received": 0.00,
+      "balance_due": 735.00,
+      "line_refs": ["m08.te.0007", "m08.te.0008", "m08.te.0009"]
+    }
+  ],
+  "trust_entries": []
+}

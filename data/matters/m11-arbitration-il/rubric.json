@@ -1,0 +1,114 @@
+{
+  "id": "m11.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m11.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m11",
+  "declared_total": 202,
+  "criteria": [
+    {
+      "id": "m11.rub.c01",
+      "name": "Statement of the Case (written advocacy)",
+      "description": "Drafts a clear, well-organized, persuasive arbitration statement of the case that frames the issues, marshals the facts, and states the requested relief.",
+      "weight_points": 56,
+      "skill_id": "SK-LP-09",
+      "task_id": "TSK-032",
+      "subcriteria": [
+        {
+          "id": "m11.rub.c01.s01",
+          "name": "Issue framing",
+          "description": "Frames the retaliation and unpaid-wage issues for the arbitral forum with a coherent theory.",
+          "weight_points": 20
+        },
+        {
+          "id": "m11.rub.c01.s02",
+          "name": "Fact marshaling",
+          "description": "Organizes the record evidence — timeline, documents, and witnesses — into a persuasive factual narrative.",
+          "weight_points": 20
+        },
+        {
+          "id": "m11.rub.c01.s03",
+          "name": "Requested relief and remedy",
+          "description": "States and supports the relief sought (reinstatement or back/front pay, unpaid wages, reference).",
+          "weight_points": 16
+        }
+      ]
+    },
+    {
+      "id": "m11.rub.c02",
+      "name": "Fact development and witness interviews",
+      "description": "Investigates and develops the facts through the client and fact witnesses and builds a defensible chronology from the documents.",
+      "weight_points": 46,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m11.rub.c02.s01",
+          "name": "Client interview",
+          "description": "Conducts an effective client interview that earns trust and surfaces sensitive, rapport-gated facts.",
+          "weight_points": 16,
+          "task_id": "TSK-022"
+        },
+        {
+          "id": "m11.rub.c02.s02",
+          "name": "Fact-witness interviews",
+          "description": "Interviews corroborating witnesses and identifies represented persons who may not be contacted directly.",
+          "weight_points": 16,
+          "task_id": "TSK-024"
+        },
+        {
+          "id": "m11.rub.c02.s03",
+          "name": "Chronology and documents",
+          "description": "Builds and maintains an accurate chronology tied to the documentary record.",
+          "weight_points": 14,
+          "task_id": "TSK-025"
+        }
+      ]
+    },
+    {
+      "id": "m11.rub.c03",
+      "name": "Case theory and legal analysis",
+      "description": "Develops a sound retaliation / wrongful-discharge theory and analyzes the enforceability posture of the arbitration agreement.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-002"
+    },
+    {
+      "id": "m11.rub.c04",
+      "name": "Arbitration hearing advocacy",
+      "description": "Presents the case at the arbitration hearing through opening, examination, and closing.",
+      "weight_points": 44,
+      "skill_id": "SK-LP-14",
+      "task_id": "TSK-052",
+      "subcriteria": [
+        {
+          "id": "m11.rub.c04.s01",
+          "name": "Opening and closing",
+          "description": "Delivers a focused opening statement and a persuasive closing argument.",
+          "weight_points": 22
+        },
+        {
+          "id": "m11.rub.c04.s02",
+          "name": "Direct and cross-examination",
+          "description": "Conducts effective direct of the client and corroborating witnesses and cross of adverse witnesses.",
+          "weight_points": 22
+        }
+      ]
+    },
+    {
+      "id": "m11.rub.c05",
+      "name": "Professional responsibility and counseling",
+      "description": "Handles the Rule 4.2 no-contact issue correctly and counsels the client on settlement versus proceeding.",
+      "weight_points": 16,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 202 },
+    { "grade": "A-", "points": 192 },
+    { "grade": "B+", "points": 180 },
+    { "grade": "B", "points": 170 },
+    { "grade": "B-", "points": 160 }
+  ]
+}

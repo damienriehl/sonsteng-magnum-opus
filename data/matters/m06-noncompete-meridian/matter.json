@@ -1,0 +1,50 @@
+{
+  "id": "m06",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m06",
+  "slug": "m06-noncompete-meridian",
+  "shape": "noncompete_trade_secret",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "Northlake Surgical Instruments, Inc. v. Adaeze Okwuosa",
+  "sides": [
+    {
+      "role_id": "m06.role.plaintiff",
+      "label": "Plaintiff / Former Employer",
+      "party_names": ["Northlake Surgical Instruments, Inc."],
+      "confidential_fact_refs": ["m06.fact.030"]
+    },
+    {
+      "role_id": "m06.role.defense",
+      "label": "Defendant / Former Employee (our client)",
+      "party_names": ["Adaeze Okwuosa"],
+      "confidential_fact_refs": ["m06.fact.017", "m06.fact.018"]
+    }
+  ],
+  "parties": [
+    { "name": "Northlake Surgical Instruments, Inc.", "role": "plaintiff former employer", "side_role_id": "m06.role.plaintiff" },
+    { "name": "Adaeze Okwuosa", "role": "defendant former employee", "side_role_id": "m06.role.defense" }
+  ],
+  "client_id": "FIRM-C-06",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-001", "TSK-002", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-032", "TSK-050", "TSK-060"],
+  "personas": ["m06.per.okwuosa", "m06.per.danneker", "m06.per.marchetti"],
+  "witnesses": [
+    { "id": "m06.wit.hollis", "name": "Mareike Hollis" },
+    { "id": "m06.wit.dupont", "name": "André Dupont" },
+    { "id": "m06.wit.bellweather", "name": "Curtis Bellweather" },
+    { "id": "m06.wit.marchetti", "name": "Dr. Elena Marchetti" }
+  ],
+  "exhibits": [
+    { "id": "m06.exh.001", "title": "Employment Agreement with Non-Competition and Non-Solicitation Covenant" },
+    { "id": "m06.exh.002", "title": "Okwuosa Resignation Notice" },
+    { "id": "m06.exh.003", "title": "Northlake Master Customer-Pricing Spreadsheet (described)" },
+    { "id": "m06.exh.004", "title": "IT Off-Boarding Export-Log Report" },
+    { "id": "m06.exh.005", "title": "Verdant Medical Systems Offer Letter and Job Description" },
+    { "id": "m06.exh.006", "title": "Cease-and-Desist Letter from Northlake's Counsel" },
+    { "id": "m06.exh.007", "title": "Northlake's Motion for a Temporary Injunction" }
+  ],
+  "open_date": "2026-02-16",
+  "as_of_date": "2026-06-30"
+}

@@ -1,0 +1,45 @@
+{
+  "id": "m03.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m03.biz",
+  "matter_id": "m03",
+  "intake": {
+    "client_name": "Lorraine Petimeyer",
+    "contact": {
+      "email": "l.petimeyer@example.com",
+      "phone": "555-0173",
+      "address": "48 Larkspur Lane, Elleston, Meridian 55716"
+    },
+    "matter_summary": "Client rear-ended while stopped at a red light on an icy morning; contested liability and disputed neck/shoulder injuries. Seeks representation to pursue a personal-injury claim after a low insurer settlement offer.",
+    "intake_date": "2025-02-13",
+    "referral_source": "referred by a former client"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Lorraine Petimeyer", "Douglas Ashcombe"],
+    "result": "clear",
+    "notes": "No prior or current representation of Douglas Ashcombe or his liability insurer; no relationship with the independent witness. No conflict identified.",
+    "checked_date": "2025-02-13"
+  },
+  "engagement": {
+    "fee_type": "contingency",
+    "contingency_pct": 33.34,
+    "engagement_date": "2025-02-14",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m03.te.0001", "date": "2025-02-13", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial client interview and case assessment; review of client's account and scene photographs." },
+    { "id": "m03.te.0002", "date": "2025-02-20", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Open matter file; obtain Elleston Police traffic crash report and field diagram." },
+    { "id": "m03.te.0003", "date": "2025-03-05", "timekeeper_id": "FIRM-TK-02", "hours": 1.2, "rate": 225, "narrative": "Request client's medical records and billing from treating providers; begin damages summary." },
+    { "id": "m03.te.0004", "date": "2025-03-18", "timekeeper_id": "FIRM-TK-01", "hours": 0.9, "rate": 250, "narrative": "Interview independent eyewitness Rafael Quesada; prepare witness statement." },
+    { "id": "m03.te.0005", "date": "2025-04-10", "timekeeper_id": "FIRM-TK-02", "hours": 2.1, "rate": 225, "narrative": "Draft complaint for negligence; assemble factual allegations from case file." },
+    { "id": "m03.te.0006", "date": "2025-04-24", "timekeeper_id": "FIRM-TK-01", "hours": 0.6, "rate": 250, "narrative": "Review, finalize, and file complaint in Meridian District Court, Marrick County." },
+    { "id": "m03.te.0007", "date": "2025-06-12", "timekeeper_id": "FIRM-TK-02", "hours": 1.4, "rate": 225, "narrative": "Propound written discovery; prepare subpoena for defendant's cellular records; obtain independent repair appraisal." },
+    { "id": "m03.te.0008", "date": "2025-09-25", "timekeeper_id": "FIRM-TK-01", "hours": 1.1, "rate": 250, "narrative": "Review defense independent medical examination report; confer with treating physician regarding causation." },
+    { "id": "m03.te.0009", "date": "2025-11-06", "timekeeper_id": "FIRM-TK-02", "hours": 1.7, "rate": 225, "narrative": "Prepare for depositions; organize exhibits and chronology." },
+    { "id": "m03.te.0010", "date": "2026-01-15", "timekeeper_id": "FIRM-TK-01", "hours": 0.8, "rate": 250, "narrative": "Client counseling regarding insurer's settlement offer and range of outcomes." },
+    { "id": "m03.te.0011", "date": "2026-03-20", "timekeeper_id": "FIRM-TK-02", "hours": 1.3, "rate": 225, "narrative": "Draft settlement demand and prepare for mediation." },
+    { "id": "m03.te.0012", "date": "2026-06-18", "timekeeper_id": "FIRM-TK-01", "hours": 1.6, "rate": 250, "narrative": "Trial preparation; draft opening outline and direct/cross examination outlines." }
+  ],
+  "invoices": [],
+  "trust_entries": []
+}

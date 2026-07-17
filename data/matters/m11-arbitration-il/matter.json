@@ -1,0 +1,52 @@
+{
+  "id": "m11",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m11",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m11-arbitration-il",
+  "shape": "employment_arbitration",
+  "tier": "real",
+  "jurisdiction": "IL",
+  "caption": "Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)",
+  "sides": [
+    {
+      "role_id": "m11.role.employee-counsel",
+      "label": "Claimant / Employee (firm's client)",
+      "party_names": ["Yusuf Adeyemi"],
+      "confidential_fact_refs": ["m11.fact.033", "m11.fact.034", "m11.fact.041"]
+    },
+    {
+      "role_id": "m11.role.employer-counsel",
+      "label": "Respondent / Employer",
+      "party_names": ["Prairie State Logistics, Inc."],
+      "confidential_fact_refs": ["m11.fact.027", "m11.fact.028"]
+    }
+  ],
+  "parties": [
+    { "name": "Yusuf Adeyemi", "role": "claimant employee", "side_role_id": "m11.role.employee-counsel" },
+    { "name": "Prairie State Logistics, Inc.", "role": "respondent employer", "side_role_id": "m11.role.employer-counsel" }
+  ],
+  "client_id": "FIRM-C-11",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-09", "SK-LP-13", "SK-LP-14", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-002", "TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-032", "TSK-045", "TSK-052", "TSK-060"],
+  "personas": ["m11.per.adeyemi", "m11.per.pfeiffer", "m11.per.ruvalcaba"],
+  "witnesses": [
+    { "id": "m11.wit.adeyemi", "name": "Yusuf Adeyemi" },
+    { "id": "m11.wit.ruvalcaba", "name": "Tomás Ruvalcaba" },
+    { "id": "m11.wit.osei", "name": "Ayana Osei" },
+    { "id": "m11.wit.croll", "name": "Bethany Croll" }
+  ],
+  "exhibits": [
+    { "id": "m11.exh.001", "title": "Employment Agreement with Arbitration Clause" },
+    { "id": "m11.exh.002", "title": "Performance Improvement Plan (Dec. 5, 2025)" },
+    { "id": "m11.exh.003", "title": "Termination / Separation Notice (Jan. 9, 2026)" },
+    { "id": "m11.exh.004", "title": "HR Complaint Email Chain (Adeyemi–Croll)" },
+    { "id": "m11.exh.005", "title": "State Wage-and-Safety Hotline Confirmation" },
+    { "id": "m11.exh.006", "title": "Photograph — Blocked North Fire Exit (Nov. 5, 2025)" },
+    { "id": "m11.exh.007", "title": "Timekeeping / Punch Records Excerpt (Oct.–Nov. 2025)" },
+    { "id": "m11.exh.008", "title": "Reduction-in-Force Memo (Jan. 8, 2026)" }
+  ],
+  "open_date": "2026-01-26",
+  "as_of_date": "2026-06-30"
+}

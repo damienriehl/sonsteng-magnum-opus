@@ -1,0 +1,52 @@
+{
+  "id": "m20",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m20",
+  "slug": "m20-probate-fl",
+  "shape": "wills_probate",
+  "tier": "real",
+  "jurisdiction": "FL",
+  "caption": "In re the Estate of Harold W. Prewitt",
+  "sides": [
+    {
+      "role_id": "m20.role.proponent-counsel",
+      "label": "Proponent / Estate (Personal Representative)",
+      "party_names": ["Estate of Harold W. Prewitt", "Vivian Prewitt-Cole"],
+      "confidential_fact_refs": ["m20.fact.049", "m20.fact.050"]
+    },
+    {
+      "role_id": "m20.role.contestant-counsel",
+      "label": "Contestant / Objecting Heir",
+      "party_names": ["Dale Prewitt"],
+      "confidential_fact_refs": ["m20.fact.056"]
+    }
+  ],
+  "parties": [
+    { "name": "Estate of Harold W. Prewitt", "role": "decedent's estate (proponent of the will)", "side_role_id": "m20.role.proponent-counsel" },
+    { "name": "Vivian Prewitt-Cole", "role": "surviving spouse, personal representative, and principal devisee", "side_role_id": "m20.role.proponent-counsel" },
+    { "name": "Dale Prewitt", "role": "objecting heir / will contestant", "side_role_id": "m20.role.contestant-counsel" }
+  ],
+  "client_id": "FIRM-C-20",
+  "fee_type": "flat",
+  "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-004", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-037", "TSK-048", "TSK-058", "TSK-060", "TSK-063"],
+  "personas": ["m20.per.cole", "m20.per.prewitt", "m20.per.delacroix"],
+  "witnesses": [
+    { "id": "m20.wit.vandermolen", "name": "Dr. Elias Vandermolen" },
+    { "id": "m20.wit.tancredi", "name": "Gloria Tancredi" },
+    { "id": "m20.wit.delacroix", "name": "Marisol Delacroix" },
+    { "id": "m20.wit.ellingboe", "name": "Amara Ellingboe" }
+  ],
+  "exhibits": [
+    { "id": "m20.exh.001", "title": "Last Will and Testament of Harold W. Prewitt (Mar. 14, 2024)" },
+    { "id": "m20.exh.002", "title": "Explanatory Letter of Harold W. Prewitt (Mar. 14, 2024)" },
+    { "id": "m20.exh.003", "title": "Prior Last Will and Testament of Harold W. Prewitt (2019)" },
+    { "id": "m20.exh.004", "title": "Prenuptial Agreement of Harold W. Prewitt and Vivian Prewitt-Cole (2018)" },
+    { "id": "m20.exh.005", "title": "Drafting Attorney's File Memorandum" },
+    { "id": "m20.exh.006", "title": "Physician's Capacity Assessment of Dr. Elias Vandermolen" },
+    { "id": "m20.exh.007", "title": "Petition to Revoke Probate and Objection to Will" },
+    { "id": "m20.exh.008", "title": "Estate Asset and Homestead Summary" }
+  ],
+  "open_date": "2024-01-15",
+  "as_of_date": "2026-06-30"
+}

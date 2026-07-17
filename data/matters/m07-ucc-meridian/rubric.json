@@ -1,0 +1,89 @@
+{
+  "id": "m07.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m07.rub",
+  "matter_id": "m07",
+  "declared_total": 200,
+  "criteria": [
+    {
+      "id": "m07.rub.c01",
+      "name": "Client interview and fact development",
+      "description": "Conducts a humane, effective client-intake interview and develops the facts from records and witnesses into a reliable chronology of the three failures.",
+      "weight_points": 50,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m07.rub.c01.s01",
+          "name": "Interview technique and rapport",
+          "description": "Uses open-ended then focused questions, builds rapport, follows up on hints, and surfaces the client's guarded and undisclosed facts without pressure or flattery.",
+          "weight_points": 28,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-022"
+        },
+        {
+          "id": "m07.rub.c01.s02",
+          "name": "Records synthesis and chronology",
+          "description": "Synthesizes the case-file documents and witness statements into an accurate timeline and identifies gaps and conflicts.",
+          "weight_points": 22
+        }
+      ]
+    },
+    {
+      "id": "m07.rub.c02",
+      "name": "Warranty and remedies analysis",
+      "description": "Correctly analyzes the express and implied warranties, the limited repair-or-replace remedy and its possible failure of essential purpose, and the enforceability of the consequential-damages exclusion.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-010",
+      "subcriteria": [
+        {
+          "id": "m07.rub.c02.s01",
+          "name": "Warranties and breach elements",
+          "description": "Identifies the governing sale-of-goods warranties and the elements of the co-op's breach claim and Brandt's defenses.",
+          "weight_points": 30,
+          "skill_id": "SK-LP-03",
+          "task_id": "TSK-009"
+        },
+        {
+          "id": "m07.rub.c02.s02",
+          "name": "Limited remedy and consequential-damages exclusion",
+          "description": "Analyzes failure of essential purpose and whether the consequential-damages exclusion survives, applying law to the disputed facts.",
+          "weight_points": 30,
+          "skill_id": "SK-LP-02",
+          "task_id": "TSK-006"
+        }
+      ]
+    },
+    {
+      "id": "m07.rub.c03",
+      "name": "Remedies, damages, and causation strategy",
+      "description": "Frames the dispositive issues, addresses the mixed-causation problem candidly, and builds a realistic damages and remedy theory.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-006"
+    },
+    {
+      "id": "m07.rub.c04",
+      "name": "ADR strategy and client counseling",
+      "description": "Counsels the co-op on mediation versus binding arbitration, assesses the co-op's best alternative and settlement posture, and gives a candid recommendation.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-047"
+    },
+    {
+      "id": "m07.rub.c05",
+      "name": "Professional responsibility and written communication",
+      "description": "Observes the Rule 4.2 no-contact limit with the represented opposing party and communicates clearly, in facts-and-advice form, without improper citation of law to the client.",
+      "weight_points": 20,
+      "skill_id": "SK-LP-16"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 200 },
+    { "grade": "A-", "points": 186 },
+    { "grade": "B+", "points": 176 },
+    { "grade": "B", "points": 166 },
+    { "grade": "C", "points": 146 }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "id": "m01.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m01.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m01",
+  "intake": {
+    "client_name": "Marceline Osgard",
+    "contact": {
+      "email": "m.osgard@example.com",
+      "phone": "555-0173",
+      "address": "1148 Foundry Row, Norsholm, Meridian 55902"
+    },
+    "matter_summary": "Represent discharged transit mechanic and grievant in a final-and-binding labor arbitration challenging her discharge for alleged insubordination; grievance brought by MAPW Local 7 asserting the discharge lacked just cause and was retaliation for safety complaints.",
+    "intake_date": "2025-11-03",
+    "referral_source": "union business agent referral"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Marceline Osgard",
+      "Halden Regional Transit District",
+      "Meridian Alliance of Public Workers, Local 7",
+      "Gerald Rennick",
+      "Theo Dellwood",
+      "Loretta Bexley"
+    ],
+    "result": "clear",
+    "notes": "No prior or current representation of the Halden Regional Transit District. The grievant and the Union share an aligned interest in overturning the discharge; the Union consents to the firm's representation of the grievant. No adverse relationship identified.",
+    "checked_date": "2025-11-04"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2025-11-05",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m01.te.0001", "date": "2025-11-05", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Initial client interview with M. Osgard; intake, conflicts confirmation, and case-assessment notes." },
+    { "id": "m01.te.0002", "date": "2025-11-12", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Review collective-bargaining agreement Article 22 and just-cause provisions; review grievance file and step responses." },
+    { "id": "m01.te.0003", "date": "2025-12-03", "timekeeper_id": "FIRM-TK-01", "hours": 2.4, "rate": 250, "narrative": "Witness planning; interview of coworker T. Dellwood; memo to file on brake red-tag sequence." },
+    { "id": "m01.te.0004", "date": "2025-12-18", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Research plan and preliminary review of arbitral just-cause standards and remedy framework." },
+    { "id": "m01.te.0005", "date": "2026-01-08", "timekeeper_id": "FIRM-TK-01", "hours": 1.8, "rate": 250, "narrative": "Build chronology of events September through October 2025; map facts to elements the District must prove." },
+    { "id": "m01.te.0006", "date": "2026-01-20", "timekeeper_id": "FIRM-TK-02", "hours": 2.6, "rate": 225, "narrative": "Analyze contractor inspection report and repair-order records for units 411, 418, and 426." },
+    { "id": "m01.te.0007", "date": "2026-01-28", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Client status letter regarding posture, arbitrator selection, and next steps." },
+    { "id": "m01.te.0008", "date": "2026-02-10", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Draft outline of statement of the case; develop retaliation-versus-insubordination theory." },
+    { "id": "m01.te.0009", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-02", "hours": 2.2, "rate": 225, "narrative": "Review personnel-file excerpts; analyze timing of 2024 supervisor note relative to safety complaints." },
+    { "id": "m01.te.0010", "date": "2026-04-07", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Draft statement of the case; integrate exhibits and grievance-step record." },
+    { "id": "m01.te.0011", "date": "2026-04-22", "timekeeper_id": "FIRM-TK-01", "hours": 2.8, "rate": 250, "narrative": "Prepare witness examination outlines; conference with Union steward L. Bexley on grievance-step notes." },
+    { "id": "m01.te.0012", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Draft direct-examination outlines for Osgard and Dellwood; foundation planning for exhibits." },
+    { "id": "m01.te.0013", "date": "2026-05-19", "timekeeper_id": "FIRM-TK-01", "hours": 4.0, "rate": 250, "narrative": "Draft cross-examination outline for management witness; research whistleblower and just-cause interaction." },
+    { "id": "m01.te.0014", "date": "2026-06-03", "timekeeper_id": "FIRM-TK-01", "hours": 8.0, "rate": 250, "narrative": "Hearing preparation; revise statement of the case and finalize theory of the case." },
+    { "id": "m01.te.0015", "date": "2026-06-10", "timekeeper_id": "FIRM-TK-02", "hours": 8.0, "rate": 225, "narrative": "Hearing preparation; assemble exhibit binder and proof-of-just-cause element chart." },
+    { "id": "m01.te.0016", "date": "2026-06-17", "timekeeper_id": "FIRM-TK-01", "hours": 10.0, "rate": 250, "narrative": "Witness preparation sessions with Osgard and Dellwood; mock direct and cross." },
+    { "id": "m01.te.0017", "date": "2026-06-23", "timekeeper_id": "FIRM-TK-02", "hours": 8.0, "rate": 225, "narrative": "Finalize direct and cross outlines; prepare opening statement and remedy argument." },
+    { "id": "m01.te.0018", "date": "2026-06-26", "timekeeper_id": "FIRM-TK-01", "hours": 7.2, "rate": 250, "narrative": "Final hearing preparation; pre-hearing conference planning and exhibit stipulation review." }
+  ],
+  "invoices": [
+    {
+      "id": "m01.inv.001",
+      "date": "2026-01-05",
+      "period": { "start": "2025-11-05", "end": "2025-12-31" },
+      "fees": 2225,
+      "expenses": 0,
+      "payments_received": 2225,
+      "balance_due": 0,
+      "line_refs": ["m01.te.0001", "m01.te.0002", "m01.te.0003", "m01.te.0004"]
+    },
+    {
+      "id": "m01.inv.002",
+      "date": "2026-02-05",
+      "period": { "start": "2026-01-01", "end": "2026-01-31" },
+      "fees": 1410,
+      "expenses": 0,
+      "payments_received": 1410,
+      "balance_due": 0,
+      "line_refs": ["m01.te.0005", "m01.te.0006", "m01.te.0007"]
+    },
+    {
+      "id": "m01.inv.003",
+      "date": "2026-03-05",
+      "period": { "start": "2026-02-01", "end": "2026-02-28" },
+      "fees": 995,
+      "expenses": 0,
+      "payments_received": 995,
+      "balance_due": 0,
+      "line_refs": ["m01.te.0008", "m01.te.0009"]
+    },
+    {
+      "id": "m01.inv.004",
+      "date": "2026-04-30",
+      "period": { "start": "2026-03-01", "end": "2026-04-30" },
+      "fees": 1200,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1200,
+      "line_refs": ["m01.te.0010", "m01.te.0011"]
+    },
+    {
+      "id": "m01.inv.005",
+      "date": "2026-05-31",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 1900,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1900,
+      "line_refs": ["m01.te.0012", "m01.te.0013"]
+    },
+    {
+      "id": "m01.inv.006",
+      "date": "2026-06-28",
+      "period": { "start": "2026-06-01", "end": "2026-06-30" },
+      "fees": 9900,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 9900,
+      "line_refs": ["m01.te.0014", "m01.te.0015", "m01.te.0016", "m01.te.0017", "m01.te.0018"]
+    }
+  ],
+  "trust_entries": []
+}

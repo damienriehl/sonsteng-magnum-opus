@@ -1,0 +1,129 @@
+{
+  "id": "m10.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m10.biz",
+  "matter_id": "m10",
+  "intake": {
+    "client_name": "Estate of Mabel R. Thornquist (Eleanor Thornquist-Reddick, PR)",
+    "contact": {
+      "email": "eleanor.reddick@example.com",
+      "phone": "555-0197",
+      "address": "14 Shoreline Road, Brightwater, Meridian 56021"
+    },
+    "matter_summary": "Flat-fee estate planning for Mabel R. Thornquist — a new will and explanatory letter (2024) — and defense of the resulting will against a contest brought by the decedent's son alleging lack of capacity and undue influence.",
+    "intake_date": "2024-09-16",
+    "referral_source": "prior estate-planning client"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Mabel R. Thornquist",
+      "Eleanor Thornquist-Reddick",
+      "Ronald Thornquist",
+      "Ellingboe & Ravndal LLP (drafting firm)"
+    ],
+    "result": "clear",
+    "notes": "No adverse-client conflict identified at intake. Flagged for the file: because the firm drafted and supervised execution of the will, the drafting attorney is a potential witness if the will is later contested; the advocate-witness question is to be revisited at that time.",
+    "checked_date": "2024-09-16"
+  },
+  "engagement": {
+    "fee_type": "flat",
+    "flat_fee": 1800,
+    "engagement_date": "2024-09-16",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    {
+      "id": "m10.te.0001",
+      "date": "2024-09-16",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.8,
+      "rate": 250,
+      "narrative": "Initial estate-planning consultation and intake; review of prior 2015 will and current family circumstances."
+    },
+    {
+      "id": "m10.te.0002",
+      "date": "2024-09-25",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.6,
+      "rate": 250,
+      "narrative": "Private meeting with client alone; confirmed dispositive wishes and reasons for departure from equal split."
+    },
+    {
+      "id": "m10.te.0003",
+      "date": "2024-10-10",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.5,
+      "rate": 225,
+      "narrative": "Draft last will and testament and companion explanatory letter; coordinate capacity examination and disinterested attesting witness."
+    },
+    {
+      "id": "m10.te.0004",
+      "date": "2024-10-18",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 1.2,
+      "rate": 250,
+      "narrative": "Supervise execution of will and explanatory letter; two witnesses and self-proving affidavit; prepare contemporaneous file memorandum."
+    },
+    {
+      "id": "m10.te.0005",
+      "date": "2025-08-15",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.7,
+      "rate": 250,
+      "narrative": "Petition for probate; secure order admitting will and appointment of personal representative."
+    },
+    {
+      "id": "m10.te.0006",
+      "date": "2025-09-22",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 0.9,
+      "rate": 225,
+      "narrative": "Review contestant's objection and petition to contest; docket response deadline; preliminary issue analysis."
+    },
+    {
+      "id": "m10.te.0007",
+      "date": "2025-10-06",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 1.1,
+      "rate": 250,
+      "narrative": "Interview personal representative regarding contest; capacity, caregiving, finances, and family history."
+    },
+    {
+      "id": "m10.te.0008",
+      "date": "2025-10-09",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 0.8,
+      "rate": 225,
+      "narrative": "Obtain witness statements from attesting witness, treating physician, and home health aide."
+    },
+    {
+      "id": "m10.te.0009",
+      "date": "2026-01-20",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.6,
+      "rate": 250,
+      "narrative": "Analyze advocate-witness question given firm's drafting role; memorandum on how to staff any contested hearing."
+    },
+    {
+      "id": "m10.te.0010",
+      "date": "2026-03-12",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.0,
+      "rate": 225,
+      "narrative": "Draft response to objection and petition to contest; assemble supporting exhibits."
+    }
+  ],
+  "invoices": [
+    {
+      "id": "m10.inv.001",
+      "date": "2024-10-25",
+      "period": { "start": "2024-09-16", "end": "2024-10-18" },
+      "fees": 1800,
+      "expenses": 0,
+      "payments_received": 1800,
+      "balance_due": 0,
+      "line_refs": ["m10.te.0001", "m10.te.0002", "m10.te.0003", "m10.te.0004"]
+    }
+  ],
+  "trust_entries": []
+}

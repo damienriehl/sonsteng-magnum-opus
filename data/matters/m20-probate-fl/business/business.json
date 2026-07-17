@@ -1,0 +1,137 @@
+{
+  "id": "m20.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m20.biz",
+  "matter_id": "m20",
+  "intake": {
+    "client_name": "Estate of Harold W. Prewitt (Vivian Prewitt-Cole, PR)",
+    "contact": {
+      "email": "vivian.prewittcole@example.com",
+      "phone": "555-0164",
+      "address": "41 Heron Point Lane, Manatee County, Florida 34205"
+    },
+    "matter_summary": "Flat-fee estate planning for Harold W. Prewitt — a new will, a revocable living trust, and an explanatory letter (2024) — and defense of the resulting will against a petition to revoke probate brought by the decedent's son alleging lack of capacity, undue influence, and an improper devise of homestead.",
+    "intake_date": "2024-01-15",
+    "referral_source": "prior estate-planning client"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Harold W. Prewitt",
+      "Vivian Prewitt-Cole",
+      "Dale Prewitt",
+      "Ellingboe & Ravndal LLP (drafting firm)"
+    ],
+    "result": "clear",
+    "notes": "No adverse-client conflict identified at intake. Flagged for the file: because the firm drafted and supervised execution of the will, the drafting attorney is a potential witness if the will is later contested; the advocate-witness question is to be revisited at that time.",
+    "checked_date": "2024-01-15"
+  },
+  "engagement": {
+    "fee_type": "flat",
+    "flat_fee": 2400,
+    "engagement_date": "2024-01-15",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    {
+      "id": "m20.te.0001",
+      "date": "2024-01-15",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.8,
+      "rate": 250,
+      "narrative": "Initial estate-planning consultation and intake; review of prior 2019 will, 2018 prenuptial agreement, and current family circumstances."
+    },
+    {
+      "id": "m20.te.0002",
+      "date": "2024-01-30",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.6,
+      "rate": 250,
+      "narrative": "Private meeting with client alone; confirmed dispositive wishes and reasons for departure from the prior life-estate plan."
+    },
+    {
+      "id": "m20.te.0003",
+      "date": "2024-02-20",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.5,
+      "rate": 225,
+      "narrative": "Draft new will, revocable living trust, and companion explanatory letter; coordinate physician capacity assessment and disinterested attesting witness."
+    },
+    {
+      "id": "m20.te.0004",
+      "date": "2024-03-14",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 1.2,
+      "rate": 250,
+      "narrative": "Supervise execution of will, trust, and explanatory letter; two witnesses and self-proving affidavit before notary; prepare contemporaneous file memorandum."
+    },
+    {
+      "id": "m20.te.0005",
+      "date": "2025-04-25",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.7,
+      "rate": 250,
+      "narrative": "Petition for probate; secure order admitting will and appointment of personal representative."
+    },
+    {
+      "id": "m20.te.0006",
+      "date": "2025-06-30",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 0.9,
+      "rate": 225,
+      "narrative": "Review petition to revoke probate and objection; docket response deadline; preliminary issue analysis."
+    },
+    {
+      "id": "m20.te.0007",
+      "date": "2025-07-10",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 1.1,
+      "rate": 250,
+      "narrative": "Interview personal representative regarding contest; capacity, caregiving, finances, prenuptial agreement, and family history."
+    },
+    {
+      "id": "m20.te.0008",
+      "date": "2025-07-24",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 0.8,
+      "rate": 225,
+      "narrative": "Obtain witness statements from treating physician, attesting witness, and home health aide."
+    },
+    {
+      "id": "m20.te.0009",
+      "date": "2025-09-15",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.6,
+      "rate": 250,
+      "narrative": "Analyze advocate-witness question given firm's drafting role; memorandum on how to staff any contested hearing."
+    },
+    {
+      "id": "m20.te.0010",
+      "date": "2026-01-20",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.0,
+      "rate": 225,
+      "narrative": "Research and analyze Florida homestead-devise restrictions and the effect of the prenuptial homestead waiver on the devise of the residence."
+    },
+    {
+      "id": "m20.te.0011",
+      "date": "2026-03-12",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.0,
+      "rate": 225,
+      "narrative": "Draft response to petition to revoke probate; assemble supporting exhibits."
+    }
+  ],
+  "invoices": [
+    {
+      "id": "m20.inv.001",
+      "date": "2024-03-20",
+      "period": { "start": "2024-01-15", "end": "2024-03-14" },
+      "fees": 2400,
+      "expenses": 0,
+      "payments_received": 2400,
+      "balance_due": 0,
+      "line_refs": ["m20.te.0001", "m20.te.0002", "m20.te.0003", "m20.te.0004"]
+    }
+  ],
+  "trust_entries": []
+}

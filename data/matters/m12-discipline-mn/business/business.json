@@ -1,0 +1,115 @@
+{
+  "id": "m12.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m12.biz",
+  "matter_id": "m12",
+  "intake": {
+    "client_name": "Delphine A. Karsgaard",
+    "contact": {
+      "email": "d.karsgaard@karsgaardlaw.example.com",
+      "phone": "555-0173",
+      "address": "88 Birchmont Avenue, Suite 2, Aldenwood, MN 55418"
+    },
+    "matter_summary": "Defense of a Minnesota attorney against a Petition for Disciplinary Action alleging neglect of a client matter, a candor violation in a supporting affidavit, and a supervisory failure; goal is to contest the candor charge and argue for a proportional, lesser sanction.",
+    "intake_date": "2025-11-28",
+    "referral_source": "referral from a bar association colleague"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Delphine A. Karsgaard",
+      "Marguerite Dieterle",
+      "Office of Lawyers Professional Responsibility",
+      "Larkspur Market Holdings, LLC",
+      "Sunila Achterberg"
+    ],
+    "result": "clear",
+    "notes": "No current or former firm representation of Ms. Dieterle, the OLPR, Larkspur Market Holdings, or Ms. Achterberg. No personal or financial interest adverse to the client. Cleared to represent the respondent.",
+    "checked_date": "2025-11-29"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2025-12-01",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m12.te.0001", "date": "2025-12-01", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial conference with client; review Petition for Disciplinary Action and scope of charges." },
+    { "id": "m12.te.0002", "date": "2025-12-04", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Review OLPR investigation file, charge letter, and underlying district court record." },
+    { "id": "m12.te.0003", "date": "2025-12-09", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Reconstruct service/dismissal timeline; assemble document chronology and email archive review." },
+    { "id": "m12.te.0004", "date": "2025-12-16", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Interview former paralegal M. Delacroix regarding calendaring practices and departure handoff." },
+    { "id": "m12.te.0005", "date": "2026-01-06", "timekeeper_id": "FIRM-TK-02", "hours": 2.5, "rate": 225, "narrative": "Draft Answer to Petition; analyze admissions and denials on each count." },
+    { "id": "m12.te.0006", "date": "2026-01-13", "timekeeper_id": "FIRM-TK-01", "hours": 1.8, "rate": 250, "narrative": "Revise and finalize Answer; client review conference." },
+    { "id": "m12.te.0007", "date": "2026-01-20", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Confer with Director's office regarding scheduling and possible stipulations." },
+    { "id": "m12.te.0008", "date": "2026-02-03", "timekeeper_id": "FIRM-TK-02", "hours": 2.2, "rate": 225, "narrative": "Research standard of review and sanction factors; draft internal analysis memo." },
+    { "id": "m12.te.0009", "date": "2026-02-17", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Client counseling on mitigation, remedial measures, and candor-charge exposure." },
+    { "id": "m12.te.0010", "date": "2026-03-05", "timekeeper_id": "FIRM-TK-02", "hours": 3.4, "rate": 225, "narrative": "Draft respondent's pre-hearing brief, first pass." },
+    { "id": "m12.te.0011", "date": "2026-03-19", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Revise pre-hearing brief; refine candor and proportionality arguments." },
+    { "id": "m12.te.0012", "date": "2026-04-07", "timekeeper_id": "FIRM-TK-01", "hours": 1.3, "rate": 250, "narrative": "Prepare witness outlines for Delacroix and Emberly." },
+    { "id": "m12.te.0013", "date": "2026-04-21", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Cite-check brief and finalize exhibit index." },
+    { "id": "m12.te.0014", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-01", "hours": 1.1, "rate": 250, "narrative": "Attend referee pre-hearing conference; confirm hearing schedule." },
+    { "id": "m12.te.0015", "date": "2026-06-09", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Oral-argument preparation with client; mock questioning on candor charge." }
+  ],
+  "invoices": [
+    {
+      "id": "m12.inv.001",
+      "date": "2026-01-05",
+      "period": { "start": "2025-12-01", "end": "2025-12-31" },
+      "fees": 1850,
+      "expenses": 0,
+      "payments_received": 1850,
+      "balance_due": 0,
+      "line_refs": ["m12.te.0001", "m12.te.0002", "m12.te.0003", "m12.te.0004"]
+    },
+    {
+      "id": "m12.inv.002",
+      "date": "2026-02-02",
+      "period": { "start": "2026-01-01", "end": "2026-01-31" },
+      "fees": 1262.5,
+      "expenses": 0,
+      "payments_received": 1262.5,
+      "balance_due": 0,
+      "line_refs": ["m12.te.0005", "m12.te.0006", "m12.te.0007"]
+    },
+    {
+      "id": "m12.inv.003",
+      "date": "2026-03-02",
+      "period": { "start": "2026-02-01", "end": "2026-02-28" },
+      "fees": 870,
+      "expenses": 0,
+      "payments_received": 870,
+      "balance_due": 0,
+      "line_refs": ["m12.te.0008", "m12.te.0009"]
+    },
+    {
+      "id": "m12.inv.004",
+      "date": "2026-04-02",
+      "period": { "start": "2026-03-01", "end": "2026-03-31" },
+      "fees": 1265,
+      "expenses": 0,
+      "payments_received": 1265,
+      "balance_due": 0,
+      "line_refs": ["m12.te.0010", "m12.te.0011"]
+    },
+    {
+      "id": "m12.inv.005",
+      "date": "2026-05-04",
+      "period": { "start": "2026-04-01", "end": "2026-04-30" },
+      "fees": 685,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 685,
+      "line_refs": ["m12.te.0012", "m12.te.0013"]
+    },
+    {
+      "id": "m12.inv.006",
+      "date": "2026-06-22",
+      "period": { "start": "2026-05-01", "end": "2026-06-30" },
+      "fees": 625,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 625,
+      "line_refs": ["m12.te.0014", "m12.te.0015"]
+    }
+  ],
+  "trust_entries": []
+}

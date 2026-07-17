@@ -1,0 +1,102 @@
+{
+  "id": "m17.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m17.biz",
+  "matter_id": "m17",
+  "intake": {
+    "client_name": "Empire Provisions Corp.",
+    "contact": {
+      "email": "mbeltran@empireprovisions.example.com",
+      "phone": "555-0148",
+      "address": "1400 Riverfront Way, Newburgh, New York 12550"
+    },
+    "matter_summary": "New York specialty-food distributor sued by its contract packer, Ostervold Packing Co., in the Supreme Court of the State of New York, Commercial Division, for the contract price (about $147,000) of three truckloads of packaged goods that Empire rejected as mislabeled and short-dated. UCC Article 2 dispute over conformity, rightful and timely rejection, acceptance (including a partial resale of one load), the seller's cure offer, and the seller's price-versus-damages remedy. Firm represents Empire as buyer's counsel and defendant.",
+    "intake_date": "2026-03-06",
+    "referral_source": "returning client (prior firm matter m27)"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Empire Provisions Corp.",
+      "Marisol Beltran",
+      "Ostervold Packing Co.",
+      "Roland Ostervold",
+      "Curtis Ferraro",
+      "Priyanka Sengupta",
+      "Yosef Mizrahi",
+      "Halvorsen Markets"
+    ],
+    "result": "clear",
+    "notes": "No current or former representation of Ostervold Packing Co., Roland Ostervold, or Halvorsen Markets. Empire is a returning client (prior closed matter m27); no positional conflict identified. Retained consultant Sengupta and freight broker Mizrahi are Empire-side witnesses, not adverse.",
+    "checked_date": "2026-03-07"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-03-09",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m17.te.0001", "date": "2026-03-09", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Initial client interview with procurement director Beltran; scope, goals, and load-by-load history of the three rejected deliveries and the price suit." },
+    { "id": "m17.te.0002", "date": "2026-03-10", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Open matter; conflicts clearance; preliminary case assessment memo to file." },
+    { "id": "m17.te.0003", "date": "2026-03-13", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Review Master Supply Agreement and purchase orders; chart the labeling, date-code, and nine-month shelf-life specifications." },
+    { "id": "m17.te.0004", "date": "2026-03-18", "timekeeper_id": "FIRM-TK-02", "hours": 3.5, "rate": 225, "narrative": "Review Empire receiving logs, rejection notices, and photo exhibits; index the case file." },
+    { "id": "m17.te.0005", "date": "2026-03-24", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Research sale-of-goods conformity, rightful rejection, and acceptance framework for a buyer defending a price action." },
+    { "id": "m17.te.0006", "date": "2026-03-27", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Review draft assessment; client call with Beltran to confirm dates, figures, and load dispositions." },
+    { "id": "m17.te.0007", "date": "2026-04-01", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Draft answer to complaint; outline rightful-rejection and breach-of-warranty affirmative defenses." },
+    { "id": "m17.te.0008", "date": "2026-04-08", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Interview receiving manager Vandermeer; build load-by-load fact chronology and note the Load C inspection delay." },
+    { "id": "m17.te.0009", "date": "2026-04-15", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research timeliness of rejection and the seller's cure right; assess the eight-day Load C delay." },
+    { "id": "m17.te.0010", "date": "2026-04-22", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Analyze acceptance-by-resale exposure on the Load D pallets released to a customer; risk memo." },
+    { "id": "m17.te.0011", "date": "2026-04-29", "timekeeper_id": "FIRM-TK-01", "hours": 1.6, "rate": 250, "narrative": "Client counseling call on exposure, defenses, and the resale problem; confirm strategy." },
+    { "id": "m17.te.0012", "date": "2026-05-04", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Confer with labeling consultant Sengupta on sample inspection scope and findings." },
+    { "id": "m17.te.0013", "date": "2026-05-07", "timekeeper_id": "FIRM-TK-02", "hours": 3.5, "rate": 225, "narrative": "Draft discovery: document demands and interrogatories on conformity, production dates, and cure." },
+    { "id": "m17.te.0014", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Review Sengupta report; assess proof of the allergen and shelf-life nonconformities." },
+    { "id": "m17.te.0015", "date": "2026-05-15", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research the seller's price action versus a damages remedy; which loads support a price claim." },
+    { "id": "m17.te.0016", "date": "2026-05-20", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Analyze partial resale of Load D and its effect on acceptance and the price claim; memo." },
+    { "id": "m17.te.0017", "date": "2026-05-22", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Client counseling: settlement posture and discovery plan; manage expectations on the harder facts." },
+    { "id": "m17.te.0018", "date": "2026-05-28", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Prepare Empire's document production; privilege review of receiving and procurement files." },
+    { "id": "m17.te.0019", "date": "2026-05-29", "timekeeper_id": "FIRM-TK-01", "hours": 1.7, "rate": 250, "narrative": "Correspondence to opposing counsel proposing a discovery schedule and document exchange." },
+    { "id": "m17.te.0020", "date": "2026-06-02", "timekeeper_id": "FIRM-TK-02", "hours": 5.0, "rate": 225, "narrative": "Review Ostervold production and shipping records produced in discovery; flag label-changeover and backlog notes." },
+    { "id": "m17.te.0021", "date": "2026-06-04", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Strategy conference; assess mixed conformity and timeliness across the three loads." },
+    { "id": "m17.te.0022", "date": "2026-06-09", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Draft and serve interrogatory answers and responses to Ostervold's document demands." },
+    { "id": "m17.te.0023", "date": "2026-06-11", "timekeeper_id": "FIRM-TK-01", "hours": 3.0, "rate": 250, "narrative": "Prepare client representative Beltran for deposition; review the resale and inspection-delay facts." },
+    { "id": "m17.te.0024", "date": "2026-06-16", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Research short-dating causation; contrast Ostervold's transit theory with the carrier records." },
+    { "id": "m17.te.0025", "date": "2026-06-18", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Meet-and-confer with opposing counsel; evaluate settlement and narrow disputed loads." },
+    { "id": "m17.te.0026", "date": "2026-06-23", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Interview freight broker Mizrahi; analyze carrier delivery and return-pickup records." },
+    { "id": "m17.te.0027", "date": "2026-06-25", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Client counseling on trial versus settlement and realistic exposure on each load." },
+    { "id": "m17.te.0028", "date": "2026-06-29", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Draft defense and dispositive-motion outline; damages/price analysis by load." },
+    { "id": "m17.te.0029", "date": "2026-06-30", "timekeeper_id": "FIRM-TK-01", "hours": 3.0, "rate": 250, "narrative": "Finalize case-strategy memo; discovery status and next-steps update to client." }
+  ],
+  "invoices": [
+    {
+      "id": "m17.inv.001",
+      "date": "2026-04-30",
+      "period": { "start": "2026-03-09", "end": "2026-04-30" },
+      "fees": 6312.50,
+      "expenses": 250.00,
+      "payments_received": 6562.50,
+      "balance_due": 0.00,
+      "line_refs": ["m17.te.0001", "m17.te.0002", "m17.te.0003", "m17.te.0004", "m17.te.0005", "m17.te.0006", "m17.te.0007", "m17.te.0008", "m17.te.0009", "m17.te.0010", "m17.te.0011"]
+    },
+    {
+      "id": "m17.inv.002",
+      "date": "2026-05-31",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 5237.50,
+      "expenses": 500.00,
+      "payments_received": 3637.50,
+      "balance_due": 2100.00,
+      "line_refs": ["m17.te.0012", "m17.te.0013", "m17.te.0014", "m17.te.0015", "m17.te.0016", "m17.te.0017", "m17.te.0018", "m17.te.0019"]
+    },
+    {
+      "id": "m17.inv.003",
+      "date": "2026-06-30",
+      "period": { "start": "2026-06-01", "end": "2026-06-30" },
+      "fees": 7850.00,
+      "expenses": 3350.00,
+      "payments_received": 0.00,
+      "balance_due": 11200.00,
+      "line_refs": ["m17.te.0020", "m17.te.0021", "m17.te.0022", "m17.te.0023", "m17.te.0024", "m17.te.0025", "m17.te.0026", "m17.te.0027", "m17.te.0028", "m17.te.0029"]
+    }
+  ],
+  "trust_entries": []
+}

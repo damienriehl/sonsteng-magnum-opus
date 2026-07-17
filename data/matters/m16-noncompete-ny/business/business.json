@@ -1,0 +1,81 @@
+{
+  "id": "m16.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m16.biz",
+  "matter_id": "m16",
+  "intake": {
+    "client_name": "Priya Iyer",
+    "contact": {
+      "email": "priya.iyer@example.com",
+      "phone": "555-0142",
+      "address": "27 Riverbend Terrace, Apt. 3B, Beacon, New York 12508"
+    },
+    "matter_summary": "Former employer Hudson Valley Biometrics, Inc. moved by Order to Show Cause for a preliminary injunction to enforce a two-year, geographically unlimited non-compete and trade-secret covenants against Ms. Iyer, alleging she will inevitably disclose its 'matching engine' algorithm if she joins competitor Sightline Perception. Firm engaged to oppose the injunction. Client insists she took no files; employer's own forensic review found no exfiltration.",
+    "intake_date": "2026-02-15",
+    "referral_source": "referral from a colleague in the client's professional network"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Priya Iyer", "Hudson Valley Biometrics, Inc.", "Sightline Perception, Inc.", "Roland Steinhauer", "Halbrook Renner & Iselin LLP"],
+    "result": "clear",
+    "notes": "No prior or current representation of Hudson Valley Biometrics, Sightline Perception, or Halbrook Renner & Iselin. No firm relationship with Mr. Steinhauer. No positional conflict identified in restrictive-covenant defense.",
+    "checked_date": "2026-02-16"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-02-17",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m16.te.0001", "date": "2026-02-19", "timekeeper_id": "FIRM-TK-01", "hours": 3.0, "rate": 250, "narrative": "Initial client interview; preliminary case assessment; intake of employment agreement, cease-and-desist letter, resignation notice, and IT forensic review." },
+    { "id": "m16.te.0002", "date": "2026-03-12", "timekeeper_id": "FIRM-TK-02", "hours": 6.0, "rate": 225, "narrative": "Preliminary research on the preliminary-injunction standard, restrictive-covenant reasonableness, and the inevitable-disclosure theory; outline of defense theory of the case." },
+    { "id": "m16.te.0003", "date": "2026-04-10", "timekeeper_id": "FIRM-TK-01", "hours": 4.0, "rate": 250, "narrative": "Review of matching-engine description and forensic off-boarding report; analysis of trade-secret protectability and reasonable-measures evidence." },
+    { "id": "m16.te.0004", "date": "2026-04-24", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Interview of witness Dominic Frawley regarding the engine's public foundations, shared repositories, and open internal discussion of the architecture; chronology development." },
+    { "id": "m16.te.0005", "date": "2026-04-28", "timekeeper_id": "FIRM-TK-01", "hours": 2.8, "rate": 250, "narrative": "Interview of Sightline hiring VP Beatriz Salcedo; review of Sightline offer letter, job description, and ethical-wall onboarding; analysis of different-product/different-market defense." },
+    { "id": "m16.te.0006", "date": "2026-05-05", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Interview of former HVB engineer Naomi Vandermeer regarding the boilerplate covenant, non-negotiation, and HVB's prior non-enforcement; assess non-solicitation exposure." },
+    { "id": "m16.te.0007", "date": "2026-05-08", "timekeeper_id": "FIRM-TK-01", "hours": 3.6, "rate": 250, "narrative": "Draft statement of facts for memorandum opposing preliminary injunction; analysis of covenant scope, duration, and absence of geographic limit." },
+    { "id": "m16.te.0008", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research on trade-secret protectability and the reasonable-measures requirement as applied to loosely guarded, publicly derived source code." },
+    { "id": "m16.te.0009", "date": "2026-05-15", "timekeeper_id": "FIRM-TK-01", "hours": 4.2, "rate": 250, "narrative": "Draft argument section: likelihood of success; distinguish enforceability of the covenant from trade-secret misappropriation; attack the inevitable-disclosure theory on the forensic record." },
+    { "id": "m16.te.0010", "date": "2026-05-19", "timekeeper_id": "FIRM-TK-02", "hours": 3.2, "rate": 225, "narrative": "Draft argument on irreparable harm, balance of the equities, and the public interest in labor mobility and the right to use general skill and knowledge." },
+    { "id": "m16.te.0011", "date": "2026-05-22", "timekeeper_id": "FIRM-TK-01", "hours": 5.0, "rate": 250, "narrative": "Prepare client declaration; integrate Frawley, Salcedo, and Vandermeer statements; revise memorandum; address the emailed personal folder and diagram candidly." },
+    { "id": "m16.te.0012", "date": "2026-05-28", "timekeeper_id": "FIRM-TK-01", "hours": 4.0, "rate": 250, "narrative": "Client counseling session on risk arising from the forwarded diagram, personal notebook, the Vandermeer conversation, and a prior offhand remark; discuss options including a narrowed resolution." },
+    { "id": "m16.te.0013", "date": "2026-06-02", "timekeeper_id": "FIRM-TK-02", "hours": 2.8, "rate": 225, "narrative": "Cite-check and edit memorandum against the rubric; assemble exhibits and witness statements for filing." },
+    { "id": "m16.te.0014", "date": "2026-06-05", "timekeeper_id": "FIRM-TK-01", "hours": 4.6, "rate": 250, "narrative": "Final revisions to memorandum opposing preliminary injunction; refine reasonableness and blue-pencil arguments; prepare proposed order." },
+    { "id": "m16.te.0015", "date": "2026-06-10", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Prepare Salcedo declaration and ethical-wall documentation; draft witness-contact memo noting Rule 4.2 limit as to Mr. Steinhauer." },
+    { "id": "m16.te.0016", "date": "2026-06-16", "timekeeper_id": "FIRM-TK-01", "hours": 3.2, "rate": 250, "narrative": "Hearing preparation: moot the injunction argument; refine responses on protectability, covenant overbreadth, and the inevitable-disclosure theory." },
+    { "id": "m16.te.0017", "date": "2026-06-22", "timekeeper_id": "FIRM-TK-01", "hours": 3.4, "rate": 250, "narrative": "Second client counseling session; finalize hearing outline and argument allocation between attorneys; confirm evidentiary submissions." }
+  ],
+  "invoices": [
+    {
+      "id": "m16.inv.001",
+      "date": "2026-04-05",
+      "period": { "start": "2026-02-17", "end": "2026-03-31" },
+      "fees": 2100,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 2100,
+      "line_refs": ["m16.te.0001", "m16.te.0002"]
+    },
+    {
+      "id": "m16.inv.002",
+      "date": "2026-05-08",
+      "period": { "start": "2026-04-01", "end": "2026-04-30" },
+      "fees": 2600,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 2600,
+      "line_refs": ["m16.te.0003", "m16.te.0004", "m16.te.0005"]
+    },
+    {
+      "id": "m16.inv.003",
+      "date": "2026-06-25",
+      "period": { "start": "2026-05-01", "end": "2026-06-25" },
+      "fees": 10600,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 10600,
+      "line_refs": ["m16.te.0006", "m16.te.0007", "m16.te.0008", "m16.te.0009", "m16.te.0010", "m16.te.0011", "m16.te.0012", "m16.te.0013", "m16.te.0014", "m16.te.0015", "m16.te.0016", "m16.te.0017"]
+    }
+  ],
+  "trust_entries": []
+}

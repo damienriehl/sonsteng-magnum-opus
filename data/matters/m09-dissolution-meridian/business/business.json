@@ -1,0 +1,77 @@
+{
+  "id": "m09.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m09.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m09",
+  "intake": {
+    "client_name": "Renata Sitko",
+    "contact": {
+      "email": "renata.sitko@example.com",
+      "phone": "555-0193",
+      "address": "214 Birchmere Lane, Norsholm, Meridian"
+    },
+    "matter_summary": "Petitioner in a marriage dissolution with two minor children; disputes over custody and parenting schedule, the marital home, valuation and division of the respondent's remodeling business, and the respondent's spousal-maintenance claim.",
+    "intake_date": "2026-02-12",
+    "referral_source": "referral from a hospital colleague"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Renata Sitko", "Harlan Aldergrove", "Aldergrove Remodeling & Restoration LLC", "Marisol Ferreira", "Warren Kilbane"],
+    "result": "clear",
+    "notes": "No prior or current representation of Harlan Aldergrove, his business, or any adverse party. Firm has not represented the marital business. No personal relationships identified between the firm's attorneys and the parties or witnesses.",
+    "checked_date": "2026-02-13"
+  },
+  "engagement": {
+    "fee_type": "retainer",
+    "retainer_amount": 8500,
+    "engagement_date": "2026-02-18",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m09.te.0001", "date": "2026-02-12", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial client intake interview; preliminary diagnosis of custody, property, business-valuation, and maintenance issues; opened matter." },
+    { "id": "m09.te.0002", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-01", "hours": 0.6, "rate": 250, "narrative": "Prepared and reviewed engagement letter with client; completed conflicts check; explained retainer and evergreen replenishment." },
+    { "id": "m09.te.0003", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Drafted Petition for Dissolution of Marriage and Confidential Information Form." },
+    { "id": "m09.te.0004", "date": "2026-03-02", "timekeeper_id": "FIRM-TK-01", "hours": 0.8, "rate": 250, "narrative": "Reviewed and revised petition with client; confirmed requested relief on custody, home, and business." },
+    { "id": "m09.te.0005", "date": "2026-03-04", "timekeeper_id": "FIRM-TK-02", "hours": 0.5, "rate": 225, "narrative": "Finalized and filed petition with Halden County Family Division; arranged service on respondent." },
+    { "id": "m09.te.0006", "date": "2026-03-12", "timekeeper_id": "FIRM-TK-02", "hours": 1.3, "rate": 225, "narrative": "Drafted client financial affidavit; assembled income, benefits, and mortgage documentation." },
+    { "id": "m09.te.0007", "date": "2026-03-20", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Client counseling session on custody options and realistic parenting-time outcomes; managed expectations." },
+    { "id": "m09.te.0008", "date": "2026-03-27", "timekeeper_id": "FIRM-TK-02", "hours": 1.7, "rate": 225, "narrative": "Reviewed business financial records and appraisal; outlined business-valuation and discovery approach." },
+    { "id": "m09.te.0009", "date": "2026-04-03", "timekeeper_id": "FIRM-TK-01", "hours": 0.9, "rate": 250, "narrative": "Prepared for initial case-management conference; drafted proposed scheduling and mediation referral." },
+    { "id": "m09.te.0010", "date": "2026-04-17", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Developed case theory and strategic settlement-and-negotiation plan prioritizing a durable parenting schedule." },
+    { "id": "m09.te.0011", "date": "2026-04-24", "timekeeper_id": "FIRM-TK-02", "hours": 1.1, "rate": 225, "narrative": "Drafted proposed parenting plan accommodating client's rotating shifts and on-call weekends." },
+    { "id": "m09.te.0012", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Prepared for parenting-time mediation; assembled property proposal and tradeoff analysis." },
+    { "id": "m09.te.0013", "date": "2026-05-14", "timekeeper_id": "FIRM-TK-01", "hours": 2.3, "rate": 250, "narrative": "Attended parenting-time mediation session with client." },
+    { "id": "m09.te.0014", "date": "2026-05-22", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Revised marital-property division spreadsheet to reflect mediation discussion." },
+    { "id": "m09.te.0015", "date": "2026-06-03", "timekeeper_id": "FIRM-TK-01", "hours": 0.7, "rate": 250, "narrative": "Client counseling on spousal-maintenance exposure and interaction with child support and property award." },
+    { "id": "m09.te.0016", "date": "2026-06-12", "timekeeper_id": "FIRM-TK-02", "hours": 0.9, "rate": 225, "narrative": "Drafted partial marital termination agreement terms on property and schedule for continued negotiation." }
+  ],
+  "invoices": [
+    {
+      "id": "m09.inv.001",
+      "date": "2026-04-16",
+      "period": { "start": "2026-02-12", "end": "2026-04-15" },
+      "fees": 2437.50,
+      "expenses": 0,
+      "payments_received": 2437.50,
+      "balance_due": 0,
+      "line_refs": ["m09.te.0001", "m09.te.0002", "m09.te.0003", "m09.te.0004", "m09.te.0005", "m09.te.0006", "m09.te.0007", "m09.te.0008", "m09.te.0009"]
+    },
+    {
+      "id": "m09.inv.002",
+      "date": "2026-06-26",
+      "period": { "start": "2026-04-16", "end": "2026-06-25" },
+      "fees": 2030.00,
+      "expenses": 0,
+      "payments_received": 2030.00,
+      "balance_due": 0,
+      "line_refs": ["m09.te.0010", "m09.te.0011", "m09.te.0012", "m09.te.0013", "m09.te.0014", "m09.te.0015", "m09.te.0016"]
+    }
+  ],
+  "trust_entries": [
+    { "id": "m09.tr.001", "date": "2026-02-18", "type": "deposit", "amount": 8500, "running_balance": 8500 },
+    { "id": "m09.tr.002", "date": "2026-04-20", "type": "disbursement", "amount": 2437.50, "related_invoice_id": "m09.inv.001", "running_balance": 6062.50 },
+    { "id": "m09.tr.003", "date": "2026-04-22", "type": "deposit", "amount": 2437.50, "running_balance": 8500 },
+    { "id": "m09.tr.004", "date": "2026-06-29", "type": "disbursement", "amount": 2030.00, "related_invoice_id": "m09.inv.002", "running_balance": 6470 },
+    { "id": "m09.tr.005", "date": "2026-06-30", "type": "deposit", "amount": 2030.00, "running_balance": 8500 }
+  ]
+}

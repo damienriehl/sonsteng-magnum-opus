@@ -1,0 +1,52 @@
+{
+  "id": "m10.ex",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/exercise/m10.ex",
+  "matter_id": "m10",
+  "role_id": "m10.role.proponent-counsel",
+  "sections": {
+    "intro": {
+      "title": "Introduction",
+      "body_md": "You are an attorney at Ellingboe & Ravndal LLP, a two-lawyer general practice in Norsholm, Meridian. Your firm drafted the last will of Mabel R. Thornquist, an elderly widow who lived on Loon Rush Lake in Sable County. Eight months before she died, Mabel signed a new will leaving her lake home and most of her estate to her daughter, Eleanor Thornquist-Reddick, whom she also named personal representative, and leaving a smaller cash bequest to her son, Ronald. After Mabel's death, the will was admitted to probate and Eleanor was appointed personal representative. Ronald has now filed a contest, alleging that his mother lacked testamentary capacity and that Eleanor exercised undue influence over her while serving as her caregiver. Your client is the Estate of Mabel R. Thornquist, acting through Eleanor as personal representative. Your job is to defend the validity of the will your firm drafted — which also means grappling with the fact that the drafting attorney is now a potential witness, and that your client both benefited from the will and controlled the decedent's finances. This exercise centers on the client interview: meeting Eleanor, gathering the facts, and beginning to build the estate's defense."
+    },
+    "objectives": {
+      "title": "Learning Objectives",
+      "body_md": "By completing this exercise you will practice and be assessed on the following. **Fact gathering (SK-LP-07; TSK-023):** conduct a thorough interview of the personal representative and identify the facts that bear on capacity and undue influence, including the unhelpful ones. **Client intake and diagnosis (TSK-004, TSK-022):** frame the legal problem the estate faces and explain the posture to a grieving, defensive client. **Legal analysis and reasoning (SK-LP-02; TSK-010, TSK-011):** separate the two distinct challenges — testamentary capacity and undue influence — and map the record evidence to the elements of each. **Counseling a distressed client (SK-LP-10; TSK-037):** manage Eleanor's fear of being branded a manipulator while still eliciting the facts that cut against the estate, including the undocumented withdrawals. **Professional responsibility (SK-LP-16; TSK-058, TSK-060):** recognize the lawyer-as-witness problem created because your firm drafted the will, and recognize that Ronald is a represented adverse party you may not contact directly. **Litigation posture (SK-LP-14; TSK-048):** identify what a response to the contest must address. **Drafting sensibility (SK-LP-17):** appreciate how the drafting attorney's contemporaneous file memo and the explanatory letter function as evidence."
+    },
+    "activities": {
+      "title": "Activities",
+      "body_md": "This exercise runs in four connected activities. **(1) Preparation.** Read the case file — the two wills, the explanatory letter, the drafting attorney's file memo, the physician's capacity letter, the asset summary, and the three witness statements. Build a chronology and list, in advance, the facts you most need to confirm with your client. **(2) Client interview.** Interview Eleanor Thornquist-Reddick, the personal representative, using the chat interface. Elicit her account of the caregiving, the will change, and the family history; and, with care, surface the facts that hurt — her role in setting up the appointment, the phone fight with Ronald, and the account withdrawals. Some of these will only come out if you build trust and reassure her. **(3) Analysis and counseling.** Prepare a short interview memo separating the capacity issue from the undue-influence issue, mapping the evidence on each, and flagging the professional-responsibility problems (the drafting attorney as witness; no direct contact with Ronald). **(4) Optional witness interview.** If assigned, interview the home health aide, Lorna Sundberg, who is available to both sides, and assess how her account helps and hurts. A short debrief and rubric-based critique follow."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "body_md": "Come to the client interview prepared with a written interview plan and a chronology drawn from the case file. Conduct the interview with Eleanor Thornquist-Reddick through the chat interface; plan for roughly twenty exchanges. Open with rapport and an open-ended invitation before moving to specific questions — several key facts are gated behind genuine rapport, reassurance about confidentiality, and a non-judgmental response to sensitive admissions, and no amount of pressure or flattery will unlock them. After the interview, prepare a two-to-three page interview memo that (a) states the estate's legal problem, (b) analyzes testamentary capacity and undue influence separately, mapping the specific facts and exhibits to each, (c) identifies the professional-responsibility issues raised by the firm having drafted the will and by Ronald's representation, and (d) recommends next steps and any further investigation. Do not contact Ronald Thornquist; he is represented. Cite only facts from the record in anything you submit — the legal research is yours to do separately. Submit your interview plan, the interview transcript, and your memo."
+    },
+    "case_file": {
+      "title": "Case File",
+      "files": [
+        "case-file/exhibit-001-will-2024.md",
+        "case-file/exhibit-002-explanatory-letter.md",
+        "case-file/exhibit-003-prior-will-2015.md",
+        "case-file/exhibit-004-drafting-memo.md",
+        "case-file/exhibit-005-capacity-letter.md",
+        "case-file/exhibit-006-objection-petition.md",
+        "case-file/exhibit-007-asset-summary.md",
+        "case-file/witness-grenfell.md",
+        "case-file/witness-brashear.md",
+        "case-file/witness-sundberg.md"
+      ]
+    },
+    "history": {
+      "title": "Procedural & Factual History",
+      "body_md": "Mabel R. Thornquist, a widow, lived at her home on Loon Rush Lake in Sable County. She signed a will in 2015 that divided her estate equally between her two children, Eleanor and Ronald. In early 2024 her health declined; she fell, and her physician diagnosed an early-stage, vascular-type cognitive impairment. In March 2024 Eleanor moved in as her full-time caregiver, later taking a financial power of attorney and becoming a joint signer on her mother's checking account. In September 2024 an appointment was made with Ellingboe & Ravndal, and on October 18, 2024, Mabel signed a new will leaving the lake home and residue to Eleanor, a $25,000 cash bequest to Ronald, and naming Eleanor personal representative; she signed an explanatory letter the same day. Her physician had examined her two weeks earlier and opined she had capacity. Mabel died on June 22, 2025. The will was admitted to probate in the Sable County Probate Division and Eleanor was appointed personal representative on August 11, 2025. On September 15, 2025, Ronald filed an objection and petition to contest, alleging lack of capacity and undue influence. The matter is assigned to the Hon. Malcolm Ferris."
+    },
+    "considerations": {
+      "title": "Considerations",
+      "body_md": "This matter rewards separating two challenges that laypeople tend to blur. **Testamentary capacity** and **undue influence** are distinct: one asks whether the testator understood what she was doing; the other asks whether someone overbore her free will. The estate's proof differs on each, and the same facts can point in opposite directions. Weigh the capacity evidence — the physician's contemporaneous assessment, the drafting attorney's practice of meeting the client alone, the disinterested attesting witness, and the self-proving affidavit — against the reality of a diagnosed cognitive decline and a witness who recalls Mabel seeming tired and losing her place. On undue influence, consider the classic warning signs the contestant will press: a caregiver-beneficiary who lived with the testator, held her power of attorney, controlled access, participated in arranging the will, and benefited from a change to a long-standing equal split. Then weigh the counter-facts: the testator met with counsel alone, gave independent and documented reasons, memorialized them in her own letter, and had a real, pre-existing basis to treat her children differently. Consider, too, the professional-responsibility terrain: the drafting attorney is a likely witness, which raises the lawyer-as-witness question for the firm; the personal representative's undocumented withdrawals raise fiduciary and candor concerns; and the contestant is represented, so direct contact is off-limits. Finally, consider how you counsel a grieving client whose devotion is being recast as manipulation."
+    },
+    "substantive_info": {
+      "title": "Substantive Information",
+      "body_md": "This is a will contest in the Probate Division of the Meridian District Court, Sable County. Students should research the Meridian law governing (1) the elements of testamentary capacity — generally, the testator's understanding of the nature and extent of her property, the natural objects of her bounty, and the nature of the testamentary act — and how a diagnosed cognitive impairment interacts with capacity, which is measured at the moment of execution; (2) undue influence, including the factors courts weigh and the circumstances under which a presumption of undue influence may arise from a confidential relationship coupled with suspicious circumstances and active participation in procuring the will, and who bears the burden once such a presumption arises; (3) the evidentiary effect of a self-proving affidavit and attesting-witness testimony; and (4) the professional-responsibility rules on a lawyer acting as a witness in a matter and on communication with a represented person. Procedurally, students should understand the posture of a contest after a will has been admitted to probate, who bears the burden of proof on capacity versus undue influence, and the role of the personal representative as a fiduciary defending the will. Consistent with the facts-only policy, this packet states the issues but no citations; finding and reading the governing Meridian authority is the student's research task."
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "id": "m13.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m13.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m13",
+  "declared_total": 325,
+  "criteria": [
+    {
+      "id": "m13.rub.c01",
+      "name": "Fact investigation and chronology",
+      "description": "Develops the facts from the client, the independent eyewitness, the crash report, and the medical and economic records, and builds a defensible chronology.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m13.rub.c01.s01",
+          "name": "Witness and eyewitness development",
+          "description": "Elicits the client's account and the independent eyewitness account; identifies corroborating physical evidence.",
+          "weight_points": 35
+        },
+        {
+          "id": "m13.rub.c01.s02",
+          "name": "Documentary and medical development",
+          "description": "Marshals the crash report, medical records, earnings, PIP log, and property-damage proof into a coherent chronology.",
+          "weight_points": 35
+        }
+      ]
+    },
+    {
+      "id": "m13.rub.c02",
+      "name": "Liability and comparative-fault analysis",
+      "description": "Analyzes the negligence elements against the disputed signal facts and assesses comparative-fault exposure.",
+      "weight_points": 80,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-010",
+      "subcriteria": [
+        {
+          "id": "m13.rub.c02.s01",
+          "name": "Negligence elements",
+          "description": "Correctly identifies and applies duty, breach, causation, and damages to the intersection facts.",
+          "weight_points": 40
+        },
+        {
+          "id": "m13.rub.c02.s02",
+          "name": "Comparative-fault apportionment",
+          "description": "Assesses how the alleged late entry and distraction could shift fault and reduce recovery.",
+          "weight_points": 40
+        }
+      ]
+    },
+    {
+      "id": "m13.rub.c03",
+      "name": "Damages and no-fault / PIP analysis",
+      "description": "Quantifies economic and non-economic damages and analyzes the PIP/no-fault layer and injury threshold.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-001"
+    },
+    {
+      "id": "m13.rub.c04",
+      "name": "Client counseling and expectation management",
+      "description": "Conducts an empathetic interview, surfaces legal and non-legal concerns, and counsels the client honestly on options, risks, and the settlement trade-off.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-034"
+    },
+    {
+      "id": "m13.rub.c05",
+      "name": "Settlement strategy and negotiation",
+      "description": "Builds a strategic settlement and negotiation plan and responds to the insurer's low, comparative-fault-based offer.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-044"
+    },
+    {
+      "id": "m13.rub.c06",
+      "name": "Professional responsibility — no-contact rule",
+      "description": "Recognizes that the opposing driver is represented and applies the no-contact rule instead of interviewing him directly.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 325 },
+    { "grade": "A-", "points": 309 },
+    { "grade": "B+", "points": 293 },
+    { "grade": "B", "points": 276 },
+    { "grade": "B-", "points": 260 },
+    { "grade": "C", "points": 228 }
+  ]
+}

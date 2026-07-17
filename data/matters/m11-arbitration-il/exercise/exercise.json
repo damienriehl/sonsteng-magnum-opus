@@ -1,0 +1,55 @@
+{
+  "id": "m11.ex",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/exercise/m11.ex",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m11",
+  "role_id": "m11.role.employee-counsel",
+  "sections": {
+    "intro": {
+      "title": "Introduction",
+      "body_md": "You are an associate at Ellingboe & Ravndal LLP, and the firm represents Yusuf Adeyemi, a warehouse operations supervisor who was fired by Prairie State Logistics, Inc. a few weeks after he reported unpaid off-the-clock work and blocked fire exits. Adeyemi spent about seven years at a distribution center in the Interstate 80 corridor near Joliet, Illinois, rising from the floor to run a two-dozen-person second shift, with a clean and even praised record until the fall of 2025. When he complained in writing to human resources and then to a state wage-and-safety hotline, the company placed him on the first negative review of his career and terminated him within weeks, offering two overlapping reasons: a failed performance plan and a site headcount reduction. Because Adeyemi signed an employment agreement with a mandatory arbitration clause, this dispute does not go to court. It proceeds in a private arbitral forum under the parties' agreement and Illinois law. Your job across this exercise is to interview the client and witnesses, develop the facts, build the theory of the case, draft the statement of the case, and prepare to present at the arbitration hearing — all while handling the professional-responsibility questions that come with a represented opposing party."
+    },
+    "objectives": {
+      "title": "Objectives",
+      "body_md": "By completing this exercise you will practice a connected set of surveyed lawyering skills and tasks. You will exercise legal analysis and reasoning (SK-LP-02) by developing a retaliation and wrongful-discharge theory and by analyzing the enforceability posture of the arbitration agreement (TSK-001 preliminary case analysis; TSK-002 case theory and strategy). You will exercise fact gathering (SK-LP-07) through a client intake interview (TSK-022), fact-witness interviews (TSK-024), factual investigation (TSK-023), and a disciplined chronology (TSK-025). You will exercise written communication (SK-LP-09) by drafting a persuasive arbitration statement of the case (TSK-032). You will exercise negotiation (SK-LP-13) by preparing for and conducting a settlement discussion (TSK-045). You will exercise litigation and advocacy (SK-LP-14) by presenting the matter at an arbitration hearing (TSK-052). Finally, you will exercise sensitivity to professional and ethical concerns (SK-LP-16) by recognizing and correctly handling the Rule 4.2 no-contact problem posed by the employer's represented managers and by complying with the rules of professional conduct (TSK-060). The graded rubric maps directly to these skill and task references."
+    },
+    "activities": {
+      "title": "Activities",
+      "body_md": "This exercise unfolds in stages that mirror real practice. First, prepare for and conduct a client interview with Yusuf Adeyemi using the persona chat: open broadly, establish rapport and confidentiality, and work the funnel from open narrative toward the specific timeline. Some of the most important facts — a personal notebook of late-work nights, a timecard edit he approved, his fear of being blackballed — will surface only if you earn them, not if you pressure for them. Second, interview the corroborating fact witnesses, and notice which persons on the employer's side are represented and therefore off-limits for direct contact. Third, assemble the documentary record and build a tight chronology that lines up the internal complaint, the hotline call, the performance improvement plan, and the termination. Fourth, articulate a theory of the case and draft the arbitration statement of the case within the page limit. Fifth, prepare a settlement and negotiation plan and conduct a settlement discussion. Sixth, prepare and present the arbitration hearing: opening statement, direct examination of your client and witnesses, cross-examination of the adverse witness, and closing argument, followed by an oral critique."
+    },
+    "instructions": {
+      "title": "Instructions",
+      "body_md": "Work only from the case file provided; do not invent facts. Begin by reading the entire case file and the witness statements, then run your client interview through the persona engine before you draft anything. Prepare a preliminary case-analysis memorandum of no more than four pages that states the facts, the client's objectives, the likely claims and defenses, and your recommended strategy, including how the mandatory arbitration clause changes the procedural picture. Then draft an arbitration statement of the case for the claimant that frames the issues, marshals the facts to the record, and states the relief sought; observe the page limit set by your instructor and cite to exhibits by their case-file labels rather than to legal authority in the student-facing draft. Prepare a strategic settlement and negotiation plan and be ready to conduct a settlement discussion. Finally, prepare a hearing notebook: an opening, examination outlines for your client and each witness, a cross outline for the adverse director of operations, an exhibit list, and a closing. Throughout, document any professional-responsibility issues you encounter — in particular, any attempt to contact a represented person — and explain how you resolved them."
+    },
+    "case_file": {
+      "title": "Case File",
+      "files": [
+        "case-file/statement-adeyemi.md",
+        "case-file/statement-ruvalcaba.md",
+        "case-file/statement-osei.md",
+        "case-file/statement-croll.md",
+        "case-file/employment-agreement.md",
+        "case-file/performance-improvement-plan.md",
+        "case-file/termination-notice.md",
+        "case-file/hr-complaint-email-chain.md",
+        "case-file/state-hotline-confirmation.md",
+        "case-file/fire-exit-photo-exhibit.md",
+        "case-file/timekeeping-records.md",
+        "case-file/rif-memo.md"
+      ]
+    },
+    "history": {
+      "title": "Procedural & Factual History",
+      "body_md": "Yusuf Adeyemi joined Prairie State Logistics in 2019 and became second-shift operations supervisor in 2022 with consistently strong reviews. In the summer and fall of 2025, his crew was routinely kept working past clock-out to hit outbound quotas, and a timekeeping change left that time unrecorded and unpaid; during the same peak season, staged pallets repeatedly blocked outbound-bay fire exits. On November 10, 2025, Adeyemi emailed a written complaint to HR business partner Bethany Croll about both problems; on November 18, 2025, having gotten no substantive response, he filed a complaint with a state wage-and-safety hotline. On December 5, 2025, the site's director of operations, Roland Pfeiffer, placed Adeyemi on a performance improvement plan — the first negative document in his file — citing October–November accuracy metrics. On January 9, 2026, the company terminated him, citing both the performance plan and a site headcount reduction memorialized in a reduction-in-force memo dated January 8, 2026; within six weeks it posted a second-shift operations-lead opening. Adeyemi refused a conditional severance release. Because his employment agreement contains a mandatory arbitration clause with a class waiver, the firm filed a demand for arbitration in February 2026. As of June 30, 2026, pre-hearing document exchange is ongoing and the hearing is anticipated later in the year."
+    },
+    "considerations": {
+      "title": "Considerations",
+      "body_md": "This matter rewards careful thinking about proof, sequence, and forum. The claimant's case is largely circumstantial and built on timing: the closeness in time between the protected reports and the adverse actions, the sudden appearance of a negative review in an otherwise clean file, and the shifting or overlapping reasons the employer gave for the termination. Consider how you would prove that decision-makers knew about the protected activity, and what the internal HR routing of the complaint does to the employer's claim of ignorance. Consider, too, the tension between the two employer rationales — a for-cause performance failure and a neutral headcount reduction — and whether they reinforce or undercut each other. On the forum, weigh what changes when the dispute is heard by a private arbitrator rather than a jury: the streamlined procedure, the limited record, and the employer's obligation under the clause to pay the arbitrator. Consider the client's real objectives, which are not only monetary — reinstatement, a clean reference, and protection from being blackballed matter to him. Weigh the professional-responsibility dimension seriously: the employer's managers are represented, and the no-contact rule governs how you may reach them. Finally, consider the settlement posture and what a durable resolution would need to include."
+    },
+    "substantive_info": {
+      "title": "Substantive Information",
+      "body_md": "This is a private employment arbitration, not a court trial, and the difference shapes everything you do. The parties' employment agreement, not a set of court rules, supplies the procedure, and the arbitral forum's rules fill the gaps; the arbitrator, a neutral chosen under the agreement, both decides the facts and applies the law. Your research task is to find the governing framework yourself: the enforceability of the arbitration clause and its class waiver, the arbitrator's authority to compel arbitration and issue an award, and the narrow grounds on which a court may later confirm or vacate that award. On the merits, you are researching Illinois and federal employment law governing retaliation and wrongful discharge for protected activity — reporting wage-and-hour violations and unsafe conditions — as well as the recovery of unpaid wages for off-the-clock work. Think in elements: what protected activity looks like, what an adverse employment action is, and how a claimant proves the causal link between them, often through timing, knowledge, pretext, and comparators. Consider available remedies, including reinstatement, back and front pay, and unpaid wages, and how each is proven and measured. The student-facing packet is deliberately facts-only: locating and reading the controlling statutes, rules, and authorities is your legal-research exercise."
+    }
+  }
+}

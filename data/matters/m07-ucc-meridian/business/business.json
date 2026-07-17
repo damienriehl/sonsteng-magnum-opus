@@ -1,0 +1,100 @@
+{
+  "id": "m07.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m07.biz",
+  "matter_id": "m07",
+  "intake": {
+    "client_name": "Cloverdyke Dairy Cooperative",
+    "contact": {
+      "email": "naaberg@cloverdykedairy.example.coop",
+      "phone": "555-0173",
+      "address": "County Road 9, near Danforth, Voss County, Meridian 55—"
+    },
+    "matter_summary": "Farmer-owned dairy co-op seeks recovery against equipment seller Brandt Refrigeration Systems, LLC after a new $96,000 bulk milk-cooling unit failed to hold temperature three times in its first two months, spoiling milk. UCC Article 2 breach-of-warranty and remedies dispute; limited-remedy warranty disclaims consequential damages; mediation then binding arbitration contemplated per the agreement.",
+    "intake_date": "2026-03-13",
+    "referral_source": "co-op board member referral (prior firm client)"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Cloverdyke Dairy Cooperative",
+      "Nils Aaberg",
+      "Brandt Refrigeration Systems, LLC",
+      "Sylvia Brandt",
+      "Larkspur Creamery",
+      "Ingemar Rask, P.E."
+    ],
+    "result": "clear",
+    "notes": "No current or former representation of Brandt Refrigeration Systems, LLC, Sylvia Brandt, or Larkspur Creamery. Prior closed matter for this client (m22) reviewed; no positional conflict. Independent engineer Rask is a retained consultant, not adverse.",
+    "checked_date": "2026-03-14"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-03-16",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m07.te.0001", "date": "2026-03-16", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Initial client interview with general manager Aaberg; scope, goals, and timeline of the three cooling failures." },
+    { "id": "m07.te.0002", "date": "2026-03-17", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Open matter; conflicts clearance; preliminary case assessment memo to file." },
+    { "id": "m07.te.0003", "date": "2026-03-20", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Review purchase agreement and limited warranty; research sale-of-goods warranty framework." },
+    { "id": "m07.te.0004", "date": "2026-03-24", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Draft warranty-claim analysis; outline demand and mediation posture." },
+    { "id": "m07.te.0005", "date": "2026-03-27", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Review draft analysis; client call with Aaberg to confirm loss figures and documents." },
+    { "id": "m07.te.0006", "date": "2026-04-02", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Gather and index delivery/installation, service, and creamery rejection records." },
+    { "id": "m07.te.0007", "date": "2026-04-08", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Interview milk-house operator Tuvang; build fact chronology of the three failures." },
+    { "id": "m07.te.0008", "date": "2026-04-15", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research limited-remedy failure of essential purpose and consequential-damages exclusion." },
+    { "id": "m07.te.0009", "date": "2026-04-22", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Memorialize technician interview; assess mixed-causation evidence." },
+    { "id": "m07.te.0010", "date": "2026-05-04", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Confer with independent engineer Rask regarding inspection findings and report." },
+    { "id": "m07.te.0011", "date": "2026-05-07", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Draft mediation statement and damages model (spoilage, premium loss, cover costs)." },
+    { "id": "m07.te.0012", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research enforceability of consequential-damages exclusion in commercial sale; unconscionability angle." },
+    { "id": "m07.te.0013", "date": "2026-05-15", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Client counseling call: mediation vs. arbitration, exposure, and best alternative." },
+    { "id": "m07.te.0014", "date": "2026-05-19", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Revise mediation statement; assemble exhibit set and witness summaries." },
+    { "id": "m07.te.0015", "date": "2026-05-22", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Correspondence to opposing counsel proposing mediation dates and scheduling." },
+    { "id": "m07.te.0016", "date": "2026-05-27", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Interview creamery grader Callahan; obtain rejection tickets and credit memos." },
+    { "id": "m07.te.0017", "date": "2026-05-29", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Review mediation package; strategy conference with associate." },
+    { "id": "m07.te.0018", "date": "2026-05-30", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Finalize mediation statement; client sign-off." },
+    { "id": "m07.te.0019", "date": "2026-06-02", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Prepare for mediation session; anticipate Brandt's causation and warranty-limit defenses." },
+    { "id": "m07.te.0020", "date": "2026-06-04", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Attend mediation session (part 1) with client representative." },
+    { "id": "m07.te.0021", "date": "2026-06-09", "timekeeper_id": "FIRM-TK-02", "hours": 5.0, "rate": 225, "narrative": "Post-mediation analysis; draft settlement counter and outline arbitration statement of the case." },
+    { "id": "m07.te.0022", "date": "2026-06-11", "timekeeper_id": "FIRM-TK-01", "hours": 3.0, "rate": 250, "narrative": "Client counseling on settlement counter versus proceeding to binding arbitration." },
+    { "id": "m07.te.0023", "date": "2026-06-16", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Research arbitration procedure and award-review standard; draft arbitration demand outline." },
+    { "id": "m07.te.0024", "date": "2026-06-18", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Correspondence with opposing counsel on settlement terms; evaluate offer." },
+    { "id": "m07.te.0025", "date": "2026-06-23", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Refine damages model with engineer input; prepare demand exhibits." },
+    { "id": "m07.te.0026", "date": "2026-06-25", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Strategy conference; assess mixed-causation risk for arbitration." },
+    { "id": "m07.te.0027", "date": "2026-06-29", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Draft statement of the case for binding arbitration; witness and exhibit list." },
+    { "id": "m07.te.0028", "date": "2026-06-30", "timekeeper_id": "FIRM-TK-01", "hours": 1.7, "rate": 250, "narrative": "Client update on status and options; confirm next steps." },
+    { "id": "m07.te.0029", "date": "2026-06-30", "timekeeper_id": "FIRM-TK-01", "hours": 4.0, "rate": 250, "narrative": "Finalize arbitration statement of the case and supporting damages summary." }
+  ],
+  "invoices": [
+    {
+      "id": "m07.inv.001",
+      "date": "2026-04-30",
+      "period": { "start": "2026-03-16", "end": "2026-04-30" },
+      "fees": 4900,
+      "expenses": 500,
+      "payments_received": 3000,
+      "balance_due": 2400,
+      "line_refs": ["m07.te.0001", "m07.te.0002", "m07.te.0003", "m07.te.0004", "m07.te.0005", "m07.te.0006", "m07.te.0007", "m07.te.0008", "m07.te.0009"]
+    },
+    {
+      "id": "m07.inv.002",
+      "date": "2026-05-31",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 5400,
+      "expenses": 0,
+      "payments_received": 2200,
+      "balance_due": 3200,
+      "line_refs": ["m07.te.0010", "m07.te.0011", "m07.te.0012", "m07.te.0013", "m07.te.0014", "m07.te.0015", "m07.te.0016", "m07.te.0017", "m07.te.0018"]
+    },
+    {
+      "id": "m07.inv.003",
+      "date": "2026-06-30",
+      "period": { "start": "2026-06-01", "end": "2026-06-30" },
+      "fees": 8300,
+      "expenses": 4000,
+      "payments_received": 0,
+      "balance_due": 12300,
+      "line_refs": ["m07.te.0019", "m07.te.0020", "m07.te.0021", "m07.te.0022", "m07.te.0023", "m07.te.0024", "m07.te.0025", "m07.te.0026", "m07.te.0027", "m07.te.0028", "m07.te.0029"]
+    }
+  ],
+  "trust_entries": []
+}

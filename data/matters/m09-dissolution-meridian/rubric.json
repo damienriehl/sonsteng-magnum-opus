@@ -1,0 +1,120 @@
+{
+  "id": "m09.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m09.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m09",
+  "declared_total": 220,
+  "criteria": [
+    {
+      "id": "m09.rub.c01",
+      "name": "Client interview and fact-gathering",
+      "description": "Plans and conducts an effective intake interview of a distressed client that develops a complete factual record.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m09.rub.c01.s01",
+          "name": "Rapport and interview technique",
+          "description": "Opens with an open-ended invitation, attends to wellbeing, avoids interruption, and builds trust without pressure or flattery.",
+          "weight_points": 30
+        },
+        {
+          "id": "m09.rub.c01.s02",
+          "name": "Surfacing guarded and concealed facts",
+          "description": "Notices and gently follows hints to develop the rapport-gated and concealed facts (the wall incident, the children left home, the undisclosed relationship, suspected cash income).",
+          "weight_points": 25
+        },
+        {
+          "id": "m09.rub.c01.s03",
+          "name": "Chronology and completeness",
+          "description": "Produces an accurate chronology and a complete, well-organized factual record from the interview and case file.",
+          "weight_points": 15
+        }
+      ]
+    },
+    {
+      "id": "m09.rub.c02",
+      "name": "Counseling the distressed client",
+      "description": "Counsels a vulnerable client on realistic options while managing emotion and expectations.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037",
+      "subcriteria": [
+        {
+          "id": "m09.rub.c02.s01",
+          "name": "Realistic option-framing",
+          "description": "Explains custody, home, business-valuation, and maintenance options honestly, including the client's maintenance exposure, without false comfort or fatalism.",
+          "weight_points": 20
+        },
+        {
+          "id": "m09.rub.c02.s02",
+          "name": "Empathy and expectation management",
+          "description": "Responds to the client's guilt and fear with empathy, distinguishes labels from outcomes, and keeps the children's interests central.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m09.rub.c03",
+      "name": "Settlement strategy and negotiation",
+      "description": "Builds and prepares to execute a strategic settlement-and-negotiation plan.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-044",
+      "subcriteria": [
+        {
+          "id": "m09.rub.c03.s01",
+          "name": "Prioritization and tradeoffs",
+          "description": "Prioritizes a durable parenting schedule and treats property questions as tradeable; identifies interests behind positions.",
+          "weight_points": 30
+        },
+        {
+          "id": "m09.rub.c03.s02",
+          "name": "Business valuation and maintenance analysis",
+          "description": "Analyzes how to value the one-person business and how the income disparity drives the maintenance question, and plans the needed discovery/experts.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m09.rub.c04",
+      "name": "Professional responsibility",
+      "description": "Identifies and honors the governing ethical duties.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m09.rub.c04.s01",
+          "name": "Rule 4.2 no-contact with represented party",
+          "description": "Recognizes that Harlan is represented and routes any contact through his counsel rather than communicating with him directly.",
+          "weight_points": 15
+        },
+        {
+          "id": "m09.rub.c04.s02",
+          "name": "Confidentiality of sensitive disclosures",
+          "description": "Protects the client's most sensitive disclosures and reasons carefully about what appears in served documents.",
+          "weight_points": 15
+        }
+      ]
+    },
+    {
+      "id": "m09.rub.c05",
+      "name": "Drafting the initiating documents",
+      "description": "Translates the case theory into a competent petition, proposed parenting plan, and property proposal.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-048"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 220 },
+    { "grade": "A-", "points": 209 },
+    { "grade": "B+", "points": 198 },
+    { "grade": "B", "points": 187 },
+    { "grade": "B-", "points": 176 },
+    { "grade": "C", "points": 154 }
+  ]
+}

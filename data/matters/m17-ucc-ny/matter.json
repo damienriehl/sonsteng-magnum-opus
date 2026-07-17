@@ -1,0 +1,53 @@
+{
+  "id": "m17",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m17",
+  "slug": "m17-ucc-ny",
+  "shape": "ucc_sale_of_goods",
+  "tier": "real",
+  "jurisdiction": "NY",
+  "caption": "Empire Provisions Corp. v. Ostervold Packing Co.",
+  "sides": [
+    {
+      "role_id": "m17.role.buyer-counsel",
+      "label": "Buyer / Defendant — Empire Provisions Corp.",
+      "party_names": ["Empire Provisions Corp."],
+      "confidential_fact_refs": ["m17.fact.038"]
+    },
+    {
+      "role_id": "m17.role.seller-counsel",
+      "label": "Seller / Plaintiff — Ostervold Packing Co.",
+      "party_names": ["Ostervold Packing Co."],
+      "confidential_fact_refs": ["m17.fact.040"]
+    }
+  ],
+  "parties": [
+    { "name": "Empire Provisions Corp.", "role": "buyer / defendant specialty-food distributor", "side_role_id": "m17.role.buyer-counsel" },
+    { "name": "Marisol Beltran", "role": "buyer's procurement director and representative", "side_role_id": "m17.role.buyer-counsel" },
+    { "name": "Ostervold Packing Co.", "role": "seller / plaintiff contract packer", "side_role_id": "m17.role.seller-counsel" },
+    { "name": "Roland Ostervold", "role": "seller's president and representative", "side_role_id": "m17.role.seller-counsel" }
+  ],
+  "client_id": "FIRM-C-17",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-01", "SK-LP-02", "SK-LP-03", "SK-LP-07", "SK-LP-14", "SK-LP-16"],
+  "task_refs": ["TSK-004", "TSK-006", "TSK-009", "TSK-010", "TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-034", "TSK-048", "TSK-049"],
+  "personas": ["m17.per.beltran", "m17.per.ostervold", "m17.per.vandermeer"],
+  "witnesses": [
+    { "id": "m17.wit.vandermeer", "name": "Tobias Vandermeer" },
+    { "id": "m17.wit.sengupta", "name": "Priyanka Sengupta" },
+    { "id": "m17.wit.ferraro", "name": "Curtis Ferraro" },
+    { "id": "m17.wit.mizrahi", "name": "Yosef Mizrahi" }
+  ],
+  "exhibits": [
+    { "id": "m17.exh.001", "title": "Master Supply Agreement and Purchase Orders" },
+    { "id": "m17.exh.002", "title": "Empire Receiving Inspection Reports and Rejection Notices" },
+    { "id": "m17.exh.003", "title": "Label and Date-Code Photo Exhibits (Described)" },
+    { "id": "m17.exh.004", "title": "Independent Food-Labeling Consultant Inspection Report" },
+    { "id": "m17.exh.005", "title": "Rejection, Cure-Offer, and Demand Correspondence" },
+    { "id": "m17.exh.006", "title": "Ostervold Production and Shipping Records (Excerpts)" },
+    { "id": "m17.exh.007", "title": "Carrier Delivery and Pickup Records" },
+    { "id": "m17.exh.008", "title": "Empire Inventory and Resale Records (Load D)" }
+  ],
+  "open_date": "2026-03-09",
+  "as_of_date": "2026-06-30"
+}

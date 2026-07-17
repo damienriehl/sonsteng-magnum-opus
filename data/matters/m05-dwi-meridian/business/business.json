@@ -1,0 +1,114 @@
+{
+  "id": "m05.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m05.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m05",
+  "intake": {
+    "client_name": "Devon R. Halvard",
+    "contact": {
+      "email": "devon.halvard@example.com",
+      "phone": "555-0179",
+      "address": "1420 Wexford Avenue, Apt. B, Norsholm, Meridian 55902"
+    },
+    "matter_summary": "First-offense Fourth-degree DWI charge following a taillight stop in Norsholm; client seeks to protect his driver's license and job and to challenge or negotiate the charge.",
+    "intake_date": "2026-02-16",
+    "referral_source": "returning client"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Devon R. Halvard", "State of Meridian", "Officer Curtis Broshears", "The Copper Larder"],
+    "result": "clear",
+    "notes": "No current or former client adverse to Devon Halvard; the arresting officer and the restaurant present no conflict. Returning flat-fee client; prior unrelated matter closed 2024.",
+    "checked_date": "2026-02-16"
+  },
+  "engagement": {
+    "fee_type": "flat",
+    "flat_fee": 2500,
+    "engagement_date": "2026-02-17",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    {
+      "id": "m05.te.0001",
+      "date": "2026-02-16",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.5,
+      "rate": 225,
+      "narrative": "Initial intake interview with Devon Halvard; assessed first-offense DWI charge, breath reading, and driver's-license exposure."
+    },
+    {
+      "id": "m05.te.0002",
+      "date": "2026-02-18",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 0.8,
+      "rate": 225,
+      "narrative": "Reviewed incident report, breath-test record, and citations; opened matter file and calendared deadlines."
+    },
+    {
+      "id": "m05.te.0003",
+      "date": "2026-02-24",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.6,
+      "rate": 250,
+      "narrative": "Appeared at arraignment; entered not-guilty plea; requested contested omnibus hearing."
+    },
+    {
+      "id": "m05.te.0004",
+      "date": "2026-03-05",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.2,
+      "rate": 225,
+      "narrative": "Drafted and served demand for discovery, including request for squad dashcam and body-camera footage."
+    },
+    {
+      "id": "m05.te.0005",
+      "date": "2026-03-20",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 2.0,
+      "rate": 225,
+      "narrative": "Reviewed dashcam and bodycam footage; analyzed field-sobriety administration on the sloped, icy shoulder."
+    },
+    {
+      "id": "m05.te.0006",
+      "date": "2026-04-10",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 1.4,
+      "rate": 250,
+      "narrative": "Legal research and analysis of breath-test margin-of-error and mouth-alcohol issues; developed suppression theory."
+    },
+    {
+      "id": "m05.te.0007",
+      "date": "2026-05-08",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.1,
+      "rate": 225,
+      "narrative": "Follow-up client meeting; discussed vertigo diagnosis and double-shift fatigue; obtained medical-records authorization."
+    },
+    {
+      "id": "m05.te.0008",
+      "date": "2026-06-04",
+      "timekeeper_id": "FIRM-TK-01",
+      "hours": 0.9,
+      "rate": 250,
+      "narrative": "Prepared negotiation position; opened plea discussions with the city attorney regarding reduction to careless driving."
+    },
+    {
+      "id": "m05.te.0009",
+      "date": "2026-06-20",
+      "timekeeper_id": "FIRM-TK-02",
+      "hours": 1.6,
+      "rate": 225,
+      "narrative": "Outlined omnibus suppression argument; prepared client for the contested omnibus hearing."
+    }
+  ],
+  "invoices": [],
+  "trust_entries": [
+    {
+      "id": "m05.tr.001",
+      "date": "2026-02-17",
+      "type": "deposit",
+      "amount": 2500,
+      "running_balance": 2500
+    }
+  ]
+}

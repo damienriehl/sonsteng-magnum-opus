@@ -1,0 +1,62 @@
+{
+  "id": "m16.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m16.rub",
+  "matter_id": "m16",
+  "declared_total": 189,
+  "criteria": [
+    {
+      "id": "m16.rub.c01",
+      "name": "Preliminary-injunction standard and covenant reasonableness",
+      "description": "Correctly identifies and applies the preliminary-injunction standard and the reasonableness test governing restrictive covenants; separates the enforceability question from the trade-secret question and engages the inevitable-disclosure theory directly.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-011",
+      "subcriteria": [
+        {
+          "id": "m16.rub.c01.s01",
+          "name": "Likelihood of success on the merits",
+          "description": "Analyzes whether the two-year, geographically unlimited covenant is reasonable in scope, geography, and duration and protects a legitimate interest; whether the matching engine is a protectable trade secret given its public foundations and loose handling; and whether inevitable disclosure is a viable theory on these facts.",
+          "weight_points": 40
+        },
+        {
+          "id": "m16.rub.c01.s02",
+          "name": "Irreparable harm, balance of equities, public interest",
+          "description": "Weighs the employer's claimed harm against the employee's loss of livelihood in a narrow specialty and the public interest in labor mobility and in not enforcing overbroad covenants.",
+          "weight_points": 30
+        }
+      ]
+    },
+    {
+      "id": "m16.rub.c02",
+      "name": "Fact development and investigation",
+      "description": "Gathers and organizes the facts that decide the case — how the engine was actually built and shared, what (if anything) the client took, and whether any solicitation occurred — from the client interview, the witnesses, and the exhibits.",
+      "weight_points": 35,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023"
+    },
+    {
+      "id": "m16.rub.c03",
+      "name": "Persuasive written advocacy",
+      "description": "Produces a clear, well-organized memorandum opposing the injunction, with an accurate statement of facts (including the facts that hurt the client) and a disciplined argument on reasonableness, protectability, and inevitable disclosure.",
+      "weight_points": 44,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-032"
+    },
+    {
+      "id": "m16.rub.c04",
+      "name": "Professional-responsibility and client-counseling judgment",
+      "description": "Recognizes the no-contact rule as to Hudson Valley's represented co-founder, and candidly counsels a frightened client about the risk created by the emailed diagram, the personal notebook, the recruiting conversation, and the offhand remark.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 189 },
+    { "grade": "A-", "points": 178 },
+    { "grade": "B+", "points": 167 },
+    { "grade": "B", "points": 155 },
+    { "grade": "C", "points": 132 }
+  ]
+}

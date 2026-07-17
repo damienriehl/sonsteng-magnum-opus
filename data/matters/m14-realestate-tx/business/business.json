@@ -1,0 +1,92 @@
+{
+  "id": "m14.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m14.biz",
+  "matter_id": "m14",
+  "intake": {
+    "client_name": "Kenji Nakamura",
+    "contact": {
+      "email": "kenji.nakamura@example.com",
+      "phone": "555-0173",
+      "address": "2210 Cedar Post Road, Kerrville, TX 78028"
+    },
+    "matter_summary": "Buyer under a signed earnest-money contract for a 320-acre Texas rangeland tract (Edwards County) for a combined solar array and cattle operation. Title work surfaced a questionable access easement, a severed mineral estate held by a third party, and a seller demand to reserve a surface easement around an existing water well. Firm to advise and renegotiate the deed and access terms toward a closeable deal.",
+    "intake_date": "2025-11-18",
+    "referral_source": "referred by the buyer's real-estate agent"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Kenji Nakamura",
+      "Garrett Whitfield",
+      "Everett Sandoval",
+      "Ocotillo Minerals, LP",
+      "Lone Mesa Title Company",
+      "Faircloth Land Law"
+    ],
+    "result": "clear",
+    "notes": "No current or former firm client appears among the seller, the adjacent landowner, the mineral owner, the title company, or opposing counsel. No conflict identified.",
+    "checked_date": "2025-11-19"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2025-11-20",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m14.te.0001", "date": "2025-11-24", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Initial client intake interview; assess purchase, intended solar and cattle use, and preliminary title concerns." },
+    { "id": "m14.te.0002", "date": "2025-11-26", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Open matter file; review executed Farm and Ranch earnest-money contract; calendar feasibility and closing deadlines." },
+    { "id": "m14.te.0003", "date": "2025-12-08", "timekeeper_id": "FIRM-TK-01", "hours": 2.8, "rate": 250, "narrative": "Review Lone Mesa title commitment; issue-spot access easement, mineral reservation, and pipeline exceptions." },
+    { "id": "m14.te.0004", "date": "2025-12-19", "timekeeper_id": "FIRM-TK-02", "hours": 3.2, "rate": 225, "narrative": "Analyze Deloria survey; compare recorded easement to surveyed road; locate well within the western flat." },
+    { "id": "m14.te.0005", "date": "2026-01-14", "timekeeper_id": "FIRM-TK-01", "hours": 2.4, "rate": 250, "narrative": "Client counseling call regarding the three title problems and preliminary options." },
+    { "id": "m14.te.0006", "date": "2026-02-06", "timekeeper_id": "FIRM-TK-02", "hours": 2.8, "rate": 225, "narrative": "Draft strategic settlement-and-negotiation plan outline; build research plan for access cures." },
+    { "id": "m14.te.0007", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-02", "hours": 1.8, "rate": 225, "narrative": "Draft and send letter to seller's counsel Faircloth on access, minerals, and the requested well reservation." },
+    { "id": "m14.te.0008", "date": "2026-03-05", "timekeeper_id": "FIRM-TK-01", "hours": 3.0, "rate": 250, "narrative": "Strategy session; sequence access, mineral, and well cures and identify the party controlling each." },
+    { "id": "m14.te.0009", "date": "2026-03-12", "timekeeper_id": "FIRM-TK-02", "hours": 3.6, "rate": 225, "narrative": "Prepare full SSNP; separate client interests from stated positions; assess alternatives to agreement." },
+    { "id": "m14.te.0010", "date": "2026-03-19", "timekeeper_id": "FIRM-TK-01", "hours": 2.8, "rate": 250, "narrative": "Client counseling on acquiring an easement from Sandoval versus seeking a price reduction." },
+    { "id": "m14.te.0011", "date": "2026-03-27", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Draft proposed corrective access-easement terms and cost-allocation options." },
+    { "id": "m14.te.0012", "date": "2026-04-10", "timekeeper_id": "FIRM-TK-01", "hours": 3.4, "rate": 250, "narrative": "Negotiation call with Faircloth on deed form, mineral treatment, and the well reservation." },
+    { "id": "m14.te.0013", "date": "2026-04-23", "timekeeper_id": "FIRM-TK-02", "hours": 2.8, "rate": 225, "narrative": "Revise deed and well-reservation term sheet after the negotiation call." },
+    { "id": "m14.te.0014", "date": "2026-04-29", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Counsel client on the well-relocation option and revised price allocation." },
+    { "id": "m14.te.0015", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-01", "hours": 3.6, "rate": 250, "narrative": "Draft proposed special warranty deed with mineral exception and a bounded well easement." },
+    { "id": "m14.te.0016", "date": "2026-05-14", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Negotiate access easement with Sandoval's counsel; draft grant and road-maintenance covenants." },
+    { "id": "m14.te.0017", "date": "2026-05-21", "timekeeper_id": "FIRM-TK-01", "hours": 3.2, "rate": 250, "narrative": "Client counseling on final well terms and surface-protection strategy." },
+    { "id": "m14.te.0018", "date": "2026-06-03", "timekeeper_id": "FIRM-TK-02", "hours": 3.4, "rate": 225, "narrative": "Prepare surface-protection provisions addressing the severed mineral estate." },
+    { "id": "m14.te.0019", "date": "2026-06-11", "timekeeper_id": "FIRM-TK-01", "hours": 3.2, "rate": 250, "narrative": "Negotiation session with Faircloth toward final deal terms." },
+    { "id": "m14.te.0020", "date": "2026-06-19", "timekeeper_id": "FIRM-TK-02", "hours": 2.8, "rate": 225, "narrative": "Revise closing term sheet; coordinate with Lone Mesa on an access endorsement." },
+    { "id": "m14.te.0021", "date": "2026-06-24", "timekeeper_id": "FIRM-TK-01", "hours": 2.4, "rate": 250, "narrative": "Client counseling on final terms and the remaining decisions before closing." }
+  ],
+  "invoices": [
+    {
+      "id": "m14.inv.001",
+      "date": "2026-03-05",
+      "period": { "start": "2025-11-20", "end": "2026-02-28" },
+      "fees": 4040.0,
+      "expenses": 0,
+      "payments_received": 1350.0,
+      "balance_due": 2690.0,
+      "line_refs": ["m14.te.0001", "m14.te.0002", "m14.te.0003", "m14.te.0004", "m14.te.0005", "m14.te.0006", "m14.te.0007"]
+    },
+    {
+      "id": "m14.inv.002",
+      "date": "2026-05-05",
+      "period": { "start": "2026-03-01", "end": "2026-04-30" },
+      "fees": 4915.0,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 4915.0,
+      "line_refs": ["m14.te.0008", "m14.te.0009", "m14.te.0010", "m14.te.0011", "m14.te.0012", "m14.te.0013", "m14.te.0014"]
+    },
+    {
+      "id": "m14.inv.003",
+      "date": "2026-06-30",
+      "period": { "start": "2026-05-01", "end": "2026-06-30" },
+      "fees": 5395.0,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 5395.0,
+      "line_refs": ["m14.te.0015", "m14.te.0016", "m14.te.0017", "m14.te.0018", "m14.te.0019", "m14.te.0020", "m14.te.0021"]
+    }
+  ],
+  "trust_entries": []
+}

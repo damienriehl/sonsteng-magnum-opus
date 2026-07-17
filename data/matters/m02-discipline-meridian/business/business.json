@@ -1,0 +1,92 @@
+{
+  "id": "m02.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m02.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m02",
+  "intake": {
+    "client_name": "Gregor A. Winterhalt",
+    "contact": {
+      "email": "gwinterhalt@winterhaltlaw.example.com",
+      "phone": "555-0173",
+      "address": "24 Riverbend Road, Danforth, Meridian 55823"
+    },
+    "matter_summary": "Defense of a solo practitioner in a disciplinary proceeding brought by the Meridian Office of Lawyer Conduct alleging commingling and delayed disbursement of client settlement funds, inadequate trust records, and failure to communicate with a second client.",
+    "intake_date": "2025-11-10",
+    "referral_source": "referral from the county bar association's lawyers-assistance contact"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Gregor A. Winterhalt",
+      "Delia Marchetti",
+      "Harun Osei",
+      "Lorna Beckwith",
+      "Meridian Office of Lawyer Conduct"
+    ],
+    "result": "clear",
+    "notes": "Winterhalt is the firm's client. No current or former firm client is adverse; neither Marchetti, Osei, nor their counsel has any prior relationship with Ellingboe & Ravndal. No conflict identified.",
+    "checked_date": "2025-11-12"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2025-11-14",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m02.te.0001", "date": "2025-11-11", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial client interview with Winterhalt; overview of petition and personal circumstances." },
+    { "id": "m02.te.0002", "date": "2025-11-14", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Run conflicts check; open matter; prepare and send engagement letter." },
+    { "id": "m02.te.0003", "date": "2025-11-20", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Review Petition for Disciplinary Action, Marchetti and Osei complaints, and MOLC investigation file." },
+    { "id": "m02.te.0004", "date": "2025-12-05", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Assemble bank records; review reconstructed trust-account reconciliation with bookkeeper." },
+    { "id": "m02.te.0005", "date": "2025-12-18", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Draft preliminary case-analysis memorandum on violations, admissions, and mitigation." },
+    { "id": "m02.te.0006", "date": "2026-01-12", "timekeeper_id": "FIRM-TK-02", "hours": 2.2, "rate": 225, "narrative": "Draft Respondent's Answer to the Petition." },
+    { "id": "m02.te.0007", "date": "2026-01-26", "timekeeper_id": "FIRM-TK-01", "hours": 1.8, "rate": 250, "narrative": "Client counseling session on candor duties, disclosure strategy, and realistic sanction outcomes." },
+    { "id": "m02.te.0008", "date": "2026-02-09", "timekeeper_id": "FIRM-TK-02", "hours": 2.6, "rate": 225, "narrative": "Legal research on sanction factors and the commingling/misappropriation distinction; research memo." },
+    { "id": "m02.te.0009", "date": "2026-02-23", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Witness preparation and interview of former legal assistant Nadia Fenwick." },
+    { "id": "m02.te.0010", "date": "2026-03-10", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Draft Respondent's pre-hearing brief on sanction and mitigation." },
+    { "id": "m02.te.0011", "date": "2026-03-24", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Negotiation with disciplinary counsel regarding a possible stipulation for discipline." },
+    { "id": "m02.te.0012", "date": "2026-04-14", "timekeeper_id": "FIRM-TK-01", "hours": 1.6, "rate": 250, "narrative": "Revise pre-hearing brief; assemble mitigation exhibits and remediation record." },
+    { "id": "m02.te.0013", "date": "2026-04-28", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Prepare for hearing before the LPRB panel and referee; outline direct testimony." },
+    { "id": "m02.te.0014", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Moot oral argument on sanction; refine responses to anticipated panel questions." },
+    { "id": "m02.te.0015", "date": "2026-05-26", "timekeeper_id": "FIRM-TK-02", "hours": 1.2, "rate": 225, "narrative": "Finalize mitigation exhibits and character reference letters for the hearing." },
+    { "id": "m02.te.0016", "date": "2026-06-09", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Attend disciplinary hearing before the referee; present mitigation and argument." },
+    { "id": "m02.te.0017", "date": "2026-06-20", "timekeeper_id": "FIRM-TK-02", "hours": 0.6, "rate": 225, "narrative": "Post-hearing status memorandum to client." }
+  ],
+  "invoices": [
+    {
+      "id": "m02.inv.001",
+      "date": "2026-01-05",
+      "period": { "start": "2025-11-10", "end": "2025-12-31" },
+      "fees": 1765,
+      "expenses": 0,
+      "payments_received": 1765,
+      "balance_due": 0,
+      "line_refs": ["m02.te.0001", "m02.te.0002", "m02.te.0003", "m02.te.0004", "m02.te.0005"]
+    },
+    {
+      "id": "m02.inv.002",
+      "date": "2026-04-05",
+      "period": { "start": "2026-01-01", "end": "2026-03-31" },
+      "fees": 2755,
+      "expenses": 0,
+      "payments_received": 2755,
+      "balance_due": 0,
+      "line_refs": ["m02.te.0006", "m02.te.0007", "m02.te.0008", "m02.te.0009", "m02.te.0010", "m02.te.0011"]
+    },
+    {
+      "id": "m02.inv.003",
+      "date": "2026-06-30",
+      "period": { "start": "2026-04-01", "end": "2026-06-30" },
+      "fees": 2105,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 2105,
+      "line_refs": ["m02.te.0012", "m02.te.0013", "m02.te.0014", "m02.te.0015", "m02.te.0016", "m02.te.0017"]
+    }
+  ],
+  "trust_entries": [
+    { "id": "m02.tr.001", "date": "2025-11-14", "type": "deposit", "amount": 3500, "running_balance": 3500 },
+    { "id": "m02.tr.002", "date": "2026-01-06", "type": "disbursement", "amount": 1765, "related_invoice_id": "m02.inv.001", "running_balance": 1735 },
+    { "id": "m02.tr.003", "date": "2026-04-06", "type": "disbursement", "amount": 1735, "related_invoice_id": "m02.inv.002", "running_balance": 0 }
+  ]
+}

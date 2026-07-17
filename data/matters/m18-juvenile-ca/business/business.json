@@ -1,0 +1,72 @@
+{
+  "id": "m18.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m18.biz",
+  "matter_id": "m18",
+  "intake": {
+    "client_name": "Jasmine Cordero, a minor (parent: Ana Cordero)",
+    "contact": {
+      "email": "ana.cordero@example.com",
+      "phone": "555-0192",
+      "address": "2216 Alameda Court, Apt. 5, Encinal Springs, CA 93610"
+    },
+    "matter_summary": "Represent a 16-year-old in a Juvenile Division wardship petition (Welf. & Inst. Code § 602) alleging vandalism arising from an April 10, 2026 parking-lot incident at Encinal Ridge High School; evaluate an informal diversion offer against a contested jurisdictional hearing.",
+    "intake_date": "2026-04-20",
+    "referral_source": "referral from a neighbor who is a former firm client"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Jasmine Cordero",
+      "Ana Cordero",
+      "Kayla Trejo",
+      "Andre Sotelo",
+      "Priyanka Sundaram",
+      "Gerald Marchetti",
+      "The People of the State of California (Alta Mesa County District Attorney)"
+    ],
+    "result": "clear",
+    "notes": "No current or former firm client appears among the parties or witnesses. The firm does not and will not represent the separately charged co-participants, Kayla Trejo (represented by the public defender) or Andre Sotelo; noted to avoid any adverse-representation issue and the Rule 4.2 no-contact constraint as to Kayla.",
+    "checked_date": "2026-04-20"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-04-21",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m18.te.0001", "date": "2026-04-20", "timekeeper_id": "FIRM-TK-01", "hours": 1.6, "rate": 250, "narrative": "Initial intake interview with Jasmine and Ana Cordero; preliminary case assessment; conflicts screen." },
+    { "id": "m18.te.0002", "date": "2026-04-21", "timekeeper_id": "FIRM-TK-02", "hours": 0.7, "rate": 225, "narrative": "Draft engagement letter; open matter file; calendar first appearance and key deadlines." },
+    { "id": "m18.te.0003", "date": "2026-04-24", "timekeeper_id": "FIRM-TK-01", "hours": 2.1, "rate": 250, "narrative": "Review SRO incident report, surveillance/phone-video still-frame log, and prior dress-code referral; issue-spot vandalism participation and identification questions; note evidentiary gaps." },
+    { "id": "m18.te.0004", "date": "2026-04-29", "timekeeper_id": "FIRM-TK-02", "hours": 1.1, "rate": 225, "narrative": "Interview student eyewitness (T. Villareal); memo to file on attribution of keying to co-participant." },
+    { "id": "m18.te.0005", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Appear at first hearing in Juvenile Division; deny allegations on behalf of the minor; obtain scheduling order." },
+    { "id": "m18.te.0006", "date": "2026-05-18", "timekeeper_id": "FIRM-TK-02", "hours": 0.9, "rate": 225, "narrative": "Obtain school disciplinary and attendance records; confer with school regarding character and dispositional supports." },
+    { "id": "m18.te.0007", "date": "2026-05-27", "timekeeper_id": "FIRM-TK-01", "hours": 1.3, "rate": 250, "narrative": "Negotiation call with Deputy District Attorney regarding diversion terms and apportioned restitution given disputed role." },
+    { "id": "m18.te.0008", "date": "2026-06-03", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Client counseling session with Jasmine and Ana Cordero: diversion offer versus contested jurisdictional hearing; risks and priorities." },
+    { "id": "m18.te.0009", "date": "2026-06-10", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Draft strategic settlement-and-negotiation plan memo; outline restitution and responsibility-acknowledgment position." },
+    { "id": "m18.te.0010", "date": "2026-06-16", "timekeeper_id": "FIRM-TK-01", "hours": 0.6, "rate": 250, "narrative": "Professional-responsibility analysis memo: Rule 4.2 as to represented co-participant; confidentiality and school-questioning issues." }
+  ],
+  "invoices": [
+    {
+      "id": "m18.inv.001",
+      "date": "2026-06-01",
+      "period": { "start": "2026-04-20", "end": "2026-05-31" },
+      "fees": 2207.50,
+      "expenses": 55.00,
+      "payments_received": 1500.00,
+      "balance_due": 762.50,
+      "line_refs": ["m18.te.0001", "m18.te.0002", "m18.te.0003", "m18.te.0004", "m18.te.0005", "m18.te.0006", "m18.te.0007"]
+    },
+    {
+      "id": "m18.inv.002",
+      "date": "2026-06-30",
+      "period": { "start": "2026-06-01", "end": "2026-06-30" },
+      "fees": 630.00,
+      "expenses": 0.00,
+      "payments_received": 0.00,
+      "balance_due": 630.00,
+      "line_refs": ["m18.te.0008", "m18.te.0009", "m18.te.0010"]
+    }
+  ],
+  "trust_entries": []
+}

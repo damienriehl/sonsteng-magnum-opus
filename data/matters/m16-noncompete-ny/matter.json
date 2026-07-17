@@ -1,0 +1,52 @@
+{
+  "id": "m16",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m16",
+  "slug": "m16-noncompete-ny",
+  "shape": "noncompete_trade_secret",
+  "tier": "real",
+  "jurisdiction": "NY",
+  "caption": "Hudson Valley Biometrics, Inc. v. Priya Iyer",
+  "sides": [
+    {
+      "role_id": "m16.role.plaintiff",
+      "label": "Plaintiff / Former Employer",
+      "party_names": ["Hudson Valley Biometrics, Inc."],
+      "confidential_fact_refs": ["m16.fact.031"]
+    },
+    {
+      "role_id": "m16.role.defense",
+      "label": "Defendant / Former Employee (our client)",
+      "party_names": ["Priya Iyer"],
+      "confidential_fact_refs": ["m16.fact.021", "m16.fact.024"]
+    }
+  ],
+  "parties": [
+    { "name": "Hudson Valley Biometrics, Inc.", "role": "plaintiff former employer", "side_role_id": "m16.role.plaintiff" },
+    { "name": "Priya Iyer", "role": "defendant former employee", "side_role_id": "m16.role.defense" },
+    { "name": "Sightline Perception, Inc.", "role": "new employer (non-party)" }
+  ],
+  "client_id": "FIRM-C-16",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-001", "TSK-002", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-032", "TSK-050", "TSK-060"],
+  "personas": ["m16.per.iyer", "m16.per.steinhauer"],
+  "witnesses": [
+    { "id": "m16.wit.frawley", "name": "Dominic Frawley" },
+    { "id": "m16.wit.salcedo", "name": "Beatriz Salcedo" },
+    { "id": "m16.wit.vandermeer", "name": "Naomi Vandermeer" }
+  ],
+  "exhibits": [
+    { "id": "m16.exh.001", "title": "Employment Agreement with Non-Competition, Non-Solicitation, and Confidentiality Covenants" },
+    { "id": "m16.exh.002", "title": "Iyer Resignation Notice (email)" },
+    { "id": "m16.exh.003", "title": "Sightline Perception Offer Letter and Job Description" },
+    { "id": "m16.exh.004", "title": "Cease-and-Desist Letter from HVB's Counsel" },
+    { "id": "m16.exh.005", "title": "Description of the HVB 'Matching Engine' (alleged trade secret)" },
+    { "id": "m16.exh.006", "title": "IT Off-Boarding Forensic Review and Device-Return Receipt" },
+    { "id": "m16.exh.007", "title": "Witness Statement of Dominic Frawley" },
+    { "id": "m16.exh.008", "title": "Witness Statement of Beatriz Salcedo" },
+    { "id": "m16.exh.009", "title": "Witness Statement of Naomi Vandermeer" }
+  ],
+  "open_date": "2026-02-17",
+  "as_of_date": "2026-06-30"
+}

@@ -1,0 +1,52 @@
+{
+  "id": "m08",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m08",
+  "slug": "m08-juvenile-meridian",
+  "shape": "juvenile_delinquency",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "In re the Welfare of T.M., a Minor",
+  "sides": [
+    {
+      "role_id": "m08.role.prosecution",
+      "label": "Prosecution / State (Halden County Attorney)",
+      "party_names": ["State of Meridian"],
+      "confidential_fact_refs": ["m08.fact.037"]
+    },
+    {
+      "role_id": "m08.role.defense",
+      "label": "Juvenile Defense Counsel (Respondent)",
+      "party_names": ["Tobias Merrow (T.M.)"],
+      "confidential_fact_refs": ["m08.fact.032"]
+    }
+  ],
+  "parties": [
+    { "name": "State of Meridian (Halden County Attorney)", "role": "petitioner / prosecuting authority", "side_role_id": "m08.role.prosecution" },
+    { "name": "Tobias Merrow (T.M.)", "role": "juvenile respondent", "side_role_id": "m08.role.defense" },
+    { "name": "Dana Merrow", "role": "parent / guardian of the respondent", "side_role_id": "m08.role.defense" },
+    { "name": "Kellan Dubourg", "role": "co-respondent charged separately", "side_role_id": "m08.role.prosecution" }
+  ],
+  "client_id": "FIRM-C-08",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-01", "SK-LP-07", "SK-LP-10", "SK-LP-13", "SK-LP-16"],
+  "task_refs": ["TSK-004", "TSK-022", "TSK-023", "TSK-024", "TSK-034", "TSK-035", "TSK-037", "TSK-044", "TSK-045", "TSK-060"],
+  "personas": ["m08.per.merrow-t", "m08.per.merrow-d", "m08.per.dubourg"],
+  "witnesses": [
+    { "id": "m08.wit.vanderhoek", "name": "Curtis Vanderhoek" },
+    { "id": "m08.wit.quintero", "name": "Naomi Quintero" },
+    { "id": "m08.wit.nwosu", "name": "Adaora Nwosu" },
+    { "id": "m08.wit.bagley", "name": "Officer Trent Bagley" }
+  ],
+  "exhibits": [
+    { "id": "m08.exh.001", "title": "Norsholm Police Department Incident Report" },
+    { "id": "m08.exh.002", "title": "VoltHaus Loss-Prevention Incident Report" },
+    { "id": "m08.exh.003", "title": "Delinquency Petition (In re the Welfare of T.M.)" },
+    { "id": "m08.exh.004", "title": "VoltHaus Inventory & Recovery Record (Nexus X console)" },
+    { "id": "m08.exh.005", "title": "County Attorney Juvenile Diversion Offer Letter" },
+    { "id": "m08.exh.006", "title": "Larkmont High School Counselor Letter" },
+    { "id": "m08.exh.007", "title": "CCTV Still-Frame Description Log" }
+  ],
+  "open_date": "2026-03-18",
+  "as_of_date": "2026-06-30"
+}

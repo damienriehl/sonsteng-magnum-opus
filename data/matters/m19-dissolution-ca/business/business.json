@@ -1,0 +1,76 @@
+{
+  "id": "m19.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m19.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m19",
+  "intake": {
+    "client_name": "Camille Beaumont",
+    "contact": {
+      "email": "camille.beaumont@example.com",
+      "phone": "555-0172",
+      "address": "48 Chabot Terrace, Oakland, California"
+    },
+    "matter_summary": "Petitioner in a California marriage dissolution with one minor child; disputes over custody and a parenting schedule, the family residence, characterization and tracing of the respondent's asserted separate-property contribution to the parties' restaurant, and the valuation and division of that community-owned restaurant business.",
+    "intake_date": "2026-02-09",
+    "referral_source": "referral from a former client"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Camille Beaumont", "Andre Lassiter", "Petite Marigny LLC", "Marguerite Tessier", "Yvette Larue", "Daniel Ferrante"],
+    "result": "clear",
+    "notes": "No prior or current representation of Andre Lassiter, Petite Marigny LLC, or any adverse party. Firm has not represented the restaurant. The jointly retained valuation analyst, Daniel Ferrante, has no prior relationship with the firm. No personal relationships identified between the firm's attorneys and the parties or witnesses.",
+    "checked_date": "2026-02-11"
+  },
+  "engagement": {
+    "fee_type": "retainer",
+    "retainer_amount": 7000,
+    "engagement_date": "2026-02-13",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m19.te.0001", "date": "2026-02-09", "timekeeper_id": "FIRM-TK-01", "hours": 1.6, "rate": 250, "narrative": "Initial client intake interview; preliminary diagnosis of custody, community-property, business-valuation, and separate-property tracing issues; opened matter." },
+    { "id": "m19.te.0002", "date": "2026-02-13", "timekeeper_id": "FIRM-TK-01", "hours": 0.6, "rate": 250, "narrative": "Prepared and reviewed engagement letter with client; completed conflicts check; explained retainer and evergreen replenishment." },
+    { "id": "m19.te.0003", "date": "2026-02-19", "timekeeper_id": "FIRM-TK-02", "hours": 2.1, "rate": 225, "narrative": "Drafted Petition for Dissolution of Marriage, Summons, and UCCJEA declaration; prepared confidential information sheet." },
+    { "id": "m19.te.0004", "date": "2026-02-25", "timekeeper_id": "FIRM-TK-01", "hours": 0.7, "rate": 250, "narrative": "Reviewed and revised petition with client; confirmed requested relief on custody, residence, and the restaurant." },
+    { "id": "m19.te.0005", "date": "2026-02-27", "timekeeper_id": "FIRM-TK-02", "hours": 0.5, "rate": 225, "narrative": "Finalized and filed petition with Alameda County Family Law Division; arranged service on respondent." },
+    { "id": "m19.te.0006", "date": "2026-03-10", "timekeeper_id": "FIRM-TK-02", "hours": 1.4, "rate": 225, "narrative": "Drafted preliminary declaration of disclosure and schedule of assets and debts; assembled financial and property documentation." },
+    { "id": "m19.te.0007", "date": "2026-03-19", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Client counseling session on custody options and realistic parenting-time outcomes; managed expectations." },
+    { "id": "m19.te.0008", "date": "2026-03-26", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Reviewed restaurant financials and respondent's separate-property tracing documents; outlined valuation and discovery approach." },
+    { "id": "m19.te.0009", "date": "2026-04-08", "timekeeper_id": "FIRM-TK-01", "hours": 0.9, "rate": 250, "narrative": "Prepared for case-management conference; drafted proposed scheduling and Family Court Services mediation referral." },
+    { "id": "m19.te.0010", "date": "2026-04-16", "timekeeper_id": "FIRM-TK-01", "hours": 1.3, "rate": 250, "narrative": "Developed case theory and strategic settlement-and-negotiation plan separating the property/tracing fight from a durable parenting schedule." },
+    { "id": "m19.te.0011", "date": "2026-04-23", "timekeeper_id": "FIRM-TK-02", "hours": 1.1, "rate": 225, "narrative": "Drafted proposed parenting plan accommodating the restaurant's night-and-weekend service hours." },
+    { "id": "m19.te.0012", "date": "2026-05-05", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Prepared for Family Court Services custody mediation; assembled property proposal and separate-property tracing rebuttal." },
+    { "id": "m19.te.0013", "date": "2026-05-13", "timekeeper_id": "FIRM-TK-01", "hours": 2.2, "rate": 250, "narrative": "Attended Family Court Services custody mediation session with client." },
+    { "id": "m19.te.0014", "date": "2026-05-21", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Revised community/separate property spreadsheet after mediation; coordinated with jointly retained valuation analyst." },
+    { "id": "m19.te.0015", "date": "2026-06-11", "timekeeper_id": "FIRM-TK-01", "hours": 0.8, "rate": 250, "narrative": "Client counseling on fiduciary duty of financial disclosure and business-valuation exposure; reviewed preliminary valuation report." }
+  ],
+  "invoices": [
+    {
+      "id": "m19.inv.001",
+      "date": "2026-04-16",
+      "period": { "start": "2026-02-09", "end": "2026-04-15" },
+      "fees": 2460.00,
+      "expenses": 0,
+      "payments_received": 2460.00,
+      "balance_due": 0,
+      "line_refs": ["m19.te.0001", "m19.te.0002", "m19.te.0003", "m19.te.0004", "m19.te.0005", "m19.te.0006", "m19.te.0007", "m19.te.0008", "m19.te.0009"]
+    },
+    {
+      "id": "m19.inv.002",
+      "date": "2026-06-26",
+      "period": { "start": "2026-04-16", "end": "2026-06-25" },
+      "fees": 1802.50,
+      "expenses": 0,
+      "payments_received": 1802.50,
+      "balance_due": 0,
+      "line_refs": ["m19.te.0010", "m19.te.0011", "m19.te.0012", "m19.te.0013", "m19.te.0014", "m19.te.0015"]
+    }
+  ],
+  "trust_entries": [
+    { "id": "m19.tr.001", "date": "2026-02-13", "type": "deposit", "amount": 7000, "running_balance": 7000 },
+    { "id": "m19.tr.002", "date": "2026-04-20", "type": "disbursement", "amount": 2460.00, "related_invoice_id": "m19.inv.001", "running_balance": 4540 },
+    { "id": "m19.tr.003", "date": "2026-04-22", "type": "deposit", "amount": 2460.00, "running_balance": 7000 },
+    { "id": "m19.tr.004", "date": "2026-06-29", "type": "disbursement", "amount": 1802.50, "related_invoice_id": "m19.inv.002", "running_balance": 5197.50 },
+    { "id": "m19.tr.005", "date": "2026-06-30", "type": "deposit", "amount": 1802.50, "running_balance": 7000 }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "m13.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m13.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m13",
+  "intake": {
+    "client_name": "Sofia Reyes",
+    "contact": {
+      "email": "sofia.reyes@example.com",
+      "phone": "555-0173",
+      "address": "48 Palmetto Row, Belmar Springs, FL 33xxx"
+    },
+    "matter_summary": "Rideshare driver injured in an intersection collision seeks to recover from the at-fault left-turning driver; torn meniscus with surgery, lost income, totaled vehicle, and an exhausted PIP layer. Contingency representation toward a civil jury trial.",
+    "intake_date": "2025-03-05",
+    "referral_source": "former-client referral"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Sofia Reyes", "Bradley Hutchins", "Belmar Springs Police Department", "Gerald Fontaine"],
+    "result": "clear",
+    "notes": "No prior or current representation adverse to Sofia Reyes; the firm has never represented Bradley Hutchins or his liability insurer. No relationship to the independent eyewitness.",
+    "checked_date": "2025-03-06"
+  },
+  "engagement": {
+    "fee_type": "contingency",
+    "contingency_pct": 33.33,
+    "engagement_date": "2025-03-08",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m13.te.0001", "date": "2025-03-05", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial intake interview with client; preliminary assessment of liability and injuries." },
+    { "id": "m13.te.0002", "date": "2025-03-06", "timekeeper_id": "FIRM-TK-02", "hours": 0.8, "rate": 225, "narrative": "Run conflicts check; open matter; prepare contingency engagement letter." },
+    { "id": "m13.te.0003", "date": "2025-03-12", "timekeeper_id": "FIRM-TK-02", "hours": 2.3, "rate": 225, "narrative": "Review Florida crash report and emergency/operative medical records; build chronology of the collision and treatment." },
+    { "id": "m13.te.0004", "date": "2025-03-20", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Interview independent eyewitness Gerald Fontaine; obtain signed statement." },
+    { "id": "m13.te.0005", "date": "2025-04-02", "timekeeper_id": "FIRM-TK-02", "hours": 1.7, "rate": 225, "narrative": "Obtain and review PIP correspondence; analyze no-fault threshold and coverage-exhaustion issues." },
+    { "id": "m13.te.0006", "date": "2025-05-15", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Draft and file negligence complaint in the Circuit Court for Sunhaven County." },
+    { "id": "m13.te.0007", "date": "2025-07-10", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Client counseling regarding comparative-fault exposure and settlement posture." },
+    { "id": "m13.te.0008", "date": "2025-10-18", "timekeeper_id": "FIRM-TK-02", "hours": 1.9, "rate": 225, "narrative": "Prepare and send settlement demand to the liability insurer; assemble damages documentation." },
+    { "id": "m13.te.0009", "date": "2026-01-22", "timekeeper_id": "FIRM-TK-02", "hours": 2.6, "rate": 225, "narrative": "Draft written discovery: interrogatories and requests for production to the defendant." },
+    { "id": "m13.te.0010", "date": "2026-04-15", "timekeeper_id": "FIRM-TK-01", "hours": 1.1, "rate": 250, "narrative": "Prepare for depositions of the two drivers and the independent eyewitness." },
+    { "id": "m13.te.0011", "date": "2026-06-12", "timekeeper_id": "FIRM-TK-02", "hours": 1.5, "rate": 225, "narrative": "Trial preparation: exhibit organization, intersection diagram, and witness planning." }
+  ],
+  "invoices": [],
+  "trust_entries": []
+}

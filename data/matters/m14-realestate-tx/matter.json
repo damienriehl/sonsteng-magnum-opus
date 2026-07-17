@@ -1,0 +1,50 @@
+{
+  "id": "m14",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m14",
+  "slug": "m14-realestate-tx",
+  "shape": "real_estate_negotiation",
+  "tier": "real",
+  "jurisdiction": "TX",
+  "caption": "In re Purchase of the Cimarron Tract (Whitfield–Nakamura)",
+  "sides": [
+    {
+      "role_id": "m14.role.buyer-counsel",
+      "label": "Buyer's Counsel (Nakamura)",
+      "party_names": ["Kenji Nakamura"],
+      "confidential_fact_refs": ["m14.fact.030", "m14.fact.031", "m14.fact.032", "m14.fact.033"]
+    },
+    {
+      "role_id": "m14.role.seller-counsel",
+      "label": "Seller's Counsel (Whitfield)",
+      "party_names": ["Garrett Whitfield"],
+      "confidential_fact_refs": ["m14.fact.034", "m14.fact.035", "m14.fact.036", "m14.fact.037"]
+    }
+  ],
+  "parties": [
+    { "name": "Kenji Nakamura", "role": "buyer", "side_role_id": "m14.role.buyer-counsel" },
+    { "name": "Garrett Whitfield", "role": "seller", "side_role_id": "m14.role.seller-counsel" },
+    { "name": "Everett Sandoval", "role": "adjacent landowner over the access road" },
+    { "name": "Ocotillo Minerals, LP", "role": "severed mineral estate owner" }
+  ],
+  "client_id": "FIRM-C-14",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-13", "SK-LP-07", "SK-LP-10", "SK-LP-17", "SK-LP-01", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-022", "TSK-023", "TSK-034", "TSK-044", "TSK-046", "TSK-062", "TSK-029", "TSK-060"],
+  "personas": ["m14.per.nakamura", "m14.per.whitfield"],
+  "witnesses": [
+    { "id": "m14.wit.deloria", "name": "Rosalind Deloria" },
+    { "id": "m14.wit.sandoval", "name": "Everett Sandoval" },
+    { "id": "m14.wit.castellano", "name": "Nadia Castellano" }
+  ],
+  "exhibits": [
+    { "id": "m14.exh.001", "title": "Farm and Ranch Earnest Money Contract (Cimarron Tract)" },
+    { "id": "m14.exh.002", "title": "Title Commitment — Lone Mesa Title Company" },
+    { "id": "m14.exh.003", "title": "Boundary & Improvement Survey — Deloria Land Surveying" },
+    { "id": "m14.exh.004", "title": "Amendment Extending Closing Date" },
+    { "id": "m14.exh.005", "title": "Solar Developer Option & Ground-Lease Term Sheet" },
+    { "id": "m14.exh.006", "title": "Correspondence — Buyer's Counsel and Faircloth Land Law" }
+  ],
+  "open_date": "2025-11-20",
+  "as_of_date": "2026-06-30"
+}

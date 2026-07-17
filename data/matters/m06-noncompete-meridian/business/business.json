@@ -1,0 +1,78 @@
+{
+  "id": "m06.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m06.biz",
+  "matter_id": "m06",
+  "intake": {
+    "client_name": "Adaeze Okwuosa",
+    "contact": {
+      "email": "adaeze.okwuosa@example.com",
+      "phone": "555-0173",
+      "address": "1420 Birchmere Court, Norsholm, Meridian 55902"
+    },
+    "matter_summary": "Former employer Northlake Surgical Instruments moved for a temporary injunction to enforce a one-year non-compete and eighteen-month non-solicitation covenant against Ms. Okwuosa, alleging she copied a customer-pricing spreadsheet before resigning to join a competitor. Firm engaged to oppose the injunction.",
+    "intake_date": "2026-02-14",
+    "referral_source": "referral from a former Ellingboe & Ravndal client"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Adaeze Okwuosa", "Northlake Surgical Instruments, Inc.", "Verdant Medical Systems, LLC", "Priscilla Danneker", "Rennick & Vao LLP"],
+    "result": "clear",
+    "notes": "No prior or current representation of Northlake, Verdant, or Rennick & Vao. No firm relationship with Ms. Danneker. No positional conflict identified.",
+    "checked_date": "2026-02-15"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-02-16",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m06.te.0001", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-01", "hours": 2.8, "rate": 250, "narrative": "Initial client interview; preliminary case assessment and intake of the employment agreement, cease-and-desist letter, and IT export log." },
+    { "id": "m06.te.0002", "date": "2026-03-10", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Preliminary research on temporary-injunction standard and enforceability of restrictive covenants; outline of defense theory." },
+    { "id": "m06.te.0003", "date": "2026-04-08", "timekeeper_id": "FIRM-TK-01", "hours": 3.6, "rate": 250, "narrative": "Review of pricing-spreadsheet handling; interview of witness Mareike Hollis regarding shared-drive access and routine emailing of the file." },
+    { "id": "m06.te.0004", "date": "2026-04-22", "timekeeper_id": "FIRM-TK-02", "hours": 4.0, "rate": 225, "narrative": "Interview of Verdant hiring manager Curtis Bellweather; review of Verdant offer letter and job description; chronology development." },
+    { "id": "m06.te.0005", "date": "2026-05-04", "timekeeper_id": "FIRM-TK-01", "hours": 3.5, "rate": 250, "narrative": "Draft statement of facts for memorandum opposing temporary injunction; analysis of non-compete scope, geography, and duration." },
+    { "id": "m06.te.0006", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Research on trade-secret protectability and reasonable-measures requirement as applied to loosely guarded pricing data." },
+    { "id": "m06.te.0007", "date": "2026-05-11", "timekeeper_id": "FIRM-TK-01", "hours": 4.2, "rate": 250, "narrative": "Draft argument section: likelihood of success and distinction between non-compete and non-solicitation clauses." },
+    { "id": "m06.te.0008", "date": "2026-05-13", "timekeeper_id": "FIRM-TK-02", "hours": 2.5, "rate": 225, "narrative": "Draft argument on irreparable harm, balance of equities, and public interest in labor mobility." },
+    { "id": "m06.te.0009", "date": "2026-05-18", "timekeeper_id": "FIRM-TK-01", "hours": 5.0, "rate": 250, "narrative": "Prepare client declaration; interview witness Dr. Elena Marchetti regarding absence of solicitation; revise memorandum." },
+    { "id": "m06.te.0010", "date": "2026-05-20", "timekeeper_id": "FIRM-TK-02", "hours": 3.5, "rate": 225, "narrative": "Prepare declaration of André Dupont analysis; cite-check and edit memorandum against rubric." },
+    { "id": "m06.te.0011", "date": "2026-05-22", "timekeeper_id": "FIRM-TK-01", "hours": 3.8, "rate": 250, "narrative": "Client counseling session on risk arising from copied file and forwarded email; discussion of options including narrowed resolution." },
+    { "id": "m06.te.0012", "date": "2026-05-27", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Draft proposed order and finalize supporting declarations; assemble exhibits for filing." },
+    { "id": "m06.te.0013", "date": "2026-05-28", "timekeeper_id": "FIRM-TK-01", "hours": 4.1, "rate": 250, "narrative": "Final revisions to memorandum opposing temporary injunction; prepare argument outline for hearing." },
+    { "id": "m06.te.0014", "date": "2026-05-29", "timekeeper_id": "FIRM-TK-01", "hours": 5.0, "rate": 250, "narrative": "Hearing preparation: moot the injunction argument, refine responses on trade-secret protectability and covenant overbreadth." }
+  ],
+  "invoices": [
+    {
+      "id": "m06.inv.001",
+      "date": "2026-04-15",
+      "period": { "start": "2026-02-16", "end": "2026-03-31" },
+      "fees": 1600,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1600,
+      "line_refs": ["m06.te.0001", "m06.te.0002"]
+    },
+    {
+      "id": "m06.inv.002",
+      "date": "2026-05-20",
+      "period": { "start": "2026-04-01", "end": "2026-04-30" },
+      "fees": 1800,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1800,
+      "line_refs": ["m06.te.0003", "m06.te.0004"]
+    },
+    {
+      "id": "m06.inv.003",
+      "date": "2026-06-10",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 9100,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 9100,
+      "line_refs": ["m06.te.0005", "m06.te.0006", "m06.te.0007", "m06.te.0008", "m06.te.0009", "m06.te.0010", "m06.te.0011", "m06.te.0012", "m06.te.0013", "m06.te.0014"]
+    }
+  ],
+  "trust_entries": []
+}

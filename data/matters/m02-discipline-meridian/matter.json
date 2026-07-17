@@ -1,0 +1,56 @@
+{
+  "id": "m02",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m02",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m02-discipline-meridian",
+  "shape": "attorney_discipline",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "In re Petition for Disciplinary Action against Gregor A. Winterhalt, a Meridian Attorney",
+  "sides": [
+    {
+      "role_id": "m02.role.disciplinary-counsel",
+      "label": "Petitioner / Disciplinary Counsel (Meridian Office of Lawyer Conduct)",
+      "party_names": ["Director, Meridian Office of Lawyer Conduct"]
+    },
+    {
+      "role_id": "m02.role.respondent-counsel",
+      "label": "Respondent / Gregor A. Winterhalt",
+      "party_names": ["Gregor A. Winterhalt"],
+      "confidential_fact_refs": ["m02.fact.012", "m02.fact.024"]
+    }
+  ],
+  "parties": [
+    {
+      "name": "Director, Meridian Office of Lawyer Conduct",
+      "role": "petitioner / disciplinary counsel",
+      "side_role_id": "m02.role.disciplinary-counsel"
+    },
+    {
+      "name": "Gregor A. Winterhalt",
+      "role": "respondent attorney",
+      "side_role_id": "m02.role.respondent-counsel"
+    }
+  ],
+  "client_id": "FIRM-C-02",
+  "fee_type": "hourly",
+  "skill_refs": ["SK-LP-16", "SK-LP-07", "SK-LP-10", "SK-LP-08", "SK-LP-17", "SK-LP-02"],
+  "task_refs": ["TSK-001", "TSK-022", "TSK-037", "TSK-060", "TSK-061", "TSK-005", "TSK-032", "TSK-045", "TSK-026"],
+  "personas": ["m02.per.winterhalt", "m02.per.marchetti", "m02.per.fenwick"],
+  "witnesses": [
+    { "id": "m02.wit.marchetti", "name": "Delia Marchetti" },
+    { "id": "m02.wit.osei", "name": "Harun Osei" },
+    { "id": "m02.wit.fenwick", "name": "Nadia Fenwick" }
+  ],
+  "exhibits": [
+    { "id": "m02.exh.001", "title": "Petition for Disciplinary Action" },
+    { "id": "m02.exh.002", "title": "Respondent's Answer to the Petition" },
+    { "id": "m02.exh.003", "title": "Trust-Account Reconciliation Summary" },
+    { "id": "m02.exh.004", "title": "Marchetti Settlement Statement and Disbursement Ledger" },
+    { "id": "m02.exh.005", "title": "Demand Letter from Attorney Lorna Beckwith" },
+    { "id": "m02.exh.006", "title": "Meridian Office of Lawyer Conduct Notice of Investigation" }
+  ],
+  "open_date": "2025-11-10",
+  "as_of_date": "2026-06-30"
+}

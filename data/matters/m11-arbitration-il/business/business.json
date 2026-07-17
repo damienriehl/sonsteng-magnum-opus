@@ -1,0 +1,108 @@
+{
+  "id": "m11.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m11.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m11",
+  "intake": {
+    "client_name": "Yusuf Adeyemi",
+    "contact": {
+      "email": "yusuf.adeyemi@example.com",
+      "phone": "555-0173",
+      "address": "Joliet, Illinois (full address on file)"
+    },
+    "matter_summary": "Second-shift operations supervisor terminated weeks after reporting off-the-clock work and blocked fire exits; wrongful-discharge and retaliation claims proceed in private arbitration under a mandatory arbitration clause. Firm represents the employee as claimant.",
+    "intake_date": "2026-01-20",
+    "referral_source": "former client referral"
+  },
+  "conflicts_check": {
+    "parties_checked": [
+      "Yusuf Adeyemi",
+      "Prairie State Logistics, Inc.",
+      "Roland Pfeiffer",
+      "Bethany Croll"
+    ],
+    "result": "clear",
+    "notes": "No prior or current representation of Prairie State Logistics, Inc. or any named manager; no positional or financial conflict identified.",
+    "checked_date": "2026-01-22"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-01-26",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m11.te.0001", "date": "2026-01-26", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial client interview and preliminary case assessment; review of separation notice and PIP." },
+    { "id": "m11.te.0002", "date": "2026-01-28", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Review employment agreement and mandatory arbitration clause; assess forum and class-waiver posture." },
+    { "id": "m11.te.0003", "date": "2026-01-30", "timekeeper_id": "FIRM-TK-01", "hours": 0.8, "rate": 250, "narrative": "Conflicts check and preparation of engagement letter." },
+    { "id": "m11.te.0004", "date": "2026-02-04", "timekeeper_id": "FIRM-TK-02", "hours": 2.5, "rate": 225, "narrative": "Draft and file demand for arbitration; open matter with the arbitral forum." },
+    { "id": "m11.te.0005", "date": "2026-02-10", "timekeeper_id": "FIRM-TK-01", "hours": 1.8, "rate": 250, "narrative": "Second client interview; build chronology of complaint, PIP, and termination." },
+    { "id": "m11.te.0006", "date": "2026-02-12", "timekeeper_id": "FIRM-TK-02", "hours": 2.2, "rate": 225, "narrative": "Interview fact witness Tomás Ruvalcaba regarding off-the-clock work; memo to file." },
+    { "id": "m11.te.0007", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Interview fact witness Ayana Osei re blocked exits; note Rule 4.2 limits on contacting represented managers." },
+    { "id": "m11.te.0008", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Legal research on retaliation and wrongful-discharge theory and arbitration-clause enforceability." },
+    { "id": "m11.te.0009", "date": "2026-03-05", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Assemble documentary record; analyze timekeeping/punch records and HR email chain." },
+    { "id": "m11.te.0010", "date": "2026-03-12", "timekeeper_id": "FIRM-TK-01", "hours": 2.6, "rate": 250, "narrative": "Draft statement of the case (issue framing and factual narrative)." },
+    { "id": "m11.te.0011", "date": "2026-03-19", "timekeeper_id": "FIRM-TK-02", "hours": 2.4, "rate": 225, "narrative": "Draft statement of the case (evidence marshaling and requested relief); revise." },
+    { "id": "m11.te.0012", "date": "2026-03-26", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Client counseling on objectives, settlement versus proceeding, and reinstatement." },
+    { "id": "m11.te.0013", "date": "2026-04-08", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Revise statement of the case; correspondence with Respondent's counsel on pre-hearing exchange." },
+    { "id": "m11.te.0014", "date": "2026-04-15", "timekeeper_id": "FIRM-TK-02", "hours": 1.8, "rate": 225, "narrative": "Prepare strategic settlement and negotiation plan (SSNP)." },
+    { "id": "m11.te.0015", "date": "2026-04-22", "timekeeper_id": "FIRM-TK-02", "hours": 1.5, "rate": 225, "narrative": "Settlement discussion with Respondent's counsel; report to client." },
+    { "id": "m11.te.0016", "date": "2026-05-06", "timekeeper_id": "FIRM-TK-01", "hours": 2.2, "rate": 250, "narrative": "Hearing preparation: direct-examination outlines for client and corroborating witnesses." },
+    { "id": "m11.te.0017", "date": "2026-05-13", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Hearing preparation: cross-examination outline for adverse witness and exhibit list." },
+    { "id": "m11.te.0018", "date": "2026-05-20", "timekeeper_id": "FIRM-TK-01", "hours": 1.0, "rate": 250, "narrative": "Witness preparation session with client." }
+  ],
+  "invoices": [
+    {
+      "id": "m11.inv.001",
+      "date": "2026-02-05",
+      "period": { "start": "2026-01-26", "end": "2026-01-31" },
+      "fees": 1025,
+      "expenses": 0,
+      "payments_received": 1025,
+      "balance_due": 0,
+      "line_refs": ["m11.te.0001", "m11.te.0002", "m11.te.0003"]
+    },
+    {
+      "id": "m11.inv.002",
+      "date": "2026-03-04",
+      "period": { "start": "2026-02-01", "end": "2026-02-28" },
+      "fees": 2217.50,
+      "expenses": 250,
+      "payments_received": 2467.50,
+      "balance_due": 0,
+      "line_refs": ["m11.te.0004", "m11.te.0005", "m11.te.0006", "m11.te.0007", "m11.te.0008"]
+    },
+    {
+      "id": "m11.inv.003",
+      "date": "2026-04-03",
+      "period": { "start": "2026-03-01", "end": "2026-03-31" },
+      "fees": 2165,
+      "expenses": 0,
+      "payments_received": 2165,
+      "balance_due": 0,
+      "line_refs": ["m11.te.0009", "m11.te.0010", "m11.te.0011", "m11.te.0012"]
+    },
+    {
+      "id": "m11.inv.004",
+      "date": "2026-05-05",
+      "period": { "start": "2026-04-01", "end": "2026-04-30" },
+      "fees": 1242.50,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1242.50,
+      "line_refs": ["m11.te.0013", "m11.te.0014", "m11.te.0015"]
+    },
+    {
+      "id": "m11.inv.005",
+      "date": "2026-06-04",
+      "period": { "start": "2026-05-01", "end": "2026-05-31" },
+      "fees": 1250,
+      "expenses": 0,
+      "payments_received": 0,
+      "balance_due": 1250,
+      "line_refs": ["m11.te.0016", "m11.te.0017", "m11.te.0018"]
+    }
+  ],
+  "trust_entries": []
+}

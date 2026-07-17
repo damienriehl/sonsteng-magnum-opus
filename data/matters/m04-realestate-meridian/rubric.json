@@ -1,0 +1,99 @@
+{
+  "id": "m04.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m04.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m04",
+  "declared_total": 185.5,
+  "criteria": [
+    {
+      "id": "m04.rub.c01",
+      "name": "Strategic negotiation plan (SSNP)",
+      "description": "Quality of the strategic settlement and negotiation plan: interests, alternatives, and disciplined handling of the client's confidential facts.",
+      "weight_points": 50,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-044",
+      "subcriteria": [
+        {
+          "id": "m04.rub.c01.s01",
+          "name": "Interests, priorities, and BATNA",
+          "description": "Identifies the client's true interests and priorities (including access certainty, density, and timing) and a realistic BATNA, and infers the seller's likely interests.",
+          "weight_points": 25
+        },
+        {
+          "id": "m04.rub.c01.s02",
+          "name": "Confidential-fact management and creative options",
+          "description": "Protects the client's confidential facts (ceiling price, deadline, management LOI, septic cost) while generating at least three creative options to cure access.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m04.rub.c02",
+      "name": "Access-rights analysis (easement vs. license)",
+      "description": "Correctly frames and researches whether the 1978 instrument created an easement appurtenant or a revocable license, and the effect of the pending city road vacation and title exception.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m04.rub.c02.s01",
+          "name": "Easement vs. revocable license",
+          "description": "Analyzes the character of the access right, the effect of the missing legal description and mislocated lane, and the paths to cure.",
+          "weight_points": 25
+        },
+        {
+          "id": "m04.rub.c02.s02",
+          "name": "Road vacation and title impact",
+          "description": "Assesses the proposed vacation of Verdant Shore Road, reversion to abutting owners, and the title commitment's access exception.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m04.rub.c03",
+      "name": "Purchase-agreement drafting",
+      "description": "Drafts purchase-agreement terms — especially the access contingency and cure obligations — that actually protect the buyer.",
+      "weight_points": 40.5,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-062",
+      "subcriteria": [
+        {
+          "id": "m04.rub.c03.s01",
+          "name": "Contingency and access provisions",
+          "description": "Access contingency, cure obligation, title-objection, and closing-condition language allocate the access risk to the buyer's protection.",
+          "weight_points": 20.5
+        },
+        {
+          "id": "m04.rub.c03.s02",
+          "name": "Clarity and completeness",
+          "description": "Drafting is clear, internally consistent, and complete on price, closing, and remedies.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m04.rub.c04",
+      "name": "Client counseling and fact-gathering",
+      "description": "Interviews the client effectively and counsels him on options and risks in plain, decision-useful terms.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-034"
+    },
+    {
+      "id": "m04.rub.c05",
+      "name": "Professional responsibility",
+      "description": "Recognizes the no-contact limits on the represented seller, the propriety of dealing with the unrepresented neighbor, and any conflicts.",
+      "weight_points": 20,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 185.5 },
+    { "grade": "A-", "points": 176 },
+    { "grade": "B+", "points": 167 },
+    { "grade": "B", "points": 158 },
+    { "grade": "C", "points": 139 }
+  ]
+}

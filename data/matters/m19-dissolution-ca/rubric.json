@@ -1,0 +1,120 @@
+{
+  "id": "m19.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m19.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m19",
+  "declared_total": 210,
+  "criteria": [
+    {
+      "id": "m19.rub.c01",
+      "name": "Client interview and fact-gathering",
+      "description": "Plans and conducts an effective intake interview of a distressed client that develops a complete factual record.",
+      "weight_points": 65,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m19.rub.c01.s01",
+          "name": "Rapport and interview technique",
+          "description": "Opens with an open-ended invitation, attends to wellbeing, avoids interruption, and builds trust without pressure or flattery.",
+          "weight_points": 28
+        },
+        {
+          "id": "m19.rub.c01.s02",
+          "name": "Surfacing guarded and concealed facts",
+          "description": "Notices and gently follows hints to develop the rapport-gated and concealed facts (Andre's drinking and the June pickup, the client's guilt about overnights, and the funds she moved).",
+          "weight_points": 22
+        },
+        {
+          "id": "m19.rub.c01.s03",
+          "name": "Chronology and completeness",
+          "description": "Produces an accurate chronology and a complete, well-organized factual record from the interview and case file.",
+          "weight_points": 15
+        }
+      ]
+    },
+    {
+      "id": "m19.rub.c02",
+      "name": "Counseling the distressed client",
+      "description": "Counsels a vulnerable client on realistic options while managing emotion and expectations.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037",
+      "subcriteria": [
+        {
+          "id": "m19.rub.c02.s01",
+          "name": "Realistic option-framing",
+          "description": "Explains custody, home, business-valuation, and separate-property options honestly, and counsels candidly on the disclosure risk created by the funds the client moved, without false comfort or fatalism.",
+          "weight_points": 22
+        },
+        {
+          "id": "m19.rub.c02.s02",
+          "name": "Empathy and expectation management",
+          "description": "Responds to the client's guilt and fear with empathy, distinguishes custody labels from outcomes, and keeps the child's interests central.",
+          "weight_points": 18
+        }
+      ]
+    },
+    {
+      "id": "m19.rub.c03",
+      "name": "Community-property analysis and settlement strategy",
+      "description": "Characterizes the estate under community-property rules and builds a strategic settlement-and-negotiation plan.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-044",
+      "subcriteria": [
+        {
+          "id": "m19.rub.c03.s01",
+          "name": "Characterization and tracing",
+          "description": "Correctly frames the community-property presumption and equal division, and analyzes Andre's separate-property reimbursement claim and the gaps in his tracing of the eighty-thousand-dollar contribution.",
+          "weight_points": 30
+        },
+        {
+          "id": "m19.rub.c03.s02",
+          "name": "Business valuation and parenting-schedule tradeoffs",
+          "description": "Analyzes the enterprise-versus-personal goodwill question and needed discovery/experts, and prioritizes a durable parenting schedule while treating property questions as tradeable.",
+          "weight_points": 30
+        }
+      ]
+    },
+    {
+      "id": "m19.rub.c04",
+      "name": "Professional responsibility",
+      "description": "Identifies and honors the governing ethical duties.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m19.rub.c04.s01",
+          "name": "Rule 4.2 no-contact with represented party",
+          "description": "Recognizes that Andre is represented and routes any contact through his counsel rather than communicating with him directly.",
+          "weight_points": 13
+        },
+        {
+          "id": "m19.rub.c04.s02",
+          "name": "Confidentiality and the duty of financial disclosure",
+          "description": "Protects the client's sensitive disclosures while counseling her on her independent fiduciary duty to disclose all community assets, including the funds she moved.",
+          "weight_points": 12
+        }
+      ]
+    },
+    {
+      "id": "m19.rub.c05",
+      "name": "Drafting the initiating documents",
+      "description": "Translates the case theory into a competent petition, declarations of disclosure, and proposed parenting plan.",
+      "weight_points": 20,
+      "skill_id": "SK-LP-17",
+      "task_id": "TSK-048"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 210 },
+    { "grade": "A-", "points": 199 },
+    { "grade": "B+", "points": 189 },
+    { "grade": "B", "points": 178 },
+    { "grade": "B-", "points": 168 },
+    { "grade": "C", "points": 147 }
+  ]
+}

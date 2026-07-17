@@ -1,0 +1,98 @@
+{
+  "id": "m20.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m20.rub",
+  "matter_id": "m20",
+  "declared_total": 210,
+  "criteria": [
+    {
+      "id": "m20.rub.c01",
+      "name": "Fact gathering and client interview",
+      "description": "Conducts a thorough, well-planned interview of the personal representative that surfaces both the favorable facts and the facts that cut against the estate.",
+      "weight_points": 55,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m20.rub.c01.s01",
+          "name": "Eliciting the supporting facts",
+          "description": "Draws out the caregiving, Harold's stated reasons, the private attorney meeting, and the disinterested-witness evidence.",
+          "weight_points": 25
+        },
+        {
+          "id": "m20.rub.c01.s02",
+          "name": "Surfacing the adverse facts",
+          "description": "Uses rapport, confidentiality reassurance, and non-judgmental technique to surface the client's role in arranging the appointment, the phone fight with Dale, and the undocumented withdrawals.",
+          "weight_points": 30
+        }
+      ]
+    },
+    {
+      "id": "m20.rub.c02",
+      "name": "Capacity and undue-influence analysis",
+      "description": "Separates testamentary capacity from undue influence and maps the record evidence to the elements of each.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-010",
+      "subcriteria": [
+        {
+          "id": "m20.rub.c02.s01",
+          "name": "Testamentary capacity",
+          "description": "Analyzes capacity as measured at execution, weighing the physician's assessment against the diagnosed decline and bad-day evidence.",
+          "weight_points": 30
+        },
+        {
+          "id": "m20.rub.c02.s02",
+          "name": "Undue influence and the presumption",
+          "description": "Identifies the confidential-relationship-plus-active-procurement factors, the burden-shifting presumption, and the estate's independence-of-execution counter-facts.",
+          "weight_points": 30
+        }
+      ]
+    },
+    {
+      "id": "m20.rub.c03",
+      "name": "Homestead-devise analysis",
+      "description": "Spots and analyzes Florida's homestead-devise restriction as a distinct question of law, including the surviving-spouse exception and the effect of the prenuptial waiver.",
+      "weight_points": 40,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-011"
+    },
+    {
+      "id": "m20.rub.c04",
+      "name": "Professional responsibility",
+      "description": "Recognizes the lawyer-as-witness problem created by the firm's drafting role and the no-contact rule as to the represented contestant.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m20.rub.c04.s01",
+          "name": "Lawyer as witness",
+          "description": "Flags that the drafting attorney is a likely witness and reasons about how the small firm should staff any contested hearing.",
+          "weight_points": 15
+        },
+        {
+          "id": "m20.rub.c04.s02",
+          "name": "No contact with represented party",
+          "description": "Recognizes that Dale is represented and routes any contact through his counsel rather than interviewing him directly.",
+          "weight_points": 15
+        }
+      ]
+    },
+    {
+      "id": "m20.rub.c05",
+      "name": "Counseling a distressed client",
+      "description": "Manages a grieving, defensive client whose devotion is being recast as manipulation, while still eliciting and confronting the hard facts.",
+      "weight_points": 25,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 210 },
+    { "grade": "A-", "points": 200 },
+    { "grade": "B+", "points": 190 },
+    { "grade": "B", "points": 180 },
+    { "grade": "C", "points": 160 }
+  ]
+}

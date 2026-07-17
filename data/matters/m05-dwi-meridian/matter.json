@@ -1,0 +1,52 @@
+{
+  "id": "m05",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m05",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m05-dwi-meridian",
+  "shape": "criminal_dwi",
+  "tier": "meridian",
+  "jurisdiction": "meridian",
+  "caption": "State of Meridian v. Devon R. Halvard",
+  "sides": [
+    {
+      "role_id": "m05.role.defense",
+      "label": "Defense / Defendant",
+      "party_names": ["Devon R. Halvard"],
+      "confidential_fact_refs": ["m05.fact.008", "m05.fact.026"]
+    },
+    {
+      "role_id": "m05.role.prosecution",
+      "label": "Prosecution / State of Meridian",
+      "party_names": ["State of Meridian"]
+    }
+  ],
+  "parties": [
+    { "name": "Devon R. Halvard", "role": "defendant", "side_role_id": "m05.role.defense" },
+    { "name": "State of Meridian", "role": "prosecuting authority", "side_role_id": "m05.role.prosecution" }
+  ],
+  "client_id": "FIRM-C-05",
+  "fee_type": "flat",
+  "skill_refs": ["SK-LP-07", "SK-LP-01", "SK-LP-10", "SK-LP-13", "SK-LP-16"],
+  "task_refs": ["TSK-001", "TSK-004", "TSK-022", "TSK-023", "TSK-025", "TSK-034", "TSK-037", "TSK-044", "TSK-045", "TSK-050", "TSK-060"],
+  "personas": ["m05.per.halvard", "m05.per.broshears"],
+  "witnesses": [
+    { "id": "m05.wit.broshears", "name": "Officer Curtis Broshears" },
+    { "id": "m05.wit.selkirk", "name": "Margo Selkirk" },
+    { "id": "m05.wit.vandehey", "name": "Trina Vandehey" },
+    { "id": "m05.wit.rahimi", "name": "Aabid Rahimi" }
+  ],
+  "exhibits": [
+    { "id": "m05.exh.001", "title": "Norsholm PD Incident and Arrest Report (Officer Broshears)" },
+    { "id": "m05.exh.002", "title": "DMT-G Evidentiary Breath-Test Record (0.08)" },
+    { "id": "m05.exh.003", "title": "Standardized Field Sobriety Test Worksheet" },
+    { "id": "m05.exh.004", "title": "Implied Consent Advisory Form" },
+    { "id": "m05.exh.005", "title": "Squad Dashcam and Bodycam Index" },
+    { "id": "m05.exh.006", "title": "Devon Halvard Driving Record (DVS abstract)" },
+    { "id": "m05.exh.007", "title": "The Copper Larder Guest Check / Bar Tab" },
+    { "id": "m05.exh.008", "title": "Norsholm Weather and Road-Condition Report" },
+    { "id": "m05.exh.009", "title": "Stop-Location Photographs and Slope Measurement (described)" }
+  ],
+  "open_date": "2026-02-16",
+  "as_of_date": "2026-06-30"
+}

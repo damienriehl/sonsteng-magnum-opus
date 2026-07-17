@@ -1,0 +1,50 @@
+{
+  "id": "m19",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/matter/m19",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "slug": "m19-dissolution-ca",
+  "shape": "marriage_dissolution",
+  "tier": "real",
+  "jurisdiction": "CA",
+  "caption": "In re the Marriage of Camille Beaumont and Andre Lassiter",
+  "sides": [
+    {
+      "role_id": "m19.role.petitioner-counsel",
+      "label": "Petitioner's Counsel (Camille Beaumont)",
+      "party_names": ["Camille Beaumont"],
+      "confidential_fact_refs": ["m19.fact.048", "m19.fact.049"]
+    },
+    {
+      "role_id": "m19.role.respondent-counsel",
+      "label": "Respondent's Counsel (Andre Lassiter)",
+      "party_names": ["Andre Lassiter"],
+      "confidential_fact_refs": ["m19.fact.018"]
+    }
+  ],
+  "parties": [
+    { "name": "Camille Beaumont", "role": "petitioner / wife", "side_role_id": "m19.role.petitioner-counsel" },
+    { "name": "Andre Lassiter", "role": "respondent / husband", "side_role_id": "m19.role.respondent-counsel" }
+  ],
+  "client_id": "FIRM-C-19",
+  "fee_type": "retainer",
+  "skill_refs": ["SK-LP-07", "SK-LP-10", "SK-LP-13", "SK-LP-16", "SK-LP-17"],
+  "task_refs": ["TSK-004", "TSK-022", "TSK-023", "TSK-024", "TSK-034", "TSK-037", "TSK-044", "TSK-047", "TSK-048", "TSK-059", "TSK-060"],
+  "personas": ["m19.per.beaumont", "m19.per.lassiter", "m19.per.tessier"],
+  "witnesses": [
+    { "id": "m19.wit.tessier", "name": "Marguerite Tessier" },
+    { "id": "m19.wit.larue", "name": "Yvette Larue" },
+    { "id": "m19.wit.ferrante", "name": "Daniel Ferrante" }
+  ],
+  "exhibits": [
+    { "id": "m19.exh.001", "title": "Petition for Dissolution of Marriage" },
+    { "id": "m19.exh.002", "title": "Schedule of Assets and Debts (Community & Separate Property)" },
+    { "id": "m19.exh.003", "title": "Petite Marigny LLC Financial Summary" },
+    { "id": "m19.exh.004", "title": "Separate-Property Tracing Documents (Described)" },
+    { "id": "m19.exh.005", "title": "Preliminary Business Valuation Report (Ferrante)" },
+    { "id": "m19.exh.006", "title": "Co-Parenting Text-Message Thread" },
+    { "id": "m19.exh.007", "title": "Petitioner's Parenting-Time Journal" }
+  ],
+  "open_date": "2026-02-13",
+  "as_of_date": "2026-06-30"
+}

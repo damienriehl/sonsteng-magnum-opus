@@ -1,0 +1,66 @@
+{
+  "id": "m04.biz",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/business/m04.biz",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m04",
+  "intake": {
+    "client_name": "Talbot Meskin",
+    "contact": {
+      "email": "talbot.meskin@example.com",
+      "phone": "555-0194",
+      "address": "1120 Timbergate Road, Brightwater, Meridian 55716"
+    },
+    "matter_summary": "Represent buyer/developer in the purchase of 4400 Kestrel Point on Lake Verdant; central issue is whether access over a neighbor's gravel lane is a recorded easement or a revocable license. Negotiate and paper a purchase agreement that secures permanent access.",
+    "intake_date": "2026-02-16",
+    "referral_source": "prior client referral (past cabin-development matter)"
+  },
+  "conflicts_check": {
+    "parties_checked": ["Talbot Meskin", "Ruth Renard", "Corwin Delahaye", "City of Brightwater"],
+    "result": "clear",
+    "notes": "No current or former representation of the seller Renard, the neighbor Delahaye, or the City. Delahaye is an adverse but unrepresented adjoining owner; no conflict. Cleared by both partners.",
+    "checked_date": "2026-02-17"
+  },
+  "engagement": {
+    "fee_type": "hourly",
+    "rate": 250,
+    "engagement_date": "2026-02-18",
+    "letter_md": "business/engagement-letter.md"
+  },
+  "time_entries": [
+    { "id": "m04.te.0001", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-01", "hours": 1.5, "rate": 250, "narrative": "Initial client interview with Talbot Meskin; intake of goals, four-cabin plan, and access concerns; open matter." },
+    { "id": "m04.te.0002", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-02", "hours": 2.0, "rate": 225, "narrative": "Review 1978 recorded access instrument, 1971 plat, and title commitment; note absence of legal description and Schedule B access exception." },
+    { "id": "m04.te.0003", "date": "2026-03-03", "timekeeper_id": "FIRM-TK-02", "hours": 1.8, "rate": 225, "narrative": "Legal research on easement appurtenant versus revocable license and location of an indefinitely described right of way under Meridian law." },
+    { "id": "m04.te.0004", "date": "2026-03-10", "timekeeper_id": "FIRM-TK-01", "hours": 1.2, "rate": 250, "narrative": "Client counseling call re: access risk, title exception, and options to cure; discuss strategy." },
+    { "id": "m04.te.0005", "date": "2026-03-18", "timekeeper_id": "FIRM-TK-01", "hours": 2.5, "rate": 250, "narrative": "Prepare strategic settlement and negotiation plan (SSNP); map interests, BATNA, confidential facts, and access-cure options." },
+    { "id": "m04.te.0006", "date": "2026-03-30", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Draft purchase-agreement access contingency and cure/title-objection provisions." },
+    { "id": "m04.te.0007", "date": "2026-04-14", "timekeeper_id": "FIRM-TK-01", "hours": 2.0, "rate": 250, "narrative": "Negotiation session with seller's counsel re: access characterization, contingency deadline, and price; follow-up notes." },
+    { "id": "m04.te.0008", "date": "2026-04-28", "timekeeper_id": "FIRM-TK-02", "hours": 1.4, "rate": 225, "narrative": "Revise purchase agreement; refine access-cure and closing-condition language after negotiation." },
+    { "id": "m04.te.0009", "date": "2026-05-12", "timekeeper_id": "FIRM-TK-01", "hours": 1.7, "rate": 250, "narrative": "Inquiry into City of Brightwater proposed vacation of Verdant Shore Road; counsel client on structuring a road-vacation contingency." },
+    { "id": "m04.te.0010", "date": "2026-05-27", "timekeeper_id": "FIRM-TK-02", "hours": 1.1, "rate": 225, "narrative": "Coordinate with surveyor Brummond re: fixing easement centerline/width; correspondence to seller's counsel." },
+    { "id": "m04.te.0011", "date": "2026-06-16", "timekeeper_id": "FIRM-TK-01", "hours": 1.3, "rate": 250, "narrative": "Final negotiation and review of purchase-agreement terms; client memo on recommended deal." }
+  ],
+  "invoices": [
+    {
+      "id": "m04.inv.001",
+      "date": "2026-04-05",
+      "period": { "start": "2026-02-18", "end": "2026-03-31" },
+      "fees": 2515,
+      "expenses": 45,
+      "payments_received": 2560,
+      "balance_due": 0,
+      "line_refs": ["m04.te.0001", "m04.te.0002", "m04.te.0003", "m04.te.0004", "m04.te.0005", "m04.te.0006"]
+    },
+    {
+      "id": "m04.inv.002",
+      "date": "2026-06-25",
+      "period": { "start": "2026-04-01", "end": "2026-06-30" },
+      "fees": 1812.5,
+      "expenses": 30,
+      "payments_received": 0,
+      "balance_due": 1842.5,
+      "line_refs": ["m04.te.0007", "m04.te.0008", "m04.te.0009", "m04.te.0010", "m04.te.0011"]
+    }
+  ],
+  "trust_entries": []
+}

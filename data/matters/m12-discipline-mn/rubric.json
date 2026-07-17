@@ -1,0 +1,118 @@
+{
+  "id": "m12.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m12.rub",
+  "matter_id": "m12",
+  "declared_total": 207,
+  "criteria": [
+    {
+      "id": "m12.rub.c01",
+      "name": "Misconduct analysis across the three charges",
+      "description": "Correctly identifies and applies the governing standards for neglect/diligence, candor to the tribunal, and supervisory responsibility, distinguishing conceded from contested elements.",
+      "weight_points": 70,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060",
+      "subcriteria": [
+        {
+          "id": "m12.rub.c01.s01",
+          "name": "Neglect and diligence",
+          "description": "Analyzes the missed service deadline and post-departure monitoring as a diligence failure; correctly frames concession and its limits.",
+          "weight_points": 25
+        },
+        {
+          "id": "m12.rub.c01.s02",
+          "name": "Candor to the tribunal",
+          "description": "Analyzes the affidavit date under the false-statement standard; distinguishes a knowing misstatement from an honest reconstruction and grapples honestly with the interview facts.",
+          "weight_points": 25
+        },
+        {
+          "id": "m12.rub.c01.s03",
+          "name": "Supervisory responsibility",
+          "description": "Analyzes the reliance on a single staff member's personal calendar as a supervision/systems failure and the effect of remedial measures.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m12.rub.c02",
+      "name": "Sanction analysis and proportionality",
+      "description": "Builds a proportional-sanction argument from aggravating and mitigating factors and comparable outcomes, keyed to the purposes of discipline.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-02",
+      "task_id": "TSK-007",
+      "subcriteria": [
+        {
+          "id": "m12.rub.c02.s01",
+          "name": "Aggravating and mitigating factors",
+          "description": "Marshals the recognized factors accurately, including the September notice and false client reassurance as aggravation and the clean record, cooperation, remedial steps, and personal circumstances as mitigation.",
+          "weight_points": 25
+        },
+        {
+          "id": "m12.rub.c02.s02",
+          "name": "Comparable-outcome reasoning",
+          "description": "Uses comparable disciplinary outcomes to argue for a proportional sanction rather than relying on sympathy.",
+          "weight_points": 20
+        }
+      ]
+    },
+    {
+      "id": "m12.rub.c03",
+      "name": "Respondent's pre-hearing brief",
+      "description": "A well-structured, rule-compliant, persuasive brief appropriate to the disciplinary posture and standard of review.",
+      "weight_points": 45,
+      "skill_id": "SK-LP-09",
+      "task_id": "TSK-032",
+      "subcriteria": [
+        {
+          "id": "m12.rub.c03.s01",
+          "name": "Structure and rule compliance",
+          "description": "Organization, format, and procedural compliance for the referee/Supreme Court posture.",
+          "weight_points": 20
+        },
+        {
+          "id": "m12.rub.c03.s02",
+          "name": "Argument and standard of review",
+          "description": "Persuasive argument that correctly deploys the applicable standard of review and burden.",
+          "weight_points": 25
+        }
+      ]
+    },
+    {
+      "id": "m12.rub.c04",
+      "name": "Fact development and client counseling",
+      "description": "Reconstructs a defensible timeline from record and interviews and counsels a distressed client, including on the candor problem.",
+      "weight_points": 27,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-023",
+      "subcriteria": [
+        {
+          "id": "m12.rub.c04.s01",
+          "name": "Timeline reconstruction",
+          "description": "Accurately distinguishes when the client knew from when she says she knew, tested against the record.",
+          "weight_points": 15
+        },
+        {
+          "id": "m12.rub.c04.s02",
+          "name": "Counseling the distressed client",
+          "description": "Interviews with rapport, surfaces gated facts appropriately, and counsels ethically on the misstatement; recognizes the Rule 4.2 boundary with the former client.",
+          "weight_points": 12
+        }
+      ]
+    },
+    {
+      "id": "m12.rub.c05",
+      "name": "Oral argument readiness",
+      "description": "Prepared, responsive oral argument before the referee, fielding questions on the candor charge and sanction.",
+      "weight_points": 20,
+      "skill_id": "SK-LP-08",
+      "task_id": "TSK-026"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 207 },
+    { "grade": "A-", "points": 197 },
+    { "grade": "B+", "points": 187 },
+    { "grade": "B", "points": 177 },
+    { "grade": "C", "points": 160 }
+  ]
+}

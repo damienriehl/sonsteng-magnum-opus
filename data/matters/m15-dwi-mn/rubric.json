@@ -1,0 +1,90 @@
+{
+  "id": "m15.rub",
+  "schema_version": "1.0.0",
+  "@id": "https://sonsteng.damienriehl.com/spine/rubric/m15.rub",
+  "@context": "https://sonsteng.damienriehl.com/spine/",
+  "matter_id": "m15",
+  "declared_total": 316.5,
+  "criteria": [
+    {
+      "id": "m15.rub.c01",
+      "name": "Client interview and fact development",
+      "description": "Elicits a complete, reliable account of the shift, the drinking, the stop, and the arrest, including the sensitive facts that only surface with rapport.",
+      "weight_points": 90,
+      "skill_id": "SK-LP-07",
+      "task_id": "TSK-022",
+      "subcriteria": [
+        {
+          "id": "m15.rub.c01.s01",
+          "name": "Arrest narrative and drinking timeline",
+          "description": "Builds an ordered timeline of the double shift, the tap house, the drive, the stop, the field tests, and the breath test.",
+          "weight_points": 45,
+          "task_id": "TSK-025"
+        },
+        {
+          "id": "m15.rub.c01.s02",
+          "name": "Surfacing gated and concealed facts",
+          "description": "Earns the fatigue-and-phone distraction, the mouthwash used to mask the beer, the uncounted third drink, and the concealed prior offense through rapport rather than pressure.",
+          "weight_points": 45,
+          "task_id": "TSK-023"
+        }
+      ]
+    },
+    {
+      "id": "m15.rub.c02",
+      "name": "Issue-spotting: stop, field tests, and breath sample",
+      "description": "Identifies the legal vulnerabilities that drive the defense theory of the case and separates the criminal charge from the implied-consent revocation.",
+      "weight_points": 80,
+      "skill_id": "SK-LP-01",
+      "task_id": "TSK-001",
+      "subcriteria": [
+        {
+          "id": "m15.rub.c02.s01",
+          "name": "Reasonable suspicion for the stop",
+          "description": "Spots the tip-reliability and independent-corroboration questions raised by the citizen weaving report and the single fog-line contact.",
+          "weight_points": 40,
+          "task_id": "TSK-004"
+        },
+        {
+          "id": "m15.rub.c02.s02",
+          "name": "Test reliability and suppression theory",
+          "description": "Spots the extreme-cold, icy-shoulder field-test issues and the mouth-alcohol, observation-period, and margin-of-error breath-test issues, and frames a suppression theory.",
+          "weight_points": 40,
+          "task_id": "TSK-050"
+        }
+      ]
+    },
+    {
+      "id": "m15.rub.c03",
+      "name": "Counseling a client whose livelihood is at stake",
+      "description": "Manages Travis's fear for his commercial license and family income, explains the two parallel proceedings, and sets realistic expectations without over-promising.",
+      "weight_points": 56.5,
+      "skill_id": "SK-LP-10",
+      "task_id": "TSK-037"
+    },
+    {
+      "id": "m15.rub.c04",
+      "name": "Plea and charge negotiation strategy",
+      "description": "Develops a defensible negotiation plan that treats the CDL disqualification as the central objective and identifies leverage and exposure given the prior offense.",
+      "weight_points": 60,
+      "skill_id": "SK-LP-13",
+      "task_id": "TSK-045"
+    },
+    {
+      "id": "m15.rub.c05",
+      "name": "Professional responsibility",
+      "description": "Respects the no-contact rule with the represented arresting deputy and keeps within the scope of the flat-fee engagement.",
+      "weight_points": 30,
+      "skill_id": "SK-LP-16",
+      "task_id": "TSK-060"
+    }
+  ],
+  "letter_grade_map": [
+    { "grade": "A", "points": 316.5 },
+    { "grade": "A-", "points": 300 },
+    { "grade": "B+", "points": 285 },
+    { "grade": "B", "points": 268 },
+    { "grade": "B-", "points": 250 },
+    { "grade": "C", "points": 220 }
+  ]
+}
