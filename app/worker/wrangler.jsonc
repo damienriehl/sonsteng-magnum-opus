@@ -1,0 +1,25 @@
+{
+  // Sonsteng client-interview / debrief / critique Worker.
+  // Zero-build, plain-JS ES modules + native JSON import (wrangler bundles both).
+  // Secrets are set out-of-band and NEVER live here: ANTHROPIC_API_KEY,
+  // SESSION_SIGNING_KEY, DEMO_BYPASS_TOKEN (wrangler secret put ...).
+  "name": "sonsteng-chat",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } },
+  "durable_objects": {
+    "bindings": [{ "name": "BUDGET", "class_name": "BudgetCounter" }]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["BudgetCounter"] }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+    "ANTHROPIC_MODEL": "claude-haiku-4-5",
+    "PUBLIC_BUDGET_USD": "7",
+    "DEMO_RESERVE_USD": "3",
+    "MAX_TURNS": "20",
+    "MAX_SESSIONS_PER_DAY": "200"
+  }
+}

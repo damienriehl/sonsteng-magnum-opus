@@ -1,0 +1,8 @@
+# Local-only secrets loaded by `wrangler dev` — NEVER commit.
+.dev.vars
+.dev.vars.*
+
+# Wrangler + node build/runtime artifacts.
+.wrangler/
+node_modules/
+dist/
