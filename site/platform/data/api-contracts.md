@@ -4,14 +4,64 @@ Authoritative request/response contract for the Sonsteng client-interview
 Worker (`app/worker/`). The chat/critique UI is built against this exact
 contract. **Do not deviate without versioning.** Base path: `/v1`.
 
-- Model, system prompt, and `max_tokens` are **always server-built**; the client
-  can never supply `model`, `system`, `max_tokens`, or `tools`. Client input is
-  restricted to the whitelisted fields below.
+- System prompt and `max_tokens` are **always server-built**; the client can
+  never supply `system`, `max_tokens`, or `tools`. Client input is restricted to
+  the whitelisted fields below. The one client-controlled upstream input is the
+  optional **`byok`** block (below): their provider, **their** key, and a model
+  restricted to a per-provider allowlist.
 - **CORS:** every response — success *and* error — carries
   `Access-Control-Allow-Origin` echoing the matched allowlisted origin (plus
   `Vary: Origin`). A request from a non-allowlisted origin gets a bare `403`
   with **no** ACAO (the browser blocks it — the allowlist working).
 - **Non-streaming.** Each response is a single JSON body.
+
+---
+
+## BYOK — bring your own key (provider-agnostic)
+
+`POST /v1/chat`, `/v1/debrief`, and `/v1/critique` MAY include:
+
+```json
+{ "byok": { "provider": "anthropic", "api_key": "sk-…", "model": "claude-haiku-4-5" } }
+```
+
+- `provider` ∈ `"anthropic"` | `"openai"` | `"google"`.
+- `model` (optional) must be in that provider's **allowlist**; omitted → the
+  provider's default. Defaults & allowlists are deploy config (`wrangler.jsonc`
+  vars), currently:
+
+  | provider  | default            | allowlist                                              |
+  |-----------|--------------------|--------------------------------------------------------|
+  | anthropic | `claude-haiku-4-5` | `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-5` |
+  | openai    | `gpt-4o-mini`      | `gpt-4o-mini`, `gpt-4o`                                |
+  | google    | `gemini-2.0-flash` | `gemini-2.0-flash`, `gemini-2.5-flash`                 |
+
+- **When `byok` is present:** the Worker calls that provider with the user's
+  key and **skips the hosted spend counter entirely** (their money). Everything
+  else still applies: session validity, turn caps + `turn_id` dedupe, input-size
+  caps, server-side persona injection, and the ≥6-turn debrief guard.
+- **The key is never stored and never logged.** It exists only for the lifetime
+  of the request (forwarded in the provider's auth **header** — never in a URL);
+  no log line, metric, or error body contains it (enforced by a unit test that
+  scans every logging call site).
+- A provider 4xx on a BYOK call (bad key, unavailable model) returns a plain
+  `validation_error` naming the provider + HTTP status — never in-character.
+- **When `byok` is absent:** the hosted demo pool is used as documented — but if
+  the deployment has no `ANTHROPIC_API_KEY` secret (the hosted pool is dormant),
+  every such request returns:
+
+```json
+{ "error": { "code": "no_hosted_key", "message": "This deployment has no hosted demo key. Add your own API key to interview the client." } }
+```
+
+- Prompt caching (Segment-A prefix + history breakpoint) applies **only** on the
+  anthropic path; OpenAI/Gemini requests send the same server-built prompt
+  without cache directives (any provider-side automatic caching is surfaced in
+  the normalized `usage`).
+- Evaluator calls (`/v1/debrief`, `/v1/critique`) request native JSON output
+  where the provider supports it: OpenAI `response_format: json_object`, Gemini
+  `responseMimeType: application/json`; Anthropic relies on the prompt contract.
+  All providers' outputs are still schema-validated before reaching the client.
 
 ---
 
@@ -76,7 +126,8 @@ One interview turn (user message + client reply).
 
 **Errors:** `cap_exceeded` (429), `turn_limit` (429), `upstream_unavailable`
 (503; retry-once then in-character "bad phone connection", **no turn burned**),
-`session_invalid` (401), `validation_error` (400).
+`session_invalid` (401), `validation_error` (400), `no_hosted_key` (503; no
+`byok` supplied and the deployment has no hosted key).
 
 ---
 
@@ -134,7 +185,8 @@ Always JSON, always with CORS headers (for allowlisted origins):
 { "error": { "code": "cap_exceeded", "message": "…", "in_character": "…optional…" } }
 ```
 - `code` ∈ `cap_exceeded` | `turn_limit` | `rate_limited` | `validation_error` |
-  `upstream_unavailable` | `origin_forbidden` | `session_invalid`.
+  `upstream_unavailable` | `origin_forbidden` | `session_invalid` |
+  `no_hosted_key`.
 - `in_character` is supplied for `cap_exceeded` / `turn_limit` /
   `upstream_unavailable` (the UI renders the in-character line, e.g. the
   bad-phone-connection message, instead of a raw error).
@@ -143,12 +195,17 @@ Always JSON, always with CORS headers (for allowlisted origins):
 
 ## Config (wrangler.jsonc `vars`) + secrets
 
-`vars`: `ALLOWED_ORIGINS`, `ANTHROPIC_MODEL` (`claude-haiku-4-5`),
-`PUBLIC_BUDGET_USD` (7), `DEMO_RESERVE_USD` (3), `MAX_TURNS` (20),
-`MAX_SESSIONS_PER_DAY` (200).
+`vars`: `ALLOWED_ORIGINS`, `PUBLIC_BUDGET_USD` (7), `DEMO_RESERVE_USD` (3),
+`MAX_TURNS` (20), `MAX_SESSIONS_PER_DAY` (200), plus the per-provider model
+config `MODEL_DEFAULT_ANTHROPIC` / `MODEL_DEFAULT_OPENAI` /
+`MODEL_DEFAULT_GOOGLE` and allowlists `MODEL_ALLOW_ANTHROPIC` /
+`MODEL_ALLOW_OPENAI` / `MODEL_ALLOW_GOOGLE` (comma-separated; see the BYOK
+section table).
 
-Secrets (set with `wrangler secret put`, never in source): `ANTHROPIC_API_KEY`
-(gated on Damien), `SESSION_SIGNING_KEY`, `DEMO_BYPASS_TOKEN`.
+Secrets (set with `wrangler secret put`, never in source): `SESSION_SIGNING_KEY`,
+`DEMO_BYPASS_TOKEN`, and **optionally** `ANTHROPIC_API_KEY` (gated on Damien;
+while unset the hosted demo pool is dormant and non-BYOK requests get
+`no_hosted_key`).
 
 ## Privacy / logging
 
