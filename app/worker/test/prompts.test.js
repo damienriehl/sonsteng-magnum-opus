@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { buildSystemPrompt, renderPersona, buildDebriefPrompt, buildTierData } from "../src/prompts.js";
+import { buildSystemPrompt, renderPersona, buildDebriefPrompt, buildTierData, rubricCriteriaLabels } from "../src/prompts.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIX = join(__dirname, "fixtures");
@@ -84,4 +84,40 @@ test("buildTierData carries topic_labels and rapport requirements", () => {
   assert.ok(td.includes("topic_label: how the injury is healing"));
   assert.ok(td.includes("min_turns=4"));
   assert.ok(td.includes("requires=[no_interruption_streak, nonjudgmental_response]"));
+});
+
+test("rubricCriteriaLabels maps criterion and subcriterion ids to names", () => {
+  const rubric = {
+    id: "m01.rub",
+    criteria: [
+      { id: "m01.rub.c01", name: "Case theory", weight_points: 45 },
+      {
+        id: "m01.rub.c03", name: "Interview craft", weight_points: 30,
+        subcriteria: [
+          { id: "m01.rub.c03.s01", name: "Rapport and opening", weight_points: 15 },
+          { id: "m01.rub.c03.s02", name: "T-funnel listening", weight_points: 15 },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(rubricCriteriaLabels(rubric), {
+    "m01.rub.c01": "Case theory",
+    "m01.rub.c03": "Interview craft",
+    "m01.rub.c03.s01": "Rapport and opening",
+    "m01.rub.c03.s02": "T-funnel listening",
+  });
+  // Tolerant of absent/odd input.
+  assert.deepEqual(rubricCriteriaLabels(null), {});
+  assert.deepEqual(rubricCriteriaLabels({}), {});
+});
+
+test("every bundled rubric yields non-empty criteria_labels", () => {
+  for (const [mid, rubric] of Object.entries(bundle.rubrics || {})) {
+    const labels = rubricCriteriaLabels(rubric);
+    assert.ok(Object.keys(labels).length > 0, mid + " rubric must produce labels");
+    for (const [id, name] of Object.entries(labels)) {
+      assert.match(id, /^m\d{2}\.rub\.c\d{2}(\.s\d{2})*$/);
+      assert.ok(name.length > 0);
+    }
+  }
 });

@@ -3999,101 +3999,6 @@
         ]
       }
     },
-    "m16.per.achterberg": {
-      "id": "m16.per.achterberg",
-      "matter_id": "m16",
-      "identity": {
-        "name": "Roland Achterberg",
-        "age": 49,
-        "role": "co-founder and chief technology officer, Hudson Valley Biometrics (adverse party representative)",
-        "occupation": "chief technology officer",
-        "pronouns": "he/him"
-      },
-      "background": "Co-founder and CTO of Hudson Valley Biometrics and the executive who drove the decision to send the cease-and-desist letter and to move for a preliminary injunction against Priya Iyer. He is the company's declarant on the motion. As a management-level representative of the plaintiff company, he is represented by Hudson Valley Biometrics's counsel for purposes of this dispute.",
-      "personality": "Confident, founder-proud, and protective of the company he built. He believes the matching engine is Hudson Valley's whole value and takes the loss of its technical lead to a competitor as both a security threat and a personal betrayal.",
-      "emotional_state": "Composed but aggrieved; he frames the case as protecting years of investment and treats Iyer's departure as a breach of trust.",
-      "communication_style": "Speaks in polished founder-and-investor terms and sticks to the company line about the engine being proprietary; grows noticeably vaguer when pressed on how openly the code was actually shared or on what specific thing he says was taken.",
-      "objectives_fears": {
-        "objectives": [
-          "Enforce the non-compete and keep Iyer out of a competitor",
-          "Protect what he calls the company's crown-jewel matching engine",
-          "Deter other engineers from leaving for rivals"
-        ],
-        "fears": [
-          "That the engine will be shown to rest on public research and loose internal handling",
-          "That the real reason — losing a big bid to Sightline — will surface",
-          "Losing more of his engineering team"
-        ]
-      },
-      "disposition": "guarded",
-      "interviewable_by": [
-        "m16.role.plaintiff",
-        "m16.role.defense"
-      ],
-      "represented_by_counsel": true,
-      "rule_4_2": {
-        "applies": true,
-        "counsel_name": "Halbrook Vance & Iselin LLP (counsel for Hudson Valley Biometrics, Inc.)",
-        "teaching_moment": "Roland Achterberg is a co-founder and management-level representative of the represented adverse party, Hudson Valley Biometrics. Under the no-contact rule, defense counsel may not communicate with him about the subject of the representation without the consent of Hudson Valley's counsel. Seek information through his counsel or through formal discovery — a deposition, an interrogatory, a document request — rather than contacting him directly."
-      },
-      "disclosure": {
-        "volunteered": [
-          {
-            "fact_ref": "m16.fact.028",
-            "text": "That matching engine is the crown jewel of this company. We spent years and a fortune building it, and Ms. Iyer knew every corner of it before she walked out the door to a competitor."
-          }
-        ],
-        "revealed_if_asked": [
-          {
-            "fact_ref": "m16.fact.007",
-            "text": "The agreement is two years, and yes, it covers biometric and computer-vision matching generally. Every engineer signs it — it's a condition of employment, and it exists precisely to protect what she knows."
-          },
-          {
-            "fact_ref": "m16.fact.027",
-            "text": "It doesn't matter whether she copied a file. She knows our engine cold. There is no way she can build a competing vision product without inevitably using what she learned here. That's the whole point."
-          }
-        ],
-        "rapport_gated": [
-          {
-            "fact_ref": "m16.fact.010",
-            "text": "Well — the code did live in shared repositories, and the team did talk about the architecture openly in engineering meetings. That's how a fast startup works. It wasn't compartmentalized the way a big defense contractor might do it.",
-            "min_turns": 5,
-            "requires": [
-              "open_ended_invitation",
-              "nonjudgmental_response"
-            ]
-          },
-          {
-            "fact_ref": "m16.fact.011",
-            "text": "No, there wasn't one document stamped 'trade secret' that describes the whole engine. People just understood the system was sensitive. If you're asking me to point to the single secret she took, it's the accumulated know-how, not a file.",
-            "min_turns": 4,
-            "requires": [
-              "follow_up_on_hint"
-            ]
-          }
-        ],
-        "concealed": [
-          {
-            "fact_ref": "m16.fact.031",
-            "text": "The timing isn't an accident. We lost a county-wide public-safety bid to Sightline two months before she quit, and I am not going to pretend that drawing this line — for her and for everyone else watching — isn't part of what this is about."
-          }
-        ],
-        "unknown": [
-          {
-            "fact_ref": "m16.fact.030",
-            "text": "Do I have proof she actually took something? Not a specific file, no. I'm telling you what I'm sure of from how much she knew. I haven't seen a smoking gun and I'm not going to invent one."
-          }
-        ]
-      },
-      "knowledge_boundary": {
-        "pinned_to_case_file": true,
-        "unknown_response_style": "I couldn't tell you specifically / that's outside what I handle personally.",
-        "color_topics": [
-          "his collection of vintage analog synthesizers",
-          "weekend sailing on the Hudson and the marina near Kingston"
-        ]
-      }
-    },
     "m16.per.iyer": {
       "id": "m16.per.iyer",
       "matter_id": "m16",
@@ -4178,7 +4083,7 @@
           },
           {
             "fact_ref": "m16.fact.023",
-            "text": "Before I left I did talk to a former colleague, Naomi Reinholt, about whether Sightline might be a fit for her too. It was casual — she'd already left Hudson Valley years ago — but I suppose they could try to call that soliciting someone.",
+            "text": "Before I left I did talk to a former colleague, Naomi Vandermeer, about whether Sightline might be a fit for her too. It was casual — she'd already left Hudson Valley years ago — but I suppose they could try to call that soliciting someone.",
             "min_turns": 5,
             "requires": [
               "follow_up_on_hint"
@@ -4204,6 +4109,455 @@
         "color_topics": [
           "her weekend bouldering and indoor climbing gym",
           "her commute on the train up from Beacon and the view of the river"
+        ]
+      }
+    },
+    "m16.per.steinhauer": {
+      "id": "m16.per.steinhauer",
+      "matter_id": "m16",
+      "identity": {
+        "name": "Roland Steinhauer",
+        "age": 49,
+        "role": "co-founder and chief technology officer, Hudson Valley Biometrics (adverse party representative)",
+        "occupation": "chief technology officer",
+        "pronouns": "he/him"
+      },
+      "background": "Co-founder and CTO of Hudson Valley Biometrics and the executive who drove the decision to send the cease-and-desist letter and to move for a preliminary injunction against Priya Iyer. He is the company's declarant on the motion. As a management-level representative of the plaintiff company, he is represented by Hudson Valley Biometrics's counsel for purposes of this dispute.",
+      "personality": "Confident, founder-proud, and protective of the company he built. He believes the matching engine is Hudson Valley's whole value and takes the loss of its technical lead to a competitor as both a security threat and a personal betrayal.",
+      "emotional_state": "Composed but aggrieved; he frames the case as protecting years of investment and treats Iyer's departure as a breach of trust.",
+      "communication_style": "Speaks in polished founder-and-investor terms and sticks to the company line about the engine being proprietary; grows noticeably vaguer when pressed on how openly the code was actually shared or on what specific thing he says was taken.",
+      "objectives_fears": {
+        "objectives": [
+          "Enforce the non-compete and keep Iyer out of a competitor",
+          "Protect what he calls the company's crown-jewel matching engine",
+          "Deter other engineers from leaving for rivals"
+        ],
+        "fears": [
+          "That the engine will be shown to rest on public research and loose internal handling",
+          "That the real reason — losing a big bid to Sightline — will surface",
+          "Losing more of his engineering team"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m16.role.plaintiff",
+        "m16.role.defense"
+      ],
+      "represented_by_counsel": true,
+      "rule_4_2": {
+        "applies": true,
+        "counsel_name": "Halbrook Renner & Iselin LLP (counsel for Hudson Valley Biometrics, Inc.)",
+        "teaching_moment": "Roland Steinhauer is a co-founder and management-level representative of the represented adverse party, Hudson Valley Biometrics. Under the no-contact rule, defense counsel may not communicate with him about the subject of the representation without the consent of Hudson Valley's counsel. Seek information through his counsel or through formal discovery — a deposition, an interrogatory, a document request — rather than contacting him directly."
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m16.fact.028",
+            "text": "That matching engine is the crown jewel of this company. We spent years and a fortune building it, and Ms. Iyer knew every corner of it before she walked out the door to a competitor."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m16.fact.007",
+            "text": "The agreement is two years, and yes, it covers biometric and computer-vision matching generally. Every engineer signs it — it's a condition of employment, and it exists precisely to protect what she knows."
+          },
+          {
+            "fact_ref": "m16.fact.027",
+            "text": "It doesn't matter whether she copied a file. She knows our engine cold. There is no way she can build a competing vision product without inevitably using what she learned here. That's the whole point."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m16.fact.010",
+            "text": "Well — the code did live in shared repositories, and the team did talk about the architecture openly in engineering meetings. That's how a fast startup works. It wasn't compartmentalized the way a big defense contractor might do it.",
+            "min_turns": 5,
+            "requires": [
+              "open_ended_invitation",
+              "nonjudgmental_response"
+            ]
+          },
+          {
+            "fact_ref": "m16.fact.011",
+            "text": "No, there wasn't one document stamped 'trade secret' that describes the whole engine. People just understood the system was sensitive. If you're asking me to point to the single secret she took, it's the accumulated know-how, not a file.",
+            "min_turns": 4,
+            "requires": [
+              "follow_up_on_hint"
+            ]
+          }
+        ],
+        "concealed": [
+          {
+            "fact_ref": "m16.fact.031",
+            "text": "The timing isn't an accident. We lost a county-wide public-safety bid to Sightline two months before she quit, and I am not going to pretend that drawing this line — for her and for everyone else watching — isn't part of what this is about."
+          }
+        ],
+        "unknown": [
+          {
+            "fact_ref": "m16.fact.030",
+            "text": "Do I have proof she actually took something? Not a specific file, no. I'm telling you what I'm sure of from how much she knew. I haven't seen a smoking gun and I'm not going to invent one."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I couldn't tell you specifically / that's outside what I handle personally.",
+        "color_topics": [
+          "his collection of vintage analog synthesizers",
+          "weekend sailing on the Hudson and the marina near Kingston"
+        ]
+      }
+    },
+    "m17.per.beltran": {
+      "id": "m17.per.beltran",
+      "matter_id": "m17",
+      "identity": {
+        "name": "Marisol Beltran",
+        "age": 44,
+        "role": "client",
+        "occupation": "procurement director, Empire Provisions Corp.",
+        "pronouns": "she/her"
+      },
+      "background": "Has run procurement for Empire, a Hudson Valley specialty-food distributor, since 2021. She negotiates the co-packing supply contracts and answers to Empire's owner-president, who watches margins closely. She knows food distribution and labeling standards well, but she is not a lawyer and has never been sued before.",
+      "personality": "Sharp, organized, and used to being the competent one in the room. She is confident about the labeling and dating problems because she can point to the proofs and the spec, and she gets impatient when she feels a question is second-guessing her judgment. She is proud of protecting Empire's customers from a bad label.",
+      "emotional_state": "Indignant and a little anxious. She feels Ostervold shipped defective product and is now trying to make Empire pay for it, which she finds outrageous. Underneath that she is worried about two decisions of her own — the load that sat, and the pallets she released — and about how the owner will view the whole episode.",
+      "communication_style": "Crisp and factual; leads with documents and dates. Warms up and gets more candid when the lawyer listens without judging and reassures her about confidentiality. Gets clipped and defensive if she feels accused of mishandling the loads or rushed past her explanations.",
+      "objectives_fears": {
+        "objectives": [
+          "Defeat or sharply reduce Ostervold's claim for the price of the three loads",
+          "Establish that the rejections were justified because the goods were genuinely defective",
+          "Come out of this having protected Empire's customers and the company's money"
+        ],
+        "fears": [
+          "That letting Load C sit eight days will be used to call the rejection untimely",
+          "That moving part of Load D to a customer will be read as accepting and reselling the goods",
+          "That the owner learns her supplier-switch plan looks like a motive to manufacture rejections"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m17.role.buyer-counsel"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m17.fact.012",
+            "text": "Load B came in with the wrong allergen label — it left the tree-nut warning off. That's a recall-level problem, so we rejected it."
+          },
+          {
+            "fact_ref": "m17.fact.015",
+            "text": "Load C's best-by dates were only about five months out. Our contract requires at least nine months of shelf life on delivery. That's not close."
+          },
+          {
+            "fact_ref": "m17.fact.028",
+            "text": "And now they've turned around and sued us in Westchester for the whole price on all three loads, like we're the ones who did something wrong."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m17.fact.007",
+            "text": "Yes, the nine-month minimum shelf life is written right into the supply agreement. It's a spec, not a handshake."
+          },
+          {
+            "fact_ref": "m17.fact.024",
+            "text": "They did send a letter offering to pick everything up and relabel or replace it within three weeks."
+          },
+          {
+            "fact_ref": "m17.fact.025",
+            "text": "I turned the cure offer down. After three bad loads in a row I'd lost confidence, and we'd already lined up another packer to keep our customers supplied."
+          },
+          {
+            "fact_ref": "m17.fact.031",
+            "text": "We hired an outside labeling consultant, Sengupta, and she confirmed the tree-nut warning really was missing and Load C really was short-dated."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m17.fact.016",
+            "text": "I'll be honest — Load C actually sat on our dock about eight days before we opened it. That last week of September we were slammed and short-staffed, and it just didn't get inspected right away.",
+            "min_turns": 5,
+            "requires": [
+              "nonjudgmental_response",
+              "follow_up_on_hint"
+            ]
+          },
+          {
+            "fact_ref": "m17.fact.020",
+            "text": "There's something else. When Load D showed up I had a standing customer order to fill, so I authorized moving about a third of those pallets straight out to the customer before we'd finished inspecting the load. Then we rejected the rest.",
+            "min_turns": 6,
+            "requires": [
+              "confidentiality_reassurance"
+            ]
+          }
+        ],
+        "concealed": [
+          {
+            "fact_ref": "m17.fact.038",
+            "text": "The part I haven't put in front of anyone: we'd already been planning to move our volume to a cheaper packer, and the owner had told me to cut our reliance on Ostervold. I know how the timing of these rejections could look."
+          }
+        ],
+        "unknown": [
+          {
+            "fact_ref": "m17.fact.039",
+            "text": "I honestly can't tell you whether they made Load C late or whether the dates got eaten up somewhere in shipping. I don't have their production records."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I couldn't tell you that for certain — you'd want to check our records or ask Tobias in receiving.",
+        "color_topics": [
+          "the Hudson Valley farmers-market season and her weekend cider-pressing hobby",
+          "coaching her daughter's youth soccer team on Saturdays"
+        ]
+      }
+    },
+    "m17.per.ostervold": {
+      "id": "m17.per.ostervold",
+      "matter_id": "m17",
+      "identity": {
+        "name": "Roland Ostervold",
+        "age": 58,
+        "role": "opposing party representative",
+        "occupation": "president and co-owner, Ostervold Packing Co.",
+        "pronouns": "he/him"
+      },
+      "background": "Runs the contract-packing company his family started outside Utica. He has packed private-label food for distributors for decades and treats a rejected load and a fight over payment as a hard but familiar part of the business. He is represented by counsel in this lawsuit, which his company brought to collect the price of three loads.",
+      "personality": "Blunt, proud of his plant, and irritated that a customer he tried to accommodate is now refusing to pay six figures. He believes his crew ran the labels off the customer's own approved artwork and that the buyer sat on the goods and then invented reasons not to pay.",
+      "emotional_state": "Aggrieved and confident on the surface, guarded underneath. He is sure he is owed the money, but he knows about the label-template changeover and the production backlog and he does not volunteer them.",
+      "communication_style": "Direct and a little combative. Sticks to the approved-artwork story and the money he's owed, and defers to his lawyer on anything he senses is a trap.",
+      "objectives_fears": {
+        "objectives": [
+          "Collect the full contract price for Loads B, C, and D",
+          "Keep responsibility on Empire for sitting on the goods and for reselling part of Load D",
+          "Protect the plant's reputation with other distributor customers"
+        ],
+        "fears": [
+          "That the label-template changeover proves at least one load really was mislabeled",
+          "That the production backlog proves Load C was short-dated at the source, not in transit",
+          "A judgment that makes his plant look like it ships defective product"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m17.role.seller-counsel"
+      ],
+      "represented_by_counsel": true,
+      "rule_4_2": {
+        "applies": true,
+        "counsel_name": "Attorney Harlan Fessenden of Fessenden & Ruiz LLP (counsel for Ostervold Packing Co.)",
+        "teaching_moment": "Ostervold Packing Co. is represented by counsel in this lawsuit. As Empire's counsel you may not communicate with Ostervold's president or employees about the subject of the representation without their lawyer's consent. Route any contact through Attorney Fessenden. This is a professional-responsibility no-contact boundary, not a strategic choice — the interface flags it rather than silently blocking you."
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m17.fact.023",
+            "text": "Those sauce labels came off the artwork Empire's own people approved before we ran a single case. If the proof was wrong, that started on their end."
+          },
+          {
+            "fact_ref": "m17.fact.033",
+            "text": "And the date business on the grain load — part of that is transit, and part of it is that they let the load sit on their dock for a week before anybody looked at it."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m17.fact.024",
+            "text": "We offered to make it right. Pick everything up, relabel or replace it, redeliver in three weeks, on our dime. That's a fair cure."
+          },
+          {
+            "fact_ref": "m17.fact.026",
+            "text": "They owe us for three full loads — a hundred forty-seven thousand and change. That's why we sued."
+          },
+          {
+            "fact_ref": "m17.fact.029",
+            "text": "And here's the thing — they resold part of Load D to one of their customers. You can't reject goods and sell them at the same time. That's acceptance in my book."
+          }
+        ],
+        "rapport_gated": [],
+        "concealed": [
+          {
+            "fact_ref": "m17.fact.040",
+            "text": "What I don't lead with is that we changed over our allergen label template mid-season, and at least one lot in that B run went out on the old template before anyone verified it."
+          }
+        ],
+        "unknown": [
+          {
+            "fact_ref": "m17.fact.042",
+            "text": "I genuinely don't know whether they actually sold those Load D pallets to a customer or just shuffled them around their own warehouse. I've heard it both ways."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I'd have to check with my QA manager or my lawyer before I'd answer that one.",
+        "color_topics": [
+          "ice-fishing trips with his brothers on Oneida Lake every winter",
+          "the regional food-packers trade expo he attends each spring"
+        ]
+      }
+    },
+    "m17.per.vandermeer": {
+      "id": "m17.per.vandermeer",
+      "matter_id": "m17",
+      "identity": {
+        "name": "Tobias Vandermeer",
+        "age": 39,
+        "role": "client-side fact witness",
+        "occupation": "warehouse and receiving manager, Empire Provisions Corp.",
+        "pronouns": "he/him"
+      },
+      "background": "Runs the receiving dock at Empire's Newburgh warehouse. Every inbound load crosses his dock; he signs the proofs of delivery, inspects private-label runs against the spec sheet and approved artwork, and keeps the receiving logs, rejection notices, and photos. He inspected and rejected the three disputed loads.",
+      "personality": "Straightforward, detail-oriented, and honest to a fault. He takes pride in catching a bad label and is willing to own the parts that don't flatter him — like the load that sat. He is loyal to Empire but not inclined to shade the facts.",
+      "emotional_state": "Steady and cooperative. A little self-conscious about the eight-day gap on Load C, but not evasive about it.",
+      "communication_style": "Plain and concrete. Answers with dates, bay numbers, and what the log says. Volunteers the awkward details rather than hiding them.",
+      "objectives_fears": {
+        "objectives": [
+          "Give an accurate account of what he inspected and when",
+          "Show that the labeling and dating defects were real and documented",
+          "Keep his records straight and his credibility intact"
+        ],
+        "fears": [
+          "That the eight-day inspection gap on Load C makes him look careless",
+          "That the pallets released off Load D get blamed on his receiving crew"
+        ]
+      },
+      "disposition": "cooperative",
+      "interviewable_by": [
+        "m17.role.buyer-counsel"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m17.fact.012",
+            "text": "On Load B I pulled a case and the allergen block just said 'Contains: Milk.' Our approved proof says 'Milk, Tree Nuts.' I rejected it that same day."
+          },
+          {
+            "fact_ref": "m17.fact.036",
+            "text": "I'll tell you up front — my log shows Load C came in on the twenty-second but I didn't get it fully checked until the thirtieth. It sat about eight days. We were buried that week."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m17.fact.015",
+            "text": "When I did read Load C's date codes, the best-by was only about five months out. Our spec is nine. So I wrote it up as short-dated."
+          },
+          {
+            "fact_ref": "m17.fact.013",
+            "text": "Load B I segregated in Bay 4 and held it for their account. It's all tagged and logged."
+          },
+          {
+            "fact_ref": "m17.fact.020",
+            "text": "On Load D, before I finished coding it, procurement had already pulled some pallets to fill a customer order. That was Beltran's call, not mine. Those pallets were gone."
+          }
+        ],
+        "rapport_gated": [],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m17.fact.034",
+            "text": "Whether the short dates on C started at their plant or got used up in shipping, I couldn't say. I just read what's stamped on the case when it hits my dock."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I'd have to pull the log to be sure — I don't want to guess at a date.",
+        "color_topics": [
+          "restoring an old pickup truck in his garage on weekends",
+          "the minor-league baseball team he takes his kids to see"
+        ]
+      }
+    },
+    "m18.per.cordero-a": {
+      "id": "m18.per.cordero-a",
+      "matter_id": "m18",
+      "identity": {
+        "name": "Ana Cordero",
+        "age": 44,
+        "role": "parent / guardian of the minor client",
+        "occupation": "home-health aide (weekdays); garden-supply store (weekends)",
+        "pronouns": "she/her"
+      },
+      "background": "Jasmine's mother and sole parent, working two jobs to keep the household afloat. She was at work the night of the incident and learned about it only when the school called her in. She has been through the juvenile system once before with her older child and is terrified of watching it happen again.",
+      "personality": "Warm but frayed, protective, and quick to apologize for taking up anyone's time. Under stress she talks fast, second-guesses herself, and swings between defending Jasmine fiercely and worrying she has failed her.",
+      "emotional_state": "Overwhelmed and anxious, running on little sleep. Angry that Jasmine was questioned at school without her, and frightened about cost and consequences in equal measure.",
+      "communication_style": "Earnest and a little scattered. Offers a lot of context at once. Calms noticeably when the lawyer explains the process step by step and reassures her that Jasmine's situation is being taken seriously.",
+      "objectives_fears": {
+        "objectives": [
+          "Protect Jasmine's future",
+          "Understand what is actually happening",
+          "Keep the cost from sinking the family",
+          "Do the right thing this time"
+        ],
+        "fears": [
+          "A record following Jasmine like it followed her older child",
+          "Not being able to afford a real defense",
+          "Being blamed as a parent",
+          "Something worse that Jasmine isn't telling her"
+        ]
+      },
+      "disposition": "distressed",
+      "interviewable_by": [
+        "m18.role.juvenile-defense-counsel"
+      ],
+      "represented_by_counsel": true,
+      "rule_4_2": {
+        "applies": false,
+        "teaching_moment": "Ana is the parent of the firm's minor client and part of the represented client unit; the firm may and should communicate with her. Rule 4.2 does not bar contact here. Note the separate confidentiality question of how privilege operates when a parent participates in conversations with the minor client."
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m18.fact.003",
+            "text": "I work two jobs — home health during the week, the garden store on weekends. It's just me. I was at work that night, I didn't even know until the school called."
+          },
+          {
+            "fact_ref": "m18.fact.004",
+            "text": "Jasmine is a good girl. Honor roll, never any trouble, never once with the police. This isn't her."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m18.fact.039",
+            "text": "What upsets me most is they had her in that office answering questions before I could even get there. No parent, no lawyer, nothing. How is that allowed with a sixteen-year-old?"
+          },
+          {
+            "fact_ref": "m18.fact.005",
+            "text": "My older one went through the juvenile system years ago. It followed him — jobs, everything. I can't watch that happen to her too. That's my real fear."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m18.fact.051",
+            "text": "Maybe if I'd been home instead of picking up that weekend shift, she never would've been out there. I keep thinking that. I feel like this is on me as much as her.",
+            "min_turns": 4,
+            "requires": [
+              "acknowledged_emotion",
+              "wellbeing_question"
+            ]
+          }
+        ],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m18.fact.038",
+            "text": "I wasn't there. I honestly can't tell you what happened in that parking lot — I only know what the school told me and what Jasmine's said since."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I wasn't there, so I couldn't tell you for sure — you'd have to ask Jasmine about that part.",
+        "color_topics": [
+          "the telenovelas she watches late at night to unwind",
+          "the potted herbs she keeps on the apartment balcony"
         ]
       }
     },
@@ -4325,6 +4679,78 @@
         "color_topics": [
           "the community soccer league where she plays midfielder",
           "helping plan her cousin's quinceanera celebration"
+        ]
+      }
+    },
+    "m18.per.trejo": {
+      "id": "m18.per.trejo",
+      "matter_id": "m18",
+      "identity": {
+        "name": "Kayla Trejo",
+        "age": 16,
+        "role": "co-participant charged separately (represented party)",
+        "occupation": "eleventh-grade student; part-time car-detailing job",
+        "pronouns": "she/her"
+      },
+      "background": "One of the two teenagers who did the spray-painting. She has been charged in her own separate juvenile matter and is represented by the county public defender. Street-smart and self-protective, she is friendly enough with Jasmine but is looking out for her own case first.",
+      "personality": "Cool and guarded. Gives little away, keeps things light on the surface, and steers hard away from anything about that night. Not hostile — just closed.",
+      "emotional_state": "Wary and self-protective; underneath it, nervous about her own exposure.",
+      "communication_style": "Clipped and deflecting. Repeats that she has a lawyer and isn't supposed to talk. Will not discuss the incident on the merits.",
+      "objectives_fears": {
+        "objectives": [
+          "Protect her own case",
+          "Not add to her own charges",
+          "Not look like she pulled Jasmine into it"
+        ],
+        "fears": [
+          "Making her own situation worse",
+          "Being cast as the ringleader",
+          "Whatever the video might show"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m18.role.juvenile-defense-counsel"
+      ],
+      "represented_by_counsel": true,
+      "rule_4_2": {
+        "applies": true,
+        "counsel_name": "Alta Mesa County Public Defender's Office (appointed counsel for Kayla Trejo)",
+        "teaching_moment": "Kayla is a represented co-participant in a related juvenile matter. Rule 4.2 forbids a lawyer from communicating about the subject of the representation with a person the lawyer knows to be represented by counsel, absent that counsel's consent. Before any contact with Kayla about this matter, defense counsel must go through her public defender. This is surfaced as a professional-responsibility teaching moment, not a silent block."
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m18.fact.044",
+            "text": "I've got my own case and my own lawyer. She told me straight up I'm not supposed to be talking to anybody about any of it."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m18.fact.045",
+            "text": "Look — I left before the cops showed up. That's it. That's all I'm going to say about that night."
+          }
+        ],
+        "rapport_gated": [],
+        "concealed": [
+          {
+            "fact_ref": "m18.fact.046",
+            "text": "The thing she won't say out loud: she knows Jasmine never touched a can — Jaz just filmed. But she hasn't told the DA or anybody that, because she's worried about her own case first."
+          }
+        ],
+        "unknown": [
+          {
+            "fact_ref": "m18.fact.047",
+            "text": "She doesn't actually know what Jasmine's video caught. She's guessing, and it makes her nervous."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I don't know, and even if I did I'm not getting into it — ask my lawyer.",
+        "color_topics": [
+          "her weekend job detailing cars",
+          "the younger cousins she babysits after school"
         ]
       }
     },
@@ -4551,6 +4977,92 @@
         ]
       }
     },
+    "m19.per.tessier": {
+      "id": "m19.per.tessier",
+      "matter_id": "m19",
+      "identity": {
+        "name": "Marguerite Tessier",
+        "age": 45,
+        "role": "fact witness (restaurant general manager and bookkeeper)",
+        "occupation": "general manager, Petite Marigny",
+        "pronouns": "she/her"
+      },
+      "background": "Has run the floor and kept the supplementary books at Petite Marigny since 2021. She knows the operation better than anyone but the owners — the vendors, the payroll, the daily deposits, and the rhythm of both Camille's and Andre's work. She likes and respects both of them and is uncomfortable being pulled into their divorce.",
+      "personality": "Warm, detail-loving, and talkative — she can narrate the whole week's covers and vendor gossip if you let her. Loyal to the restaurant more than to either owner. Flags clearly when something is her impression versus something she saw in the books.",
+      "emotional_state": "Anxious about her job and the restaurant's future; genuinely fond of both owners and reluctant to say anything that hurts either one.",
+      "communication_style": "Open and expansive; answers fully and sometimes wanders into operational detail. Precise and careful when the question is about the actual numbers.",
+      "objectives_fears": {
+        "objectives": [
+          "Keep the restaurant open and the staff employed",
+          "Tell the truth without being made to take a side"
+        ],
+        "fears": [
+          "Losing her job if the restaurant is sold or split",
+          "Being blamed by either owner for what she says"
+        ]
+      },
+      "disposition": "over_talker",
+      "interviewable_by": [
+        "m19.role.petitioner-counsel",
+        "m19.role.respondent-counsel"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m19.fact.023",
+            "text": "I've run that floor since 2021 — I do the schedule, the vendor accounts, the daily deposits, the whole nine. If you want to know how Petite Marigny actually operates, I'm your person."
+          },
+          {
+            "fact_ref": "m19.fact.006",
+            "text": "Camille runs the business side, no question. Reservations, staff, the books, the money — that's her. Andre's the kitchen and the name out front. It takes both of them, honestly."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m19.fact.020",
+            "text": "Is the place worth something without Andre? I mean — the regulars love his food, sure. But we've got the license, the equipment, the lease, a real name in the neighborhood. It's not nothing. A good chef could keep it going."
+          },
+          {
+            "fact_ref": "m19.fact.022",
+            "text": "The numbers swing a lot year to year. 2024 was our strongest — we were turning tables twice on Fridays. Some years are a lot leaner. It's a restaurant."
+          },
+          {
+            "fact_ref": "m19.fact.014",
+            "text": "We got written up a couple of times, 2023 and 2024, and that really filled the room. Thirty-eight seats, full bar — when we're on, we're packed."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m19.fact.036",
+            "text": "I'll say this if you're not going to twist it: this past year Andre was drinking more after service than he used to. A lot of us in this business do, but it got noticeable. I never saw him mess up a service over it. Since he moved out he seems better, for what that's worth.",
+            "min_turns": 4,
+            "requires": [
+              "confidentiality_reassurance"
+            ]
+          }
+        ],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m19.fact.019",
+            "text": "Where the original buildout money came from back in 2019 — whose account, what was separate — I couldn't tell you. I wasn't here yet and I never saw those records. You'd want the accountant for that."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I couldn't say for sure — that's more than I really know.",
+        "color_topics": [
+          "her sourdough hobby",
+          "the neighborhood's parking wars",
+          "staff softball league"
+        ]
+      }
+    },
     "m20.per.cole": {
       "id": "m20.per.cole",
       "matter_id": "m20",
@@ -4657,6 +5169,197 @@
         "color_topics": [
           "the herb garden she keeps on the back deck",
           "the pelicans and herons out on the water she and Harold used to watch"
+        ]
+      }
+    },
+    "m20.per.delacroix": {
+      "id": "m20.per.delacroix",
+      "matter_id": "m20",
+      "identity": {
+        "name": "Marisol Delacroix",
+        "age": 41,
+        "role": "fact witness (home health aide)",
+        "occupation": "certified home health aide",
+        "pronouns": "she/her"
+      },
+      "background": "A home health aide who worked weekday afternoons at the Heron Point home from 2023 into 2025, helping Harold with mobility, meals, and daily routines. She saw the household up close during the period the will was changed. She is not represented by counsel and is available to be interviewed by either side, which makes her both useful and delicate — she is paid through Vivian and worries about looking biased.",
+      "personality": "Kind, observant, and careful. She likes both Harold's memory and Vivian, and she does not want to hurt anyone, which makes her hesitant to volunteer the things she saw.",
+      "emotional_state": "Uneasy and conflict-averse; anxious about being dragged into a family fight and about her standing with the agency that pays her.",
+      "communication_style": "Gives short, factual answers to direct questions; hedges and softens when a question touches conflict between Vivian and Dale. Warms up when reassured her honesty won't get her in trouble.",
+      "objectives_fears": {
+        "objectives": [
+          "Tell the truth about what she saw without taking sides",
+          "Protect her job and her standing with the care agency",
+          "Not be the reason either side wins or loses"
+        ],
+        "fears": [
+          "Being accused of bias because Vivian paid her",
+          "Getting Vivian in trouble over the remark she overheard",
+          "Being blamed by the family for whatever she says"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m20.role.proponent-counsel",
+        "m20.role.contestant-counsel"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m20.fact.051",
+            "text": "I was there most weekday afternoons from 2023 up until he passed. I helped Mr. Prewitt get around, took care of his lunch, that kind of thing."
+          },
+          {
+            "fact_ref": "m20.fact.052",
+            "text": "He had good days and bad days. Some afternoons he was sharp and joking with me; other times he was tired and turned around, didn't quite know the day."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m20.fact.014",
+            "text": "Mrs. Prewitt-Cole did everything for him — the medicines, the appointments, all of it. She was run off her feet, honestly."
+          },
+          {
+            "fact_ref": "m20.fact.035",
+            "text": "I couldn't tell you about the morning he signed those papers. I usually came in the afternoons, so I wasn't there for that."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m20.fact.053",
+            "text": "There was one time — I don't like repeating it — I heard Vivian tell him, kind of frustrated, that 'Dale only calls when he needs money.' People say things when they're worn out. I don't think she meant anything cruel by it.",
+            "min_turns": 4,
+            "requires": [
+              "confidentiality_reassurance",
+              "nonjudgmental_response"
+            ]
+          },
+          {
+            "fact_ref": "m20.fact.054",
+            "text": "Honestly, I'm nervous about all this. Vivian is the one who pays me through the agency, and I'm scared that whatever I say, somebody's going to call me a liar or say I'm on her side.",
+            "min_turns": 4,
+            "requires": [
+              "wellbeing_question",
+              "acknowledged_emotion"
+            ]
+          }
+        ],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m20.fact.022",
+            "text": "I have no idea what was said in that lawyer's office. I was never part of any of that."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I only saw the afternoons, so I really couldn't say about that.",
+        "color_topics": [
+          "the long bus commute she takes to her clients",
+          "the nursing certification classes she is saving up to finish"
+        ]
+      }
+    },
+    "m20.per.prewitt": {
+      "id": "m20.per.prewitt",
+      "matter_id": "m20",
+      "identity": {
+        "name": "Dale Prewitt",
+        "age": 46,
+        "role": "will contestant (objecting heir)",
+        "occupation": "regional sales manager",
+        "pronouns": "he/him"
+      },
+      "background": "Harold Prewitt's only child, from Harold's first marriage. He lives in Ohio, several states away, and had drifted from his father in his last years. He believes his stepmother, Vivian, pressured his father into rewriting the will and steering the family home to herself, and he has filed a contest. He is represented by his own counsel.",
+      "personality": "Blunt, aggrieved, and certain he was cheated. Frames himself as the son who was shut out while a newcomer worked on his father. Defensive about his own long absence.",
+      "emotional_state": "Angry and resentful, with an undercurrent of guilt about how little he was around at the end.",
+      "communication_style": "Talks in grievances; leads with what Vivian did rather than what he did. Bristles when asked about his own absence, his debts, or the money his father gave him.",
+      "objectives_fears": {
+        "objectives": [
+          "Set aside the 2024 will and get the Heron Point home back to himself",
+          "Prove his father was pressured or not in his right mind",
+          "Establish that the homestead could not be devised away from him"
+        ],
+        "fears": [
+          "Being seen as a son who abandoned his father and now wants the house",
+          "Having his own debts and motives exposed",
+          "Learning that his father truly meant to favor Vivian"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m20.role.contestant-counsel"
+      ],
+      "represented_by_counsel": true,
+      "rule_4_2": {
+        "applies": true,
+        "counsel_name": "Renfield Ostrowski, Esq. (contestant's counsel)",
+        "teaching_moment": "Dale Prewitt is an adverse party represented by his own counsel. A student representing the estate must not communicate with him about the contest without his lawyer's consent. Attempting to interview him directly triggers this professional-responsibility teaching moment rather than a silent block; the proper move is to route any contact through opposing counsel."
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m20.fact.046",
+            "text": "Vivian moved in and cut me out. She controlled who got to see my dad and she controlled the money."
+          },
+          {
+            "fact_ref": "m20.fact.011",
+            "text": "Dad's real plan, the 2019 one, let Vivian live in the house and then it came to me. That's the house I grew up visiting. That's what he always said he wanted."
+          },
+          {
+            "fact_ref": "m20.fact.038",
+            "text": "That's our family homestead. You can't just sign it over to a second wife and cut out the son. There are laws about that."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m20.fact.018",
+            "text": "Yeah, Dad helped me out with some debts years back. That was a loan between family. It doesn't mean I gave up the house."
+          },
+          {
+            "fact_ref": "m20.fact.019",
+            "text": "Every time I'd call, it felt like Vivian was right there in the room. I could never get five minutes alone with my own father."
+          },
+          {
+            "fact_ref": "m20.fact.039",
+            "text": "She signed a prenup giving up any claim to that house. So how does she get to walk off with it now? If she can't have it, it comes to me."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m20.fact.055",
+            "text": "Look — it hurt, all right? To find out he left me fifty thousand and gave her the house and everything else. Part of why I'm fighting this is that it just isn't right by me.",
+            "min_turns": 5,
+            "requires": [
+              "acknowledged_emotion",
+              "no_interruption_streak"
+            ]
+          }
+        ],
+        "concealed": [
+          {
+            "fact_ref": "m20.fact.056",
+            "text": "I'm carrying a lot of debt right now. That house would fix everything. I'm not going to lead with that, obviously."
+          }
+        ],
+        "unknown": [
+          {
+            "fact_ref": "m20.fact.031",
+            "text": "I didn't know any doctor had actually sat down and checked whether Dad understood what he was doing. Nobody told me that."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I wasn't around for that, so I couldn't tell you.",
+        "color_topics": [
+          "the youth baseball team he coaches on weekends",
+          "the long drive down from Ohio he keeps putting off"
         ]
       }
     }
@@ -6170,36 +6873,6 @@
         "tier": "unknown"
       }
     },
-    "m16.per.achterberg": {
-      "m16.fact.028": {
-        "topic_label": "a point the client raised",
-        "tier": "volunteered"
-      },
-      "m16.fact.007": {
-        "topic_label": "a topic that was available for the asking",
-        "tier": "revealed_if_asked"
-      },
-      "m16.fact.027": {
-        "topic_label": "a topic that was available for the asking",
-        "tier": "revealed_if_asked"
-      },
-      "m16.fact.010": {
-        "topic_label": "a sensitive topic that needed trust first",
-        "tier": "rapport_gated"
-      },
-      "m16.fact.011": {
-        "topic_label": "a sensitive topic that needed trust first",
-        "tier": "rapport_gated"
-      },
-      "m16.fact.031": {
-        "topic_label": "a topic the client was protecting",
-        "tier": "concealed"
-      },
-      "m16.fact.030": {
-        "topic_label": "something the client did not know",
-        "tier": "unknown"
-      }
-    },
     "m16.per.iyer": {
       "m16.fact.004": {
         "topic_label": "a point the client raised",
@@ -6242,6 +6915,164 @@
         "tier": "concealed"
       },
       "m16.fact.037": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m16.per.steinhauer": {
+      "m16.fact.028": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m16.fact.007": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m16.fact.027": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m16.fact.010": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m16.fact.011": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m16.fact.031": {
+        "topic_label": "a topic the client was protecting",
+        "tier": "concealed"
+      },
+      "m16.fact.030": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m17.per.beltran": {
+      "m17.fact.012": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.015": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.028": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.007": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.024": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.025": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.031": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.016": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m17.fact.020": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m17.fact.038": {
+        "topic_label": "a topic the client was protecting",
+        "tier": "concealed"
+      },
+      "m17.fact.039": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m17.per.ostervold": {
+      "m17.fact.023": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.033": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.024": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.026": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.029": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.040": {
+        "topic_label": "a topic the client was protecting",
+        "tier": "concealed"
+      },
+      "m17.fact.042": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m17.per.vandermeer": {
+      "m17.fact.012": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.036": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m17.fact.015": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.013": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.020": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m17.fact.034": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m18.per.cordero-a": {
+      "m18.fact.003": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m18.fact.004": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m18.fact.039": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m18.fact.005": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m18.fact.051": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m18.fact.038": {
         "topic_label": "something the client did not know",
         "tier": "unknown"
       }
@@ -6292,6 +7123,24 @@
         "tier": "concealed"
       },
       "m18.fact.049": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m18.per.trejo": {
+      "m18.fact.044": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m18.fact.045": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m18.fact.046": {
+        "topic_label": "a topic the client was protecting",
+        "tier": "concealed"
+      },
+      "m18.fact.047": {
         "topic_label": "something the client did not know",
         "tier": "unknown"
       }
@@ -6384,6 +7233,36 @@
         "tier": "unknown"
       }
     },
+    "m19.per.tessier": {
+      "m19.fact.023": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m19.fact.006": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m19.fact.020": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m19.fact.022": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m19.fact.014": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m19.fact.036": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m19.fact.019": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
     "m20.per.cole": {
       "m20.fact.014": {
         "topic_label": "a point the client raised",
@@ -6426,6 +7305,74 @@
         "tier": "concealed"
       },
       "m20.fact.022": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m20.per.delacroix": {
+      "m20.fact.051": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m20.fact.052": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m20.fact.014": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.035": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.053": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m20.fact.054": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m20.fact.022": {
+        "topic_label": "something the client did not know",
+        "tier": "unknown"
+      }
+    },
+    "m20.per.prewitt": {
+      "m20.fact.046": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m20.fact.011": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m20.fact.038": {
+        "topic_label": "a point the client raised",
+        "tier": "volunteered"
+      },
+      "m20.fact.018": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.019": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.039": {
+        "topic_label": "a topic that was available for the asking",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.055": {
+        "topic_label": "a sensitive topic that needed trust first",
+        "tier": "rapport_gated"
+      },
+      "m20.fact.056": {
+        "topic_label": "a topic the client was protecting",
+        "tier": "concealed"
+      },
+      "m20.fact.031": {
         "topic_label": "something the client did not know",
         "tier": "unknown"
       }
@@ -8039,6 +8986,114 @@
         }
       ]
     },
+    "m15": {
+      "id": "m15.rub",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/rubric/m15.rub",
+      "@context": "https://sonsteng.damienriehl.com/spine/",
+      "matter_id": "m15",
+      "declared_total": 316.5,
+      "criteria": [
+        {
+          "id": "m15.rub.c01",
+          "name": "Client interview and fact development",
+          "description": "Elicits a complete, reliable account of the shift, the drinking, the stop, and the arrest, including the sensitive facts that only surface with rapport.",
+          "weight_points": 90,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-022",
+          "subcriteria": [
+            {
+              "id": "m15.rub.c01.s01",
+              "name": "Arrest narrative and drinking timeline",
+              "description": "Builds an ordered timeline of the double shift, the tap house, the drive, the stop, the field tests, and the breath test.",
+              "weight_points": 45,
+              "task_id": "TSK-025"
+            },
+            {
+              "id": "m15.rub.c01.s02",
+              "name": "Surfacing gated and concealed facts",
+              "description": "Earns the fatigue-and-phone distraction, the mouthwash used to mask the beer, the uncounted third drink, and the concealed prior offense through rapport rather than pressure.",
+              "weight_points": 45,
+              "task_id": "TSK-023"
+            }
+          ]
+        },
+        {
+          "id": "m15.rub.c02",
+          "name": "Issue-spotting: stop, field tests, and breath sample",
+          "description": "Identifies the legal vulnerabilities that drive the defense theory of the case and separates the criminal charge from the implied-consent revocation.",
+          "weight_points": 80,
+          "skill_id": "SK-LP-01",
+          "task_id": "TSK-001",
+          "subcriteria": [
+            {
+              "id": "m15.rub.c02.s01",
+              "name": "Reasonable suspicion for the stop",
+              "description": "Spots the tip-reliability and independent-corroboration questions raised by the citizen weaving report and the single fog-line contact.",
+              "weight_points": 40,
+              "task_id": "TSK-004"
+            },
+            {
+              "id": "m15.rub.c02.s02",
+              "name": "Test reliability and suppression theory",
+              "description": "Spots the extreme-cold, icy-shoulder field-test issues and the mouth-alcohol, observation-period, and margin-of-error breath-test issues, and frames a suppression theory.",
+              "weight_points": 40,
+              "task_id": "TSK-050"
+            }
+          ]
+        },
+        {
+          "id": "m15.rub.c03",
+          "name": "Counseling a client whose livelihood is at stake",
+          "description": "Manages Travis's fear for his commercial license and family income, explains the two parallel proceedings, and sets realistic expectations without over-promising.",
+          "weight_points": 56.5,
+          "skill_id": "SK-LP-10",
+          "task_id": "TSK-037"
+        },
+        {
+          "id": "m15.rub.c04",
+          "name": "Plea and charge negotiation strategy",
+          "description": "Develops a defensible negotiation plan that treats the CDL disqualification as the central objective and identifies leverage and exposure given the prior offense.",
+          "weight_points": 60,
+          "skill_id": "SK-LP-13",
+          "task_id": "TSK-045"
+        },
+        {
+          "id": "m15.rub.c05",
+          "name": "Professional responsibility",
+          "description": "Respects the no-contact rule with the represented arresting deputy and keeps within the scope of the flat-fee engagement.",
+          "weight_points": 30,
+          "skill_id": "SK-LP-16",
+          "task_id": "TSK-060"
+        }
+      ],
+      "letter_grade_map": [
+        {
+          "grade": "A",
+          "points": 316.5
+        },
+        {
+          "grade": "A-",
+          "points": 300
+        },
+        {
+          "grade": "B+",
+          "points": 285
+        },
+        {
+          "grade": "B",
+          "points": 268
+        },
+        {
+          "grade": "B-",
+          "points": 250
+        },
+        {
+          "grade": "C",
+          "points": 220
+        }
+      ]
+    },
     "m16": {
       "id": "m16.rub",
       "schema_version": "1.0.0",
@@ -8113,6 +9168,487 @@
         {
           "grade": "C",
           "points": 132
+        }
+      ]
+    },
+    "m17": {
+      "id": "m17.rub",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/rubric/m17.rub",
+      "matter_id": "m17",
+      "declared_total": 200,
+      "criteria": [
+        {
+          "id": "m17.rub.c01",
+          "name": "Client interview and fact development",
+          "description": "Conducts a humane, effective client-intake interview with a guarded procurement director and develops the facts from the records and witnesses into a reliable, load-by-load chronology of what conformed, what did not, and what Empire did with each load.",
+          "weight_points": 50,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-023",
+          "subcriteria": [
+            {
+              "id": "m17.rub.c01.s01",
+              "name": "Interview technique and rapport",
+              "description": "Uses open-ended then focused questions, builds rapport, follows up on hints, and surfaces the client's guarded and undisclosed facts (the eight-day inspection gap, the resold Load D pallets, the supplier-switch motive) without pressure or flattery.",
+              "weight_points": 28,
+              "skill_id": "SK-LP-07",
+              "task_id": "TSK-022"
+            },
+            {
+              "id": "m17.rub.c01.s02",
+              "name": "Records synthesis and chronology",
+              "description": "Synthesizes the supply agreement, receiving and rejection records, consultant report, and production and carrier records into an accurate timeline and identifies the gaps and conflicts.",
+              "weight_points": 22,
+              "task_id": "TSK-025"
+            }
+          ]
+        },
+        {
+          "id": "m17.rub.c02",
+          "name": "Conformity, rejection, and acceptance analysis",
+          "description": "Correctly analyzes whether each load conformed, whether Empire rightfully and timely rejected, whether Empire accepted any goods (including by reselling part of Load D), and the seller's right to cure.",
+          "weight_points": 60,
+          "skill_id": "SK-LP-02",
+          "task_id": "TSK-010",
+          "subcriteria": [
+            {
+              "id": "m17.rub.c02.s01",
+              "name": "Warranties, conformity, and rejection elements",
+              "description": "Identifies the governing sale-of-goods warranties and specifications and the elements of a rightful rejection of nonconforming goods, load by load.",
+              "weight_points": 30,
+              "skill_id": "SK-LP-03",
+              "task_id": "TSK-009"
+            },
+            {
+              "id": "m17.rub.c02.s02",
+              "name": "Acceptance, cure, and timeliness applied to the facts",
+              "description": "Applies acceptance (including acceptance by resale), the reasonable-time limit on rejection, and the seller's cure right to the disputed facts of the eight-day delay and the resold Load D pallets.",
+              "weight_points": 30,
+              "skill_id": "SK-LP-02",
+              "task_id": "TSK-006"
+            }
+          ]
+        },
+        {
+          "id": "m17.rub.c03",
+          "name": "Seller's price claim and remedies strategy",
+          "description": "Frames whether Ostervold can recover the full contract price or is limited to damages on each load, addresses the mixed causation of the short dating candidly, and builds a realistic exposure and defense theory.",
+          "weight_points": 40,
+          "skill_id": "SK-LP-01",
+          "task_id": "TSK-006"
+        },
+        {
+          "id": "m17.rub.c04",
+          "name": "Litigation posture and client counseling",
+          "description": "Plans a response to the complaint and a discovery approach targeting the contested conformity, timeliness, and resale questions, and counsels the client candidly on options, exposure, and settlement.",
+          "weight_points": 30,
+          "skill_id": "SK-LP-14",
+          "task_id": "TSK-034"
+        },
+        {
+          "id": "m17.rub.c05",
+          "name": "Professional responsibility and written communication",
+          "description": "Observes the Rule 4.2 no-contact limit with the represented opposing party and communicates clearly, in facts-and-advice form, without improper citation of law to the client.",
+          "weight_points": 20,
+          "skill_id": "SK-LP-16"
+        }
+      ],
+      "letter_grade_map": [
+        {
+          "grade": "A",
+          "points": 200
+        },
+        {
+          "grade": "A-",
+          "points": 186
+        },
+        {
+          "grade": "B+",
+          "points": 176
+        },
+        {
+          "grade": "B",
+          "points": 166
+        },
+        {
+          "grade": "C",
+          "points": 146
+        }
+      ]
+    },
+    "m18": {
+      "id": "m18.rub",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/rubric/m18.rub",
+      "matter_id": "m18",
+      "declared_total": 210,
+      "criteria": [
+        {
+          "id": "m18.rub.c01",
+          "name": "Fact investigation & the minor-client interview",
+          "description": "Elicits the client's own account through developmentally appropriate, non-leading questioning; builds a chronology; identifies the conflicting accounts and evidentiary gaps (dim footage, missing phone video, incomplete text thread, single identifying administrator).",
+          "weight_points": 60,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-022",
+          "subcriteria": [
+            {
+              "id": "m18.rub.c01.s01",
+              "name": "Eliciting the account without leading",
+              "description": "Uses open-ended prompts and secures Jasmine's own version before the adults reshape it; reaches the rapport-gated facts (the video, the panic attacks, Andre's keying) through proper triggers, not pressure.",
+              "weight_points": 32,
+              "task_id": "TSK-023"
+            },
+            {
+              "id": "m18.rub.c01.s02",
+              "name": "Chronology & proof-gap analysis",
+              "description": "Assembles an accurate chronology and expressly flags every conflict and evidentiary gap in the file, including the ambiguous surveillance and the incomplete group-chat export.",
+              "weight_points": 28,
+              "task_id": "TSK-025"
+            }
+          ]
+        },
+        {
+          "id": "m18.rub.c02",
+          "name": "Counseling the distressed juvenile and parent",
+          "description": "Builds trust with a frightened minor and manages an overwhelmed, self-blaming parent, keeping the child's voice and priorities primary.",
+          "weight_points": 50,
+          "skill_id": "SK-LP-10",
+          "task_id": "TSK-037",
+          "subcriteria": [
+            {
+              "id": "m18.rub.c02.s01",
+              "name": "Rapport & developmentally appropriate communication",
+              "description": "Communicates with Jasmine in a calm, non-judgmental, age-appropriate way that preserves her confidence and does not treat her as a troublemaker.",
+              "weight_points": 30
+            },
+            {
+              "id": "m18.rub.c02.s02",
+              "name": "Managing the parent's role & expectations",
+              "description": "Handles Ana's distress, guilt, and financial fear, corrects misunderstandings, and keeps decision-making centered on the client.",
+              "weight_points": 20,
+              "task_id": "TSK-034"
+            }
+          ]
+        },
+        {
+          "id": "m18.rub.c03",
+          "name": "Disposition strategy: diversion vs. contested jurisdictional hearing",
+          "description": "Analyzes the informal-diversion offer against a contested jurisdictional hearing and prepares a negotiation plan, including a restitution position grounded in Jasmine's disputed role and the eyewitness attribution of the keying to Andre.",
+          "weight_points": 55,
+          "skill_id": "SK-LP-01",
+          "task_id": "TSK-035",
+          "subcriteria": [
+            {
+              "id": "m18.rub.c03.s01",
+              "name": "Risk/benefit analysis of the diversion offer",
+              "description": "Weighs the no-record benefit against the responsibility-acknowledgment requirement and the innocence claim; states best- and worst-case outcomes.",
+              "weight_points": 30,
+              "task_id": "TSK-044"
+            },
+            {
+              "id": "m18.rub.c03.s02",
+              "name": "Negotiation plan on terms and restitution",
+              "description": "Prepares a concrete negotiation plan on diversion terms and apportioned restitution, using the proof gaps and the co-participant attribution as leverage.",
+              "weight_points": 25,
+              "task_id": "TSK-045"
+            }
+          ]
+        },
+        {
+          "id": "m18.rub.c04",
+          "name": "Professional responsibility",
+          "description": "Identifies and correctly navigates the Rule 4.2 no-contact problem with the represented co-participant and the confidentiality dynamics of a minor client with a parent present and prior un-counseled school questioning.",
+          "weight_points": 45,
+          "skill_id": "SK-LP-16",
+          "task_id": "TSK-060",
+          "subcriteria": [
+            {
+              "id": "m18.rub.c04.s01",
+              "name": "Rule 4.2 — the represented co-participant",
+              "description": "Spots that Kayla is represented and does not contact her directly; routes any inquiry through her public defender.",
+              "weight_points": 25
+            },
+            {
+              "id": "m18.rub.c04.s02",
+              "name": "Confidentiality, privilege & the parent/child dynamic",
+              "description": "Handles privilege and confidentiality with a parent present, addresses the un-counseled school questioning, and counsels honestly on the concealed conduct.",
+              "weight_points": 20,
+              "task_id": "TSK-059"
+            }
+          ]
+        }
+      ],
+      "letter_grade_map": [
+        {
+          "grade": "A",
+          "points": 210
+        },
+        {
+          "grade": "A-",
+          "points": 200
+        },
+        {
+          "grade": "B+",
+          "points": 189
+        },
+        {
+          "grade": "B",
+          "points": 178
+        },
+        {
+          "grade": "C",
+          "points": 158
+        }
+      ]
+    },
+    "m19": {
+      "id": "m19.rub",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/rubric/m19.rub",
+      "@context": "https://sonsteng.damienriehl.com/spine/",
+      "matter_id": "m19",
+      "declared_total": 210,
+      "criteria": [
+        {
+          "id": "m19.rub.c01",
+          "name": "Client interview and fact-gathering",
+          "description": "Plans and conducts an effective intake interview of a distressed client that develops a complete factual record.",
+          "weight_points": 65,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-022",
+          "subcriteria": [
+            {
+              "id": "m19.rub.c01.s01",
+              "name": "Rapport and interview technique",
+              "description": "Opens with an open-ended invitation, attends to wellbeing, avoids interruption, and builds trust without pressure or flattery.",
+              "weight_points": 28
+            },
+            {
+              "id": "m19.rub.c01.s02",
+              "name": "Surfacing guarded and concealed facts",
+              "description": "Notices and gently follows hints to develop the rapport-gated and concealed facts (Andre's drinking and the June pickup, the client's guilt about overnights, and the funds she moved).",
+              "weight_points": 22
+            },
+            {
+              "id": "m19.rub.c01.s03",
+              "name": "Chronology and completeness",
+              "description": "Produces an accurate chronology and a complete, well-organized factual record from the interview and case file.",
+              "weight_points": 15
+            }
+          ]
+        },
+        {
+          "id": "m19.rub.c02",
+          "name": "Counseling the distressed client",
+          "description": "Counsels a vulnerable client on realistic options while managing emotion and expectations.",
+          "weight_points": 40,
+          "skill_id": "SK-LP-10",
+          "task_id": "TSK-037",
+          "subcriteria": [
+            {
+              "id": "m19.rub.c02.s01",
+              "name": "Realistic option-framing",
+              "description": "Explains custody, home, business-valuation, and separate-property options honestly, and counsels candidly on the disclosure risk created by the funds the client moved, without false comfort or fatalism.",
+              "weight_points": 22
+            },
+            {
+              "id": "m19.rub.c02.s02",
+              "name": "Empathy and expectation management",
+              "description": "Responds to the client's guilt and fear with empathy, distinguishes custody labels from outcomes, and keeps the child's interests central.",
+              "weight_points": 18
+            }
+          ]
+        },
+        {
+          "id": "m19.rub.c03",
+          "name": "Community-property analysis and settlement strategy",
+          "description": "Characterizes the estate under community-property rules and builds a strategic settlement-and-negotiation plan.",
+          "weight_points": 60,
+          "skill_id": "SK-LP-13",
+          "task_id": "TSK-044",
+          "subcriteria": [
+            {
+              "id": "m19.rub.c03.s01",
+              "name": "Characterization and tracing",
+              "description": "Correctly frames the community-property presumption and equal division, and analyzes Andre's separate-property reimbursement claim and the gaps in his tracing of the eighty-thousand-dollar contribution.",
+              "weight_points": 30
+            },
+            {
+              "id": "m19.rub.c03.s02",
+              "name": "Business valuation and parenting-schedule tradeoffs",
+              "description": "Analyzes the enterprise-versus-personal goodwill question and needed discovery/experts, and prioritizes a durable parenting schedule while treating property questions as tradeable.",
+              "weight_points": 30
+            }
+          ]
+        },
+        {
+          "id": "m19.rub.c04",
+          "name": "Professional responsibility",
+          "description": "Identifies and honors the governing ethical duties.",
+          "weight_points": 25,
+          "skill_id": "SK-LP-16",
+          "task_id": "TSK-060",
+          "subcriteria": [
+            {
+              "id": "m19.rub.c04.s01",
+              "name": "Rule 4.2 no-contact with represented party",
+              "description": "Recognizes that Andre is represented and routes any contact through his counsel rather than communicating with him directly.",
+              "weight_points": 13
+            },
+            {
+              "id": "m19.rub.c04.s02",
+              "name": "Confidentiality and the duty of financial disclosure",
+              "description": "Protects the client's sensitive disclosures while counseling her on her independent fiduciary duty to disclose all community assets, including the funds she moved.",
+              "weight_points": 12
+            }
+          ]
+        },
+        {
+          "id": "m19.rub.c05",
+          "name": "Drafting the initiating documents",
+          "description": "Translates the case theory into a competent petition, declarations of disclosure, and proposed parenting plan.",
+          "weight_points": 20,
+          "skill_id": "SK-LP-17",
+          "task_id": "TSK-048"
+        }
+      ],
+      "letter_grade_map": [
+        {
+          "grade": "A",
+          "points": 210
+        },
+        {
+          "grade": "A-",
+          "points": 199
+        },
+        {
+          "grade": "B+",
+          "points": 189
+        },
+        {
+          "grade": "B",
+          "points": 178
+        },
+        {
+          "grade": "B-",
+          "points": 168
+        },
+        {
+          "grade": "C",
+          "points": 147
+        }
+      ]
+    },
+    "m20": {
+      "id": "m20.rub",
+      "schema_version": "1.0.0",
+      "@id": "https://sonsteng.damienriehl.com/spine/rubric/m20.rub",
+      "matter_id": "m20",
+      "declared_total": 210,
+      "criteria": [
+        {
+          "id": "m20.rub.c01",
+          "name": "Fact gathering and client interview",
+          "description": "Conducts a thorough, well-planned interview of the personal representative that surfaces both the favorable facts and the facts that cut against the estate.",
+          "weight_points": 55,
+          "skill_id": "SK-LP-07",
+          "task_id": "TSK-023",
+          "subcriteria": [
+            {
+              "id": "m20.rub.c01.s01",
+              "name": "Eliciting the supporting facts",
+              "description": "Draws out the caregiving, Harold's stated reasons, the private attorney meeting, and the disinterested-witness evidence.",
+              "weight_points": 25
+            },
+            {
+              "id": "m20.rub.c01.s02",
+              "name": "Surfacing the adverse facts",
+              "description": "Uses rapport, confidentiality reassurance, and non-judgmental technique to surface the client's role in arranging the appointment, the phone fight with Dale, and the undocumented withdrawals.",
+              "weight_points": 30
+            }
+          ]
+        },
+        {
+          "id": "m20.rub.c02",
+          "name": "Capacity and undue-influence analysis",
+          "description": "Separates testamentary capacity from undue influence and maps the record evidence to the elements of each.",
+          "weight_points": 60,
+          "skill_id": "SK-LP-02",
+          "task_id": "TSK-010",
+          "subcriteria": [
+            {
+              "id": "m20.rub.c02.s01",
+              "name": "Testamentary capacity",
+              "description": "Analyzes capacity as measured at execution, weighing the physician's assessment against the diagnosed decline and bad-day evidence.",
+              "weight_points": 30
+            },
+            {
+              "id": "m20.rub.c02.s02",
+              "name": "Undue influence and the presumption",
+              "description": "Identifies the confidential-relationship-plus-active-procurement factors, the burden-shifting presumption, and the estate's independence-of-execution counter-facts.",
+              "weight_points": 30
+            }
+          ]
+        },
+        {
+          "id": "m20.rub.c03",
+          "name": "Homestead-devise analysis",
+          "description": "Spots and analyzes Florida's homestead-devise restriction as a distinct question of law, including the surviving-spouse exception and the effect of the prenuptial waiver.",
+          "weight_points": 40,
+          "skill_id": "SK-LP-02",
+          "task_id": "TSK-011"
+        },
+        {
+          "id": "m20.rub.c04",
+          "name": "Professional responsibility",
+          "description": "Recognizes the lawyer-as-witness problem created by the firm's drafting role and the no-contact rule as to the represented contestant.",
+          "weight_points": 30,
+          "skill_id": "SK-LP-16",
+          "task_id": "TSK-060",
+          "subcriteria": [
+            {
+              "id": "m20.rub.c04.s01",
+              "name": "Lawyer as witness",
+              "description": "Flags that the drafting attorney is a likely witness and reasons about how the small firm should staff any contested hearing.",
+              "weight_points": 15
+            },
+            {
+              "id": "m20.rub.c04.s02",
+              "name": "No contact with represented party",
+              "description": "Recognizes that Dale is represented and routes any contact through his counsel rather than interviewing him directly.",
+              "weight_points": 15
+            }
+          ]
+        },
+        {
+          "id": "m20.rub.c05",
+          "name": "Counseling a distressed client",
+          "description": "Manages a grieving, defensive client whose devotion is being recast as manipulation, while still eliciting and confronting the hard facts.",
+          "weight_points": 25,
+          "skill_id": "SK-LP-10",
+          "task_id": "TSK-037"
+        }
+      ],
+      "letter_grade_map": [
+        {
+          "grade": "A",
+          "points": 210
+        },
+        {
+          "grade": "A-",
+          "points": 200
+        },
+        {
+          "grade": "B+",
+          "points": 190
+        },
+        {
+          "grade": "B",
+          "points": 180
+        },
+        {
+          "grade": "C",
+          "points": 160
         }
       ]
     }

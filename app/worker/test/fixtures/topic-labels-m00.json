@@ -1,0 +1,18 @@
+{
+  "_comment": "Curated-label sidecar for the m00 test fixture, and the EXAMPLE of the format matter authors ship as data/matters/<slug>/personas/topic-labels.json. Each value is a short (3-6 word) LEAK-SAFE topic label: it names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). tools/build_worker_personas.py prefers these over its content-free placeholders.",
+  "m00.fact.001": "when and where it happened",
+  "m00.fact.002": "the slip in the produce aisle",
+  "m00.fact.003": "what she was doing just before",
+  "m00.fact.004": "the wrist and knee injuries",
+  "m00.fact.005": "any warning sign near the spill",
+  "m00.fact.006": "what the liquid was",
+  "m00.fact.007": "the store's response after the fall",
+  "m00.fact.008": "what a store employee said",
+  "m00.fact.009": "the store incident report",
+  "m00.fact.010": "whether any video exists",
+  "m00.fact.011": "the medical treatment she got",
+  "m00.fact.012": "how the injury is healing",
+  "m00.fact.013": "the effect on her work and income",
+  "m00.fact.014": "any history of prior claims",
+  "m00.fact.015": "her worry about prior claims"
+}

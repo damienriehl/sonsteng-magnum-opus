@@ -206,6 +206,20 @@ export function buildDebriefPrompt(template, opts) {
   });
 }
 
+// {criterion_id: name} for every criterion AND subcriterion in a rubric, so the
+// UI can render real names instead of "Criterion NN". Returned by /v1/critique
+// as a backward-compatible sibling of the scorecard (see API-CONTRACTS.md).
+export function rubricCriteriaLabels(rubric) {
+  const labels = {};
+  for (const c of (rubric && rubric.criteria) || []) {
+    if (c && typeof c.id === "string" && typeof c.name === "string") labels[c.id] = c.name;
+    for (const s of (c && c.subcriteria) || []) {
+      if (s && typeof s.id === "string" && typeof s.name === "string") labels[s.id] = s.name;
+    }
+  }
+  return labels;
+}
+
 // Build the /critique evaluator prompt. `template` = bundle.critique_template.
 export function buildCritiquePrompt(template, opts) {
   const { matterId, rubricId, rubric, deliverable } = opts;

@@ -14,7 +14,7 @@ import bundle from "../personas/personas.generated.json" with { type: "json" };
 import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./cors.js";
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
 import { callChat, callEvaluator } from "./anthropic.js";
-import { buildSystemPrompt, renderPersona, buildDebriefPrompt, buildCritiquePrompt } from "./prompts.js";
+import { buildSystemPrompt, renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 
@@ -281,7 +281,7 @@ async function handleCritique(request, env, origin) {
 
   await stub.charge(session.p, result.usage);
   logMeta({ ev: "critique_ok", pool: session.p });
-  return json({ scorecard: parsed });
+  return json({ scorecard: parsed, criteria_labels: rubricCriteriaLabels(rubric) });
 }
 
 // ---- router -----------------------------------------------------------------

@@ -13,10 +13,14 @@ bundle at app/worker/personas/personas.generated.json containing:
                 knowledge_boundary, rule_4_2, disposition, narrative fields) —
                 the fields prompts.js needs to render Segment B. No @id/@context.
   - fact_map  : out-of-band {persona_id -> {fact_ref -> {topic_label, tier}}}
-                for /debrief. topic_label is a short (3-6 word) HUMAN label
-                derived here from the fact text — never the fact's content — so
-                the debrief can name a missed TOPIC without ever leaking a
-                concealed/un-elicited fact.
+                for /debrief. topic_label is a short (3-6 word) HUMAN label that
+                names a topic without the fact's content, so the debrief can
+                name a missed TOPIC without ever leaking a concealed/un-elicited
+                fact. Labels come from a curated SIDECAR file per matter —
+                data/matters/<slug>/personas/topic-labels.json, shaped
+                {"<fact_ref>": "<leak-safe label>"} (example:
+                app/worker/test/fixtures/topic-labels-m00.json). Facts without a
+                curated label get a content-free tier placeholder + a WARNING.
 
 Design constraints (see docs/plans/...-curriculum-buildout-plan.md item 4):
   * Python 3 STDLIB ONLY (no new deps).
@@ -39,7 +43,10 @@ PROMPTS_DIR = os.path.join(REPO_ROOT, "app", "worker", "prompts")
 SYSTEM_TEMPLATE = os.path.join(PROMPTS_DIR, "system-template.md")
 DEBRIEF_TEMPLATE = os.path.join(PROMPTS_DIR, "debrief-template.md")
 CRITIQUE_TEMPLATE = os.path.join(PROMPTS_DIR, "critique-template.md")
-FIXTURE_PERSONA = os.path.join(REPO_ROOT, "app", "worker", "test", "fixtures", "persona-m00-client.json")
+FIXTURES_DIR = os.path.join(REPO_ROOT, "app", "worker", "test", "fixtures")
+FIXTURE_PERSONA = os.path.join(FIXTURES_DIR, "persona-m00-client.json")
+FIXTURE_SIDECAR = os.path.join(FIXTURES_DIR, "topic-labels-m00.json")
+SIDECAR_NAME = "topic-labels.json"
 MATTERS_DIR = os.path.join(REPO_ROOT, "data", "matters")
 OUT_PATH = os.path.join(REPO_ROOT, "app", "worker", "personas", "personas.generated.json")
 
@@ -66,25 +73,11 @@ INJECTION_FIELDS = [
     "knowledge_boundary",
 ]
 
-# Curated, leak-safe topic labels for the m00 fixture facts. A topic label names
-# the SUBJECT a student could have explored, never the fact's actual content.
-CURATED_TOPIC_LABELS = {
-    "m00.fact.001": "when and where it happened",
-    "m00.fact.002": "the slip in the produce aisle",
-    "m00.fact.003": "what she was doing just before",
-    "m00.fact.004": "the wrist and knee injuries",
-    "m00.fact.005": "any warning sign near the spill",
-    "m00.fact.006": "what the liquid was",
-    "m00.fact.007": "the store's response after the fall",
-    "m00.fact.008": "what a store employee said",
-    "m00.fact.009": "the store incident report",
-    "m00.fact.010": "whether any video exists",
-    "m00.fact.011": "the medical treatment she got",
-    "m00.fact.012": "how the injury is healing",
-    "m00.fact.013": "the effect on her work and income",
-    "m00.fact.014": "any history of prior claims",
-    "m00.fact.015": "her worry about prior claims",
-}
+# Curated, leak-safe topic labels come from SIDECAR files, not this script:
+#   data/matters/<slug>/personas/topic-labels.json   {"<fact_ref>": "<label>"}
+# (and app/worker/test/fixtures/topic-labels-m00.json for the m00 fixture, which
+# doubles as the format example). A topic label names the SUBJECT a student could
+# have explored — 3-6 words — never the fact's actual content.
 
 # Content-FREE neutral fallback labels, keyed by tier. A truncation of raw fact
 # text inevitably leaks concealed/un-elicited content (the debrief-oracle risk),
@@ -118,18 +111,39 @@ def read_template(path, begin, end):
         return extract_between(f.read(), begin, end)
 
 
-def derive_topic_label(fact_ref, text, tier):
-    """Curated override if known; else a CONTENT-FREE neutral placeholder keyed by
-    tier. Returns (label, is_fallback). Truncating raw fact text would leak the
-    very content the debrief-oracle rule forbids, so un-curated facts get a safe
-    generic label and are reported for ship-time curation."""
-    if fact_ref in CURATED_TOPIC_LABELS:
-        return CURATED_TOPIC_LABELS[fact_ref], False
+def load_sidecar(path):
+    """Load a curated-label sidecar {"<fact_ref>": "<leak-safe label>"}. Returns
+    {} when absent/unreadable. Keys not shaped like a fact_ref (e.g. _comment)
+    and non-string values are ignored."""
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        k: v.strip()
+        for k, v in raw.items()
+        if isinstance(v, str) and v.strip() and re.match(r"^m\d{2}\.fact\.\d{3}$", k)
+    }
+
+
+def derive_topic_label(fact_ref, tier, curated):
+    """Curated sidecar label if present; else a CONTENT-FREE neutral placeholder
+    keyed by tier. Returns (label, is_fallback). Truncating raw fact text would
+    leak the very content the debrief-oracle rule forbids, so un-curated facts
+    get a safe generic label and are reported for ship-time curation."""
+    if fact_ref in curated:
+        return curated[fact_ref], False
     return NEUTRAL_TIER_LABEL.get(tier, "an unexplored topic"), True
 
 
-def build_persona(persona):
-    """Split one persona JSON into (injection_obj, fact_map_entries, fallback_refs)."""
+def build_persona(persona, curated):
+    """Split one persona JSON into (injection_obj, fact_map_entries, fallback_refs).
+    `curated` is the sidecar label dict for this persona's directory."""
     injection = {k: persona[k] for k in INJECTION_FIELDS if k in persona}
     fact_entries = {}
     fallback_refs = []
@@ -139,7 +153,7 @@ def build_persona(persona):
             fref = item.get("fact_ref")
             if not fref:
                 continue
-            label, is_fallback = derive_topic_label(fref, item.get("text", ""), tier)
+            label, is_fallback = derive_topic_label(fref, tier, curated)
             if is_fallback:
                 fallback_refs.append(fref)
             fact_entries[fref] = {"topic_label": label, "tier": tier}
@@ -170,19 +184,22 @@ def collect_rubrics():
     return rubrics
 
 
-def collect_persona_paths():
-    """m00 fixture first, then every data/matters/*/personas/*.json (sorted).
-    Tolerates a missing/empty data/matters tree."""
-    paths = [FIXTURE_PERSONA]
+def collect_persona_entries():
+    """Yield (persona_path, sidecar_labels) pairs: the m00 fixture first (with its
+    fixtures sidecar), then every data/matters/*/personas/*.json (sorted) with
+    that directory's topic-labels.json sidecar (if present). Tolerates a
+    missing/empty data/matters tree."""
+    entries = [(FIXTURE_PERSONA, load_sidecar(FIXTURE_SIDECAR))]
     if os.path.isdir(MATTERS_DIR):
         for matter in sorted(os.listdir(MATTERS_DIR)):
             pdir = os.path.join(MATTERS_DIR, matter, "personas")
             if not os.path.isdir(pdir):
                 continue
+            sidecar = load_sidecar(os.path.join(pdir, SIDECAR_NAME))
             for fn in sorted(os.listdir(pdir)):
-                if fn.endswith(".json"):
-                    paths.append(os.path.join(pdir, fn))
-    return paths
+                if fn.endswith(".json") and fn != SIDECAR_NAME:
+                    entries.append((os.path.join(pdir, fn), sidecar))
+    return entries
 
 
 def main():
@@ -202,7 +219,7 @@ def main():
     skipped = []
     fallback_by_persona = {}
 
-    for path in collect_persona_paths():
+    for path, curated in collect_persona_entries():
         if not os.path.isfile(path):
             skipped.append((path, "missing"))
             continue
@@ -219,7 +236,7 @@ def main():
         if pid in personas:
             skipped.append((path, "duplicate id %s" % pid))
             continue
-        injection, fact_entries, fallback_refs = build_persona(persona)
+        injection, fact_entries, fallback_refs = build_persona(persona, curated)
         personas[pid] = injection
         fact_map[pid] = fact_entries
         if fallback_refs:
@@ -260,7 +277,8 @@ def main():
         print("")
         print("  WARNING: %d fact(s) across %d persona(s) used CONTENT-FREE "
               "placeholder topic labels." % (n, len(fallback_by_persona)))
-        print("           Curate leak-safe topic_labels before ship (debrief-oracle rule):")
+        print("           Curate leak-safe labels before ship (debrief-oracle rule) by adding")
+        print("           data/matters/<slug>/personas/%s entries for:" % SIDECAR_NAME)
         for pid, refs in sorted(fallback_by_persona.items()):
             print("           - %s: %s" % (pid, ", ".join(refs)))
     return 0

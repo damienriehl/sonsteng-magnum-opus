@@ -112,8 +112,18 @@ Rubric-based first-pass critique of a pasted deliverable.
 - Server-side size cap **~18,000 chars** → `413 validation_error` above it.
 - The matter's rubric is loaded server-side (bundled), never sent by the client.
 
-**200:** `{ "scorecard": <critique scorecard JSON> }` — validates against
-`data/schemas/critique.scorecard.schema.json`.
+**200:**
+```json
+{
+  "scorecard": { "…": "critique scorecard JSON…" },
+  "criteria_labels": { "m03.rub.c01": "Case theory and liability analysis", "m03.rub.c03.s01": "Rapport and opening" }
+}
+```
+- `scorecard` validates against `data/schemas/critique.scorecard.schema.json`.
+- `criteria_labels` (backward-compatible addition): `{criterion_id: name}` for
+  every criterion **and** subcriterion in the matter's bundled rubric, so the UI
+  can render real criterion names instead of "Criterion NN". Ids match the
+  scorecard's `criteria[].criterion_id` values.
 
 ---
 
