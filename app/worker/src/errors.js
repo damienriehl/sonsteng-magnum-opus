@@ -15,6 +15,7 @@ export const ERROR_CODES = new Set([
   "upstream_unavailable",
   "origin_forbidden",
   "session_invalid",
+  "no_hosted_key",
 ]);
 
 export const IN_CHARACTER = {

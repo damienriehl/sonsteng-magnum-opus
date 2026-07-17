@@ -3,9 +3,16 @@
 // Invariants:
 //  * withCors() wraps EVERY return (success AND error) for allowlisted origins,
 //    plus an explicit OPTIONS preflight (see cors.js).
-//  * The Worker builds the ENTIRE Anthropic request server-side. Client input is
-//    whitelisted to specific fields; model/system/max_tokens/tools are never read
-//    from the client (see anthropic.js).
+//  * The Worker builds the ENTIRE upstream request server-side. Client input is
+//    whitelisted to specific fields; system prompt and max_tokens are never read
+//    from the client. The one client-controlled upstream input is the BYOK block
+//    (their provider + THEIR key + a model from a per-provider allowlist).
+//  * PROVIDER-AGNOSTIC BYOK: requests may carry byok {provider, api_key, model?}
+//    for anthropic | openai | google. BYOK skips the spend counter (their money)
+//    but every other guard still applies (turn caps, dedupe, session validity,
+//    input caps, persona injection, ≥6-turn debrief guard). The user's key is
+//    NEVER stored and NEVER logged (see the log-scan unit test).
+//  * No byok + no hosted ANTHROPIC_API_KEY -> typed no_hosted_key error.
 //  * The BudgetCounter DO is the single authority for spend + turn caps + mint
 //    throttle + turn_id dedupe + the debrief ≥6-turn oracle guard.
 //  * Non-streaming: await the full JSON, settle the exact usage, then return.
@@ -13,8 +20,9 @@
 import bundle from "../personas/personas.generated.json" with { type: "json" };
 import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./cors.js";
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
-import { callChat, callEvaluator } from "./anthropic.js";
-import { buildSystemPrompt, renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
+import { getProvider } from "./providers/registry.js";
+import { resolveUpstream } from "./byok.js";
+import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 
@@ -67,6 +75,39 @@ function logMeta(fields) {
 // Reserve worst-case cents helper input estimate (chars -> ~tokens).
 function estTokens(chars) {
   return Math.ceil(chars / 3.5);
+}
+
+// Resolve the upstream (BYOK or hosted) for a request body, or return the typed
+// error Response. NEVER log the resolved object — it carries an API key.
+function upstreamOrError(env, body) {
+  const up = resolveUpstream(env, body.byok);
+  if (!up.ok) return { error: errorEnvelope(up.code, up.message, up.status) };
+  return { up };
+}
+
+// One upstream completion via the resolved provider adapter.
+function callUpstream(up, { system, messages, maxTokens, jsonMode }) {
+  const provider = getProvider(up.provider);
+  return provider.complete({
+    system, messages, maxTokens,
+    providerCfg: { apiKey: up.apiKey, model: up.model, jsonMode: !!jsonMode },
+  });
+}
+
+// Map an upstream failure to the right envelope. A 4xx "config" failure on a
+// BYOK call almost always means the USER'S key or model was rejected — surface
+// it as a plain validation_error (never in-character). Hosted config failures
+// are OUR bug: log-and-alert semantics, generic upstream error to the client.
+function upstreamFailureResponse(up, result, ev) {
+  logMeta({ ev, mode: up.mode, provider: up.provider, kind: result.kind, status: result.status || 0 });
+  if (result.kind === "config" && up.mode === "byok") {
+    return errorEnvelope(
+      "validation_error",
+      `The ${up.provider} API rejected the request (HTTP ${result.status}). Check your API key and model.`,
+      400
+    );
+  }
+  return errorEnvelope("upstream_unavailable", "The interview service is temporarily unavailable.", 503);
 }
 
 // ---- GET /v1/session --------------------------------------------------------
@@ -137,6 +178,9 @@ async function handleChat(request, env, origin) {
   if (!persona || persona.matter_id !== matterId)
     return errorEnvelope("validation_error", "Unknown persona for this matter.", 400);
 
+  const { up, error } = upstreamOrError(env, body);
+  if (error) return error;
+
   const caps = capsFor(env);
   const stub = budgetStub(env);
   const personaTail = renderPersona(persona);
@@ -144,10 +188,12 @@ async function handleChat(request, env, origin) {
   const inputEst = estTokens(bundle.segment_a.length + personaTail.length + msgChars);
   const reserveCents = Math.ceil((inputEst * 100 + CHAT_MAX_TOKENS * 500) / 1_000_000);
 
+  // BYOK: skipBudget — no spend gate, no reserve (their key, their money). Turn
+  // cap, turn_id dedupe, and persona-turn counting still enforced in the DO.
   const pre = await stub.preflight(session.sid, {
     personaId, pool: session.p,
     capPublicCents: caps.capPublicCents, capDemoCents: caps.capDemoCents,
-    maxTurns: caps.maxTurns, reserveCents, turnId,
+    maxTurns: caps.maxTurns, reserveCents, turnId, skipBudget: up.skipBudget,
   });
 
   if (pre.replay) return json(pre.result); // idempotent: never re-bill
@@ -159,14 +205,14 @@ async function handleChat(request, env, origin) {
     return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
   }
 
-  const result = await callChat(env, {
-    segmentA: bundle.segment_a, personaTail, messages, maxTokens: CHAT_MAX_TOKENS,
+  const result = await callUpstream(up, {
+    system: { prefix: bundle.segment_a, tail: personaTail },
+    messages, maxTokens: CHAT_MAX_TOKENS,
   });
 
   if (!result.ok) {
     await stub.rollback(session.sid, turnId); // no turn burned, no spend
-    logMeta({ ev: "chat_upstream_fail", kind: result.kind, status: result.status || 0 });
-    return errorEnvelope("upstream_unavailable", "The interview service is temporarily unavailable.", 503);
+    return upstreamFailureResponse(up, result, "chat_upstream_fail");
   }
 
   const turn = pre.turn;
@@ -182,8 +228,9 @@ async function handleChat(request, env, origin) {
       cache_read_input_tokens: result.usage.cache_read_input_tokens || 0,
     },
   };
-  await stub.settle(session.sid, result.usage, turnId, payload);
-  logMeta({ ev: "chat_ok", pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
+  // usage=null on BYOK: nothing billed to the hosted pools, replay still stored.
+  await stub.settle(session.sid, up.skipBudget ? null : result.usage, turnId, payload);
+  logMeta({ ev: "chat_ok", mode: up.mode, provider: up.provider, pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
   return json(payload);
 }
 
@@ -205,27 +252,33 @@ async function handleDebrief(request, env, origin) {
   if (!persona || persona.matter_id !== matterId)
     return errorEnvelope("validation_error", "Unknown persona for this matter.", 400);
 
+  const { up, error } = upstreamOrError(env, body);
+  if (error) return error;
+
   const caps = capsFor(env);
   const stub = budgetStub(env);
 
   // Debrief-oracle guard: the sid must have really conducted this interview.
+  // Applies to BYOK too — the guard protects the answer key, not the budget.
   const committed = await stub.committedTurnsForPersona(session.sid, personaId);
   if (committed < DEBRIEF_MIN_TURNS)
     return errorEnvelope("session_invalid", "No completed interview found for this persona.", 403);
 
-  const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
-  if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  if (!up.skipBudget) {
+    const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
+    if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  }
 
   const prompt = buildDebriefPrompt(bundle.debrief_template, {
     matterId, personaId, persona,
     factMap: bundle.fact_map[personaId] || {},
     transcript, interviewerOnOpposingSide: false,
   });
-  const result = await callEvaluator(env, { prompt, maxTokens: DEBRIEF_MAX_TOKENS });
-  if (!result.ok) {
-    logMeta({ ev: "debrief_upstream_fail", kind: result.kind, status: result.status || 0 });
-    return errorEnvelope("upstream_unavailable", "The debrief service is temporarily unavailable.", 503);
-  }
+  const result = await callUpstream(up, {
+    system: null, messages: [{ role: "user", content: prompt }],
+    maxTokens: DEBRIEF_MAX_TOKENS, jsonMode: true,
+  });
+  if (!result.ok) return upstreamFailureResponse(up, result, "debrief_upstream_fail");
 
   const parsed = parseModelJson(result.text);
   const check = parsed && validateDebriefScorecard(parsed);
@@ -234,8 +287,8 @@ async function handleDebrief(request, env, origin) {
     return errorEnvelope("validation_error", "The debrief could not be generated. Please try again.", 502);
   }
 
-  await stub.charge(session.p, result.usage);
-  logMeta({ ev: "debrief_ok", pool: session.p });
+  if (!up.skipBudget) await stub.charge(session.p, result.usage);
+  logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });
   return json({ scorecard: parsed });
 }
 
@@ -258,19 +311,24 @@ async function handleCritique(request, env, origin) {
   if (!rubric) return errorEnvelope("validation_error", "No rubric is available for this matter.", 400);
   const rubricId = rubric.id && /^m\d{2}\.rub$/.test(rubric.id) ? rubric.id : matterId + ".rub";
 
+  const { up, error } = upstreamOrError(env, body);
+  if (error) return error;
+
   const caps = capsFor(env);
   const stub = budgetStub(env);
-  const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
-  if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  if (!up.skipBudget) {
+    const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
+    if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  }
 
   const prompt = buildCritiquePrompt(bundle.critique_template, {
     matterId, rubricId, rubric, deliverable,
   });
-  const result = await callEvaluator(env, { prompt, maxTokens: CRITIQUE_MAX_TOKENS });
-  if (!result.ok) {
-    logMeta({ ev: "critique_upstream_fail", kind: result.kind, status: result.status || 0 });
-    return errorEnvelope("upstream_unavailable", "The critique service is temporarily unavailable.", 503);
-  }
+  const result = await callUpstream(up, {
+    system: null, messages: [{ role: "user", content: prompt }],
+    maxTokens: CRITIQUE_MAX_TOKENS, jsonMode: true,
+  });
+  if (!result.ok) return upstreamFailureResponse(up, result, "critique_upstream_fail");
 
   const parsed = parseModelJson(result.text);
   const check = parsed && validateCritiqueScorecard(parsed);
@@ -279,8 +337,8 @@ async function handleCritique(request, env, origin) {
     return errorEnvelope("validation_error", "The critique could not be generated. Please try again.", 502);
   }
 
-  await stub.charge(session.p, result.usage);
-  logMeta({ ev: "critique_ok", pool: session.p });
+  if (!up.skipBudget) await stub.charge(session.p, result.usage);
+  logMeta({ ev: "critique_ok", mode: up.mode, provider: up.provider, pool: session.p });
   return json({ scorecard: parsed, criteria_labels: rubricCriteriaLabels(rubric) });
 }
 

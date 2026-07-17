@@ -1,8 +1,11 @@
 {
   // Sonsteng client-interview / debrief / critique Worker.
   // Zero-build, plain-JS ES modules + native JSON import (wrangler bundles both).
-  // Secrets are set out-of-band and NEVER live here: ANTHROPIC_API_KEY,
-  // SESSION_SIGNING_KEY, DEMO_BYPASS_TOKEN (wrangler secret put ...).
+  // Secrets are set out-of-band and NEVER live here: SESSION_SIGNING_KEY,
+  // DEMO_BYPASS_TOKEN, and OPTIONALLY ANTHROPIC_API_KEY (wrangler secret put).
+  // Provider-agnostic BYOK: users may bring their own anthropic/openai/google
+  // key per request; if ANTHROPIC_API_KEY is unset the hosted demo pool is
+  // dormant and non-BYOK requests get the typed no_hosted_key error.
   "name": "sonsteng-chat",
   "main": "src/index.js",
   "compatibility_date": "2026-07-17",
@@ -16,7 +19,12 @@
   ],
   "vars": {
     "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
-    "ANTHROPIC_MODEL": "claude-haiku-4-5",
+    "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
+    "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
+    "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
+    "MODEL_ALLOW_ANTHROPIC": "claude-haiku-4-5,claude-haiku-4-5-20251001,claude-sonnet-4-5",
+    "MODEL_ALLOW_OPENAI": "gpt-4o-mini,gpt-4o",
+    "MODEL_ALLOW_GOOGLE": "gemini-2.0-flash,gemini-2.5-flash",
     "PUBLIC_BUDGET_USD": "7",
     "DEMO_RESERVE_USD": "3",
     "MAX_TURNS": "20",

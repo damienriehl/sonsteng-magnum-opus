@@ -28,7 +28,7 @@ test("cap_exceeded / turn_limit / upstream_unavailable carry an in_character lin
 test("all codes used by the Worker are in the documented set", () => {
   for (const code of [
     "cap_exceeded", "turn_limit", "rate_limited", "validation_error",
-    "upstream_unavailable", "origin_forbidden", "session_invalid",
+    "upstream_unavailable", "origin_forbidden", "session_invalid", "no_hosted_key",
   ]) {
     assert.ok(ERROR_CODES.has(code), code + " must be a documented code");
   }
@@ -37,4 +37,16 @@ test("all codes used by the Worker are in the documented set", () => {
 test("an explicit extra.in_character overrides the default", async () => {
   const b = await bodyOf(errorEnvelope("upstream_unavailable", "x", 503, { in_character: "custom line" }));
   assert.equal(b.error.in_character, "custom line");
+});
+
+test("no_hosted_key envelope has the exact required message shape", async () => {
+  const res = errorEnvelope(
+    "no_hosted_key",
+    "This deployment has no hosted demo key. Add your own API key to interview the client.",
+    503
+  );
+  assert.equal(res.status, 503);
+  const b = JSON.parse(await res.text());
+  assert.equal(b.error.code, "no_hosted_key");
+  assert.match(b.error.message, /no hosted demo key/i);
 });
