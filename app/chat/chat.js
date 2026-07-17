@@ -196,6 +196,11 @@
     /* top bar: brand + large-type toggle */
     var top = el('div', 'chat-topbar');
     top.appendChild(el('span', 'brand', 'SONSTENG · CONSULTATION'));
+
+    /* BYOK: persistent header chip + drawer (byok.js loads before this file) */
+    var chipMount = el('span'); chipMount.style.display = 'inline-flex';
+    top.appendChild(chipMount);
+
     var tg = el('div', 'segmented-toggle');
     tg.setAttribute('role', 'group');
     tg.setAttribute('aria-label', 'Type size');
@@ -227,6 +232,13 @@
     who.appendChild(el('span', 'role', cfg.role));
     head.appendChild(who);
     wrap.appendChild(head);
+
+    /* BYOK drawer sits under the case header, above the stream */
+    var drawerMount = el('div');
+    wrap.appendChild(drawerMount);
+    if (window.SonstengBYOK) {
+      window.SonstengBYOK.attach({ chipMount: chipMount, drawerMount: drawerMount });
+    }
 
     /* stream (aria-live polite) */
     var stream = el('div', 'stream');
@@ -465,6 +477,8 @@
       turn_id: turn_id,
       messages: buildMessages(text)
     };
+    var byok = window.SonstengBYOK && window.SonstengBYOK.get();
+    if (byok) body.byok = byok;   // {provider, api_key, model?} — never logged/rendered
 
     runWithRetry(body).then(function (out) {
       hideConsidering();
@@ -522,6 +536,24 @@
       refs.input.focus();
     }
 
+    // provider-side auth failures can surface as validation_error/upstream_unavailable
+    var authish = /\b401\b|unauthoriz|authentication|invalid[_\s-]*(api[_\s-]*)?key|api[_\s-]*key[^.]*invalid|credential/i
+      .test(e.message || '');
+
+    if (code === 'no_hosted_key') {
+      recoverable(e.in_character || '[The receptionist looks up apologetically. “This office doesn’t keep a house key — you’ll need to bring your own.”]');
+      if (window.SonstengBYOK) {
+        window.SonstengBYOK.open('This deployment has no house key — bring your own to sit down with the client.');
+      }
+      return;
+    }
+    if (authish && (code === 'validation_error' || code === 'upstream_unavailable')) {
+      recoverable('Your key was declined by the provider — check it in ADD YOUR KEY, then send again.');
+      if (window.SonstengBYOK) {
+        window.SonstengBYOK.open('Your key was declined — double-check the provider, the key itself, and any model override.');
+      }
+      return;
+    }
     if (code === 'network' || code === 'upstream_unavailable') {
       recoverable('[The phone line crackles — that didn’t get through. Try sending again.]');
       return;
@@ -659,6 +691,8 @@
       persona_id: cfg.persona_id,
       transcript: buildTranscript()
     };
+    var byok = window.SonstengBYOK && window.SonstengBYOK.get();
+    if (byok) body.byok = byok;
     api('/v1/debrief', { body: body }).then(function (out) {
       refs.debriefBtn.textContent = 'Prepare debrief';
       refs.debriefBtn.disabled = false;
@@ -666,7 +700,12 @@
         renderDebrief(out.data.scorecard);
       } else {
         var e = (out.data && out.data.error) || {};
-        plainNotice(e.message || 'The debrief couldn’t be prepared just now. Please try again in a moment.');
+        if (e.code === 'no_hosted_key' && window.SonstengBYOK) {
+          window.SonstengBYOK.open('This deployment has no house key — bring your own to prepare the debrief.');
+          plainNotice('Add your own API key (ADD YOUR KEY, top of the page), then request the debrief again.');
+        } else {
+          plainNotice(e.message || 'The debrief couldn’t be prepared just now. Please try again in a moment.');
+        }
       }
     });
   }

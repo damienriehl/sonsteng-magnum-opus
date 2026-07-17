@@ -37,6 +37,8 @@
     <button type="button" id="btnPlay">Auto-play 6 turns</button>
     <button type="button" id="btnDebrief">Open debrief</button>
     <button type="button" id="btnReset">Reset session</button>
+    <button type="button" id="btnKey">Inject test key</button>
+    <button type="button" id="btnKeyClear">Clear key</button>
   </div>
   <div class="row" style="margin-top:.4rem">
     <span>scenario:</span>
@@ -47,7 +49,9 @@
     <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=rate_limited">rate-limited</a>
     <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=session_invalid">session-invalid</a>
     <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&represented=1">represented (4.2)</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=no_hosted_key">no-hosted-key</a>
     <a href="?view=critique&matter=m05&title=Suppression%20Memo%20Critique">critique</a>
+    <a href="?view=critique&matter=m05&title=Suppression%20Memo%20Critique&scenario=no_hosted_key">critique no-key</a>
   </div>
   <div class="log" id="hlog"></div>
 </div>
@@ -88,6 +92,17 @@
 
       if (path.indexOf('/v1/session') === 0) {
         return { ok: true, status: 200, data: { session_token: 'mock-token-' + Math.random().toString(16).slice(2, 8), sid: 'mock-sid', pool: 'public', max_turns: MAXT } };
+      }
+
+      /* ---- BYOK log-assert (never the raw key — masked last-4 only) ---- */
+      var byok = body && body.byok;
+      if (byok) log('   byok PRESENT: provider=' + byok.provider + ' key=••••' + String(byok.api_key).slice(-4) + (byok.model ? ' model=' + byok.model : ''));
+      else log('   byok ABSENT');
+
+      /* ---- no_hosted_key: this deployment has no house key; a saved BYOK
+              key unlocks the endpoint (exercises the auto-open drawer flow) */
+      if (SCEN === 'no_hosted_key' && !byok) {
+        return { ok: false, status: 402, data: { error: { code: 'no_hosted_key', message: 'no hosted key configured for this deployment' } } };
       }
 
       if (path.indexOf('/v1/chat') === 0) {
@@ -183,8 +198,13 @@
   root.id = VIEW === 'critique' ? 'critique-root' : 'chat-root';
   root.setAttribute('data-mode', 'mock');
   mount.appendChild(root);
+  // byok.js first, app second — async=false preserves execution order
+  var b = document.createElement('script');
+  b.src = 'byok.js'; b.async = false;
+  document.body.appendChild(b);
   var s = document.createElement('script');
   s.src = VIEW === 'critique' ? 'critique.js' : 'chat.js';
+  s.async = false;
   document.body.appendChild(s);
 
   function log(m) { (window.__DEVLOG__ || function () {})(m); }
@@ -200,6 +220,16 @@
   document.getElementById('btnReset').onclick = function () {
     try { sessionStorage.clear(); } catch (e) {}
     location.reload();
+  };
+  document.getElementById('btnKey').onclick = function () {
+    if (!window.SonstengBYOK) { log('byok.js not loaded'); return; }
+    window.SonstengBYOK.set({ provider: 'anthropic', api_key: 'sk-test-mock-key-1234', model: '' });
+    log('test key injected (anthropic ••••1234) — chip should turn green');
+  };
+  document.getElementById('btnKeyClear').onclick = function () {
+    if (!window.SonstengBYOK) return;
+    window.SonstengBYOK.clear();
+    log('key cleared — chip should read ADD YOUR KEY');
   };
   document.getElementById('btnTwo').onclick = function () {
     var api = window.SonstengChat; if (!api) { log('chat not ready'); return; }

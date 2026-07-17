@@ -105,6 +105,13 @@
 
     var wrap = el('div', 'crit-wrap');
 
+    /* BYOK: persistent header chip row + drawer (byok.js loads before this file) */
+    var topRow = el('div');
+    topRow.style.cssText = 'display:flex;justify-content:flex-end;padding:var(--sp-3) 0';
+    var chipMount = el('span'); chipMount.style.display = 'inline-flex';
+    topRow.appendChild(chipMount);
+    wrap.appendChild(topRow);
+
     var rh = el('div', 'running-head');
     rh.appendChild(el('span', null, (cfg.matter_id ? cfg.matter_id.toUpperCase() + ' · ' : '') + 'GALLEY PROOF · CRITIQUE'));
     rh.appendChild(el('span', 'rh-spacer'));
@@ -115,6 +122,12 @@
     head.appendChild(el('h1', null, cfg.title));
     head.appendChild(el('p', 'crit-intro', 'Paste a draft deliverable — a memo, letter, or pleading — and it will be marked up against this matter’s rubric, criterion by criterion, in the Sonsteng revise-and-resubmit tradition.'));
     wrap.appendChild(head);
+
+    var drawerMount = el('div');
+    wrap.appendChild(drawerMount);
+    if (window.SonstengBYOK) {
+      window.SonstengBYOK.attach({ chipMount: chipMount, drawerMount: drawerMount });
+    }
 
     var warn = el('div', 'paste-warn');
     warn.setAttribute('role', 'note');
@@ -170,6 +183,8 @@
 
     var body = { session_token: sessionToken(), matter_id: cfg.matter_id, deliverable_text: text };
     if (cfg.bypass) body.bypass = cfg.bypass;
+    var byok = window.SonstengBYOK && window.SonstengBYOK.get();
+    if (byok) body.byok = byok;   // {provider, api_key, model?} — never logged/rendered
     api('/v1/critique', { body: body }).then(function (out) {
       busy = false; refs.submit.disabled = false; refs.submit.textContent = 'Submit for critique';
       refs.mount.textContent = '';
@@ -180,7 +195,14 @@
         renderCritique(text, out.data.scorecard, labels);
       } else {
         var e = (out.data && out.data.error) || {};
-        if (e.code === 'validation_error' && /size|long|large|413/.test((e.message || '') + out.status)) {
+        var authish = /\b401\b|unauthoriz|authentication|invalid[_\s-]*(api[_\s-]*)?key|api[_\s-]*key[^.]*invalid|credential/i.test(e.message || '');
+        if (e.code === 'no_hosted_key') {
+          oversizeOrNotice('Bring your own key', 'This deployment has no house key — bring your own to have the draft reviewed. Use ADD YOUR KEY at the top of the page, then submit again.');
+          if (window.SonstengBYOK) window.SonstengBYOK.open('This deployment has no house key — bring your own to have the draft reviewed.');
+        } else if (authish && (e.code === 'validation_error' || e.code === 'upstream_unavailable')) {
+          oversizeOrNotice('Your key was declined', 'The provider rejected your key — check it in ADD YOUR KEY, then submit again.');
+          if (window.SonstengBYOK) window.SonstengBYOK.open('Your key was declined — double-check the provider, the key itself, and any model override.');
+        } else if (e.code === 'validation_error' && /size|long|large|413/.test((e.message || '') + out.status)) {
           oversizeOrNotice('That draft is too long', e.message || 'Trim your draft and try again.');
         } else if (e.code === 'cap_exceeded') {
           oversizeOrNotice('Demo budget spent', e.in_character || 'Demo budget for today is spent — come back tomorrow or bring your own key.');
