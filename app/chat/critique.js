@@ -174,7 +174,10 @@
       busy = false; refs.submit.disabled = false; refs.submit.textContent = 'Submit for critique';
       refs.mount.textContent = '';
       if (out.ok && out.data && out.data.scorecard) {
-        renderCritique(text, out.data.scorecard);
+        // criteria_labels: {criterion_id: name} — sibling of scorecard in the
+        // /v1/critique response (also accepted inside the scorecard, defensively).
+        var labels = out.data.criteria_labels || out.data.scorecard.criteria_labels || {};
+        renderCritique(text, out.data.scorecard, labels);
       } else {
         var e = (out.data && out.data.error) || {};
         if (e.code === 'validation_error' && /size|long|large|413/.test((e.message || '') + out.status)) {
@@ -199,7 +202,8 @@
     refs.mount.appendChild(d);
   }
 
-  function renderCritique(memoText, sc) {
+  function renderCritique(memoText, sc, labels) {
+    labels = labels || {};
     var galley = el('div', 'galley');
 
     /* left — the pasted memo as a manuscript proof (textContent only) */
@@ -226,7 +230,7 @@
       var weak = possible > 0 && earned / possible < 0.5;
       var card = el('div', 'crit-card' + (weak ? ' weak' : (strong ? ' strong' : '')));
       var hd = el('div', 'crit-card__head');
-      hd.appendChild(el('h3', 'crit-card__name', criterionName(c.criterion_id)));
+      hd.appendChild(el('h3', 'crit-card__name', criterionName(c.criterion_id, labels)));
       hd.appendChild(el('span', 'crit-card__pts', fmtPts(earned) + ' / ' + fmtPts(possible) + ' PTS'));
       card.appendChild(hd);
       card.appendChild(el('div', 'crit-card__id', c.criterion_id));
@@ -261,9 +265,12 @@
     try { galley.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (e) {}
   }
 
-  // The scorecard carries a criterion_id (e.g. m05.rub.c01) but no display name;
-  // derive a readable heading from the id. (Contract gap: no criterion label in schema.)
-  function criterionName(id) {
+  // Prefer the Worker-supplied display name from criteria_labels
+  // ({criterion_id: name}); fall back to a "Criterion NN" heading derived from
+  // the id (e.g. m05.rub.c01) when no label is present. The mono id sublabel
+  // renders either way.
+  function criterionName(id, labels) {
+    if (labels && typeof labels[id] === 'string' && labels[id].trim()) return labels[id].trim();
     var m = /c(\d+)(?:\.s(\d+))?$/.exec(id || '');
     if (!m) return id || 'Criterion';
     return 'Criterion ' + m[1] + (m[2] ? '.' + m[2] : '');

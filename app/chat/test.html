@@ -118,7 +118,13 @@
       if (path.indexOf('/v1/debrief') === 0) return { ok: true, status: 200, data: { scorecard: mockDebrief() } };
       if (path.indexOf('/v1/critique') === 0) {
         if (SCEN === 'cap3') return { ok: false, status: 402, data: { error: { code: 'cap_exceeded', in_character: 'Demo budget for today is spent — come back tomorrow or bring your own key.' } } };
-        return { ok: true, status: 200, data: { scorecard: mockCritique() } };
+        // criteria_labels = sibling of scorecard; m05.rub.c04 intentionally
+        // omitted to exercise the "Criterion NN" fallback path.
+        return { ok: true, status: 200, data: { scorecard: mockCritique(), criteria_labels: {
+          'm05.rub.c01': 'Issue framing',
+          'm05.rub.c02': 'Legal standard for the stop',
+          'm05.rub.c03': 'Factual marshalling'
+        } } };
       }
       return { ok: false, status: 404, data: { error: { code: 'validation_error', message: 'unknown path' } } };
     });
