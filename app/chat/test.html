@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DEV HARNESS — Sonsteng Chat/Critique (mock)</title>
+
+<!-- DEV-ONLY: this harness relaxes CSP to allow the in-page mock + control script.
+     index.html / critique.html ship the strict production CSP (no inline script). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:">
+<meta name="sonsteng-api" content="">
+
+<link rel="stylesheet" href="../assets/fonts.css">
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+  #harness{position:sticky;top:0;z-index:50;background:var(--green);color:var(--ink-invert);
+    border-bottom:var(--rule-bold) solid var(--brass);padding:.6rem .9rem;
+    font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+  #harness .row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+  #harness b{color:var(--brass-lite)}
+  #harness a,#harness button{font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-invert);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);
+    border-radius:3px;padding:.35em .6em;cursor:pointer;text-decoration:none}
+  #harness button.hot{background:var(--claret);border-color:var(--claret)}
+  #harness .log{margin-top:.4rem;color:var(--brass-lite);max-height:5rem;overflow:auto;white-space:pre-wrap}
+  #harness select{font-family:var(--font-mono);font-size:.7rem;padding:.3em}
+</style>
+</head>
+<body>
+
+<div id="harness">
+  <div class="row">
+    <b>DEV HARNESS · MOCK</b>
+    <span id="hstate">state: —</span>
+    <span id="hturns">committed: 0</span>
+    <button type="button" id="btnTwo" class="hot">Fire two sends</button>
+    <button type="button" id="btnPlay">Auto-play 6 turns</button>
+    <button type="button" id="btnDebrief">Open debrief</button>
+    <button type="button" id="btnReset">Reset session</button>
+  </div>
+  <div class="row" style="margin-top:.4rem">
+    <span>scenario:</span>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=normal">normal</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=slow&delay=6000">slow 6s</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=cap3&capAt=3">cap@3</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=upstream_once">upstream→retry-ok</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=rate_limited">rate-limited</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=session_invalid">session-invalid</a>
+    <a href="?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&represented=1">represented (4.2)</a>
+    <a href="?view=critique&matter=m05&title=Suppression%20Memo%20Critique">critique</a>
+  </div>
+  <div class="log" id="hlog"></div>
+</div>
+
+<div id="root-mount"></div>
+
+<script>
+/* ===== in-page mock: stubs the whole v1 API so every race/error path runs Worker-free ===== */
+(function () {
+  var P = new URLSearchParams(location.search);
+  var VIEW = P.get('view') || 'chat';
+  var SCEN = P.get('scenario') || 'normal';
+  var DELAY = parseInt(P.get('delay') || '500', 10);
+  var CAP_AT = parseInt(P.get('capAt') || (SCEN === 'cap3' ? '3' : '0'), 10);
+  var MAXT = 20;
+  var srvTurn = 0;              // server-authoritative turn count
+  var attempts = {};           // turn_id -> attempt count (for upstream_once dedupe test)
+  var log = function (m) { var l = document.getElementById('hlog'); l.textContent = '[' + new Date().toLocaleTimeString() + '] ' + m + '\n' + l.textContent; };
+  window.__DEVLOG__ = log;
+
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  var CLIENT_LINES = [
+    "It was late — maybe eleven. I'd had two beers at Ruggiero's, nothing more, hours before. I was driving home the back way.",
+    "The officer said I crossed the center line. I don't think I did. The road curves right there and it was icy.",
+    "I blew into the machine at the station. They said it read over. But I'd used mouthwash right before I left the house — does that matter?",
+    "I've never been in trouble before. I coach my kid's hockey team. If I lose my license I lose my job — I drive a delivery route.",
+    "Honestly? I'm scared. I didn't feel drunk. I keep replaying it.",
+    "They didn't read me anything until after they'd already cuffed me. Is that — is that a problem for them or for me?",
+    "My wife doesn't know how bad this could get. I haven't told her the whole thing."
+  ];
+
+  window.__SONSTENG_MOCK__ = function (req) {
+    var path = req.path, body = req.body || {};
+    log('→ ' + req.method + ' ' + path + (body.turn_id ? ' tid=' + body.turn_id.slice(0, 8) : ''));
+    var d = path.indexOf('/v1/session') === 0 ? 120 : DELAY;
+    return wait(d).then(function () {
+
+      if (path.indexOf('/v1/session') === 0) {
+        return { ok: true, status: 200, data: { session_token: 'mock-token-' + Math.random().toString(16).slice(2, 8), sid: 'mock-sid', pool: 'public', max_turns: MAXT } };
+      }
+
+      if (path.indexOf('/v1/chat') === 0) {
+        var tid = body.turn_id || 'notid';
+        attempts[tid] = (attempts[tid] || 0) + 1;
+        log('   attempt#' + attempts[tid] + ' for ' + tid.slice(0, 8));
+
+        if (SCEN === 'upstream_once' && attempts[tid] === 1)
+          return { ok: false, status: 503, data: { error: { code: 'upstream_unavailable', message: 'upstream busy', in_character: '[the line crackles]' } } };
+        if (SCEN === 'upstream_always')
+          return { ok: false, status: 503, data: { error: { code: 'upstream_unavailable', message: 'upstream busy' } } };
+        if (SCEN === 'rate_limited')
+          return { ok: false, status: 429, data: { error: { code: 'rate_limited', in_character: '[Devon’s phone buzzes; they hold up a finger. “One second, sorry.”]' } } };
+        if (SCEN === 'session_invalid')
+          return { ok: false, status: 401, data: { error: { code: 'session_invalid', message: 'session expired' } } };
+
+        var wouldBe = srvTurn + 1;
+        if (CAP_AT && wouldBe > CAP_AT)
+          return { ok: false, status: 402, data: { error: { code: 'cap_exceeded', in_character: '[Devon’s phone rings — they glance at it. “I’m sorry, I have to take this. Can we pick it up another day?”]' } } };
+
+        srvTurn = wouldBe;
+        var st = srvTurn >= MAXT ? 'ended' : (srvTurn >= 15 ? 'warning' : 'active');
+        var reply = CLIENT_LINES[(srvTurn - 1) % CLIENT_LINES.length];
+        if (P.get('represented') === '1' && srvTurn === 1) reply = "I probably shouldn't even be talking to you directly — my company's lawyer told me not to. But go ahead. " + reply;
+        return { ok: true, status: 200, data: { reply: reply, turn: srvTurn, remaining: Math.max(0, MAXT - srvTurn), state: st, usage: { input_tokens: 1200, output_tokens: 180 } } };
+      }
+
+      if (path.indexOf('/v1/debrief') === 0) return { ok: true, status: 200, data: { scorecard: mockDebrief() } };
+      if (path.indexOf('/v1/critique') === 0) {
+        if (SCEN === 'cap3') return { ok: false, status: 402, data: { error: { code: 'cap_exceeded', in_character: 'Demo budget for today is spent — come back tomorrow or bring your own key.' } } };
+        return { ok: true, status: 200, data: { scorecard: mockCritique() } };
+      }
+      return { ok: false, status: 404, data: { error: { code: 'validation_error', message: 'unknown path' } } };
+    });
+  };
+
+  function mockDebrief() {
+    return {
+      schema_version: '1.0.0',
+      matter_id: 'm05',
+      persona_id: 'm05.per.halvard',
+      axis_a: {
+        facts_elicited: ['m05.fact.001', 'm05.fact.004', 'm05.fact.011'],
+        revealed_if_asked_missed: ['The exact timing of the last drink', 'Whether Miranda warnings were given', 'Prior medical conditions affecting the breath test'],
+        rapport_gated_unearned: [
+          { topic: 'What the client hasn’t told their spouse', trigger_needed: 'confidentiality_reassurance' },
+          { topic: 'The client’s fear about losing their job', trigger_needed: 'acknowledged_emotion' }
+        ],
+        rule_4_2_flags: []
+      },
+      axis_b: {
+        rapport_opening: { score: 8, comment: 'You opened warmly and put the client at ease quickly.' },
+        listening_t_funnel: { score: 6, comment: 'You moved to narrow questions a little early — let the broad story breathe first.' },
+        understanding_goals: { score: 7, comment: 'You grasped the license-and-livelihood stakes.' },
+        explanation_next_steps: { score: 5, comment: 'The client left unsure what happens next — close with a roadmap.' },
+        overall_confidence: { score: 7, comment: 'The client would likely come back, but wanted more reassurance.' }
+      },
+      ethics_score: 2,
+      narrative: 'A solid, humane first interview. You built rapport fast and caught the core facts. The growth edge is patience — give the client room to tell the whole story before narrowing, and close with clear next steps so they leave the room knowing the plan.',
+      self_reflection_prompt: 'Where in the interview did you narrow to specifics before the client had finished their own account — and what might you have missed by doing so?'
+    };
+  }
+  function mockCritique() {
+    return {
+      schema_version: '1.0.0',
+      matter_id: 'm05',
+      rubric_id: 'm05.rub',
+      criteria: [
+        { criterion_id: 'm05.rub.c01', score: 8, weight_points: 10, evidence: 'Issue framed crisply in the opening paragraph; the suppression question is identified up front.', suggestions: 'Name the controlling standard (reasonable articulable suspicion) in the same sentence you frame the issue.' },
+        { criterion_id: 'm05.rub.c02', score: 4, weight_points: 10, evidence: 'The stop is described but the legal standard for the traffic stop is only implied.', suggestions: 'Add a short rule paragraph on the standard for an investigatory stop, then apply the icy-road facts to it explicitly.' },
+        { criterion_id: 'm05.rub.c03', score: 9, weight_points: 10, evidence: 'Strong factual marshalling of the breath-test timeline and the mouthwash detail.', suggestions: 'Tie the mouthwash fact to the specific reliability challenge you intend to raise.' },
+        { criterion_id: 'm05.rub.c04', score: 5, weight_points: 10, evidence: 'Conclusion states the ask but the remedy is vague.', suggestions: 'State precisely what you want suppressed and why the exclusionary remedy follows.' }
+      ],
+      total: { earned: 26, possible: 40 },
+      narrative: 'A promising draft with a clear structure. The facts are handled well; the legal standards need to be stated before they are applied.',
+      revise_resubmit_note: 'Revise the two weak criteria — add explicit rule statements for the stop and sharpen the remedy — then resubmit. You are one focused pass from a strong memo.'
+    };
+  }
+})();
+
+/* ===== load the right app + wire harness controls ===== */
+(function () {
+  var P = new URLSearchParams(location.search);
+  var VIEW = P.get('view') || 'chat';
+  var mount = document.getElementById('root-mount');
+  var root = document.createElement('div');
+  root.id = VIEW === 'critique' ? 'critique-root' : 'chat-root';
+  root.setAttribute('data-mode', 'mock');
+  mount.appendChild(root);
+  var s = document.createElement('script');
+  s.src = VIEW === 'critique' ? 'critique.js' : 'chat.js';
+  document.body.appendChild(s);
+
+  function log(m) { (window.__DEVLOG__ || function () {})(m); }
+  function tick() {
+    var api = window.SonstengChat;
+    if (api) {
+      document.getElementById('hstate').textContent = 'state: ' + api.getState();
+      document.getElementById('hturns').textContent = 'committed: ' + api.getTurns();
+    }
+  }
+  setInterval(tick, 400);
+
+  document.getElementById('btnReset').onclick = function () {
+    try { sessionStorage.clear(); } catch (e) {}
+    location.reload();
+  };
+  document.getElementById('btnTwo').onclick = function () {
+    var api = window.SonstengChat; if (!api) { log('chat not ready'); return; }
+    log('FIRE TWO SENDS (2nd must be ignored while SENDING)');
+    api.send('Tell me, in your own words, what happened that night.');
+    api.send('And where were you driving from?');
+    log('after double-fire, state=' + api.getState() + ' (expect SENDING/RETRYING; only ONE request should fly)');
+  };
+  document.getElementById('btnPlay').onclick = function () {
+    var api = window.SonstengChat; if (!api) { log('chat not ready'); return; }
+    var i = 0;
+    (function step() {
+      if (i >= 6) { log('auto-play done; committed=' + api.getTurns()); return; }
+      if (api.getState() !== 'IDLE') { setTimeout(step, 300); return; }
+      i++; log('auto-play send #' + i);
+      api.send('Follow-up question number ' + i + ' — please tell me more about that.');
+      setTimeout(step, 300);
+    })();
+  };
+  document.getElementById('btnDebrief').onclick = function () {
+    var api = window.SonstengChat; if (!api) return;
+    var b = api.refs().debriefBtn;
+    if (b.disabled) { log('debrief still disabled (need 6 committed turns; have ' + api.getTurns() + ')'); return; }
+    b.click(); log('debrief requested');
+  };
+})();
+</script>
+</body>
+</html>
