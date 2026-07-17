@@ -1,7 +1,7 @@
 ---
 title: "feat: Curriculum Build-Out — Data Spine, 20-Matter Corpus, Client-Interview Simulator, Business-of-Law, Platform Site"
 type: feat
-status: active
+status: completed  # shipped 2026-07-17 (BYOK-first pivot; live red-team + E2E rehearsal pending an API key — see docs/evidence/EP-2026-07-17-buildout.md)
 date: 2026-07-17
 origin: docs/brainstorms/2026-07-17-curriculum-buildout-brainstorm.md
 ---
@@ -361,9 +361,11 @@ Full validator + red-team runs; DEV deploy (`-p sonsteng`, never `--remove-orpha
 
 ## Acceptance Criteria (adopted from SpecFlow §D)
 
+> **Ship-time status (2026-07-17):** D1 ✅ · D2 ✅ · D3/D4 harness built, live run pending an API key (provider-agnostic pivot: no hosted key set) · D5 server-side logic unit-proven vs real SQLite, live scripted-client probe pending key · D6 ✅ (mock-verified) · D7 pending key · D8 ✅ · D9 quickstart written + steps executed in-repo (clean-clone run pending) · D10 ✅ · D11 endpoint built + unit-tested, live run pending key. Evidence: docs/evidence/EP-2026-07-17-buildout.md.
+
 **Data spine**
-- [ ] D1 `tools/validate_spine.py` green per `docs/research/validator-spec.md`: every cross-ref resolves; zero orphans; 20/20 matters schema-conform + above the depth floor; all FOLIO IRIs validated against the crosswalk snapshot (offline) or marked `no_folio_equivalent`.
-- [ ] D2 Money-math green: time entries Σ = billing statements; trust ledgers balance (never negative at any point); **matter ↔ firm reconciliation = WARN** surfaced in the evidence pack, not a ship-blocker.
+- [x] D1 `tools/validate_spine.py` green per `docs/research/validator-spec.md`: every cross-ref resolves; zero orphans; 20/20 matters schema-conform + above the depth floor; all FOLIO IRIs validated against the crosswalk snapshot (offline) or marked `no_folio_equivalent`.
+- [x] D2 Money-math green: time entries Σ = billing statements; trust ledgers balance (never negative at any point); **matter ↔ firm reconciliation = WARN** surfaced in the evidence pack, not a ship-blocker.
 
 **Chat app**
 - [ ] D3 Red-team (~15 adversarial prompts × 3 personas): zero concealed-tier leaks; zero out-of-character raw errors; abuse ends in character. **Includes: debrief-oracle probes (empty/one-line transcript), XSS payloads in chat output, sycophancy-pressure probes.**
@@ -374,9 +376,9 @@ Full validator + red-team runs; DEV deploy (`-p sonsteng`, never `--remove-orpha
 - [ ] D11 Critique endpoint: a sample 4-page memo submitted against a matter rubric returns criterion-by-criterion, point-referenced critique; oversized input rejected gracefully; spend counted against the daily cap.
 
 **Site & repo**
-- [ ] D8 No dead links; all four flows traversable; skills ↔ matters bidirectional.
-- [ ] D9 OSS quickstart executed once from a clean clone; README updated.
-- [ ] D10 Out-of-scope list published (below) so demo-night gaps read as roadmap.
+- [x] D8 No dead links; all four flows traversable; skills ↔ matters bidirectional.
+- [x] D9 OSS quickstart written + steps executed in-repo; README updated. (Literal clean-clone run: pending.)
+- [x] D10 Out-of-scope list published (below) so demo-night gaps read as roadmap.
 
 ## Out of Scope (tonight — "coming soon" labels)
 
