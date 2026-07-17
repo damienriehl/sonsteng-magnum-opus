@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for m18 debrief oracle. Each value is a 3-6 word topic area a student could have explored, never the fact's content. Keys cover every warned fact_ref for this matter's personas.",
+  "m18.fact.003": "the mother's work and whereabouts",
+  "m18.fact.004": "Jasmine's school record and history",
+  "m18.fact.005": "the family's prior experience",
+  "m18.fact.007": "what the other teens did",
+  "m18.fact.010": "who was present in the lot",
+  "m18.fact.011": "Jasmine's account of her actions",
+  "m18.fact.018": "why she was pulled in first",
+  "m18.fact.020": "the questioning at school",
+  "m18.fact.038": "the mother's direct knowledge",
+  "m18.fact.039": "the mother's view of the questioning",
+  "m18.fact.040": "what the phone video shows",
+  "m18.fact.041": "messages before the incident",
+  "m18.fact.042": "how Jasmine is coping",
+  "m18.fact.043": "who damaged the teacher's car",
+  "m18.fact.044": "Kayla's representation",
+  "m18.fact.045": "what Kayla will say",
+  "m18.fact.046": "what Kayla knows about Jasmine",
+  "m18.fact.047": "Kayla's knowledge of the video",
+  "m18.fact.049": "status of the other teens' cases",
+  "m18.fact.051": "the mother's feelings of guilt"
+}

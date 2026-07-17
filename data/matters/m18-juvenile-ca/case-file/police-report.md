@@ -15,7 +15,7 @@
 
 On Monday, April 14, 2026, I completed this report following the reported vandalism of school property and three private vehicles in the Encinal Ridge High School parking lot on the evening of Friday, April 10, 2026. The damage was discovered Saturday morning, April 11, by custodial staff and reported to school administration, who notified me on Monday, April 13.
 
-Administration reviewed the parking-lot security-camera recording from the night in question. The recording is of limited quality: it depicts several figures moving among parked vehicles in low light beginning at approximately 2038 hours, but it does not clearly show which individual applied paint to which surface. Assistant Principal Gerald Marchetti stated that he recognized one of the figures as student Jasmine Cordero and identified two additional students, Kayla Trejo and Andre Sotelo, as also present.
+Administration reviewed the parking-lot security-camera recording from the night in question. The recording is of limited quality: it depicts several figures moving among parked vehicles in low light beginning at approximately 2038 hours, but it does not clearly show which individual applied paint to which surface. Assistant Principal Gerald Corvino stated that he recognized one of the figures as student Jasmine Cordero and identified two additional students, Kayla Trejo and Andre Sotelo, as also present.
 
 ## Persons present (per administration and footage review)
 
@@ -29,7 +29,7 @@ Black and red spray paint (block lettering, initials, and a figure) on the exter
 
 ## Statements
 
-I was present in Assistant Principal Marchetti's office on April 13 for a portion of his conversation with Jasmine Cordero, before her parent arrived. Ms. Cordero stated that she had been in the lot and had used her phone but denied applying any paint to any surface. I advised administration that the matter would be referred to Juvenile Probation and the District Attorney's juvenile unit.
+I was present in Assistant Principal Corvino's office on April 13 for a portion of his conversation with Jasmine Cordero, before her parent arrived. Ms. Cordero stated that she had been in the lot and had used her phone but denied applying any paint to any surface. I advised administration that the matter would be referred to Juvenile Probation and the District Attorney's juvenile unit.
 
 ## Disposition
 

@@ -10,7 +10,7 @@
 
 **Student:** Cordero, Jasmine — Grade 10
 **Referral date:** February 11, 2026
-**Referring administrator:** G. Marchetti, Assistant Principal
+**Referring administrator:** G. Corvino, Assistant Principal
 **Category:** Dress-code — administrative referral
 
 **Administrator entry:** Student sent to office for dress-code non-compliance (graphic tee shirt and head covering). Student disputed the citation as inconsistent with how the policy is applied to other students and became argumentative. No detention assigned; verbal warning issued.

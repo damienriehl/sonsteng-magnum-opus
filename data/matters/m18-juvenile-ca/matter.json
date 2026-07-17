@@ -35,7 +35,7 @@
   "personas": ["m18.per.cordero-j", "m18.per.cordero-a", "m18.per.trejo"],
   "witnesses": [
     { "id": "m18.wit.haddad", "name": "Deputy Omar Haddad" },
-    { "id": "m18.wit.marchetti", "name": "Gerald Marchetti" },
+    { "id": "m18.wit.corvino", "name": "Gerald Corvino" },
     { "id": "m18.wit.villareal", "name": "Tomás Villareal" },
     { "id": "m18.wit.sundaram", "name": "Priyanka Sundaram" }
   ],

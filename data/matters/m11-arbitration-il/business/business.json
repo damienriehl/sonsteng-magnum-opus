@@ -39,7 +39,7 @@
     { "id": "m11.te.0004", "date": "2026-02-04", "timekeeper_id": "FIRM-TK-02", "hours": 2.5, "rate": 225, "narrative": "Draft and file demand for arbitration; open matter with the arbitral forum." },
     { "id": "m11.te.0005", "date": "2026-02-10", "timekeeper_id": "FIRM-TK-01", "hours": 1.8, "rate": 250, "narrative": "Second client interview; build chronology of complaint, PIP, and termination." },
     { "id": "m11.te.0006", "date": "2026-02-12", "timekeeper_id": "FIRM-TK-02", "hours": 2.2, "rate": 225, "narrative": "Interview fact witness Tomás Ruvalcaba regarding off-the-clock work; memo to file." },
-    { "id": "m11.te.0007", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Interview fact witness Ayana Osei re blocked exits; note Rule 4.2 limits on contacting represented managers." },
+    { "id": "m11.te.0007", "date": "2026-02-18", "timekeeper_id": "FIRM-TK-02", "hours": 1.6, "rate": 225, "narrative": "Interview fact witness Ayana Nyarko re blocked exits; note Rule 4.2 limits on contacting represented managers." },
     { "id": "m11.te.0008", "date": "2026-02-24", "timekeeper_id": "FIRM-TK-01", "hours": 1.4, "rate": 250, "narrative": "Legal research on retaliation and wrongful-discharge theory and arbitration-clause enforceability." },
     { "id": "m11.te.0009", "date": "2026-03-05", "timekeeper_id": "FIRM-TK-02", "hours": 3.0, "rate": 225, "narrative": "Assemble documentary record; analyze timekeeping/punch records and HR email chain." },
     { "id": "m11.te.0010", "date": "2026-03-12", "timekeeper_id": "FIRM-TK-01", "hours": 2.6, "rate": 250, "narrative": "Draft statement of the case (issue framing and factual narrative)." },

@@ -1,8 +1,8 @@
-# Independent Medical Examination — Dr. Alan Bexley
+# Independent Medical Examination — Dr. Alan Kolstad
 
 *Report of the physician retained by the defense to conduct an independent medical examination. Included in the file so plaintiff's counsel can prepare to meet it. Clinical opinion only.*
 
-I am Dr. Alan Bexley, a physician retained by counsel for the defense to perform an independent medical examination of Lorraine Petimeyer. I examined Ms. Petimeyer on September 18, 2025, and reviewed her available medical records and imaging.
+I am Dr. Alan Kolstad, a physician retained by counsel for the defense to perform an independent medical examination of Lorraine Petimeyer. I examined Ms. Petimeyer on September 18, 2025, and reviewed her available medical records and imaging.
 
 **History reviewed.** Ms. Petimeyer reported a rear-end collision on February 7, 2025, while stopped, with neck and right-shoulder complaints developing the following day. Records reflect an initial urgent-care visit two days after the collision and a subsequent course of physical therapy of approximately twenty sessions. Records also reflect a prior episode of right-shoulder rotator-cuff tendinitis treated in 2019.
 
@@ -12,4 +12,4 @@ I am Dr. Alan Bexley, a physician retained by counsel for the defense to perform
 
 I understand the treating physician has reached a different conclusion. This report reflects my own examination and record review.
 
-*Alan Bexley, M.D.*
+*Alan Kolstad, M.D.*

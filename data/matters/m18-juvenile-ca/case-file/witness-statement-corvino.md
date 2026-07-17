@@ -1,12 +1,12 @@
-# Witness Statement — Gerald Marchetti, Assistant Principal
+# Witness Statement — Gerald Corvino, Assistant Principal
 
-**Witness m18.wit.marchetti**
+**Witness m18.wit.corvino**
 
 *Statement given to Alta Mesa County Probation intake, April 21, 2026. Recorded and summarized in the witness's own words.*
 
 ---
 
-My name is Gerald Marchetti. I am an assistant principal at Encinal Ridge High School and I have worked at the school for eleven years. Part of my job is student discipline and campus safety.
+My name is Gerald Corvino. I am an assistant principal at Encinal Ridge High School and I have worked at the school for eleven years. Part of my job is student discipline and campus safety.
 
 On Saturday morning, April 11, our head custodian called me at home to say the north parking lot and the gym wall had been vandalized overnight — paint on the wall and on some cars, and one car scratched up pretty badly. We had a home basketball game Friday night, so there were a lot of people coming and going until maybe nine.
 
@@ -18,4 +18,4 @@ I'll be honest that Jasmine and I have had friction. She filed a complaint about
 
 That's what I know.
 
-*Statement of Gerald Marchetti.*
+*Statement of Gerald Corvino.*

@@ -42,7 +42,7 @@ Dr. Ifeoma Ekwueme, a physiatrist, examined Petimeyer and diagnosed a cervical s
 
 ## The prior-condition dispute
 
-Petimeyer had a documented right-shoulder problem years before the crash: she was treated for rotator-cuff tendinitis in 2019 after years of repetitive lifting, and it had largely resolved with therapy at the time [m03.fact.044]. She is embarrassed about the old injury and worried that mentioning it will let the other side blame her pain on something other than the crash, so she is reluctant to bring it up [m03.fact.045]. Dr. Alan Bexley, the physician retained by the defense to perform an independent medical examination, opines that Petimeyer's current shoulder symptoms are largely degenerative and pre-existing rather than caused by the collision [m03.fact.046]. Dr. Ekwueme's view is that the crash aggravated a previously quiet condition and produced new, symptomatic injury [m03.fact.047].
+Petimeyer had a documented right-shoulder problem years before the crash: she was treated for rotator-cuff tendinitis in 2019 after years of repetitive lifting, and it had largely resolved with therapy at the time [m03.fact.044]. She is embarrassed about the old injury and worried that mentioning it will let the other side blame her pain on something other than the crash, so she is reluctant to bring it up [m03.fact.045]. Dr. Alan Kolstad, the physician retained by the defense to perform an independent medical examination, opines that Petimeyer's current shoulder symptoms are largely degenerative and pre-existing rather than caused by the collision [m03.fact.046]. Dr. Ekwueme's view is that the crash aggravated a previously quiet condition and produced new, symptomatic injury [m03.fact.047].
 
 ## Work impact and lost income
 

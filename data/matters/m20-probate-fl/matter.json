@@ -30,11 +30,11 @@
   "fee_type": "flat",
   "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
   "task_refs": ["TSK-004", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-037", "TSK-048", "TSK-058", "TSK-060", "TSK-063"],
-  "personas": ["m20.per.cole", "m20.per.prewitt", "m20.per.delacroix"],
+  "personas": ["m20.per.cole", "m20.per.prewitt", "m20.per.bastien"],
   "witnesses": [
     { "id": "m20.wit.vandermolen", "name": "Dr. Elias Vandermolen" },
     { "id": "m20.wit.tancredi", "name": "Gloria Tancredi" },
-    { "id": "m20.wit.delacroix", "name": "Marisol Delacroix" },
+    { "id": "m20.wit.bastien", "name": "Marisol Bastien" },
     { "id": "m20.wit.ellingboe", "name": "Amara Ellingboe" }
   ],
   "exhibits": [

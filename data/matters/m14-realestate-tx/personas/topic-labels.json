@@ -1,0 +1,21 @@
+{
+  "_comment": "Curated leak-safe topic labels for m14. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Covers every warned fact_ref across m14 personas.",
+  "m14.fact.002": "his plans for the land",
+  "m14.fact.006": "the seller's background",
+  "m14.fact.007": "the seller's remaining property",
+  "m14.fact.008": "the purchase contract",
+  "m14.fact.017": "the access easement problem",
+  "m14.fact.018": "the mineral-rights issue",
+  "m14.fact.020": "current mineral activity",
+  "m14.fact.021": "the seller's well request",
+  "m14.fact.030": "the buyer's solar arrangement",
+  "m14.fact.031": "his true deadline and leverage",
+  "m14.fact.032": "his flexibility on price",
+  "m14.fact.033": "his loan conditions",
+  "m14.fact.034": "why the seller wants the well",
+  "m14.fact.035": "the well's importance to him",
+  "m14.fact.036": "the seller's financial timeline",
+  "m14.fact.037": "his knowledge of the road history",
+  "m14.fact.038": "each side's willingness to close",
+  "m14.fact.041": "his direct contact with the seller"
+}

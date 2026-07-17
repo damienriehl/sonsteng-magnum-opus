@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for m15. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Covers every warned fact_ref across m15 personas.",
+  "m15.fact.002": "his commercial driving license",
+  "m15.fact.005": "his long work day",
+  "m15.fact.006": "what he drank that night",
+  "m15.fact.007": "the full amount he drank",
+  "m15.fact.008": "covering the smell of alcohol",
+  "m15.fact.009": "medication he had taken",
+  "m15.fact.010": "his acid-reflux condition",
+  "m15.fact.012": "why the truck drifted",
+  "m15.fact.013": "the 911 report",
+  "m15.fact.014": "the deputy's initial observation",
+  "m15.fact.015": "the driving before the stop",
+  "m15.fact.016": "the deputy's observations at contact",
+  "m15.fact.017": "conditions during the field tests",
+  "m15.fact.019": "the field-sobriety test results",
+  "m15.fact.021": "the arrest",
+  "m15.fact.023": "the pre-test observation period",
+  "m15.fact.025": "the breath-test reading",
+  "m15.fact.026": "the license consequences",
+  "m15.fact.027": "his prior driving history",
+  "m15.fact.036": "the 911 caller's certainty"
+}

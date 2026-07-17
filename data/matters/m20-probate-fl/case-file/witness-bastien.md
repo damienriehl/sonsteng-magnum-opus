@@ -1,13 +1,13 @@
-# Witness Statement — Marisol Delacroix
+# Witness Statement — Marisol Bastien
 
-**Witness:** Marisol Delacroix
+**Witness:** Marisol Bastien
 **Role:** Home health aide who worked at the Prewitt home, 2023–2025
 **Date of statement:** July 22, 2025
 **Taken at:** Manatee County, Florida (aide's residence)
 
 ---
 
-My name is Marisol Delacroix. I am a certified home health aide. From sometime in 2023 until Mr. Prewitt passed away in February of this year, I worked afternoons at the house on Heron Point Lane, usually Monday through Friday. My job was to help Mr. Prewitt — help him get around, fix his lunch, keep him company, and give Mrs. Prewitt-Cole a break in the day. The agency sends me, but Mrs. Prewitt-Cole was the one who arranged and paid for my hours.
+My name is Marisol Bastien. I am a certified home health aide. From sometime in 2023 until Mr. Prewitt passed away in February of this year, I worked afternoons at the house on Heron Point Lane, usually Monday through Friday. My job was to help Mr. Prewitt — help him get around, fix his lunch, keep him company, and give Mrs. Prewitt-Cole a break in the day. The agency sends me, but Mrs. Prewitt-Cole was the one who arranged and paid for my hours.
 
 I want to be fair to everyone, so I will just say what I saw. Mr. Prewitt had good days and bad days. On a good day he was sharp — he'd tease me, ask about my classes, tell me stories about building bridges. On a bad day he was tired and turned around. He might not know what day it was, or he'd ask me the same question twice. It went back and forth like that the whole time I was there.
 
@@ -19,4 +19,4 @@ I was not there in the mornings, as a rule, so I cannot tell you anything about 
 
 I will be honest that I am nervous about all of this. Mrs. Prewitt-Cole is the one who pays for my hours, and I am worried that no matter what I say, somebody is going to say I am biased or that I am lying. I am not. I am just telling you what I saw in that house.
 
-*/s/ Marisol Delacroix*
+*/s/ Marisol Bastien*

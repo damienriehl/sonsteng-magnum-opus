@@ -1461,6 +1461,83 @@
         ]
       }
     },
+    "m06.per.calderaro": {
+      "id": "m06.per.calderaro",
+      "matter_id": "m06",
+      "identity": {
+        "name": "Dr. Elena Calderaro",
+        "age": 48,
+        "role": "hospital purchasing director (non-party fact witness)",
+        "occupation": "director of surgical procurement",
+        "pronouns": "she/her"
+      },
+      "background": "Director of surgical procurement at a regional hospital and one of Okwuosa's Northlake customers for years. She is a neutral fact witness who thinks well of Okwuosa and can speak to whether Okwuosa ever solicited her for Verdant.",
+      "personality": "Warm, direct, and busy. Values honest reps and has little patience for corporate gamesmanship.",
+      "emotional_state": "Calm and mildly amused to be pulled into a lawsuit over a lunch.",
+      "communication_style": "Friendly and forthcoming; answers plainly and volunteers context; not guarded because she has no stake in the outcome.",
+      "objectives_fears": {
+        "objectives": [
+          "Tell the truth accurately",
+          "Stay out of the middle of a fight between two vendors"
+        ],
+        "fears": [
+          "Being cast as taking sides",
+          "Having a casual lunch turned into evidence of something it wasn't"
+        ]
+      },
+      "disposition": "cooperative",
+      "interviewable_by": [
+        "m06.role.plaintiff",
+        "m06.role.defense"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m06.fact.040",
+            "text": "Adaeze was my Northlake rep for years. I bought a lot of implants through her."
+          },
+          {
+            "fact_ref": "m06.fact.041",
+            "text": "She was the straightest-dealing rep I ever worked with — never oversold me, always told me when a cheaper option would do."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m06.fact.042",
+            "text": "Yes, we had lunch after she changed jobs. We talked about our kids and her cabin. She did not pitch me a single Verdant product."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m06.fact.043",
+            "text": "If we're being precise: I'm the one who brought up Verdant. I asked her how the new job was going. She didn't raise it at all.",
+            "min_turns": 4,
+            "requires": [
+              "open_ended_invitation"
+            ]
+          }
+        ],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m06.fact.044",
+            "text": "Whether the prices in Northlake's old spreadsheet are still good? No idea. We renegotiate our contracts constantly — those numbers go stale fast."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I wouldn't know about that / that's not something I'd have seen.",
+        "color_topics": [
+          "her backyard tomato garden and canning",
+          "the hospital cafeteria's questionable coffee"
+        ]
+      }
+    },
     "m06.per.danneker": {
       "id": "m06.per.danneker",
       "matter_id": "m06",
@@ -1553,83 +1630,6 @@
         "color_topics": [
           "her weekend golf outings and handicap",
           "the perpetually broken office espresso machine"
-        ]
-      }
-    },
-    "m06.per.marchetti": {
-      "id": "m06.per.marchetti",
-      "matter_id": "m06",
-      "identity": {
-        "name": "Dr. Elena Marchetti",
-        "age": 48,
-        "role": "hospital purchasing director (non-party fact witness)",
-        "occupation": "director of surgical procurement",
-        "pronouns": "she/her"
-      },
-      "background": "Director of surgical procurement at a regional hospital and one of Okwuosa's Northlake customers for years. She is a neutral fact witness who thinks well of Okwuosa and can speak to whether Okwuosa ever solicited her for Verdant.",
-      "personality": "Warm, direct, and busy. Values honest reps and has little patience for corporate gamesmanship.",
-      "emotional_state": "Calm and mildly amused to be pulled into a lawsuit over a lunch.",
-      "communication_style": "Friendly and forthcoming; answers plainly and volunteers context; not guarded because she has no stake in the outcome.",
-      "objectives_fears": {
-        "objectives": [
-          "Tell the truth accurately",
-          "Stay out of the middle of a fight between two vendors"
-        ],
-        "fears": [
-          "Being cast as taking sides",
-          "Having a casual lunch turned into evidence of something it wasn't"
-        ]
-      },
-      "disposition": "cooperative",
-      "interviewable_by": [
-        "m06.role.plaintiff",
-        "m06.role.defense"
-      ],
-      "represented_by_counsel": false,
-      "rule_4_2": {
-        "applies": false
-      },
-      "disclosure": {
-        "volunteered": [
-          {
-            "fact_ref": "m06.fact.040",
-            "text": "Adaeze was my Northlake rep for years. I bought a lot of implants through her."
-          },
-          {
-            "fact_ref": "m06.fact.041",
-            "text": "She was the straightest-dealing rep I ever worked with — never oversold me, always told me when a cheaper option would do."
-          }
-        ],
-        "revealed_if_asked": [
-          {
-            "fact_ref": "m06.fact.042",
-            "text": "Yes, we had lunch after she changed jobs. We talked about our kids and her cabin. She did not pitch me a single Verdant product."
-          }
-        ],
-        "rapport_gated": [
-          {
-            "fact_ref": "m06.fact.043",
-            "text": "If we're being precise: I'm the one who brought up Verdant. I asked her how the new job was going. She didn't raise it at all.",
-            "min_turns": 4,
-            "requires": [
-              "open_ended_invitation"
-            ]
-          }
-        ],
-        "concealed": [],
-        "unknown": [
-          {
-            "fact_ref": "m06.fact.044",
-            "text": "Whether the prices in Northlake's old spreadsheet are still good? No idea. We renegotiate our contracts constantly — those numbers go stale fast."
-          }
-        ]
-      },
-      "knowledge_boundary": {
-        "pinned_to_case_file": true,
-        "unknown_response_style": "I wouldn't know about that / that's not something I'd have seen.",
-        "color_topics": [
-          "her backyard tomato garden and canning",
-          "the hospital cafeteria's questionable coffee"
         ]
       }
     },
@@ -1727,7 +1727,7 @@
         "concealed": [
           {
             "fact_ref": "m06.fact.042",
-            "text": "I had lunch with Dr. Marchetti, one of my old customers, a few weeks after I started at Verdant. We only talked about family. I didn't pitch her anything — but I know how it would look if it came out."
+            "text": "I had lunch with Dr. Calderaro, one of my old customers, a few weeks after I started at Verdant. We only talked about family. I didn't pitch her anything — but I know how it would look if it came out."
           }
         ],
         "unknown": [
@@ -4399,11 +4399,11 @@
         ]
       }
     },
-    "m17.per.vandermeer": {
-      "id": "m17.per.vandermeer",
+    "m17.per.renfrew": {
+      "id": "m17.per.renfrew",
       "matter_id": "m17",
       "identity": {
-        "name": "Tobias Vandermeer",
+        "name": "Tobias Renfrew",
         "age": 39,
         "role": "client-side fact witness",
         "occupation": "warehouse and receiving manager, Empire Provisions Corp.",
@@ -4606,7 +4606,7 @@
           },
           {
             "fact_ref": "m18.fact.018",
-            "text": "They pulled me in first, before Kayla or Andre. It's because of Halloran — the assistant principal. I filed a complaint on him back in February about the dress-code stuff and he's had it out for me since."
+            "text": "They pulled me in first, before Kayla or Andre. It's because of Corvino — the assistant principal. I filed a complaint on him back in February about the dress-code stuff and he's had it out for me since."
           },
           {
             "fact_ref": "m18.fact.003",
@@ -4628,7 +4628,7 @@
           },
           {
             "fact_ref": "m18.fact.020",
-            "text": "At school that Monday, Halloran and the officer asked me a bunch of questions right there in his office. My mom wasn't there yet. I didn't have a lawyer or anything — I just answered them."
+            "text": "At school that Monday, Corvino and the officer asked me a bunch of questions right there in his office. My mom wasn't there yet. I didn't have a lawyer or anything — I just answered them."
           }
         ],
         "rapport_gated": [
@@ -5063,6 +5063,99 @@
         ]
       }
     },
+    "m20.per.bastien": {
+      "id": "m20.per.bastien",
+      "matter_id": "m20",
+      "identity": {
+        "name": "Marisol Bastien",
+        "age": 41,
+        "role": "fact witness (home health aide)",
+        "occupation": "certified home health aide",
+        "pronouns": "she/her"
+      },
+      "background": "A home health aide who worked weekday afternoons at the Heron Point home from 2023 into 2025, helping Harold with mobility, meals, and daily routines. She saw the household up close during the period the will was changed. She is not represented by counsel and is available to be interviewed by either side, which makes her both useful and delicate — she is paid through Vivian and worries about looking biased.",
+      "personality": "Kind, observant, and careful. She likes both Harold's memory and Vivian, and she does not want to hurt anyone, which makes her hesitant to volunteer the things she saw.",
+      "emotional_state": "Uneasy and conflict-averse; anxious about being dragged into a family fight and about her standing with the agency that pays her.",
+      "communication_style": "Gives short, factual answers to direct questions; hedges and softens when a question touches conflict between Vivian and Dale. Warms up when reassured her honesty won't get her in trouble.",
+      "objectives_fears": {
+        "objectives": [
+          "Tell the truth about what she saw without taking sides",
+          "Protect her job and her standing with the care agency",
+          "Not be the reason either side wins or loses"
+        ],
+        "fears": [
+          "Being accused of bias because Vivian paid her",
+          "Getting Vivian in trouble over the remark she overheard",
+          "Being blamed by the family for whatever she says"
+        ]
+      },
+      "disposition": "guarded",
+      "interviewable_by": [
+        "m20.role.proponent-counsel",
+        "m20.role.contestant-counsel"
+      ],
+      "represented_by_counsel": false,
+      "rule_4_2": {
+        "applies": false
+      },
+      "disclosure": {
+        "volunteered": [
+          {
+            "fact_ref": "m20.fact.051",
+            "text": "I was there most weekday afternoons from 2023 up until he passed. I helped Mr. Prewitt get around, took care of his lunch, that kind of thing."
+          },
+          {
+            "fact_ref": "m20.fact.052",
+            "text": "He had good days and bad days. Some afternoons he was sharp and joking with me; other times he was tired and turned around, didn't quite know the day."
+          }
+        ],
+        "revealed_if_asked": [
+          {
+            "fact_ref": "m20.fact.014",
+            "text": "Mrs. Prewitt-Cole did everything for him — the medicines, the appointments, all of it. She was run off her feet, honestly."
+          },
+          {
+            "fact_ref": "m20.fact.035",
+            "text": "I couldn't tell you about the morning he signed those papers. I usually came in the afternoons, so I wasn't there for that."
+          }
+        ],
+        "rapport_gated": [
+          {
+            "fact_ref": "m20.fact.053",
+            "text": "There was one time — I don't like repeating it — I heard Vivian tell him, kind of frustrated, that 'Dale only calls when he needs money.' People say things when they're worn out. I don't think she meant anything cruel by it.",
+            "min_turns": 4,
+            "requires": [
+              "confidentiality_reassurance",
+              "nonjudgmental_response"
+            ]
+          },
+          {
+            "fact_ref": "m20.fact.054",
+            "text": "Honestly, I'm nervous about all this. Vivian is the one who pays me through the agency, and I'm scared that whatever I say, somebody's going to call me a liar or say I'm on her side.",
+            "min_turns": 4,
+            "requires": [
+              "wellbeing_question",
+              "acknowledged_emotion"
+            ]
+          }
+        ],
+        "concealed": [],
+        "unknown": [
+          {
+            "fact_ref": "m20.fact.022",
+            "text": "I have no idea what was said in that lawyer's office. I was never part of any of that."
+          }
+        ]
+      },
+      "knowledge_boundary": {
+        "pinned_to_case_file": true,
+        "unknown_response_style": "I only saw the afternoons, so I really couldn't say about that.",
+        "color_topics": [
+          "the long bus commute she takes to her clients",
+          "the nursing certification classes she is saving up to finish"
+        ]
+      }
+    },
     "m20.per.cole": {
       "id": "m20.per.cole",
       "matter_id": "m20",
@@ -5169,99 +5262,6 @@
         "color_topics": [
           "the herb garden she keeps on the back deck",
           "the pelicans and herons out on the water she and Harold used to watch"
-        ]
-      }
-    },
-    "m20.per.delacroix": {
-      "id": "m20.per.delacroix",
-      "matter_id": "m20",
-      "identity": {
-        "name": "Marisol Delacroix",
-        "age": 41,
-        "role": "fact witness (home health aide)",
-        "occupation": "certified home health aide",
-        "pronouns": "she/her"
-      },
-      "background": "A home health aide who worked weekday afternoons at the Heron Point home from 2023 into 2025, helping Harold with mobility, meals, and daily routines. She saw the household up close during the period the will was changed. She is not represented by counsel and is available to be interviewed by either side, which makes her both useful and delicate — she is paid through Vivian and worries about looking biased.",
-      "personality": "Kind, observant, and careful. She likes both Harold's memory and Vivian, and she does not want to hurt anyone, which makes her hesitant to volunteer the things she saw.",
-      "emotional_state": "Uneasy and conflict-averse; anxious about being dragged into a family fight and about her standing with the agency that pays her.",
-      "communication_style": "Gives short, factual answers to direct questions; hedges and softens when a question touches conflict between Vivian and Dale. Warms up when reassured her honesty won't get her in trouble.",
-      "objectives_fears": {
-        "objectives": [
-          "Tell the truth about what she saw without taking sides",
-          "Protect her job and her standing with the care agency",
-          "Not be the reason either side wins or loses"
-        ],
-        "fears": [
-          "Being accused of bias because Vivian paid her",
-          "Getting Vivian in trouble over the remark she overheard",
-          "Being blamed by the family for whatever she says"
-        ]
-      },
-      "disposition": "guarded",
-      "interviewable_by": [
-        "m20.role.proponent-counsel",
-        "m20.role.contestant-counsel"
-      ],
-      "represented_by_counsel": false,
-      "rule_4_2": {
-        "applies": false
-      },
-      "disclosure": {
-        "volunteered": [
-          {
-            "fact_ref": "m20.fact.051",
-            "text": "I was there most weekday afternoons from 2023 up until he passed. I helped Mr. Prewitt get around, took care of his lunch, that kind of thing."
-          },
-          {
-            "fact_ref": "m20.fact.052",
-            "text": "He had good days and bad days. Some afternoons he was sharp and joking with me; other times he was tired and turned around, didn't quite know the day."
-          }
-        ],
-        "revealed_if_asked": [
-          {
-            "fact_ref": "m20.fact.014",
-            "text": "Mrs. Prewitt-Cole did everything for him — the medicines, the appointments, all of it. She was run off her feet, honestly."
-          },
-          {
-            "fact_ref": "m20.fact.035",
-            "text": "I couldn't tell you about the morning he signed those papers. I usually came in the afternoons, so I wasn't there for that."
-          }
-        ],
-        "rapport_gated": [
-          {
-            "fact_ref": "m20.fact.053",
-            "text": "There was one time — I don't like repeating it — I heard Vivian tell him, kind of frustrated, that 'Dale only calls when he needs money.' People say things when they're worn out. I don't think she meant anything cruel by it.",
-            "min_turns": 4,
-            "requires": [
-              "confidentiality_reassurance",
-              "nonjudgmental_response"
-            ]
-          },
-          {
-            "fact_ref": "m20.fact.054",
-            "text": "Honestly, I'm nervous about all this. Vivian is the one who pays me through the agency, and I'm scared that whatever I say, somebody's going to call me a liar or say I'm on her side.",
-            "min_turns": 4,
-            "requires": [
-              "wellbeing_question",
-              "acknowledged_emotion"
-            ]
-          }
-        ],
-        "concealed": [],
-        "unknown": [
-          {
-            "fact_ref": "m20.fact.022",
-            "text": "I have no idea what was said in that lawyer's office. I was never part of any of that."
-          }
-        ]
-      },
-      "knowledge_boundary": {
-        "pinned_to_case_file": true,
-        "unknown_response_style": "I only saw the afternoons, so I really couldn't say about that.",
-        "color_topics": [
-          "the long bus commute she takes to her clients",
-          "the nursing certification classes she is saving up to finish"
         ]
       }
     },
@@ -5421,1959 +5421,1959 @@
     },
     "m01.per.dellwood": {
       "m01.fact.037": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what a coworker witnessed",
         "tier": "volunteered"
       },
       "m01.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how the supervisor responded",
         "tier": "revealed_if_asked"
       },
       "m01.fact.039": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the coworker's memory of one bus",
         "tier": "revealed_if_asked"
       },
       "m01.fact.038": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the coworker's own worries",
         "tier": "rapport_gated"
       },
       "m01.fact.017": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the outside contractor's inspection",
         "tier": "unknown"
       }
     },
     "m01.per.osgard": {
       "m01.fact.001": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her work history at the District",
         "tier": "volunteered"
       },
       "m01.fact.015": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her refusal to certify the buses",
         "tier": "volunteered"
       },
       "m01.fact.019": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her safety complaint and who saw it",
         "tier": "volunteered"
       },
       "m01.fact.012": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the brake inspection found",
         "tier": "revealed_if_asked"
       },
       "m01.fact.014": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the supervisor's return-to-service order",
         "tier": "revealed_if_asked"
       },
       "m01.fact.024": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the day she was told to change assignments",
         "tier": "revealed_if_asked"
       },
       "m01.fact.030": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the timing of that note",
         "tier": "revealed_if_asked"
       },
       "m01.fact.040": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "an earlier experience on the job",
         "tier": "rapport_gated"
       },
       "m01.fact.042": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her financial situation",
         "tier": "rapport_gated"
       },
       "m01.fact.041": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "how she documented the conflict",
         "tier": "concealed"
       },
       "m01.fact.021": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what came of the oversight report",
         "tier": "unknown"
       }
     },
     "m01.per.rennick": {
       "m01.fact.025": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the employer's view of that day",
         "tier": "volunteered"
       },
       "m01.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the new superintendent's priorities",
         "tier": "revealed_if_asked"
       },
       "m01.fact.031": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the employer's account of the note",
         "tier": "revealed_if_asked"
       },
       "m01.fact.014": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the supervisor's return-to-service order",
         "tier": "rapport_gated"
       },
       "m01.fact.029": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "a note in her personnel file",
         "tier": "concealed"
       },
       "m01.fact.021": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what came of the oversight report",
         "tier": "unknown"
       }
     },
     "m02.per.fenwick": {
       "m02.fact.003": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his office staffing and bookkeeping",
         "tier": "volunteered"
       },
       "m02.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his reputation around town",
         "tier": "volunteered"
       },
       "m02.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the state of his accounting records",
         "tier": "revealed_if_asked"
       },
       "m02.fact.049": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "warnings he received about the books",
         "tier": "revealed_if_asked"
       },
       "m02.fact.021": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his health that spring",
         "tier": "revealed_if_asked"
       },
       "m02.fact.024": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how he was coping personally",
         "tier": "rapport_gated"
       }
     },
     "m02.per.marchetti": {
       "m02.fact.005": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the personal-injury client's case",
         "tier": "volunteered"
       },
       "m02.fact.010": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the timing of the client's payout",
         "tier": "volunteered"
       },
       "m02.fact.006": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how that settlement resolved",
         "tier": "revealed_if_asked"
       },
       "m02.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how the complaint arose",
         "tier": "revealed_if_asked"
       },
       "m02.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how he made the client whole",
         "tier": "revealed_if_asked"
       },
       "m02.fact.014": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the medical lien",
         "tier": "unknown"
       }
     },
     "m02.per.winterhalt": {
       "m02.fact.001": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the respondent's background and practice",
         "tier": "volunteered"
       },
       "m02.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his health that spring",
         "tier": "volunteered"
       },
       "m02.fact.025": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the state of his accounting records",
         "tier": "volunteered"
       },
       "m02.fact.044": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the outcome he hopes for",
         "tier": "volunteered"
       },
       "m02.fact.008": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "where the settlement money went",
         "tier": "revealed_if_asked"
       },
       "m02.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the timing of the client's payout",
         "tier": "revealed_if_asked"
       },
       "m02.fact.017": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his responsiveness to the estate client",
         "tier": "revealed_if_asked"
       },
       "m02.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how he made the client whole",
         "tier": "revealed_if_asked"
       },
       "m02.fact.039": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his prior disciplinary history",
         "tier": "revealed_if_asked"
       },
       "m02.fact.023": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "his state of mind that spring",
         "tier": "rapport_gated"
       },
       "m02.fact.024": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how he was coping personally",
         "tier": "rapport_gated"
       },
       "m02.fact.012": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "how the office funds were used",
         "tier": "concealed"
       },
       "m02.fact.040": {
-        "topic_label": "something the client did not know",
+        "topic_label": "how his prior record may be treated",
         "tier": "unknown"
       }
     },
     "m03.per.ashcombe": {
       "m03.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the other driver's account of the crash",
         "tier": "volunteered"
       },
       "m03.fact.014": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his explanation for the crash",
         "tier": "volunteered"
       },
       "m03.fact.029": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his explanation about the phone",
         "tier": "revealed_if_asked"
       },
       "m03.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "whether police issued a citation",
         "tier": "revealed_if_asked"
       },
       "m03.fact.005": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "what the other driver was doing that morning",
         "tier": "concealed"
       },
       "m03.fact.031": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the texting question",
         "tier": "unknown"
       }
     },
     "m03.per.petimeyer": {
       "m03.fact.010": {
-        "topic_label": "a point the client raised",
+        "topic_label": "where her car was stopped",
         "tier": "volunteered"
       },
       "m03.fact.011": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how the impact happened",
         "tier": "volunteered"
       },
       "m03.fact.037": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how her symptoms developed",
         "tier": "volunteered"
       },
       "m03.fact.036": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what she did right after the crash",
         "tier": "revealed_if_asked"
       },
       "m03.fact.041": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her course of treatment",
         "tier": "revealed_if_asked"
       },
       "m03.fact.048": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her lost work and income",
         "tier": "revealed_if_asked"
       },
       "m03.fact.052": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the settlement posture",
         "tier": "revealed_if_asked"
       },
       "m03.fact.044": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her medical history before the crash",
         "tier": "rapport_gated"
       },
       "m03.fact.039": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the delay before she sought care",
         "tier": "rapport_gated"
       },
       "m03.fact.049": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how the injury affected her work",
         "tier": "rapport_gated"
       },
       "m03.fact.050": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "her activity level during recovery",
         "tier": "concealed"
       },
       "m03.fact.031": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the texting question",
         "tier": "unknown"
       }
     },
     "m03.per.quesada": {
       "m03.fact.018": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the independent witness's vantage point",
         "tier": "volunteered"
       },
       "m03.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the witness on the road conditions",
         "tier": "volunteered"
       },
       "m03.fact.019": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the witness noticed about the driver",
         "tier": "revealed_if_asked"
       },
       "m03.fact.022": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the witness's cooperation with police",
         "tier": "revealed_if_asked"
       },
       "m03.fact.020": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the limits of the witness's view",
         "tier": "unknown"
       }
     },
     "m04.per.delahaye": {
       "m04.fact.035": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the neighbor's account of the arrangement",
         "tier": "volunteered"
       },
       "m04.fact.036": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the neighbor's upkeep of the lane",
         "tier": "volunteered"
       },
       "m04.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the neighbor's position on the lane",
         "tier": "revealed_if_asked"
       },
       "m04.fact.034": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the neighbor's preference",
         "tier": "revealed_if_asked"
       },
       "m04.fact.037": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the neighbor's proposals",
         "tier": "rapport_gated"
       },
       "m04.fact.041": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the options for curing access",
         "tier": "rapport_gated"
       },
       "m04.fact.027": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the neighbor's own interest in the parcel",
         "tier": "concealed"
       },
       "m04.fact.016": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the effect of the road vacation",
         "tier": "unknown"
       }
     },
     "m04.per.meskin": {
       "m04.fact.002": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the buyer's plans for the parcel",
         "tier": "volunteered"
       },
       "m04.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how the parcel is accessed",
         "tier": "volunteered"
       },
       "m04.fact.020": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the buyer's opening offer",
         "tier": "volunteered"
       },
       "m04.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the nature of the access right",
         "tier": "revealed_if_asked"
       },
       "m04.fact.023": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the development-density question",
         "tier": "revealed_if_asked"
       },
       "m04.fact.040": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the title insurance position",
         "tier": "revealed_if_asked"
       },
       "m04.fact.026": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the buyer's negotiating room",
         "tier": "rapport_gated"
       },
       "m04.fact.024": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the buyer's business commitments",
         "tier": "rapport_gated"
       },
       "m04.fact.028": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "site development costs",
         "tier": "rapport_gated"
       },
       "m04.fact.025": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the buyer's financing timeline",
         "tier": "concealed"
       },
       "m04.fact.016": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the effect of the road vacation",
         "tier": "unknown"
       }
     },
     "m04.per.renard": {
       "m04.fact.003": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the seller and her ownership",
         "tier": "volunteered"
       },
       "m04.fact.031": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what the seller knows about the old deal",
         "tier": "volunteered"
       },
       "m04.fact.021": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how the disclosure described access",
         "tier": "revealed_if_asked"
       },
       "m04.fact.022": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how the access language changed",
         "tier": "revealed_if_asked"
       },
       "m04.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the ownership history",
         "tier": "revealed_if_asked"
       },
       "m04.fact.029": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the seller's health and future plans",
         "tier": "rapport_gated"
       },
       "m04.fact.030": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the seller's need to close",
         "tier": "rapport_gated"
       },
       "m04.fact.032": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "any other offers on the table",
         "tier": "concealed"
       },
       "m04.fact.007": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the nature of the access right",
         "tier": "unknown"
       }
     },
     "m05.per.broshears": {
       "m05.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the reason for the traffic stop",
         "tier": "volunteered"
       },
       "m05.fact.015": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the officer's observations",
         "tier": "volunteered"
       },
       "m05.fact.020": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the field sobriety tests",
         "tier": "revealed_if_asked"
       },
       "m05.fact.023": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the arrest and roadside test",
         "tier": "revealed_if_asked"
       },
       "m05.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the breath-test result",
         "tier": "revealed_if_asked"
       },
       "m05.fact.041": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the squad and body camera footage",
         "tier": "revealed_if_asked"
       },
       "m05.fact.033": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the measured slope of the shoulder",
         "tier": "unknown"
       }
     },
     "m05.per.halvard": {
       "m05.fact.007": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how much he says he drank",
         "tier": "volunteered"
       },
       "m05.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the reason for the traffic stop",
         "tier": "volunteered"
       },
       "m05.fact.003": {
-        "topic_label": "a point the client raised",
+        "topic_label": "why his license matters to him",
         "tier": "volunteered"
       },
       "m05.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his lack of any prior record",
         "tier": "volunteered"
       },
       "m05.fact.018": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the ground where the tests were done",
         "tier": "revealed_if_asked"
       },
       "m05.fact.019": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his request about the testing spot",
         "tier": "revealed_if_asked"
       },
       "m05.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "whether he had eaten",
         "tier": "revealed_if_asked"
       },
       "m05.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the breath-test result",
         "tier": "revealed_if_asked"
       },
       "m05.fact.014": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his belief about the taillight",
         "tier": "revealed_if_asked"
       },
       "m05.fact.021": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "a physical condition affecting the tests",
         "tier": "rapport_gated"
       },
       "m05.fact.022": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how tired he was that night",
         "tier": "rapport_gated"
       },
       "m05.fact.026": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how he felt just before the breath test",
         "tier": "rapport_gated"
       },
       "m05.fact.008": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "his part in the birthday toast",
         "tier": "concealed"
       },
       "m05.fact.042": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the margin of error on the reading",
         "tier": "unknown"
       },
       "m05.fact.031": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the threat to his license",
+        "tier": "unknown"
+      }
+    },
+    "m06.per.calderaro": {
+      "m06.fact.040": {
+        "topic_label": "the client as a former customer",
+        "tier": "volunteered"
+      },
+      "m06.fact.041": {
+        "topic_label": "her reputation with customers",
+        "tier": "volunteered"
+      },
+      "m06.fact.042": {
+        "topic_label": "a meeting after her job change",
+        "tier": "revealed_if_asked"
+      },
+      "m06.fact.043": {
+        "topic_label": "who first raised the new employer",
+        "tier": "rapport_gated"
+      },
+      "m06.fact.044": {
+        "topic_label": "whether the pricing is current",
         "tier": "unknown"
       }
     },
     "m06.per.danneker": {
       "m06.fact.032": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how the company values its data",
         "tier": "volunteered"
       },
       "m06.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the scope of the non-compete",
         "tier": "revealed_if_asked"
       },
       "m06.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the agreement gave her",
         "tier": "revealed_if_asked"
       },
       "m06.fact.015": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how that file was shared",
         "tier": "rapport_gated"
       },
       "m06.fact.016": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how the file was safeguarded",
         "tier": "rapport_gated"
       },
       "m06.fact.030": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the company's real motive for suing",
         "tier": "concealed"
       },
       "m06.fact.033": {
-        "topic_label": "something the client did not know",
-        "tier": "unknown"
-      }
-    },
-    "m06.per.marchetti": {
-      "m06.fact.040": {
-        "topic_label": "a point the client raised",
-        "tier": "volunteered"
-      },
-      "m06.fact.041": {
-        "topic_label": "a point the client raised",
-        "tier": "volunteered"
-      },
-      "m06.fact.042": {
-        "topic_label": "a topic that was available for the asking",
-        "tier": "revealed_if_asked"
-      },
-      "m06.fact.043": {
-        "topic_label": "a sensitive topic that needed trust first",
-        "tier": "rapport_gated"
-      },
-      "m06.fact.044": {
-        "topic_label": "something the client did not know",
+        "topic_label": "whether she solicited customers",
         "tier": "unknown"
       }
     },
     "m06.per.okwuosa": {
       "m06.fact.001": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her time at the company",
         "tier": "volunteered"
       },
       "m06.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how she signed the agreement",
         "tier": "volunteered"
       },
       "m06.fact.011": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her new job's focus",
         "tier": "volunteered"
       },
       "m06.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the pricing file she used",
         "tier": "revealed_if_asked"
       },
       "m06.fact.033": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "whether she solicited customers",
         "tier": "revealed_if_asked"
       },
       "m06.fact.020": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her reasons for keeping records",
         "tier": "revealed_if_asked"
       },
       "m06.fact.017": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what she took when leaving",
         "tier": "rapport_gated"
       },
       "m06.fact.018": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "an email she sent herself",
         "tier": "rapport_gated"
       },
       "m06.fact.019": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her personal work records",
         "tier": "rapport_gated"
       },
       "m06.fact.042": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "a meeting after her job change",
         "tier": "concealed"
       },
       "m06.fact.035": {
-        "topic_label": "something the client did not know",
+        "topic_label": "whether the data is still valuable",
         "tier": "unknown"
       }
     },
     "m07.per.aaberg": {
       "m07.fact.014": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the cooling unit's failures",
         "tier": "volunteered"
       },
       "m07.fact.015": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the first spoilage event",
         "tier": "volunteered"
       },
       "m07.fact.029": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the co-op's demand to the vendor",
         "tier": "volunteered"
       },
       "m07.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the unit's performance promise",
         "tier": "revealed_if_asked"
       },
       "m07.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the warranty's damage limits",
         "tier": "revealed_if_asked"
       },
       "m07.fact.022": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the co-op's out-of-pocket costs",
         "tier": "revealed_if_asked"
       },
       "m07.fact.031": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the independent engineer's inspection",
         "tier": "revealed_if_asked"
       },
       "m07.fact.037": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the co-op's maintenance timing",
         "tier": "rapport_gated"
       },
       "m07.fact.038": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "prior warnings about the electrical panel",
         "tier": "rapport_gated"
       },
       "m07.fact.039": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the startup testing before go-live",
         "tier": "concealed"
       },
       "m07.fact.036": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the unit's internal data logs",
         "tier": "unknown"
       }
     },
     "m07.per.brandt": {
       "m07.fact.023": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the vendor's service visits",
         "tier": "volunteered"
       },
       "m07.fact.026": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the vendor's view of the cause",
         "tier": "volunteered"
       },
       "m07.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the warranty's damage limits",
         "tier": "revealed_if_asked"
       },
       "m07.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the technician's written findings",
         "tier": "revealed_if_asked"
       },
       "m07.fact.030": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the vendor's response to the demand",
         "tier": "revealed_if_asked"
       },
       "m07.fact.040": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "what the installer flagged before shipping",
         "tier": "concealed"
       },
       "m07.fact.041": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the timing of the electrical problem",
         "tier": "unknown"
       }
     },
     "m07.per.tuvang": {
       "m07.fact.016": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how a failure was discovered",
         "tier": "volunteered"
       },
       "m07.fact.035": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the milk-house temperature records",
         "tier": "volunteered"
       },
       "m07.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the technician's written findings",
         "tier": "revealed_if_asked"
       },
       "m07.fact.017": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the second spoilage event",
         "tier": "revealed_if_asked"
       },
       "m07.fact.018": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the third spoilage event",
         "tier": "revealed_if_asked"
       },
       "m07.fact.036": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the unit's internal data logs",
         "tier": "unknown"
       }
     },
     "m08.per.dubourg": {
       "m08.fact.035": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the other teen's separate case",
         "tier": "volunteered"
       },
       "m08.fact.036": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the other teen leaving the store",
         "tier": "revealed_if_asked"
       },
       "m08.fact.037": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the older teen's real plan",
         "tier": "concealed"
       },
       "m08.fact.038": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what the store video shows",
         "tier": "unknown"
       }
     },
     "m08.per.merrow-d": {
       "m08.fact.039": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the mother's state that day",
         "tier": "volunteered"
       },
       "m08.fact.003": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his mother's work and availability",
         "tier": "revealed_if_asked"
       },
       "m08.fact.002": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his family and home life",
         "tier": "revealed_if_asked"
       },
       "m08.fact.029": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his fears about his future",
         "tier": "revealed_if_asked"
       },
       "m08.fact.040": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "an unexplained item at home",
         "tier": "rapport_gated"
       },
       "m08.fact.041": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "an overheard phone call",
         "tier": "rapport_gated"
       },
       "m08.fact.042": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "her own history as a teen",
         "tier": "concealed"
       },
       "m08.fact.043": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what she knows of the incident",
         "tier": "unknown"
       }
     },
     "m08.per.merrow-t": {
       "m08.fact.008": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how the box came to his hands",
         "tier": "volunteered"
       },
       "m08.fact.009": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what he did at the exit",
         "tier": "volunteered"
       },
       "m08.fact.029": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his fears about his future",
         "tier": "volunteered"
       },
       "m08.fact.017": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his account of his intent",
         "tier": "revealed_if_asked"
       },
       "m08.fact.004": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his history with the system",
         "tier": "revealed_if_asked"
       },
       "m08.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how he knows the other teens",
         "tier": "revealed_if_asked"
       },
       "m08.fact.023": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the intent behind the contact",
         "tier": "revealed_if_asked"
       },
       "m08.fact.030": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what he'll say about the others",
         "tier": "rapport_gated"
       },
       "m08.fact.031": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what he sensed in the moment",
         "tier": "rapport_gated"
       },
       "m08.fact.032": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "any earlier trouble at that store",
         "tier": "concealed"
       },
       "m08.fact.033": {
-        "topic_label": "something the client did not know",
+        "topic_label": "whether the others were caught",
         "tier": "unknown"
       }
     },
     "m09.per.aldergrove": {
       "m09.fact.040": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the custody arrangement he wants",
         "tier": "volunteered"
       },
       "m09.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his work on the house",
         "tier": "volunteered"
       },
       "m09.fact.025": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his view of the business value",
         "tier": "volunteered"
       },
       "m09.fact.011": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his business earnings",
         "tier": "revealed_if_asked"
       },
       "m09.fact.041": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his maintenance request",
         "tier": "revealed_if_asked"
       },
       "m09.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his involvement with the children",
         "tier": "revealed_if_asked"
       },
       "m09.fact.033": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "his account of that argument",
         "tier": "rapport_gated"
       },
       "m09.fact.027": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the business's cash income",
         "tier": "rapport_gated"
       },
       "m09.fact.023": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the business's assets and standing",
         "tier": "concealed"
       },
       "m09.fact.045": {
-        "topic_label": "something the client did not know",
+        "topic_label": "a new relationship in her life",
         "tier": "unknown"
       }
     },
     "m09.per.ferreira": {
       "m09.fact.012": {
-        "topic_label": "a point the client raised",
+        "topic_label": "who handles the children day-to-day",
         "tier": "volunteered"
       },
       "m09.fact.018": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the nature of the custody dispute",
         "tier": "volunteered"
       },
       "m09.fact.032": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the children witnessed",
         "tier": "revealed_if_asked"
       },
       "m09.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his involvement with the children",
         "tier": "revealed_if_asked"
       },
       "m09.fact.024": {
-        "topic_label": "something the client did not know",
+        "topic_label": "her view of the business value",
         "tier": "unknown"
       }
     },
     "m09.per.sitko": {
       "m09.fact.037": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the custody arrangement she wants",
         "tier": "volunteered"
       },
       "m09.fact.038": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her wish to keep the home",
         "tier": "volunteered"
       },
       "m09.fact.039": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how she wants the business handled",
         "tier": "volunteered"
       },
       "m09.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her income and benefits",
         "tier": "revealed_if_asked"
       },
       "m09.fact.035": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his move-out and new place",
         "tier": "revealed_if_asked"
       },
       "m09.fact.029": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the couple's counseling",
         "tier": "revealed_if_asked"
       },
       "m09.fact.008": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her work schedule",
         "tier": "revealed_if_asked"
       },
       "m09.fact.031": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "a frightening argument at home",
         "tier": "rapport_gated"
       },
       "m09.fact.043": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "an evening the children were alone",
         "tier": "rapport_gated"
       },
       "m09.fact.045": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "a new relationship in her life",
         "tier": "concealed"
       },
       "m09.fact.027": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the business's cash income",
         "tier": "unknown"
       }
     },
     "m10.per.reddick": {
       "m10.fact.009": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the daughter's caregiving role",
         "tier": "volunteered"
       },
       "m10.fact.018": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what the mother said she wanted",
         "tier": "volunteered"
       },
       "m10.fact.012": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the son's absence",
         "tier": "volunteered"
       },
       "m10.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the power of attorney",
         "tier": "revealed_if_asked"
       },
       "m10.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "who brought the mother to the office",
         "tier": "revealed_if_asked"
       },
       "m10.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "an earlier gift to the son",
         "tier": "revealed_if_asked"
       },
       "m10.fact.041": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "who set up the will appointment",
         "tier": "rapport_gated"
       },
       "m10.fact.042": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "a phone argument between the siblings",
         "tier": "rapport_gated"
       },
       "m10.fact.043": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "money taken from the account",
         "tier": "concealed"
       },
       "m10.fact.017": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the private attorney meeting",
         "tier": "unknown"
       }
     },
     "m10.per.sundberg": {
       "m10.fact.031": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the home aide's observations",
         "tier": "volunteered"
       },
       "m10.fact.032": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the mother's good and bad days",
         "tier": "volunteered"
       },
       "m10.fact.033": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the mother's state that morning",
         "tier": "revealed_if_asked"
       },
       "m10.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the daughter's caregiving role",
         "tier": "revealed_if_asked"
       },
       "m10.fact.051": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "a remark the aide overheard",
         "tier": "rapport_gated"
       },
       "m10.fact.052": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the aide's worry about bias",
         "tier": "rapport_gated"
       },
       "m10.fact.020": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the will signing",
         "tier": "unknown"
       }
     },
     "m10.per.thornquist": {
       "m10.fact.040": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the son's isolation claim",
         "tier": "volunteered"
       },
       "m10.fact.006": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the earlier will",
         "tier": "volunteered"
       },
       "m10.fact.039": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the grounds for the contest",
         "tier": "volunteered"
       },
       "m10.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "an earlier gift to the son",
         "tier": "revealed_if_asked"
       },
       "m10.fact.014": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the son's resentment",
         "tier": "revealed_if_asked"
       },
       "m10.fact.042": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "a phone argument between the siblings",
         "tier": "revealed_if_asked"
       },
       "m10.fact.049": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the son's real motive",
         "tier": "rapport_gated"
       },
       "m10.fact.050": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the son's finances",
         "tier": "concealed"
       },
       "m10.fact.029": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the physician's capacity findings",
         "tier": "unknown"
       }
     },
     "m11.per.adeyemi": {
       "m11.fact.022": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how he reads the timing",
         "tier": "volunteered"
       },
       "m11.fact.010": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his internal HR complaint",
         "tier": "volunteered"
       },
       "m11.fact.016": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the termination decision",
         "tier": "volunteered"
       },
       "m11.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "pressure to work after clock-out",
         "tier": "revealed_if_asked"
       },
       "m11.fact.012": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his complaint to the state",
         "tier": "revealed_if_asked"
       },
       "m11.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the performance improvement plan",
         "tier": "revealed_if_asked"
       },
       "m11.fact.031": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what he wants to recover",
         "tier": "revealed_if_asked"
       },
       "m11.fact.035": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "his worries about future work",
         "tier": "rapport_gated"
       },
       "m11.fact.033": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "his personal record-keeping",
         "tier": "rapport_gated"
       },
       "m11.fact.034": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "a past timekeeping decision",
         "tier": "rapport_gated"
       },
       "m11.fact.041": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "his other job searching",
         "tier": "concealed"
       },
       "m11.fact.040": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the arbitration agreement's reach",
         "tier": "unknown"
       }
     },
     "m11.per.pfeiffer": {
       "m11.fact.028": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the company's stated rationale",
         "tier": "volunteered"
       },
       "m11.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the performance improvement plan",
         "tier": "revealed_if_asked"
       },
       "m11.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the termination decision",
         "tier": "revealed_if_asked"
       },
       "m11.fact.027": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "who saw his complaint",
         "tier": "concealed"
       },
       "m11.fact.029": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the company's notice of the report",
         "tier": "unknown"
       }
     },
     "m11.per.ruvalcaba": {
       "m11.fact.023": {
-        "topic_label": "a point the client raised",
+        "topic_label": "unpaid time after the shift",
         "tier": "volunteered"
       },
       "m11.fact.024": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the manager said",
         "tier": "revealed_if_asked"
       },
       "m11.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "pressure to work after clock-out",
         "tier": "revealed_if_asked"
       },
       "m11.fact.029": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the company's notice of the report",
         "tier": "unknown"
       }
     },
     "m12.per.dieterle": {
       "m12.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what she told the client",
         "tier": "volunteered"
       },
       "m12.fact.041": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the client's related legal action",
         "tier": "revealed_if_asked"
       },
       "m12.fact.006": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the client's underlying injury",
         "tier": "revealed_if_asked"
       },
       "m12.fact.042": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the underlying claim's future",
         "tier": "unknown"
       }
     },
     "m12.per.emberly": {
       "m12.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how deadlines were tracked",
         "tier": "volunteered"
       },
       "m12.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the paralegal's file handoff",
         "tier": "volunteered"
       },
       "m12.fact.014": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "staffing after the departure",
         "tier": "revealed_if_asked"
       },
       "m12.fact.040": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her personal circumstances then",
         "tier": "revealed_if_asked"
       },
       "m12.fact.018": {
-        "topic_label": "something the client did not know",
+        "topic_label": "when she saw the warning",
         "tier": "unknown"
       }
     },
     "m12.per.karsgaard": {
       "m12.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the paralegal's file handoff",
         "tier": "volunteered"
       },
       "m12.fact.024": {
-        "topic_label": "a point the client raised",
+        "topic_label": "efforts to reopen the case",
         "tier": "volunteered"
       },
       "m12.fact.038": {
-        "topic_label": "a point the client raised",
+        "topic_label": "steps taken afterward",
         "tier": "volunteered"
       },
       "m12.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the affidavit's timeline statement",
         "tier": "revealed_if_asked"
       },
       "m12.fact.001": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her background and record",
         "tier": "revealed_if_asked"
       },
       "m12.fact.004": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "how deadlines were tracked",
         "tier": "revealed_if_asked"
       },
       "m12.fact.018": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "when she saw the warning",
         "tier": "rapport_gated"
       },
       "m12.fact.040": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her personal circumstances then",
         "tier": "rapport_gated"
       },
       "m12.fact.021": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "what she told the client",
         "tier": "concealed"
       },
       "m12.fact.042": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the underlying claim's future",
         "tier": "unknown"
       }
     },
     "m13.per.hutchins": {
       "m13.fact.014": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his account of the turn",
         "tier": "volunteered"
       },
       "m13.fact.015": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his comparative-fault theory",
         "tier": "volunteered"
       },
       "m13.fact.006": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his day before the crash",
         "tier": "revealed_if_asked"
       },
       "m13.fact.033": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the traffic citation",
         "tier": "revealed_if_asked"
       },
       "m13.fact.031": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what he blames for the crash",
         "tier": "rapport_gated"
       },
       "m13.fact.030": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "his attention during the turn",
         "tier": "concealed"
       },
       "m13.fact.022": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the signal-timing details",
         "tier": "unknown"
       }
     },
     "m13.per.reyes": {
       "m13.fact.020": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her right-of-way claim",
         "tier": "volunteered"
       },
       "m13.fact.038": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the knee diagnosis",
         "tier": "volunteered"
       },
       "m13.fact.043": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her time off the road",
         "tier": "volunteered"
       },
       "m13.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her account of entering",
         "tier": "revealed_if_asked"
       },
       "m13.fact.039": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the surgery she had",
         "tier": "revealed_if_asked"
       },
       "m13.fact.048": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the insurance coverage limits",
         "tier": "revealed_if_asked"
       },
       "m13.fact.033": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the traffic citation",
         "tier": "revealed_if_asked"
       },
       "m13.fact.029": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her prior knee history",
         "tier": "rapport_gated"
       },
       "m13.fact.053": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her financial pressure",
         "tier": "rapport_gated"
       },
       "m13.fact.027": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "her attention before the crash",
         "tier": "concealed"
       },
       "m13.fact.022": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the signal-timing details",
         "tier": "unknown"
       }
     },
     "m14.per.nakamura": {
       "m14.fact.002": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his plans for the land",
         "tier": "volunteered"
       },
       "m14.fact.008": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the purchase contract",
         "tier": "volunteered"
       },
       "m14.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the seller's well request",
         "tier": "volunteered"
       },
       "m14.fact.017": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the access easement problem",
         "tier": "volunteered"
       },
       "m14.fact.018": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the mineral-rights issue",
         "tier": "revealed_if_asked"
       },
       "m14.fact.033": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his loan conditions",
         "tier": "revealed_if_asked"
       },
       "m14.fact.041": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his direct contact with the seller",
         "tier": "revealed_if_asked"
       },
       "m14.fact.030": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the buyer's solar arrangement",
         "tier": "rapport_gated"
       },
       "m14.fact.031": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "his true deadline and leverage",
         "tier": "rapport_gated"
       },
       "m14.fact.032": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "his flexibility on price",
         "tier": "concealed"
       },
       "m14.fact.020": {
-        "topic_label": "something the client did not know",
+        "topic_label": "current mineral activity",
         "tier": "unknown"
       }
     },
     "m14.per.whitfield": {
       "m14.fact.007": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the seller's remaining property",
         "tier": "volunteered"
       },
       "m14.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the seller's well request",
         "tier": "volunteered"
       },
       "m14.fact.038": {
-        "topic_label": "a point the client raised",
+        "topic_label": "each side's willingness to close",
         "tier": "volunteered"
       },
       "m14.fact.037": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his knowledge of the road history",
         "tier": "revealed_if_asked"
       },
       "m14.fact.006": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the seller's background",
         "tier": "revealed_if_asked"
       },
       "m14.fact.034": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "why the seller wants the well",
         "tier": "rapport_gated"
       },
       "m14.fact.035": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the well's importance to him",
         "tier": "concealed"
       },
       "m14.fact.036": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the seller's financial timeline",
         "tier": "concealed"
       },
       "m14.fact.020": {
-        "topic_label": "something the client did not know",
+        "topic_label": "current mineral activity",
         "tier": "unknown"
       }
     },
     "m15.per.kallestad": {
       "m15.fact.014": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the deputy's initial observation",
         "tier": "volunteered"
       },
       "m15.fact.016": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the deputy's observations at contact",
         "tier": "volunteered"
       },
       "m15.fact.015": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the driving before the stop",
         "tier": "revealed_if_asked"
       },
       "m15.fact.019": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the field-sobriety test results",
         "tier": "revealed_if_asked"
       },
       "m15.fact.021": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the arrest",
         "tier": "revealed_if_asked"
       },
       "m15.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the breath-test reading",
         "tier": "revealed_if_asked"
       },
       "m15.fact.023": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the pre-test observation period",
         "tier": "unknown"
       },
       "m15.fact.036": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the 911 caller's certainty",
         "tier": "unknown"
       }
     },
     "m15.per.wenzloff": {
       "m15.fact.006": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what he drank that night",
         "tier": "volunteered"
       },
       "m15.fact.013": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the 911 report",
         "tier": "volunteered"
       },
       "m15.fact.002": {
-        "topic_label": "a point the client raised",
+        "topic_label": "his commercial driving license",
         "tier": "volunteered"
       },
       "m15.fact.016": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the deputy's observations at contact",
         "tier": "volunteered"
       },
       "m15.fact.017": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "conditions during the field tests",
         "tier": "revealed_if_asked"
       },
       "m15.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his long work day",
         "tier": "revealed_if_asked"
       },
       "m15.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "medication he had taken",
         "tier": "revealed_if_asked"
       },
       "m15.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "his acid-reflux condition",
         "tier": "revealed_if_asked"
       },
       "m15.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the breath-test reading",
         "tier": "revealed_if_asked"
       },
       "m15.fact.012": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "why the truck drifted",
         "tier": "rapport_gated"
       },
       "m15.fact.008": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "covering the smell of alcohol",
         "tier": "rapport_gated"
       },
       "m15.fact.007": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the full amount he drank",
         "tier": "rapport_gated"
       },
       "m15.fact.027": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "his prior driving history",
         "tier": "concealed"
       },
       "m15.fact.023": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the pre-test observation period",
         "tier": "unknown"
       },
       "m15.fact.026": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the license consequences",
         "tier": "unknown"
       }
     },
     "m16.per.iyer": {
       "m16.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "her tenure and role at HVB",
         "tier": "volunteered"
       },
       "m16.fact.008": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how she signed the agreement",
         "tier": "volunteered"
       },
       "m16.fact.019": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the off-boarding forensic review",
         "tier": "volunteered"
       },
       "m16.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the non-compete's terms and scope",
         "tier": "revealed_if_asked"
       },
       "m16.fact.016": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "her new role at Sightline",
         "tier": "revealed_if_asked"
       },
       "m16.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "origins of the engine's methods",
         "tier": "revealed_if_asked"
       },
       "m16.fact.021": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "materials she emailed herself",
         "tier": "rapport_gated"
       },
       "m16.fact.022": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her personal engineering notebook",
         "tier": "rapport_gated"
       },
       "m16.fact.023": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "her talk with a former colleague",
         "tier": "rapport_gated"
       },
       "m16.fact.024": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "a remark she made after the promotion",
         "tier": "concealed"
       },
       "m16.fact.037": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what the alleged trade secret is",
         "tier": "unknown"
       }
     },
     "m16.per.steinhauer": {
       "m16.fact.028": {
-        "topic_label": "a point the client raised",
+        "topic_label": "how HVB describes the engine's value",
         "tier": "volunteered"
       },
       "m16.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the non-compete's terms and scope",
         "tier": "revealed_if_asked"
       },
       "m16.fact.027": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "HVB's inevitable-disclosure theory",
         "tier": "revealed_if_asked"
       },
       "m16.fact.010": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how internal code was shared",
         "tier": "rapport_gated"
       },
       "m16.fact.011": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what protections guarded the engine",
         "tier": "rapport_gated"
       },
       "m16.fact.031": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "HVB's competitive motive to sue",
         "tier": "concealed"
       },
       "m16.fact.030": {
-        "topic_label": "something the client did not know",
+        "topic_label": "HVB's proof of what she took",
         "tier": "unknown"
       }
     },
     "m17.per.beltran": {
       "m17.fact.012": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the Load B labeling issue",
         "tier": "volunteered"
       },
       "m17.fact.015": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the Load C dating problem",
         "tier": "volunteered"
       },
       "m17.fact.028": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the lawsuit Ostervold filed",
         "tier": "volunteered"
       },
       "m17.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the shelf-life delivery requirement",
         "tier": "revealed_if_asked"
       },
       "m17.fact.024": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Ostervold's offer to cure",
         "tier": "revealed_if_asked"
       },
       "m17.fact.025": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "why Empire declined the cure",
         "tier": "revealed_if_asked"
       },
       "m17.fact.031": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the consultant's labeling findings",
         "tier": "revealed_if_asked"
       },
       "m17.fact.016": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the Load C inspection timing",
         "tier": "rapport_gated"
       },
       "m17.fact.020": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "handling of the Load D pallets",
         "tier": "rapport_gated"
       },
       "m17.fact.038": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "Empire's plans about its supplier",
         "tier": "concealed"
       },
       "m17.fact.039": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what Beltran knows about causation",
         "tier": "unknown"
       }
     },
     "m17.per.ostervold": {
       "m17.fact.023": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Ostervold's response to the rejections",
         "tier": "volunteered"
       },
       "m17.fact.033": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the cause of the short dating",
         "tier": "volunteered"
       },
       "m17.fact.024": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Ostervold's offer to cure",
         "tier": "revealed_if_asked"
       },
       "m17.fact.026": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the amount Ostervold demanded",
         "tier": "revealed_if_asked"
       },
       "m17.fact.029": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Ostervold's claims in the suit",
         "tier": "revealed_if_asked"
       },
       "m17.fact.040": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "Ostervold's internal production notes",
         "tier": "concealed"
       },
       "m17.fact.042": {
-        "topic_label": "something the client did not know",
+        "topic_label": "what Ostervold knows about resale",
         "tier": "unknown"
       }
     },
-    "m17.per.vandermeer": {
+    "m17.per.renfrew": {
       "m17.fact.012": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the Load B labeling issue",
         "tier": "volunteered"
       },
       "m17.fact.036": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the receiving logs and timing",
         "tier": "volunteered"
       },
       "m17.fact.015": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the Load C dating problem",
         "tier": "revealed_if_asked"
       },
       "m17.fact.013": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the Load B rejection",
         "tier": "revealed_if_asked"
       },
       "m17.fact.020": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "handling of the Load D pallets",
         "tier": "revealed_if_asked"
       },
       "m17.fact.034": {
-        "topic_label": "something the client did not know",
+        "topic_label": "where the shelf-life loss originated",
         "tier": "unknown"
       }
     },
     "m18.per.cordero-a": {
       "m18.fact.003": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the mother's work and whereabouts",
         "tier": "volunteered"
       },
       "m18.fact.004": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Jasmine's school record and history",
         "tier": "volunteered"
       },
       "m18.fact.039": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the mother's view of the questioning",
         "tier": "revealed_if_asked"
       },
       "m18.fact.005": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the family's prior experience",
         "tier": "revealed_if_asked"
       },
       "m18.fact.051": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the mother's feelings of guilt",
         "tier": "rapport_gated"
       },
       "m18.fact.038": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the mother's direct knowledge",
         "tier": "unknown"
       }
     },
     "m18.per.cordero-j": {
       "m18.fact.011": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Jasmine's account of her actions",
         "tier": "volunteered"
       },
       "m18.fact.018": {
-        "topic_label": "a point the client raised",
+        "topic_label": "why she was pulled in first",
         "tier": "volunteered"
       },
       "m18.fact.003": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the mother's work and whereabouts",
         "tier": "volunteered"
       },
       "m18.fact.010": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "who was present in the lot",
         "tier": "revealed_if_asked"
       },
       "m18.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what the other teens did",
         "tier": "revealed_if_asked"
       },
       "m18.fact.004": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Jasmine's school record and history",
         "tier": "revealed_if_asked"
       },
       "m18.fact.020": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the questioning at school",
         "tier": "revealed_if_asked"
       },
       "m18.fact.040": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "what the phone video shows",
         "tier": "rapport_gated"
       },
       "m18.fact.042": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "how Jasmine is coping",
         "tier": "rapport_gated"
       },
       "m18.fact.043": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "who damaged the teacher's car",
         "tier": "rapport_gated"
       },
       "m18.fact.041": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "messages before the incident",
         "tier": "concealed"
       },
       "m18.fact.049": {
-        "topic_label": "something the client did not know",
+        "topic_label": "status of the other teens' cases",
         "tier": "unknown"
       }
     },
     "m18.per.trejo": {
       "m18.fact.044": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Kayla's representation",
         "tier": "volunteered"
       },
       "m18.fact.045": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "what Kayla will say",
         "tier": "revealed_if_asked"
       },
       "m18.fact.046": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "what Kayla knows about Jasmine",
         "tier": "concealed"
       },
       "m18.fact.047": {
-        "topic_label": "something the client did not know",
+        "topic_label": "Kayla's knowledge of the video",
         "tier": "unknown"
       }
     },
     "m19.per.beaumont": {
       "m19.fact.043": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what Camille seeks in custody",
         "tier": "volunteered"
       },
       "m19.fact.044": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what Camille seeks on property",
         "tier": "volunteered"
       },
       "m19.fact.020": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the restaurant's value as an asset",
         "tier": "volunteered"
       },
       "m19.fact.007": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Camille's income from the business",
         "tier": "revealed_if_asked"
       },
       "m19.fact.017": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the source of the buildout funds",
         "tier": "revealed_if_asked"
       },
       "m19.fact.042": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the current parenting schedule",
         "tier": "revealed_if_asked"
       },
       "m19.fact.035": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the couple's counseling",
         "tier": "revealed_if_asked"
       },
       "m19.fact.046": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the late-pickup incident",
         "tier": "rapport_gated"
       },
       "m19.fact.047": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "Camille's hesitation about the incident",
         "tier": "rapport_gated"
       },
       "m19.fact.048": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the couple's account movements",
         "tier": "concealed"
       },
       "m19.fact.027": {
-        "topic_label": "something the client did not know",
+        "topic_label": "Andre's premarital retirement account",
         "tier": "unknown"
       }
     },
     "m19.per.lassiter": {
       "m19.fact.021": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Andre's view of the restaurant's worth",
         "tier": "volunteered"
       },
       "m19.fact.018": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Andre's reimbursement claim",
         "tier": "volunteered"
       },
       "m19.fact.045": {
-        "topic_label": "a point the client raised",
+        "topic_label": "what Andre seeks",
         "tier": "volunteered"
       },
       "m19.fact.011": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Andre's work hours",
         "tier": "revealed_if_asked"
       },
       "m19.fact.022": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the restaurant's financial performance",
         "tier": "revealed_if_asked"
       },
       "m19.fact.031": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Andre's role as a parent",
         "tier": "revealed_if_asked"
       },
       "m19.fact.039": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "Andre's account of the pickup",
         "tier": "rapport_gated"
       },
       "m19.fact.036": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "Andre's drinking pattern",
         "tier": "rapport_gated"
       },
       "m19.fact.019": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "Camille's view of the contribution",
         "tier": "concealed"
       },
       "m19.fact.048": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the couple's account movements",
         "tier": "unknown"
       }
     },
     "m19.per.tessier": {
       "m19.fact.023": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the floor manager's knowledge",
         "tier": "volunteered"
       },
       "m19.fact.006": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Camille's role in the restaurant",
         "tier": "volunteered"
       },
       "m19.fact.020": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the restaurant's value as an asset",
         "tier": "revealed_if_asked"
       },
       "m19.fact.022": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the restaurant's financial performance",
         "tier": "revealed_if_asked"
       },
       "m19.fact.014": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the restaurant's standing and assets",
         "tier": "revealed_if_asked"
       },
       "m19.fact.036": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "Andre's drinking pattern",
         "tier": "rapport_gated"
       },
       "m19.fact.019": {
-        "topic_label": "something the client did not know",
+        "topic_label": "Camille's view of the contribution",
+        "tier": "unknown"
+      }
+    },
+    "m20.per.bastien": {
+      "m20.fact.051": {
+        "topic_label": "the home health aide's observations",
+        "tier": "volunteered"
+      },
+      "m20.fact.052": {
+        "topic_label": "Harold's day-to-day condition",
+        "tier": "volunteered"
+      },
+      "m20.fact.014": {
+        "topic_label": "Vivian's caregiving role",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.035": {
+        "topic_label": "Vivian's account of the signing day",
+        "tier": "revealed_if_asked"
+      },
+      "m20.fact.053": {
+        "topic_label": "a remark the aide overheard",
+        "tier": "rapport_gated"
+      },
+      "m20.fact.054": {
+        "topic_label": "the aide's position in the dispute",
+        "tier": "rapport_gated"
+      },
+      "m20.fact.022": {
+        "topic_label": "the attorney's meeting with Harold",
         "tier": "unknown"
       }
     },
     "m20.per.cole": {
       "m20.fact.014": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Vivian's caregiving role",
         "tier": "volunteered"
       },
       "m20.fact.023": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Harold's stated wishes",
         "tier": "volunteered"
       },
       "m20.fact.017": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Dale's contact with his father",
         "tier": "volunteered"
       },
       "m20.fact.015": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the power of attorney",
         "tier": "revealed_if_asked"
       },
       "m20.fact.021": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Vivian's presence at the signing",
         "tier": "revealed_if_asked"
       },
       "m20.fact.018": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the father-son estrangement",
         "tier": "revealed_if_asked"
       },
       "m20.fact.009": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the prenuptial agreement's terms",
         "tier": "revealed_if_asked"
       },
       "m20.fact.047": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "who arranged the will update",
         "tier": "rapport_gated"
       },
       "m20.fact.048": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "the argument between Vivian and Dale",
         "tier": "rapport_gated"
       },
       "m20.fact.049": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "the account withdrawals",
         "tier": "concealed"
       },
       "m20.fact.022": {
-        "topic_label": "something the client did not know",
-        "tier": "unknown"
-      }
-    },
-    "m20.per.delacroix": {
-      "m20.fact.051": {
-        "topic_label": "a point the client raised",
-        "tier": "volunteered"
-      },
-      "m20.fact.052": {
-        "topic_label": "a point the client raised",
-        "tier": "volunteered"
-      },
-      "m20.fact.014": {
-        "topic_label": "a topic that was available for the asking",
-        "tier": "revealed_if_asked"
-      },
-      "m20.fact.035": {
-        "topic_label": "a topic that was available for the asking",
-        "tier": "revealed_if_asked"
-      },
-      "m20.fact.053": {
-        "topic_label": "a sensitive topic that needed trust first",
-        "tier": "rapport_gated"
-      },
-      "m20.fact.054": {
-        "topic_label": "a sensitive topic that needed trust first",
-        "tier": "rapport_gated"
-      },
-      "m20.fact.022": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the attorney's meeting with Harold",
         "tier": "unknown"
       }
     },
     "m20.per.prewitt": {
       "m20.fact.046": {
-        "topic_label": "a point the client raised",
+        "topic_label": "Dale's isolation allegation",
         "tier": "volunteered"
       },
       "m20.fact.011": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the prior 2019 will's terms",
         "tier": "volunteered"
       },
       "m20.fact.038": {
-        "topic_label": "a point the client raised",
+        "topic_label": "the homestead devise dispute",
         "tier": "volunteered"
       },
       "m20.fact.018": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "the father-son estrangement",
         "tier": "revealed_if_asked"
       },
       "m20.fact.019": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Dale's view of Vivian",
         "tier": "revealed_if_asked"
       },
       "m20.fact.039": {
-        "topic_label": "a topic that was available for the asking",
+        "topic_label": "Dale's argument on the prenup",
         "tier": "revealed_if_asked"
       },
       "m20.fact.055": {
-        "topic_label": "a sensitive topic that needed trust first",
+        "topic_label": "Dale's motive for contesting",
         "tier": "rapport_gated"
       },
       "m20.fact.056": {
-        "topic_label": "a topic the client was protecting",
+        "topic_label": "Dale's financial situation",
         "tier": "concealed"
       },
       "m20.fact.031": {
-        "topic_label": "something the client did not know",
+        "topic_label": "the physician's capacity assessment",
         "tier": "unknown"
       }
     }

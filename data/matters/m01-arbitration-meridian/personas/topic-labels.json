@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for /debrief. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Preferred over content-free placeholders by tools/build_worker_personas.py.",
+  "m01.fact.001": "her work history at the District",
+  "m01.fact.009": "the new superintendent's priorities",
+  "m01.fact.012": "what the brake inspection found",
+  "m01.fact.014": "the supervisor's return-to-service order",
+  "m01.fact.015": "her refusal to certify the buses",
+  "m01.fact.016": "how the supervisor responded",
+  "m01.fact.017": "the outside contractor's inspection",
+  "m01.fact.019": "her safety complaint and who saw it",
+  "m01.fact.021": "what came of the oversight report",
+  "m01.fact.024": "the day she was told to change assignments",
+  "m01.fact.025": "the employer's view of that day",
+  "m01.fact.029": "a note in her personnel file",
+  "m01.fact.030": "the timing of that note",
+  "m01.fact.031": "the employer's account of the note",
+  "m01.fact.037": "what a coworker witnessed",
+  "m01.fact.038": "the coworker's own worries",
+  "m01.fact.039": "the coworker's memory of one bus",
+  "m01.fact.040": "an earlier experience on the job",
+  "m01.fact.041": "how she documented the conflict",
+  "m01.fact.042": "her financial situation"
+}

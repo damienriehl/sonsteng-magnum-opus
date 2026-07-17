@@ -1,10 +1,10 @@
-# Witness Statement — Ayana Osei
+# Witness Statement — Ayana Nyarko
 
 **Matter:** Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)
-**Witness ID:** m11.wit.osei
+**Witness ID:** m11.wit.nyarko
 **Taken:** February 18, 2026
 
-My name is Ayana Osei. I'm an inbound clerk on the second shift at Prairie State Logistics. I've been at the site a little over two years and I worked near Yusuf Adeyemi's outbound area most nights.
+My name is Ayana Nyarko. I'm an inbound clerk on the second shift at Prairie State Logistics. I've been at the site a little over two years and I worked near Yusuf Adeyemi's outbound area most nights.
 
 I want to talk mainly about the fire exits, because that's what I saw most clearly. During peak season last fall — October into November — the outbound bay was packed. There was just more freight than places to stage it. Several nights I saw pallets sitting right in front of the north fire exit, blocking it. It wasn't a little in the way; it was fully in front of the door. I remember thinking that if something happened, people on that end of the floor would have a problem getting out.
 

@@ -38,7 +38,7 @@ Prairie State's position, through Pfeiffer, is that the PIP reflected genuine ac
 
 ## Corroboration
 
-Tomás Ruvalcaba, a forklift operator and lead on Adeyemi's crew, confirms that the crew regularly worked twenty to forty minutes past clock-out without pay during October and November 2025 [m11.fact.023]. Ruvalcaba also heard Pfeiffer tell Adeyemi to "keep the belt running" after the scheduled shift end [m11.fact.024]. Ayana Osei, an inbound clerk, saw pallets blocking the north fire exit on multiple nights and heard Adeyemi instruct a lead to clear them [m11.fact.025]. Osei recalls that after Adeyemi's complaint, supervisors held a meeting warning staff not to "go outside the building" with their concerns [m11.fact.026].
+Tomás Ruvalcaba, a forklift operator and lead on Adeyemi's crew, confirms that the crew regularly worked twenty to forty minutes past clock-out without pay during October and November 2025 [m11.fact.023]. Ruvalcaba also heard Pfeiffer tell Adeyemi to "keep the belt running" after the scheduled shift end [m11.fact.024]. Ayana Nyarko, an inbound clerk, saw pallets blocking the north fire exit on multiple nights and heard Adeyemi instruct a lead to clear them [m11.fact.025]. Nyarko recalls that after Adeyemi's complaint, supervisors held a meeting warning staff not to "go outside the building" with their concerns [m11.fact.026].
 
 ## The client, up close
 

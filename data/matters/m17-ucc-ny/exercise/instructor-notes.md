@@ -31,7 +31,7 @@ Procedure: filed in the Supreme Court, Commercial Division (see the naming cauti
 
 ## Interview design
 
-Beltran readily gives the defects (they help her). The two rapport-gated facts are the ones that hurt: the eight-day delay ([m17.fact.016], gated on `nonjudgmental_response` + `follow_up_on_hint`) and the Load D resale ([m17.fact.020], gated on `confidentiality_reassurance`). The concealed motive — Empire's plan to switch to a cheaper packer ([m17.fact.038]) — should never unlock through pressure; strong students surface it by earning trust and by reading the file. Vandermeer (cooperative) volunteers the delay openly and is a good corroboration interview.
+Beltran readily gives the defects (they help her). The two rapport-gated facts are the ones that hurt: the eight-day delay ([m17.fact.016], gated on `nonjudgmental_response` + `follow_up_on_hint`) and the Load D resale ([m17.fact.020], gated on `confidentiality_reassurance`). The concealed motive — Empire's plan to switch to a cheaper packer ([m17.fact.038]) — should never unlock through pressure; strong students surface it by earning trust and by reading the file. Renfrew (cooperative) volunteers the delay openly and is a good corroboration interview.
 
 ## Professional-responsibility beat
 

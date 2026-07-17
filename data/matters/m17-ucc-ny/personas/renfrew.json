@@ -1,10 +1,10 @@
 {
-  "id": "m17.per.vandermeer",
+  "id": "m17.per.renfrew",
   "schema_version": "1.0.0",
-  "@id": "https://sonsteng.damienriehl.com/spine/persona/m17.per.vandermeer",
+  "@id": "https://sonsteng.damienriehl.com/spine/persona/m17.per.renfrew",
   "matter_id": "m17",
   "identity": {
-    "name": "Tobias Vandermeer",
+    "name": "Tobias Renfrew",
     "age": 39,
     "role": "client-side fact witness",
     "occupation": "warehouse and receiving manager, Empire Provisions Corp.",

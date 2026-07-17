@@ -1,0 +1,20 @@
+{
+  "_comment": "Curated leak-safe topic labels for m16 debrief oracle. Each value is a 3-6 word topic area a student could have explored, never the fact's content. Keys cover every warned fact_ref for this matter's personas.",
+  "m16.fact.004": "her tenure and role at HVB",
+  "m16.fact.007": "the non-compete's terms and scope",
+  "m16.fact.008": "how she signed the agreement",
+  "m16.fact.009": "origins of the engine's methods",
+  "m16.fact.010": "how internal code was shared",
+  "m16.fact.011": "what protections guarded the engine",
+  "m16.fact.016": "her new role at Sightline",
+  "m16.fact.019": "the off-boarding forensic review",
+  "m16.fact.021": "materials she emailed herself",
+  "m16.fact.022": "her personal engineering notebook",
+  "m16.fact.023": "her talk with a former colleague",
+  "m16.fact.024": "a remark she made after the promotion",
+  "m16.fact.027": "HVB's inevitable-disclosure theory",
+  "m16.fact.028": "how HVB describes the engine's value",
+  "m16.fact.030": "HVB's proof of what she took",
+  "m16.fact.031": "HVB's competitive motive to sue",
+  "m16.fact.037": "what the alleged trade secret is"
+}

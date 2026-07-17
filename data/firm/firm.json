@@ -74,11 +74,11 @@
     { "matter_id": "m30", "client_id": "FIRM-C-13", "fee_type": "contingency", "closed_date": "2025-12-31", "total_billed": 33500 }
   ],
   "ar_aging": {
-    "current": 38500,
-    "days_1_30": 22400,
-    "days_31_60": 14800,
-    "days_61_90": 9300,
-    "days_over_90": 7600
+    "current": 31630,
+    "days_1_30": 34815,
+    "days_31_60": 19260,
+    "days_61_90": 7300,
+    "days_over_90": 10290
   },
   "realization_target": 0.9,
   "collection_target": 0.95,
@@ -154,7 +154,7 @@
     {
       "matter_id": "m14",
       "client_name": "Kenji Nakamura",
-      "buckets": { "b0_30": 7800, "b31_60": 3200, "b61_90": 2000, "b90_plus": 0 },
+      "buckets": { "b0_30": 5395, "b31_60": 4915, "b61_90": 0, "b90_plus": 2690 },
       "total": 13000
     },
     {

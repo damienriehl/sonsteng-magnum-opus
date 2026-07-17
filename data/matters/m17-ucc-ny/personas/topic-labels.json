@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for m17 debrief oracle. Each value is a 3-6 word topic area a student could have explored, never the fact's content. Keys cover every warned fact_ref for this matter's personas.",
+  "m17.fact.007": "the shelf-life delivery requirement",
+  "m17.fact.012": "the Load B labeling issue",
+  "m17.fact.013": "the Load B rejection",
+  "m17.fact.015": "the Load C dating problem",
+  "m17.fact.016": "the Load C inspection timing",
+  "m17.fact.020": "handling of the Load D pallets",
+  "m17.fact.023": "Ostervold's response to the rejections",
+  "m17.fact.024": "Ostervold's offer to cure",
+  "m17.fact.025": "why Empire declined the cure",
+  "m17.fact.026": "the amount Ostervold demanded",
+  "m17.fact.028": "the lawsuit Ostervold filed",
+  "m17.fact.029": "Ostervold's claims in the suit",
+  "m17.fact.031": "the consultant's labeling findings",
+  "m17.fact.033": "the cause of the short dating",
+  "m17.fact.034": "where the shelf-life loss originated",
+  "m17.fact.036": "the receiving logs and timing",
+  "m17.fact.038": "Empire's plans about its supplier",
+  "m17.fact.039": "what Beltran knows about causation",
+  "m17.fact.040": "Ostervold's internal production notes",
+  "m17.fact.042": "what Ostervold knows about resale"
+}

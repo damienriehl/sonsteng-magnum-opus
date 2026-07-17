@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for /debrief. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Preferred over content-free placeholders by tools/build_worker_personas.py.",
+  "m05.fact.003": "why his license matters to him",
+  "m05.fact.004": "his lack of any prior record",
+  "m05.fact.007": "how much he says he drank",
+  "m05.fact.008": "his part in the birthday toast",
+  "m05.fact.010": "whether he had eaten",
+  "m05.fact.013": "the reason for the traffic stop",
+  "m05.fact.014": "his belief about the taillight",
+  "m05.fact.015": "the officer's observations",
+  "m05.fact.018": "the ground where the tests were done",
+  "m05.fact.019": "his request about the testing spot",
+  "m05.fact.020": "the field sobriety tests",
+  "m05.fact.021": "a physical condition affecting the tests",
+  "m05.fact.022": "how tired he was that night",
+  "m05.fact.023": "the arrest and roadside test",
+  "m05.fact.026": "how he felt just before the breath test",
+  "m05.fact.027": "the breath-test result",
+  "m05.fact.031": "the threat to his license",
+  "m05.fact.033": "the measured slope of the shoulder",
+  "m05.fact.041": "the squad and body camera footage",
+  "m05.fact.042": "the margin of error on the reading"
+}

@@ -28,14 +28,14 @@
   "disclosure": {
     "volunteered": [
       { "fact_ref": "m18.fact.011", "text": "I was there, okay, I'm not going to lie about that. But I never sprayed anything. I had my phone out — I was filming. That's it." },
-      { "fact_ref": "m18.fact.018", "text": "They pulled me in first, before Kayla or Andre. It's because of Marchetti — the assistant principal. I filed a complaint on him back in February about the dress-code stuff and he's had it out for me since." },
+      { "fact_ref": "m18.fact.018", "text": "They pulled me in first, before Kayla or Andre. It's because of Corvino — the assistant principal. I filed a complaint on him back in February about the dress-code stuff and he's had it out for me since." },
       { "fact_ref": "m18.fact.003", "text": "My mom works two jobs. She's the only one at home. She's freaking out and she can't afford all this — I feel like this is my fault for even being there." }
     ],
     "revealed_if_asked": [
       { "fact_ref": "m18.fact.010", "text": "It was me, Kayla, and Andre in the lot. There were other people around from the game but it was the three of us together." },
       { "fact_ref": "m18.fact.007", "text": "Kayla and Andre are the ones who did the painting — the wall and the cars. I know how that sounds but that's what happened." },
       { "fact_ref": "m18.fact.004", "text": "No, I've never been in any kind of trouble before. Not with police, nothing. I'm on the honor roll." },
-      { "fact_ref": "m18.fact.020", "text": "At school that Monday, Marchetti and the officer asked me a bunch of questions right there in his office. My mom wasn't there yet. I didn't have a lawyer or anything — I just answered them." }
+      { "fact_ref": "m18.fact.020", "text": "At school that Monday, Corvino and the officer asked me a bunch of questions right there in his office. My mom wasn't there yet. I didn't have a lawyer or anything — I just answered them." }
     ],
     "rapport_gated": [
       {

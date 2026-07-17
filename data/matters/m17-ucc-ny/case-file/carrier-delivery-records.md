@@ -10,9 +10,9 @@
 | Load | Pickup at Ostervold | Delivered to Empire | Transit time | POD signed by |
 |------|--------------------|--------------------|--------------|---------------|
 | A | Aug 11, 2025 | Aug 12, 2025 | ~1 day | Empire receiving |
-| B | Sep 2, 2025 | Sep 3, 2025 | ~1 day | T. Vandermeer |
+| B | Sep 2, 2025 | Sep 3, 2025 | ~1 day | T. Renfrew |
 | C | Sep 20, 2025 | Sep 22, 2025 | ~2 days | Empire receiving |
-| D | Oct 4, 2025 | Oct 6, 2025 | ~2 days | T. Vandermeer |
+| D | Oct 4, 2025 | Oct 6, 2025 | ~2 days | T. Renfrew |
 
 ## Rejected-goods pickup record
 

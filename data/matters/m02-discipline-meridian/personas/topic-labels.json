@@ -1,0 +1,23 @@
+{
+  "_comment": "Curated leak-safe topic labels for /debrief. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Preferred over content-free placeholders by tools/build_worker_personas.py.",
+  "m02.fact.001": "the respondent's background and practice",
+  "m02.fact.003": "his office staffing and bookkeeping",
+  "m02.fact.004": "his reputation around town",
+  "m02.fact.005": "the personal-injury client's case",
+  "m02.fact.006": "how that settlement resolved",
+  "m02.fact.008": "where the settlement money went",
+  "m02.fact.010": "the timing of the client's payout",
+  "m02.fact.012": "how the office funds were used",
+  "m02.fact.013": "how he made the client whole",
+  "m02.fact.014": "the medical lien",
+  "m02.fact.017": "his responsiveness to the estate client",
+  "m02.fact.021": "his health that spring",
+  "m02.fact.023": "his state of mind that spring",
+  "m02.fact.024": "how he was coping personally",
+  "m02.fact.025": "the state of his accounting records",
+  "m02.fact.027": "how the complaint arose",
+  "m02.fact.039": "his prior disciplinary history",
+  "m02.fact.040": "how his prior record may be treated",
+  "m02.fact.044": "the outcome he hopes for",
+  "m02.fact.049": "warnings he received about the books"
+}

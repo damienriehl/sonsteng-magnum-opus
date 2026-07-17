@@ -15,7 +15,7 @@
     },
     "activities": {
       "title": "Activities",
-      "body_md": "This exercise runs in four connected activities. **(1) Preparation.** Read the case file — the two wills, the explanatory letter, the prenuptial agreement, the drafting attorney's file memo, the physician's capacity assessment, the asset-and-homestead summary, the petition to revoke, and the three witness statements. Build a chronology and list, in advance, the facts you most need to confirm with your client. **(2) Client interview.** Interview Vivian Prewitt-Cole, the personal representative, using the chat interface. Elicit her account of the caregiving, the will change, the prenuptial agreement, and the family history; and, with care, surface the facts that hurt — her role in setting up the appointment, the phone fight with Dale, and the account withdrawals. Some of these come out only if you build genuine trust and reassure her. **(3) Analysis and counseling.** Prepare a short interview memo separating the capacity issue from the undue-influence issue from the homestead issue, mapping the evidence on each, and flagging the professional-responsibility problems (the drafting attorney as witness; no direct contact with Dale). **(4) Optional witness interview.** If assigned, interview the home health aide, Marisol Delacroix, who is available to both sides, and assess how her account both helps and hurts. A short debrief and rubric-based critique follow."
+      "body_md": "This exercise runs in four connected activities. **(1) Preparation.** Read the case file — the two wills, the explanatory letter, the prenuptial agreement, the drafting attorney's file memo, the physician's capacity assessment, the asset-and-homestead summary, the petition to revoke, and the three witness statements. Build a chronology and list, in advance, the facts you most need to confirm with your client. **(2) Client interview.** Interview Vivian Prewitt-Cole, the personal representative, using the chat interface. Elicit her account of the caregiving, the will change, the prenuptial agreement, and the family history; and, with care, surface the facts that hurt — her role in setting up the appointment, the phone fight with Dale, and the account withdrawals. Some of these come out only if you build genuine trust and reassure her. **(3) Analysis and counseling.** Prepare a short interview memo separating the capacity issue from the undue-influence issue from the homestead issue, mapping the evidence on each, and flagging the professional-responsibility problems (the drafting attorney as witness; no direct contact with Dale). **(4) Optional witness interview.** If assigned, interview the home health aide, Marisol Bastien, who is available to both sides, and assess how her account both helps and hurts. A short debrief and rubric-based critique follow."
     },
     "instructions": {
       "title": "Instructions",
@@ -34,7 +34,7 @@
         "case-file/exhibit-008-asset-homestead-summary.md",
         "case-file/witness-vandermolen.md",
         "case-file/witness-tancredi.md",
-        "case-file/witness-delacroix.md"
+        "case-file/witness-bastien.md"
       ]
     },
     "history": {

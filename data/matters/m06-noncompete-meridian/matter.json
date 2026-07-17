@@ -29,12 +29,12 @@
   "fee_type": "hourly",
   "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
   "task_refs": ["TSK-001", "TSK-002", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-032", "TSK-050", "TSK-060"],
-  "personas": ["m06.per.okwuosa", "m06.per.danneker", "m06.per.marchetti"],
+  "personas": ["m06.per.okwuosa", "m06.per.danneker", "m06.per.calderaro"],
   "witnesses": [
     { "id": "m06.wit.hollis", "name": "Mareike Hollis" },
     { "id": "m06.wit.dupont", "name": "André Dupont" },
     { "id": "m06.wit.bellweather", "name": "Curtis Bellweather" },
-    { "id": "m06.wit.marchetti", "name": "Dr. Elena Marchetti" }
+    { "id": "m06.wit.calderaro", "name": "Dr. Elena Calderaro" }
   ],
   "exhibits": [
     { "id": "m06.exh.001", "title": "Employment Agreement with Non-Competition and Non-Solicitation Covenant" },

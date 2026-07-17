@@ -31,9 +31,9 @@
   "fee_type": "hourly",
   "skill_refs": ["SK-LP-01", "SK-LP-02", "SK-LP-03", "SK-LP-07", "SK-LP-14", "SK-LP-16"],
   "task_refs": ["TSK-004", "TSK-006", "TSK-009", "TSK-010", "TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-034", "TSK-048", "TSK-049"],
-  "personas": ["m17.per.beltran", "m17.per.ostervold", "m17.per.vandermeer"],
+  "personas": ["m17.per.beltran", "m17.per.ostervold", "m17.per.renfrew"],
   "witnesses": [
-    { "id": "m17.wit.vandermeer", "name": "Tobias Vandermeer" },
+    { "id": "m17.wit.renfrew", "name": "Tobias Renfrew" },
     { "id": "m17.wit.sengupta", "name": "Priyanka Sengupta" },
     { "id": "m17.wit.ferraro", "name": "Curtis Ferraro" },
     { "id": "m17.wit.mizrahi", "name": "Yosef Mizrahi" }
