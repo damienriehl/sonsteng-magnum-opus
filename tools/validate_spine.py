@@ -441,9 +441,25 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             fpath = rootp / fname
             if fpath in (sm_path, reg_path, mer_path):
                 continue
+            if fname == "folio-crosswalk.json" or fname.startswith("_"):
+                continue  # --online snapshot / generator scripts, not entity data
             obj, err = read_json(fpath)
             if err:
                 world.load_errors.append((fpath, err))
+                continue
+            # taxonomy collection files ({"skills": [...]}, {"tasks": [...]})
+            if isinstance(obj, dict) and isinstance(obj.get("skills"), list):
+                for el in obj["skills"]:
+                    if isinstance(el, dict) and isinstance(el.get("id"), str) \
+                            and RE["skill"].match(el["id"]):
+                        world.skills[el["id"]] = Loaded(fpath, el, "skill")
+                continue
+            if isinstance(obj, dict) and isinstance(obj.get("tasks"), list) \
+                    and "shape_keys" not in obj:
+                for el in obj["tasks"]:
+                    if isinstance(el, dict) and isinstance(el.get("id"), str) \
+                            and RE["task"].match(el["id"]):
+                        world.tasks[el["id"]] = Loaded(fpath, el, "task")
                 continue
             etype = classify(obj)
             if etype in (None, "matter_manifest"):
