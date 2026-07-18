@@ -112,3 +112,33 @@ test("CSRF guard: requires X-Edit-Request:1 and a same-origin/absent Origin", ()
   });
   assert.equal(csrfOk(crossSite, ENV), false);
 });
+
+test("service auth: admin opaque token via Authorization Bearer resolves admin scope (CSRF-safe, no cookie)", async () => {
+  const req = new Request("https://worker.example.com/edit/v1/reconcile", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin-opaque-token-value-999", "X-Edit-Request": "1" },
+  });
+  const auth = await resolveAuth(ENV, req);
+  assert.equal(auth.slot, "admin");
+  assert.equal(auth.scopes.admin.granted, true);
+  assert.equal(auth.scopes.edit.granted, false);
+});
+
+test("service auth: a bogus Bearer token grants nothing", async () => {
+  const req = new Request("https://worker.example.com/edit/v1/reconcile", {
+    method: "POST",
+    headers: { Authorization: "Bearer not-a-real-token", "X-Edit-Request": "1" },
+  });
+  const auth = await resolveAuth(ENV, req);
+  assert.equal(auth.slot, null);
+  assert.equal(auth.scopes.admin.granted, false);
+});
+
+test("service auth: a valid cookie still wins and Bearer is only the no-cookie fallback", async () => {
+  const cookie = await mintCookieValue(SIGNING, { slot: "john", stamp: (await resolveOpaqueToken(ENV, "john-opaque-token-value-123")).stamp });
+  const req = new Request("https://worker.example.com/edit/v1/pending", {
+    headers: { Cookie: `edit_scope=${cookie}`, Authorization: "Bearer admin-opaque-token-value-999" },
+  });
+  const auth = await resolveAuth(ENV, req);
+  assert.equal(auth.slot, "john"); // cookie wins; Bearer not consulted
+});
