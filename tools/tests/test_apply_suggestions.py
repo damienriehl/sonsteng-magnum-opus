@@ -1,0 +1,563 @@
+#!/usr/bin/env python3
+r"""Tests for tools/apply_suggestions.py — the apply-transaction engine.
+
+Strategy: a REAL throwaway git repo fixture in a tmp dir (so the git-worktree
+transaction, merge, and rollback all run for real against real files), plus an
+in-memory EditorStore that faithfully models the Worker's claim/finalize/
+reconcile semantics, plus a FakePipeline that stands in for the heavy spine tools
+(build_site / validate_spine / bundles / parity / deploy) and re-resolves the
+editor map from the CURRENT worktree source so the DRIFT gate is exercised
+honestly. No live Worker, no network, no real deploy.
+
+The load-bearing property under test is INTEGRITY: canonical data/ is proven
+byte-identical after every failure path, and a suggestion never reaches canonical
+except through validate + build + parity + (gated) deploy + merge.
+
+Run:  python3 -m pytest tools/tests/test_apply_suggestions.py -q
+  or: python3 tools/tests/test_apply_suggestions.py
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLS = os.path.dirname(HERE)
+sys.path.insert(0, TOOLS)
+
+import text_norm  # noqa: E402
+import apply_suggestions as ap  # noqa: E402
+
+
+# --------------------------------------------------------------------------- #
+# Honest map resolver — mirrors build_site's classification for the fixture.
+# --------------------------------------------------------------------------- #
+def _strip_markers(span):
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", span)
+    s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", s)
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+    return s
+
+
+def _hash(span):
+    return text_norm.norm_hash(_strip_markers(span))
+
+
+def _has_fmt(span):
+    return bool(re.search(r"\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)|(?<!\*)\*[^*]+\*(?!\*)", span))
+
+
+def _paragraphs(text):
+    """Blank-line separated, single-logical-line paragraphs (build_site rule)."""
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+def resolve_index(worktree, spec):
+    """Build {source_ref: block} from CURRENT worktree files per `spec`:
+      ("relpath.md", "md")
+      ("relpath.json", "json", {"body_md_fields": [...], "scalars": [...]})
+    """
+    index = {}
+    for entry in spec:
+        relpath, kind = entry[0], entry[1]
+        abspath = os.path.join(worktree, relpath)
+        if not os.path.isfile(abspath):
+            continue
+        raw = open(abspath, encoding="utf-8").read()
+        if kind == "md":
+            for n, span in enumerate(_paragraphs(raw)):
+                ref = "%s#p%d" % (relpath, n)
+                index[ref] = {
+                    "source_ref": ref, "kind": "prose", "json_path": None,
+                    "original_text": span, "original_hash": _hash(span),
+                    "has_inline_formatting": _has_fmt(span), "context": "",
+                }
+        else:  # json
+            cfg = entry[2]
+            obj = json.loads(raw)
+            for field in cfg.get("body_md_fields", []):
+                body = ap.json_get(obj, field)
+                for n, span in enumerate(_paragraphs(body)):
+                    ref = "%s#%s.p%d" % (relpath, field, n)
+                    index[ref] = {
+                        "source_ref": ref, "kind": "prose", "json_path": None,
+                        "original_text": span, "original_hash": _hash(span),
+                        "has_inline_formatting": _has_fmt(span), "context": "",
+                    }
+            for path in cfg.get("scalars", []):
+                val = ap.json_get(obj, path)
+                ref = "%s#%s" % (relpath, path)
+                index[ref] = {
+                    "source_ref": ref, "kind": "json_scalar", "json_path": path,
+                    "original_text": val, "original_hash": _hash(val),
+                    "has_inline_formatting": False, "context": "",
+                }
+    return index
+
+
+# --------------------------------------------------------------------------- #
+# In-memory EditorStore — models the Worker RPC semantics.
+# --------------------------------------------------------------------------- #
+PRE_MERGED = {"claimed", "patched", "validated", "built", "parity_ok", "deployed"}
+
+
+class InMemoryEditorStore:
+    def __init__(self, clock=0):
+        self.rows = {}          # id -> row dict
+        self.batches = {}       # batch_id -> {phase, lease_expires_at}
+        self._clock = clock
+        self.lease_ms = 1000
+
+    def now(self):
+        return self._clock
+
+    def add(self, **row):
+        row.setdefault("status", "accepted")
+        row.setdefault("origin", "human")
+        row.setdefault("kind", "prose")
+        row.setdefault("group_id", None)
+        row.setdefault("apply_batch_id", None)
+        row.setdefault("lease_expires_at", None)
+        self.rows[row["id"]] = row
+        return row
+
+    # ---- RPCs ----
+    def reconcile(self):
+        swept = {"rolled_back": [], "completed": []}
+        now = self.now()
+        for bid, b in list(self.batches.items()):
+            if b["phase"] in ("done", "rolled_back"):
+                continue
+            if (b["lease_expires_at"] or 0) > now:
+                continue
+            members = [r for r in self.rows.values() if r["apply_batch_id"] == bid]
+            if b["phase"] in PRE_MERGED:
+                for r in members:
+                    if r["status"] == "in_flight":
+                        r["status"] = "accepted"
+                        r["apply_batch_id"] = None
+                        r["lease_expires_at"] = None
+                        swept["rolled_back"].append(r["id"])
+                b["phase"] = "rolled_back"
+            else:
+                for r in members:
+                    if r["status"] == "in_flight":
+                        r["status"] = "applied"
+                        r["lease_expires_at"] = None
+                        swept["completed"].append(r["id"])
+                b["phase"] = "done"
+        # orphan in_flight (expired, batch gone/rolled) -> accepted
+        for r in self.rows.values():
+            if r["status"] == "in_flight":
+                b = self.batches.get(r["apply_batch_id"])
+                expired = (r["lease_expires_at"] or 0) <= now
+                if expired and (b is None or b["phase"] in ("rolled_back", "done")):
+                    r["status"] = "accepted"
+                    r["apply_batch_id"] = None
+                    r["lease_expires_at"] = None
+                    swept["rolled_back"].append(r["id"])
+        return {"ok": True, **swept}
+
+    def claim(self, batch_id, base_sha=None):
+        if batch_id in self.batches:
+            return {"ok": False, "reason": "batch_exists"}
+        accepted = [r for r in self.rows.values() if r["status"] == "accepted"]
+        claim_ids = set()
+        groups = set(r["group_id"] for r in accepted if r["group_id"])
+        for r in accepted:
+            if not r["group_id"]:
+                claim_ids.add(r["id"])
+        for g in groups:
+            members = [r for r in self.rows.values() if r["group_id"] == g]
+            if all(m["status"] == "accepted" for m in members):
+                for m in members:
+                    claim_ids.add(m["id"])
+        if not claim_ids:
+            return {"ok": False, "reason": "nothing_to_claim"}
+        lease = self.now() + self.lease_ms
+        self.batches[batch_id] = {"phase": "claimed", "lease_expires_at": lease}
+        for cid in claim_ids:
+            r = self.rows[cid]
+            r["status"] = "in_flight"
+            r["apply_batch_id"] = batch_id
+            r["lease_expires_at"] = lease
+        return {"ok": True, "batch_id": batch_id, "claimed": sorted(claim_ids),
+                "lease_expires_at": lease}
+
+    def fetch_batch_rows(self, batch_id, claimed_ids):
+        return [dict(self.rows[i]) for i in claimed_ids if i in self.rows]
+
+    def propose_companion(self, payload):
+        rid = payload["id"]
+        self.rows[rid] = {
+            **payload, "status": "pending", "apply_batch_id": None,
+            "lease_expires_at": None,
+        }
+        return {"ok": True, "id": rid, "status": "pending"}
+
+    def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
+                 needs_human=None, drift=None, base_sha=None):
+        b = self.batches.get(batch_id)
+        if not b:
+            return {"ok": False, "reason": "no_batch"}
+        if phase:
+            b["phase"] = phase
+        for ids, st in ((applied, "applied"), (accepted_blocked, "accepted_blocked"),
+                        (needs_human, "needs_human"), (drift, "drift")):
+            for i in (ids or []):
+                if i in self.rows:
+                    self.rows[i]["status"] = st
+                    self.rows[i]["lease_expires_at"] = None
+        return {"ok": True}
+
+    def fetch_accepted_comments(self):
+        return [dict(r) for r in self.rows.values()
+                if r["status"] == "accepted" and r["kind"] == "comment"]
+
+
+# --------------------------------------------------------------------------- #
+# Fake pipeline — stands in for the heavy spine tools; honest map re-resolution.
+# --------------------------------------------------------------------------- #
+class FakePipeline:
+    def __init__(self, spec, validate_ok=True, parity_ok=True, build_ok=True):
+        self.spec = spec
+        self.validate_ok = validate_ok
+        self.parity_ok = parity_ok
+        self.build_ok = build_ok
+        self.worktree_snapshot = {}  # relpath -> content seen at validate time
+
+    def regenerate_map(self, worktree):
+        return resolve_index(worktree, self.spec)
+
+    def validate(self, worktree):
+        # snapshot the patched worktree so tests can prove the patch landed
+        for entry in self.spec:
+            rel = entry[0]
+            p = os.path.join(worktree, rel)
+            if os.path.isfile(p):
+                self.worktree_snapshot[rel] = open(p, encoding="utf-8").read()
+        return self.validate_ok, {"report": {"errors": [] if self.validate_ok else ["x"]}}
+
+    def build(self, worktree):
+        return self.build_ok, {"stdout": "built" if self.build_ok else "build FAIL"}
+
+    def parity(self, worktree):
+        return self.parity_ok, {"stdout": "parity"}
+
+    def deploy(self, worktree, branch, plan_only):
+        plan = [["bash", "deploy/deploy-dev.sh", branch], ["npx", "wrangler", "deploy"]]
+        if plan_only:
+            return True, {"planned": plan, "executed": False}
+        return True, {"planned": plan, "executed": True}  # fake: no real deploy
+
+
+class FakeClient:
+    """Adapts InMemoryEditorStore to the client interface run_apply expects."""
+    def __init__(self, store):
+        self.store = store
+        self.proposed = []
+
+    def reconcile(self):
+        return self.store.reconcile()
+
+    def claim(self, batch_id, base_sha=None):
+        return self.store.claim(batch_id, base_sha)
+
+    def fetch_batch_rows(self, batch_id, claimed_ids):
+        return self.store.fetch_batch_rows(batch_id, claimed_ids)
+
+    def propose_companion(self, payload):
+        self.proposed.append(payload)
+        return self.store.propose_companion(payload)
+
+    def finalize(self, *a, **k):
+        return self.store.finalize(*a, **k)
+
+
+# --------------------------------------------------------------------------- #
+# Git fixture
+# --------------------------------------------------------------------------- #
+def _git(args, cwd):
+    subprocess.run(["git", "-c", "core.hooksPath=/dev/null", *args], cwd=cwd,
+                   check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def _write(root, rel, content):
+    p = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write(content)
+
+
+M03_EX = "data/matters/m03-tort-meridian/exercise/exercise.json"
+M03_MD = "data/matters/m03-tort-meridian/case-file/exh-notes.md"
+M03_FMT = "data/matters/m03-tort-meridian/case-file/exh-formatted.md"
+M07_EX = "data/matters/m07-ucc-meridian/exercise/exercise.json"
+
+SPEC = [
+    (M03_EX, "json", {"body_md_fields": ["sections.intro.body_md"], "scalars": ["caption"]}),
+    (M03_MD, "md"),
+    (M03_FMT, "md"),
+    (M07_EX, "json", {"body_md_fields": ["sections.intro.body_md"], "scalars": ["caption"]}),
+]
+
+
+def make_repo():
+    root = tempfile.mkdtemp(prefix="apply-fixture-")
+    _git(["init", "-q"], root)
+    _git(["config", "user.email", "t@t.local"], root)
+    _git(["config", "user.name", "t"], root)
+    _git(["config", "commit.gpgsign", "false"], root)
+
+    _write(root, M03_EX, json.dumps({
+        "id": "m03",
+        "caption": "Osgard v. Meridian Freight (Tort)",
+        "sections": {"intro": {"body_md":
+            "You represent the plaintiff in a negligence action.\n\n"
+            "The retainer for this matter is $8,400 total, due on signing.\n\n"
+            "The demand letter seeks $12,500 in special damages."}},
+    }, indent=2) + "\n")
+    _write(root, M03_MD,
+           "Intake notes for the tort matter.\n\n"
+           "Client confirmed the retainer of $8,400 was paid in full.\n")
+    _write(root, M03_FMT,
+           "This paragraph has **bold emphasis** that plain text cannot round-trip.\n")
+    _write(root, M07_EX, json.dumps({
+        "id": "m07",
+        "caption": "Bell v. Osgard Supply (UCC)",
+        "sections": {"intro": {"body_md":
+            "An unrelated UCC matter where the deposit was $8,400 exactly."}},
+    }, indent=2) + "\n")
+
+    _git(["add", "-A"], root)
+    _git(["commit", "-q", "-m", "fixture"], root)
+    return root
+
+
+def snapshot_data(root):
+    """Content-hash every file under data/ (proves byte-identity)."""
+    snap = {}
+    data = os.path.join(root, "data")
+    for dp, _dn, fns in os.walk(data):
+        for fn in fns:
+            fp = os.path.join(dp, fn)
+            rel = os.path.relpath(fp, root)
+            snap[rel] = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+    return snap
+
+
+# --------------------------------------------------------------------------- #
+# Tests
+# --------------------------------------------------------------------------- #
+class ApplyEngineTest(unittest.TestCase):
+    def setUp(self):
+        self.root = make_repo()
+        self.store = InMemoryEditorStore()
+        self.client = FakeClient(self.store)
+        self.index = resolve_index(self.root, SPEC)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _add_edit(self, sid, source_ref, new_text, **extra):
+        blk = self.index[source_ref]
+        return self.store.add(
+            id=sid, source_ref=source_ref, new_text=new_text,
+            original_hash=blk["original_hash"], original_text=blk["original_text"],
+            kind="json_scalar" if blk["kind"] == "json_scalar" else "prose",
+            json_path=blk.get("json_path"), status="accepted", **extra)
+
+    def _run(self, batch_id, pipeline, deploy_plan_only=True):
+        return ap.run_apply(self.client, pipeline, batch_id,
+                            worktree_parent=None, deploy_plan_only=deploy_plan_only,
+                            branch="test", canonical_root=self.root, logger=lambda *a: None)
+
+    # 1) Clean prose edit -> validator green -> parity holds -> STOPS pre-deploy.
+    def test_clean_prose_build_only_stops_before_deploy(self):
+        ref = "%s#sections.intro.body_md.p0" % M03_EX
+        self._add_edit("s1", ref, "You represent the plaintiff in a serious negligence action.")
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual(res.reason, "build_only_stopped_pre_deploy")
+        self.assertEqual([p.suggestion_id for p in res.applied], ["s1"])
+        self.assertFalse(res.committed)
+        # patch really landed in the worktree (validator saw it) ...
+        self.assertIn("serious negligence", pipe.worktree_snapshot[M03_EX])
+        # ... but canonical is byte-identical (we stopped before merge).
+        self.assertEqual(before, snapshot_data(self.root))
+        self.assertEqual(self._porcelain(), "")
+
+    # Full round trip (deploy executed via fake) -> merges to canonical.
+    def test_clean_prose_full_roundtrip_merges(self):
+        ref = "%s#p0" % M03_MD
+        self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
+        pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["s1"])
+        self.assertEqual(self.store.rows["s1"]["status"], "applied")
+        canonical = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
+        self.assertIn("Revised intake notes", canonical)
+        self.assertEqual(self._porcelain(), "")  # clean after merge
+
+    # 2) Money edit that breaks reconciliation (validator RED) -> accepted_blocked.
+    def test_money_edit_validator_red_blocks_and_discards(self):
+        ref = "%s#sections.intro.body_md.p2" % M03_EX
+        self._add_edit("s1", ref, "The demand letter seeks $15,000 in special damages.")
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC, validate_ok=False)  # reconciliation broke
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual(res.reason, "validator_red")
+        self.assertEqual([p.suggestion_id for p in res.accepted_blocked], ["s1"])
+        self.assertEqual([], res.applied)
+        self.assertEqual(self.store.rows["s1"]["status"], "accepted_blocked")
+        # the worktree DID hold the patch ($15,000) — proving discard is real ...
+        self.assertIn("$15,000", pipe.worktree_snapshot[M03_EX])
+        # ... yet canonical is byte-identical (worktree discarded, nothing shipped).
+        self.assertEqual(before, snapshot_data(self.root))  # canonical untouched
+        self.assertEqual(self._porcelain(), "")
+
+    # 3) Formatted block -> needs_human (never applied).
+    def test_formatted_block_needs_human(self):
+        ref = "%s#p0" % M03_FMT
+        self._add_edit("s1", ref, "This paragraph now says something else entirely.")
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual([r["id"] for r in res.needs_human], ["s1"])
+        self.assertEqual([], res.applied)
+        self.assertEqual(self.store.rows["s1"]["status"], "needs_human")
+        self.assertEqual(before, snapshot_data(self.root))
+
+    # 4) Drift: source changed after the suggestion was made -> drift, not patched.
+    def test_drift_when_source_changed_post_suggest(self):
+        ref = "%s#p0" % M03_MD
+        self._add_edit("s1", ref, "New intake summary.")  # captures OLD hash
+        # source changes post-suggest (a legitimate committed edit) ...
+        _write(self.root, M03_MD,
+               "Intake notes for the tort matter (amended by staff).\n\n"
+               "Client confirmed the retainer of $8,400 was paid in full.\n")
+        _git(["commit", "-aqm", "amend source"], self.root)
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual([r["id"] for r in res.drift], ["s1"])
+        self.assertEqual([], res.applied)
+        self.assertEqual(self.store.rows["s1"]["status"], "drift")
+        self.assertEqual(before, snapshot_data(self.root))  # canonical untouched
+
+    # 5) Value-sync: companion for in-matter duplicate, NOT the same value in m07.
+    def test_value_sync_scope_is_matter_bounded(self):
+        ref = "%s#sections.intro.body_md.p1" % M03_EX  # "$8,400 total"
+        self._add_edit("s1", ref, "The retainer for this matter is $9,100 total, due on signing.")
+        pipe = FakePipeline(SPEC, validate_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        proposed_refs = [c["source_ref"] for c in res.companions]
+        # in-matter duplicate ($8,400 in m03 case-file .md) IS proposed ...
+        self.assertIn("%s#p1" % M03_MD, proposed_refs)
+        # ... the SAME value in another matter (m07) is NOT.
+        self.assertNotIn("%s#sections.intro.body_md.p0" % M07_EX, proposed_refs)
+        # companions are pending, never applied.
+        for c in res.companions:
+            self.assertEqual(self.store.rows[c["id"]]["status"], "pending")
+        # the m03 companion carries the swapped value for Damien's review.
+        m03comp = next(c for c in res.companions if c["source_ref"] == "%s#p1" % M03_MD)
+        self.assertIn("$9,100", m03comp["new_text"])
+
+    # 6) Parity mismatch aborts + rollback, canonical untouched.
+    def test_parity_mismatch_aborts(self):
+        ref = "%s#p0" % M03_MD
+        self._add_edit("s1", ref, "Edited intake notes.")
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=False)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual(res.reason, "parity_mismatch")
+        self.assertEqual([], res.applied)
+        self.assertEqual(self.store.rows["s1"]["status"], "accepted_blocked")
+        self.assertEqual(before, snapshot_data(self.root))
+
+    # 7) Crash-recovery reconcile re-queues an in_flight orphan.
+    def test_reconcile_requeues_in_flight_orphan(self):
+        # an orphaned in_flight from a crashed prior run (expired lease, pre-merged batch)
+        self.store.add(id="orphan", source_ref="%s#p0" % M03_MD, new_text="x",
+                       status="in_flight", apply_batch_id="dead-batch",
+                       lease_expires_at=-1)
+        self.store.batches["dead-batch"] = {"phase": "patched", "lease_expires_at": -1}
+        self.store._clock = 10_000
+
+        # the reconcile RPC (which run_apply invokes FIRST, before any claim)
+        self.client.reconcile()
+
+        self.assertEqual(self.store.rows["orphan"]["status"], "accepted")
+        self.assertIsNone(self.store.rows["orphan"]["apply_batch_id"])
+        self.assertEqual(self.store.batches["dead-batch"]["phase"], "rolled_back")
+
+    # 7b) run_apply reconciles BEFORE it claims (ordering guarantee).
+    def test_reconcile_runs_before_claim(self):
+        calls = []
+        client = self.client
+        orig_rec, orig_claim = client.reconcile, client.claim
+        client.reconcile = lambda: (calls.append("reconcile"), orig_rec())[1]
+        client.claim = lambda *a, **k: (calls.append("claim"), orig_claim(*a, **k))[1]
+        # empty queue -> nothing_to_claim, but ordering still observable
+        self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
+        self.assertEqual(calls[:2], ["reconcile", "claim"])
+
+    # 8) Group atomicity: one member drifts -> whole group drifts, none applied.
+    def test_group_atomic_drift(self):
+        r1 = "%s#p0" % M03_MD
+        r2 = "%s#sections.intro.body_md.p0" % M03_EX
+        self._add_edit("g1", r1, "Edited notes.", group_id="grp")
+        self._add_edit("g2", r2, "Edited intro.", group_id="grp")
+        # break the hash of only ONE member post-suggest
+        self.store.rows["g1"]["original_hash"] = "deadbeef"
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual([], res.applied)
+        self.assertEqual({r["id"] for r in res.drift}, {"g1", "g2"})
+        self.assertEqual(before, snapshot_data(self.root))
+
+    # Path safety: traversal / absolute / escape all rejected.
+    def test_path_safety(self):
+        for bad in ("../etc/passwd", "/etc/passwd", "data/../../x", "site/index.html"):
+            with self.assertRaises(ap.ApplyError):
+                ap.safe_data_path(self.root, bad)
+        ok = ap.safe_data_path(self.root, M03_MD + "#p0")
+        self.assertTrue(ok.startswith(os.path.join(self.root, "data")))
+
+    # json_scalar edits are parse->set->serialize (valid JSON out, never spliced).
+    def test_json_scalar_parse_set_serialize(self):
+        ref = "%s#caption" % M03_EX
+        self._add_edit("s1", ref, "Osgard v. Meridian Freight Co. (Tort)")
+        pipe = FakePipeline(SPEC, validate_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+        self.assertTrue(res.committed)
+        obj = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        self.assertEqual(obj["caption"], "Osgard v. Meridian Freight Co. (Tort)")
+
+    def _porcelain(self):
+        out = subprocess.run(["git", "status", "--porcelain"], cwd=self.root,
+                             check=True, stdout=subprocess.PIPE, text=True)
+        return out.stdout.strip()
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
