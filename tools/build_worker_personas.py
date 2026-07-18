@@ -37,7 +37,10 @@ import os
 import re
 import sys
 
+import spine_stamp   # deterministic spine_build_id (parity gate across bundles)
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(REPO_ROOT, "data")
 
 PROMPTS_DIR = os.path.join(REPO_ROOT, "app", "worker", "prompts")
 SYSTEM_TEMPLATE = os.path.join(PROMPTS_DIR, "system-template.md")
@@ -257,6 +260,7 @@ def main():
 
     bundle = {
         "schema_version": "1.0.0",
+        "spine_build_id": spine_stamp.compute(DATA_DIR),
         "generated_by": "tools/build_worker_personas.py",
         "note": (
             "BUILD ARTIFACT — do not edit by hand. Server-only: contains "
@@ -277,6 +281,7 @@ def main():
 
     total_facts = sum(len(v) for v in fact_map.values())
     print("persona bundle written: %s" % os.path.relpath(OUT_PATH, REPO_ROOT))
+    print("  spine_build: %s" % bundle["spine_build_id"][:16])
     print("  personas   : %d" % len(personas))
     print("  fact_map   : %d facts across %d personas" % (total_facts, len(fact_map)))
     print("  rubrics    : %d" % len(bundle["rubrics"]))

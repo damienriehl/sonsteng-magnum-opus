@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPIKE · blur/Save commit semantics (race #1)</title>
+<!--
+  ============================================================================
+  SPIKE 1 — blur/Save commit semantics + origin-handler-fight (plan race #1)
+  De-risks the highest-uncertainty interaction before the P3 editor client.
+
+  Proves, with a fake slow network, the EIGHT-rule subset that governs an
+  in-place edit session:
+
+    R1  THREE VERBS, ONE EVENT EACH
+          blur   = flush-to-draft-only     (never commit, never discard)
+          commit = ONLY explicit Save
+          discard= ONLY explicit Cancel
+    R2  suggestion_id minted ONCE per edit-session (focus/first keystroke),
+        reused on resend, cleared only on Sent✓.
+    R3  Save disabled SYNCHRONOUSLY before any await; Save bound on
+        mousedown+preventDefault so it never steals the caret; the committed
+        text is read from a SNAPSHOT maintained on every `input`, never from
+        the live DOM at click time.
+    R4  Triple-click Save => ONE logical suggestion (sync-disable guard +
+        server dedupe keyed by suggestion_id).
+    R5  401-on-save PRESERVES draft + id and offers a friendly re-auth; resend
+        reuses the same id (idempotent).
+    R6  Clicking ANOTHER block mid-edit does NOT silently commit (blur inert).
+    R7  Origin page's scroll-spy + segmented-toggle handlers are NEUTRALIZED
+        inside edit regions (capture-phase stopPropagation).
+    R8  Drafts keyed to (source_ref + original_hash); the block's hash moving
+        => draft discarded with a gentle note (buffer per-tab in sessionStorage,
+        localStorage recovery-only, re-poll on pageshow/visibilitychange).
+
+  Mirrors chat.js house patterns: makeStore probe (SS/LS), state machine,
+  draftTurnId-style id idempotency, synchronous disable-before-await,
+  recoverable() draft-preserving, dropTurn, pageshow reset.
+
+  Vanilla JS, zero deps. window.SpikeBlur is the harness surface.
+  ============================================================================
+-->
+<style>
+  :root{
+    --paper:#f4efe4;--paper-2:#efe8d9;--paper-3:#e8dfcc;--ink:#1d1a16;
+    --ink-soft:#544d43;--ink-faint:#8a7f6d;--brass:#a9822f;--claret:#7c1e2b;
+    --green:#2c4636;--line:rgba(29,26,22,.16);--line-soft:rgba(29,26,22,.09);
+    --brass-wash:rgba(169,130,47,.10);--claret-wash:rgba(124,30,43,.07);
+    --radius:3px;--sp-2:.5rem;--sp-3:.75rem;--sp-6:1.5rem;--sp-8:2rem;
+    --font-body:Georgia,'Times New Roman',serif;
+    --font-mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-body);
+       line-height:1.6;font-size:18px}
+  .wrap{max-width:60rem;margin:0 auto;padding:var(--sp-8) 1.4rem 6rem}
+  h1{font-size:1.5rem;letter-spacing:-.01em}
+  .lede{color:var(--ink-soft);max-width:60ch}
+  /* ---- fake origin page: a running scroll-spy + segmented toggle ---- */
+  .origin-chrome{position:sticky;top:0;z-index:9;background:var(--paper-2);
+       border-bottom:2px solid var(--brass);padding:var(--sp-3) 1.4rem;
+       display:flex;gap:var(--sp-6);align-items:center;flex-wrap:wrap;
+       font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;
+       letter-spacing:.08em}
+  .spy{color:var(--ink-faint)}.spy b{color:var(--claret)}
+  .segmented-toggle{display:inline-flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .segmented-toggle button{font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;
+       letter-spacing:.08em;border:0;background:transparent;padding:.4em .8em;cursor:pointer;min-height:38px}
+  .segmented-toggle button[aria-pressed="true"]{background:var(--claret);color:var(--paper)}
+  /* ---- editable blocks ---- */
+  .page{margin-top:var(--sp-8)}
+  .eb{position:relative;padding:var(--sp-3) var(--sp-6);margin:var(--sp-6) 0;
+      border:1px solid transparent;border-radius:var(--radius);border-left:3px solid transparent;
+      outline:none;transition:border-color .15s,background .15s}
+  .eb:hover{border-left-color:var(--brass)}
+  .eb:focus,.eb.editing{border-color:var(--line);border-left-color:var(--claret);
+      background:var(--paper-3)}
+  .eb.dirty{border-left-color:var(--brass)}
+  .savebar{display:none;gap:var(--sp-3);align-items:center;margin-top:var(--sp-3);flex-wrap:wrap}
+  .eb.editing .savebar{display:flex}
+  .btn{font-family:var(--font-mono);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;
+       min-height:44px;padding:0 1.1rem;cursor:pointer;border-radius:var(--radius);
+       border:1px solid var(--claret);background:var(--claret);color:var(--paper)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn--ghost{background:transparent;color:var(--claret)}
+  .status{font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;
+          letter-spacing:.08em;color:var(--ink-faint)}
+  .status.sent{color:var(--green)}.status.err{color:var(--claret)}
+  .note{font-family:var(--font-mono);font-size:.72rem;color:var(--brass);
+        background:var(--brass-wash);border-left:3px solid var(--brass);
+        padding:.5em .8em;margin-top:var(--sp-3);border-radius:var(--radius);display:none}
+  .note.show{display:block}
+  .reauth{display:none;margin-top:var(--sp-3);background:var(--claret-wash);
+          border-left:3px solid var(--claret);padding:.6em .9em;border-radius:var(--radius)}
+  .reauth.show{display:block}
+  .reauth p{margin:0 0 .5em;font-size:.95rem;color:var(--ink-soft)}
+  /* ---- harness controls ---- */
+  .rig{position:fixed;right:0;bottom:0;background:var(--paper-2);border:2px solid var(--brass);
+       border-right:0;border-bottom:0;border-radius:var(--radius) 0 0 0;padding:var(--sp-3) var(--sp-6);
+       font-family:var(--font-mono);font-size:.72rem;max-width:22rem;z-index:20}
+  .rig h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;margin:0 0 .5em;color:var(--claret)}
+  .rig label{display:flex;gap:.4em;align-items:center;margin:.35em 0;cursor:pointer}
+  .rig .log{max-height:8rem;overflow:auto;background:var(--paper);border:1px solid var(--line);
+            padding:.4em;margin-top:.5em;white-space:pre-wrap;font-size:.68rem}
+</style>
+</head>
+<body>
+<!-- FAKE ORIGIN CHROME: a scroll-spy + a segmented toggle that MUST NOT fight
+     contenteditable inside edit regions (R7). These are "hostile" origin
+     handlers we intentionally leave live to prove neutralization. -->
+<div class="origin-chrome" id="chrome">
+  <span class="spy" id="spy">SECTION: <b id="spy-name">—</b></span>
+  <span class="segmented-toggle" role="group" aria-label="Type size" id="toggle">
+    <button type="button" data-size="std" aria-pressed="true">Standard</button>
+    <button type="button" data-size="lg" aria-pressed="false">Large type</button>
+  </span>
+  <span class="status" id="page-banner">YOU'RE EDITING — CHANGES GO TO DAMIEN FOR REVIEW</span>
+</div>
+
+<div class="wrap">
+  <h1>Spike 1 — blur / Save commit semantics</h1>
+  <p class="lede">Three prose blocks over a fake page that runs its own scroll-spy and
+  a segmented toggle. Click a block to edit in place. <b>blur</b> only flushes a draft;
+  <b>Save my change</b> is the only commit; <b>Cancel</b> is the only discard.</p>
+
+  <div class="page" id="page"><!-- blocks injected by JS --></div>
+</div>
+
+<!-- test rig -->
+<div class="rig">
+  <h2>Fake network</h2>
+  <label><input type="checkbox" id="rig-slow" checked> slow (delay)
+    <input type="number" id="rig-delay" value="600" min="0" style="width:4rem"> ms</label>
+  <label><input type="checkbox" id="rig-401"> fail ONCE with 401</label>
+  <div class="log" id="rig-log"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- storage: probe-write w/ in-memory fallback (chat.js pattern) --- */
+  function makeStore(backing){
+    var mem={},live=false;
+    try{var k='__pb__';backing.setItem(k,'1');backing.removeItem(k);live=true;}catch(e){live=false;}
+    return{
+      live:live,
+      get:function(k){try{return live?backing.getItem(k):(k in mem?mem[k]:null);}catch(e){return(k in mem?mem[k]:null);}},
+      set:function(k,v){try{if(live)backing.setItem(k,v);else mem[k]=v;}catch(e){mem[k]=v;}},
+      del:function(k){try{if(live)backing.removeItem(k);else delete mem[k];}catch(e){delete mem[k];}}
+    };
+  }
+  var SS=makeStore(window.sessionStorage);  // per-tab ACTIVE buffer (drafts)
+  var LS=makeStore(window.localStorage);    // cross-tab recovery-only + prefs
+  var DRAFT_PREFIX='sonsteng_edit_draft:';  // keyed by source_ref
+
+  function uuid(){
+    try{if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();}catch(e){}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+      var r=(Math.random()*16)|0,v=c==='x'?r:((r&0x3)|0x8);return v.toString(16);});
+  }
+
+  /* ---------- normalization + content hash (both sides use one spec) --------
+     NFC, collapse whitespace, fold smart quotes/dashes, strip CE artifacts. */
+  function normalize(s){
+    s=(s==null?'':String(s));
+    try{s=s.normalize('NFC');}catch(e){}
+    s=s.replace(/ /g,' ')
+       .replace(/[‘’]/g,"'").replace(/[“”]/g,'"')
+       .replace(/[–—]/g,'-')
+       .replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ')
+       .replace(/\s*\n\s*/g,'\n').trim();
+    return s;
+  }
+  function hash(s){ // small deterministic content hash (djb2-ish), hex
+    s=normalize(s);var h=5381;
+    for(var i=0;i<s.length;i++){h=((h<<5)+h+s.charCodeAt(i))>>>0;}
+    return 'h'+h.toString(16);
+  }
+
+  /* ---------- log ---------------------------------------------------------- */
+  var logEl=document.getElementById('rig-log');
+  var LOG=[];
+  function log(){var m=Array.prototype.slice.call(arguments).join(' ');LOG.push(m);
+    logEl.textContent=LOG.slice(-30).join('\n');logEl.scrollTop=logEl.scrollHeight;}
+
+  /* ============================================================================
+     FAKE SERVER — the round-trip contract's dedupe boundary.
+     suggestions keyed by suggestion_id => a resend of the SAME id is idempotent
+     (one logical suggestion). Returns {ok,status,data} like chat.js api().
+     ============================================================================ */
+  var server={
+    suggestions:{},          // id -> {id, source_ref, new_text, original_hash, status}
+    calls:0,                 // total network calls that reached the "server"
+    _401budget:0
+  };
+  window.__SPIKE_SERVER__=server;
+
+  function rigSlow(){return document.getElementById('rig-slow').checked;}
+  function rigDelay(){return Math.max(0,parseInt(document.getElementById('rig-delay').value,10)||0);}
+  function rig401(){return document.getElementById('rig-401');}
+
+  function suggest(payload){
+    // payload: {suggestion_id, source_ref, new_text, original_hash}
+    var delay=rigSlow()?rigDelay():0;
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        server.calls++;
+        // one-shot 401 (auth expired mid-session)
+        if(rig401().checked){
+          rig401().checked=false;   // consume the toggle (fail ONCE)
+          log('SERVER 401 (auth expired) id='+payload.suggestion_id.slice(0,8));
+          resolve({ok:false,status:401,data:{error:{code:'unauthorized'}}});
+          return;
+        }
+        // idempotent upsert keyed by suggestion_id => dedupe
+        var existed=!!server.suggestions[payload.suggestion_id];
+        server.suggestions[payload.suggestion_id]={
+          id:payload.suggestion_id,source_ref:payload.source_ref,
+          new_text:payload.new_text,original_hash:payload.original_hash,status:'pending'
+        };
+        log('SERVER accept id='+payload.suggestion_id.slice(0,8)+(existed?' (dedup)':' (new)')+
+            ' total='+Object.keys(server.suggestions).length);
+        resolve({ok:true,status:200,data:{id:payload.suggestion_id,status:'pending'}});
+      },delay);
+    });
+  }
+
+  /* ============================================================================
+     ORIGIN-PAGE HOSTILE HANDLERS (scroll-spy + segmented toggle).
+     These are intentionally live so we can PROVE they get neutralized inside
+     edit regions (R7). The toggle also demonstrates a real focus-stealing
+     control that would fight contenteditable.
+     ============================================================================ */
+  var spyName=document.getElementById('spy-name');
+  var spyHits=0;
+  function scrollSpy(){ // pretend to recompute the active section on scroll
+    spyHits++;
+    var blocks=document.querySelectorAll('.eb');
+    var best=null,bestTop=1e9;
+    blocks.forEach(function(b){var t=Math.abs(b.getBoundingClientRect().top-120);
+      if(t<bestTop){bestTop=t;best=b;}});
+    if(best)spyName.textContent=best.getAttribute('data-section')||'—';
+  }
+  window.addEventListener('scroll',scrollSpy,{passive:true});
+  scrollSpy();
+
+  var toggle=document.getElementById('toggle');
+  toggle.addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b)return;
+    toggle.querySelectorAll('button').forEach(function(x){
+      x.setAttribute('aria-pressed',x===b?'true':'false');});
+    document.documentElement.style.fontSize=(b.dataset.size==='lg')?'21px':'';
+  });
+
+  /* ============================================================================
+     EDIT SESSION MODEL — the state machine.
+     ============================================================================ */
+  var ST={IDLE:'IDLE',EDITING:'EDITING',SAVING:'SAVING'};
+  // Per-block session record:
+  //   { ref, el, originalText, originalHash, suggestionId, snapshot, state, dirty }
+  var sessions={};   // source_ref -> session
+  var activeRef=null;
+
+  var BLOCKS=[
+    {ref:'platform/pitch:1',section:'Opening',
+     text:'The Practicum places second- and third-year students in a simulated firm, where every matter is graded against a rubric the students never see until the debrief.'},
+    {ref:'platform/pitch:2',section:'Method',
+     text:'Each client is a persona with tiered facts: some volunteered, some available for the asking, and some gated behind rapport the student must earn.'},
+    {ref:'platform/pitch:3',section:'Assessment',
+     text:'Assessment is money-exact and validator-gated, so a student’s ledger must reconcile to the penny before the matter can close.'}
+  ];
+
+  function session(ref){return sessions[ref];}
+
+  function makeSession(ref,elx,text){
+    var s={ref:ref,el:elx,originalText:text,originalHash:hash(text),
+           suggestionId:null,snapshot:text,state:ST.IDLE,dirty:false};
+    sessions[ref]=s;return s;
+  }
+
+  /* ---------- draft persistence (per-tab SS; keyed by source_ref+hash) ------ */
+  function saveDraft(s){
+    // R8: draft is keyed to (source_ref, original_hash). We store the hash INSIDE
+    // the record so a later hash-move invalidates it (reconcileDraft).
+    var rec={source_ref:s.ref,original_hash:s.originalHash,suggestion_id:s.suggestionId,
+             new_text:s.snapshot,ts:Date.now()};
+    SS.set(DRAFT_PREFIX+s.ref,JSON.stringify(rec));
+    // localStorage is RECOVERY-ONLY (mirror, never the live read path)
+    LS.set(DRAFT_PREFIX+s.ref,JSON.stringify(rec));
+  }
+  function loadDraft(ref){try{return JSON.parse(SS.get(DRAFT_PREFIX+ref)||'null');}catch(e){return null;}}
+  function clearDraft(ref){SS.del(DRAFT_PREFIX+ref);LS.del(DRAFT_PREFIX+ref);}
+
+  /* ---------- reconcile a draft against the block's CURRENT hash (R8) ------- */
+  function reconcileDraft(s){
+    var rec=loadDraft(s.ref);
+    if(!rec)return;
+    if(rec.original_hash!==s.originalHash){
+      // the underlying block moved on us — discard the stale draft, gently, and
+      // return the block to a fully-clean state (dirty flag + classes reset, id
+      // dropped — the draft it belonged to is gone).
+      clearDraft(s.ref);
+      s.suggestionId=null;
+      s.snapshot=s.originalText;
+      s.dirty=false;
+      s.state=ST.IDLE;
+      setBlockText(s,s.originalText);
+      s.el.classList.remove('editing','dirty');
+      showNote(s,'This paragraph was updated on the site, so your unsent draft here was set aside. Your edit was not lost anywhere else — just start fresh.');
+      log('DRAFT discarded (hash moved) ref='+s.ref);
+    }
+  }
+
+  /* ============================================================================
+     DOM
+     ============================================================================ */
+  var page=document.getElementById('page');
+
+  function setBlockText(s,text){
+    // set the visible editable text WITHOUT going through innerHTML
+    s.el.textContent=text;
+  }
+
+  function statusEl(s){return s.el.parentNode.querySelector('.status');}
+  function setStatus(s,msg,cls){var e=statusEl(s);e.textContent=msg||'';
+    e.className='status'+(cls?' '+cls:'');}
+
+  function noteEl(s){return s.el.parentNode.querySelector('.note');}
+  function showNote(s,msg){var n=noteEl(s);n.textContent=msg;n.classList.add('show');}
+  function hideNote(s){noteEl(s).classList.remove('show');}
+
+  function reauthEl(s){return s.el.parentNode.querySelector('.reauth');}
+  function showReauth(s){reauthEl(s).classList.add('show');}
+  function hideReauth(s){reauthEl(s).classList.remove('show');}
+
+  function saveBtn(s){return s.el.parentNode.querySelector('[data-act="save"]');}
+
+  function build(){
+    BLOCKS.forEach(function(b){
+      var frame=document.createElement('div');frame.className='eb-frame';
+
+      var eb=document.createElement('div');
+      eb.className='eb';eb.setAttribute('contenteditable','plaintext-only');
+      eb.setAttribute('data-ref',b.ref);
+      eb.setAttribute('data-section',b.section);
+      eb.setAttribute('role','textbox');
+      eb.setAttribute('aria-label','Editable paragraph: '+b.section);
+      eb.textContent=b.text;
+      frame.appendChild(eb);
+
+      var bar=document.createElement('div');bar.className='savebar';
+      var save=document.createElement('button');save.className='btn';save.type='button';
+      save.setAttribute('data-act','save');save.textContent='Save my change';
+      var cancel=document.createElement('button');cancel.className='btn btn--ghost';cancel.type='button';
+      cancel.setAttribute('data-act','cancel');cancel.textContent='Cancel';
+      var st=document.createElement('span');st.className='status';
+      bar.appendChild(save);bar.appendChild(cancel);bar.appendChild(st);
+      frame.appendChild(bar);
+
+      var note=document.createElement('div');note.className='note';frame.appendChild(note);
+
+      var re=document.createElement('div');re.className='reauth';
+      var p=document.createElement('p');
+      p.textContent='Your editing link needs a refresh before this can be saved. Your words are safe — tap below and we’ll try again.';
+      var reBtn=document.createElement('button');reBtn.className='btn';reBtn.type='button';
+      reBtn.setAttribute('data-act','reauth');reBtn.textContent='Refresh & save again';
+      re.appendChild(p);re.appendChild(reBtn);
+      frame.appendChild(re);
+
+      page.appendChild(frame);
+
+      var s=makeSession(b.ref,eb,b.text);
+      wireBlock(s);
+      // recover any draft this tab already had (SS), reconcile against hash
+      var rec=loadDraft(b.ref);
+      if(rec&&rec.original_hash===s.originalHash&&normalize(rec.new_text)!==normalize(s.originalText)){
+        s.snapshot=rec.new_text;s.suggestionId=rec.suggestion_id||null;
+        setBlockText(s,rec.new_text);eb.classList.add('dirty');s.dirty=true;
+        setStatus(s,'Draft recovered');
+      }
+    });
+  }
+
+  /* ============================================================================
+     WIRING — three verbs, one event each.
+     ============================================================================ */
+  function wireBlock(s){
+    var eb=s.el;
+
+    /* R7: NEUTRALIZE origin handlers inside the edit region. Capture-phase
+       stopPropagation on the events the scroll-spy/toggle would react to, so
+       they can never fight the caret while this block is being edited. We only
+       swallow while EDITING; when idle the page behaves normally. */
+    var neutralize=function(e){ if(s.state!==ST.IDLE){ e.stopPropagation(); } };
+    ['mousedown','mouseup','click','keydown','wheel','touchstart','pointerdown']
+      .forEach(function(t){ eb.addEventListener(t,neutralize,true); });
+
+    /* focus => enter EDIT session; mint suggestion_id ONCE (R2) */
+    eb.addEventListener('focus',function(){ enterEdit(s); });
+
+    /* every input => update the SNAPSHOT + flush draft (R3 snapshot, R1 draft) */
+    eb.addEventListener('input',function(){
+      if(s.state===ST.IDLE)enterEdit(s);         // first keystroke can precede focus event on some IMEs
+      if(!s.suggestionId)s.suggestionId=uuid();  // R2 mint-once guard
+      s.snapshot=eb.textContent;                 // snapshot maintained continuously
+      s.dirty=normalize(s.snapshot)!==normalize(s.originalText);
+      eb.classList.toggle('dirty',s.dirty);
+      saveDraft(s);                              // R1: flush-to-DRAFT only
+      setStatus(s,s.dirty?'Draft saved (not sent)':'',null);
+    });
+
+    /* blur => flush-to-draft ONLY. Inert: never commit, never discard (R1/R6). */
+    eb.addEventListener('blur',function(){
+      // Do NOT leave EDITING here — leaving the state on blur would let the
+      // origin handlers re-fight the region and would drop the caret context.
+      // We simply persist the latest snapshot. The session stays "open" until
+      // an explicit Save/Cancel. (blur is the trap chat.js warns about.)
+      if(s.dirty)saveDraft(s);
+      log('BLUR (draft-only, inert) ref='+s.ref);
+    });
+
+    /* Save — mousedown + preventDefault so the caret is NEVER stolen (R3).
+       Disabled synchronously before any await; commits the SNAPSHOT. */
+    var save=saveBtn(s);
+    save.addEventListener('mousedown',function(e){
+      e.preventDefault();          // keep focus/selection in the block
+      commit(s);
+    });
+    // keyboard users: click still works (no caret to steal from a button press)
+    save.addEventListener('click',function(e){ if(e.detail===0){ commit(s); } });
+
+    /* Cancel — the ONLY discard path */
+    var cancel=s.el.parentNode.querySelector('[data-act="cancel"]');
+    cancel.addEventListener('mousedown',function(e){ e.preventDefault(); discard(s); });
+
+    /* re-auth resend reuses the SAME suggestion_id (R5) */
+    var reBtn=s.el.parentNode.querySelector('[data-act="reauth"]');
+    reBtn.addEventListener('mousedown',function(e){ e.preventDefault(); hideReauth(s); commit(s); });
+  }
+
+  function enterEdit(s){
+    if(s.state!==ST.IDLE)return;
+    // Only ONE block edits at a time; entering another does NOT commit the prior
+    // one (R6) — the prior session stays open with its draft intact.
+    activeRef=s.ref;
+    s.state=ST.EDITING;
+    s.el.classList.add('editing');
+    if(!s.suggestionId)s.suggestionId=uuid();   // R2 mint ONCE per edit-session
+    hideNote(s);hideReauth(s);
+    reconcileDraft(s);                          // R8 re-poll on (re)entry
+    log('EDIT enter ref='+s.ref+' id='+(s.suggestionId||'').slice(0,8));
+  }
+
+  /* ---------- COMMIT: only from explicit Save (R1) ------------------------- */
+  function commit(s){
+    if(s.state===ST.SAVING)return;              // in-flight guard (dedupe layer 1)
+    if(!s.dirty){                               // nothing to send
+      setStatus(s,'No change to send',null);return;
+    }
+    // ---- synchronous critical section BEFORE any await (chat.js §Input) ----
+    s.state=ST.SAVING;
+    var btn=saveBtn(s);
+    btn.disabled=true;                          // R3/R4 sync disable
+    setStatus(s,'Sending…',null);
+    var id=s.suggestionId||(s.suggestionId=uuid());
+    var textAtClick=s.snapshot;                 // R3: read SNAPSHOT, not live DOM
+    var payload={suggestion_id:id,source_ref:s.ref,new_text:textAtClick,
+                 original_hash:s.originalHash};
+    log('SAVE click ref='+s.ref+' id='+id.slice(0,8)+' state=SAVING (disabled)');
+
+    suggest(payload).then(function(out){
+      if(out.ok){
+        // R2: id cleared only on Sent-check. Draft purged (applied/sent).
+        s.state=ST.IDLE;
+        s.el.classList.remove('editing','dirty');
+        s.dirty=false;
+        clearDraft(s.ref);
+        s.suggestionId=null;
+        // the sent text is now the block's baseline
+        s.originalText=textAtClick;s.originalHash=hash(textAtClick);
+        setStatus(s,'Sent ✓',' sent');
+        btn.disabled=false;
+        log('SENT ref='+s.ref+' (id cleared, draft purged)');
+      }else if(out.status===401){
+        // R5: preserve draft + id, offer friendly re-auth. Recoverable.
+        s.state=ST.EDITING;                     // stay open
+        btn.disabled=false;
+        saveDraft(s);                           // draft (with id) survives
+        setStatus(s,'Your link needs a refresh',' err');
+        showReauth(s);
+        log('SAVE 401 ref='+s.ref+' (draft+id preserved id='+id.slice(0,8)+')');
+      }else{
+        s.state=ST.EDITING;
+        btn.disabled=false;
+        saveDraft(s);
+        setStatus(s,'That didn’t send — try again',' err');
+        log('SAVE err ref='+s.ref+' status='+out.status);
+      }
+    });
+  }
+
+  /* ---------- DISCARD: only from explicit Cancel (R1) --------------------- */
+  function discard(s){
+    if(s.state===ST.SAVING)return;
+    s.state=ST.IDLE;
+    s.snapshot=s.originalText;
+    setBlockText(s,s.originalText);
+    s.el.classList.remove('editing','dirty');
+    s.dirty=false;
+    clearDraft(s.ref);
+    s.suggestionId=null;                        // discard drops the id
+    hideReauth(s);hideNote(s);
+    setStatus(s,'Change discarded',null);
+    log('CANCEL discard ref='+s.ref);
+  }
+
+  /* ---------- simulate the block's source hash moving (R8) ---------------- */
+  function bumpHash(ref){
+    var s=session(ref);if(!s)return;
+    s.originalHash=hash(s.originalText+' ¶'+Date.now());  // move the integrity boundary
+    log('HASH bump ref='+ref+' -> '+s.originalHash);
+    reconcileDraft(s);
+  }
+
+  /* ---------- pageshow / visibilitychange re-poll (R8) -------------------- */
+  window.addEventListener('pageshow',function(e){
+    if(e.persisted){
+      // bfcache restore: a frozen SAVING would brick the bar — reset like chat.js
+      Object.keys(sessions).forEach(function(ref){
+        var s=sessions[ref];
+        if(s.state===ST.SAVING){s.state=ST.EDITING;saveBtn(s).disabled=false;}
+        reconcileDraft(s);
+      });
+      log('PAGESHOW persisted: reset SAVING + reconciled drafts');
+    }
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible'){
+      Object.keys(sessions).forEach(function(ref){reconcileDraft(sessions[ref]);});
+    }
+  });
+
+  /* ============================================================================
+     HARNESS SURFACE — lets puppeteer drive the exact races deterministically.
+     ============================================================================ */
+  window.SpikeBlur={
+    build:build,
+    session:function(ref){var s=session(ref);return s&&{
+      ref:s.ref,state:s.state,dirty:s.dirty,suggestionId:s.suggestionId,
+      snapshot:s.snapshot,originalHash:s.originalHash};},
+    server:function(){return{calls:server.calls,count:Object.keys(server.suggestions).length,
+      ids:Object.keys(server.suggestions),suggestions:server.suggestions};},
+    // programmatic verbs (mirror the real user events)
+    focusBlock:function(ref){session(ref).el.focus();enterEdit(session(ref));},
+    typeInto:function(ref,text){var s=session(ref);s.el.textContent=text;
+      s.el.dispatchEvent(new Event('input',{bubbles:true}));},
+    blurBlock:function(ref){session(ref).el.dispatchEvent(new Event('blur'));},
+    clickSave:function(ref){commit(session(ref));},        // one logical Save
+    tripleClickSave:function(ref){commit(session(ref));commit(session(ref));commit(session(ref));},
+    clickCancel:function(ref){discard(session(ref));},
+    bumpHash:bumpHash,
+    spyHits:function(){return spyHits;},
+    setSlow:function(on,ms){document.getElementById('rig-slow').checked=!!on;
+      if(ms!=null)document.getElementById('rig-delay').value=ms;},
+    setFail401:function(on){rig401().checked=!!on;},
+    log:function(){return LOG.slice();}
+  };
+
+  build();
+  log('SPIKE 1 ready — 3 blocks, fake network armed');
+})();
+</script>
+</body>
+</html>

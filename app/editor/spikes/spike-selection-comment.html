@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPIKE · selection-capture commenting (race #2)</title>
+<!--
+  ============================================================================
+  SPIKE 2 — selection-capture commenting (plan race #2)
+  Word-style: Windows-mouse drag-select => floating "Comment" => a bubble
+  anchored to the EXACT selected range, never a collapsed caret.
+
+  Proves:
+    C1  CAPTURE-AT-REST: the Range is snapshotted on mouseup / selectionchange
+        into a stored var. The Comment button reads the STORED range, never the
+        live selection at click time.
+    C2  NO-COLLAPSE CLICK: the Comment button is bound on mousedown +
+        preventDefault so pressing it cannot collapse or clear the selection
+        (the classic "the selection vanished the moment I clicked" bug).
+    C3  TREMOR DEBOUNCE: zero-width / jitter selections are ignored; the button
+        tracks the LAST STABLE non-empty range (debounced), so a shaky hand that
+        flickers to a caret does not lose the phrase it just highlighted.
+    C4  CROSS-BLOCK CLAMP: a selection that spans two blocks is clamped to the
+        START block at capture time (Decision 4: cross-block clamps to start).
+    C5  BLOCK-AFFORDANCE FALLBACK: a per-block "Comment on this paragraph"
+        button (one tap, no selection needed) for touch / tremor users.
+
+  All echoed text rendered via textContent only. Vanilla JS, zero deps.
+  window.SpikeSel is the harness surface.
+  ============================================================================
+-->
+<style>
+  :root{
+    --paper:#f4efe4;--paper-2:#efe8d9;--paper-3:#e8dfcc;--ink:#1d1a16;
+    --ink-soft:#544d43;--ink-faint:#8a7f6d;--brass:#a9822f;--claret:#7c1e2b;
+    --green:#2c4636;--line:rgba(29,26,22,.16);--claret-wash:rgba(124,30,43,.07);
+    --brass-wash:rgba(169,130,47,.10);
+    --radius:3px;--sp-2:.5rem;--sp-3:.75rem;--sp-6:1.5rem;--sp-8:2rem;
+    --font-body:Georgia,'Times New Roman',serif;
+    --font-mono:ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--font-body);
+       line-height:1.68;font-size:18px}
+  .wrap{max-width:52rem;margin:0 auto;padding:var(--sp-8) 1.4rem 6rem}
+  h1{font-size:1.5rem}.lede{color:var(--ink-soft);max-width:60ch}
+  .banner{font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;
+          letter-spacing:.08em;color:var(--claret);background:var(--claret-wash);
+          border-left:3px solid var(--claret);padding:.5em .9em;border-radius:var(--radius);margin:var(--sp-6) 0}
+  .cblock{position:relative;padding:var(--sp-3) var(--sp-6);margin:var(--sp-6) 0;
+          border-left:3px solid transparent;border-radius:var(--radius)}
+  .cblock:hover{border-left-color:var(--brass)}
+  ::selection{background:rgba(169,130,47,.35)}
+  .block-comment{font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;
+      letter-spacing:.06em;border:1px solid var(--line);background:transparent;color:var(--claret);
+      border-radius:var(--radius);padding:.35em .7em;min-height:40px;cursor:pointer;margin-top:var(--sp-2)}
+  /* floating Comment button */
+  .float-comment{position:absolute;z-index:30;display:none;font-family:var(--font-mono);
+      font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;background:var(--claret);
+      color:var(--paper);border:0;border-radius:var(--radius);padding:.5em .9em;min-height:40px;
+      cursor:pointer;box-shadow:0 8px 24px -10px rgba(40,20,10,.6)}
+  .float-comment.show{display:inline-flex}
+  .float-comment::after{content:'';position:absolute;bottom:-6px;left:14px;border:6px solid transparent;
+      border-top-color:var(--claret);border-bottom:0}
+  /* comment bubble */
+  .bubble{position:absolute;z-index:29;display:none;background:var(--paper-2);border:1px solid var(--line);
+      border-left:3px solid var(--claret);border-radius:var(--radius);padding:var(--sp-3) var(--sp-6);
+      width:min(24rem,80vw);box-shadow:0 14px 40px -16px rgba(40,20,10,.5)}
+  .bubble.show{display:block}
+  .bubble .anchor{font-family:var(--font-mono);font-size:.68rem;color:var(--ink-faint);
+      text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4em}
+  .bubble .quote{font-style:italic;color:var(--ink-soft);border-left:2px solid var(--brass);
+      padding-left:.6em;margin:0 0 .6em;font-size:.95rem}
+  .bubble textarea{width:100%;min-height:70px;font-family:var(--font-body);font-size:1rem;
+      border:1px solid var(--line);border-radius:var(--radius);padding:.5em;resize:vertical}
+  .bubble .row{display:flex;gap:var(--sp-3);margin-top:var(--sp-3)}
+  .btn{font-family:var(--font-mono);font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
+       min-height:44px;padding:0 1rem;cursor:pointer;border-radius:var(--radius);
+       border:1px solid var(--claret);background:var(--claret);color:var(--paper)}
+  .btn--ghost{background:transparent;color:var(--claret)}
+  .sent-mark{font-family:var(--font-mono);font-size:.68rem;color:var(--green);
+      background:var(--brass-wash);border-radius:var(--radius);padding:.2em .5em;margin-left:.4em}
+  .rig{position:fixed;right:0;bottom:0;background:var(--paper-2);border:2px solid var(--brass);
+       border-right:0;border-bottom:0;border-radius:var(--radius) 0 0 0;padding:var(--sp-3) var(--sp-6);
+       font-family:var(--font-mono);font-size:.72rem;max-width:24rem;z-index:40}
+  .rig h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;margin:0 0 .5em;color:var(--claret)}
+  .rig .log{max-height:9rem;overflow:auto;background:var(--paper);border:1px solid var(--line);
+            padding:.4em;margin-top:.5em;white-space:pre-wrap;font-size:.68rem}
+  .comments-out{margin-top:var(--sp-8)}
+  .comments-out h3{font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint)}
+  .comments-out li{margin:.4em 0;font-size:.95rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Spike 2 — selection-capture commenting</h1>
+  <p class="lede">Drag to select text (Windows mouse) — a floating <b>Comment</b> button appears.
+  Clicking it opens a bubble anchored to the <b>exact</b> phrase you highlighted. Each paragraph
+  also has a one-tap <b>Comment</b> fallback that needs no selection.</p>
+  <p class="banner">You're editing — comments go to Damien for review</p>
+
+  <div id="doc"><!-- blocks injected --></div>
+
+  <div class="comments-out">
+    <h3>Comments captured (server)</h3>
+    <ul id="out"></ul>
+  </div>
+</div>
+
+<!-- one shared floating button + one shared bubble -->
+<button class="float-comment" id="float" type="button" aria-label="Comment on the selected text">Comment</button>
+<div class="bubble" id="bubble" role="dialog" aria-label="Leave a comment">
+  <div class="anchor" id="b-anchor">ON —</div>
+  <p class="quote" id="b-quote"></p>
+  <label for="b-text" style="font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)">Your note</label>
+  <textarea id="b-text" placeholder="What should Damien know about this passage?"></textarea>
+  <div class="row">
+    <button class="btn" id="b-send" type="button">Send comment</button>
+    <button class="btn btn--ghost" id="b-cancel" type="button">Cancel</button>
+  </div>
+</div>
+
+<div class="rig">
+  <h2>Selection rig</h2>
+  <div class="log" id="rig-log"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var LOG=[],logEl=document.getElementById('rig-log');
+  function log(){var m=Array.prototype.slice.call(arguments).join(' ');LOG.push(m);
+    logEl.textContent=LOG.slice(-30).join('\n');logEl.scrollTop=logEl.scrollHeight;}
+
+  function uuid(){
+    try{if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();}catch(e){}
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+      var r=(Math.random()*16)|0,v=c==='x'?r:((r&0x3)|0x8);return v.toString(16);});
+  }
+
+  /* fake comment server: keyed by comment id (echoed via textContent only) */
+  var server={comments:{}};
+  window.__SPIKE_SERVER__=server;
+  function postComment(rec){server.comments[rec.id]=rec;renderOut();log(
+    'SERVER comment id='+rec.id.slice(0,8)+' ref='+rec.source_ref+' anchor="'+rec.anchor_text.slice(0,24)+'"');}
+  function renderOut(){
+    var ul=document.getElementById('out');ul.textContent='';
+    Object.keys(server.comments).forEach(function(id){
+      var c=server.comments[id];var li=document.createElement('li');
+      var a=document.createElement('b');a.textContent=c.source_ref+': ';
+      li.appendChild(a);
+      var q=document.createElement('span');q.textContent='“'+c.anchor_text+'” — '+(c.note||'(no note)');
+      li.appendChild(q);ul.appendChild(li);
+    });
+  }
+
+  var BLOCKS=[
+    {ref:'platform/m03/facts:1',text:'The fence sits four feet inside the recorded boundary line, and the survey stakes from 2019 are still visible at both the northeast and southwest corners of the parcel.'},
+    {ref:'platform/m03/facts:2',text:'Opposing counsel concedes the encroachment but argues adverse possession, relying on a mowing pattern the neighbor maintained for roughly eleven years before the dispute began.'},
+    {ref:'platform/m03/facts:3',text:'The client wants the fence moved to the true line and is willing to split the survey cost, but will not concede any easement, however informal, over the disputed strip.'}
+  ];
+
+  var doc=document.getElementById('doc');
+  var float=document.getElementById('float');
+  var bubble=document.getElementById('bubble');
+  var bAnchor=document.getElementById('b-anchor');
+  var bQuote=document.getElementById('b-quote');
+  var bText=document.getElementById('b-text');
+
+  function build(){
+    BLOCKS.forEach(function(b){
+      var block=document.createElement('div');
+      block.className='cblock';block.setAttribute('data-ref',b.ref);
+      var p=document.createElement('p');p.className='ctext';p.textContent=b.text;
+      block.appendChild(p);
+      var bc=document.createElement('button');bc.className='block-comment';bc.type='button';
+      bc.setAttribute('data-ref',b.ref);
+      bc.textContent='Comment on this paragraph';
+      block.appendChild(bc);
+      doc.appendChild(block);
+      bc.addEventListener('mousedown',function(e){
+        // C5 fallback: one tap, no selection needed. mousedown+preventDefault so
+        // it behaves the same way as the floating button (no focus theft).
+        e.preventDefault();
+        openBubbleWhole(b.ref);
+      });
+    });
+  }
+
+  /* ============================================================================
+     C1/C3 — capture the selection Range AT REST into a stored var.
+     ============================================================================ */
+  var captured=null;   // { range:Range, text, source_ref, rect } — the STABLE snapshot
+  var tremorTimer=null;
+  var MIN_CHARS=1;     // ignore empty; treat <1 visible char as jitter
+
+  function blockRefOf(node){
+    var el=node&&node.nodeType===3?node.parentNode:node;
+    var block=el&&el.closest?el.closest('.cblock'):null;
+    return block?block.getAttribute('data-ref'):null;
+  }
+
+  function currentSelectionSnapshot(){
+    var sel=window.getSelection();
+    if(!sel||sel.rangeCount===0||sel.isCollapsed)return null;
+    var raw=sel.getRangeAt(0);
+    var text=sel.toString();
+    if(normalizeWs(text).length<MIN_CHARS)return null;    // C3: jitter / zero-width
+
+    // C4: clamp a cross-block selection to the START block.
+    var startRef=blockRefOf(raw.startContainer);
+    var endRef=blockRefOf(raw.endContainer);
+    if(!startRef)return null;
+    var range=raw.cloneRange();
+    if(endRef!==startRef){
+      // re-end the range at the end of the START block's PROSE text (.ctext),
+      // never past it into the block's own affordance button (whose label would
+      // otherwise pollute the anchor).
+      var host=range.startContainer.nodeType===3?range.startContainer.parentNode:range.startContainer;
+      var startBlock=host.closest?host.closest('.cblock'):null;
+      var prose=startBlock?startBlock.querySelector('.ctext'):null;
+      var textNode=findLastTextNode(prose);
+      if(textNode){range.setEnd(textNode,textNode.textContent.length);}
+      text=range.toString();
+      log('CLAMP cross-block -> start ref='+startRef);
+    }
+    var rect=range.getBoundingClientRect();
+    return {range:range,text:text,source_ref:startRef,rect:rect};
+  }
+
+  function findLastTextNode(el){
+    if(!el)return null;
+    var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,null);
+    var last=null,n;while((n=walker.nextNode()))last=n;return last;
+  }
+  function normalizeWs(s){return (s||'').replace(/\s+/g,' ').trim();}
+
+  /* debounced capture: only PROMOTE a snapshot to `captured` once the selection
+     has settled (C3). A flicker to a collapsed caret does NOT wipe the stored
+     range — we keep the last stable non-empty one until a NEW stable one lands. */
+  function onSelectionActivity(){
+    if(tremorTimer)clearTimeout(tremorTimer);
+    tremorTimer=setTimeout(function(){
+      var snap=currentSelectionSnapshot();
+      if(snap){
+        captured=snap;
+        positionFloat(snap.rect);
+        float.classList.add('show');
+        log('CAPTURE stable text="'+snap.text.slice(0,30)+'" ref='+snap.source_ref);
+      }else{
+        // collapsed/jitter: keep `captured` (last stable) but hide the button
+        // only if the user truly clicked away (no selection at all).
+        var sel=window.getSelection();
+        if(!sel||sel.rangeCount===0||sel.isCollapsed){
+          // do NOT null `captured` here — C3: preserve last stable range so a
+          // tremor that briefly collapses the selection doesn't lose the phrase.
+          // The button hides, but a re-select or the fallback still works.
+        }
+      }
+    },90);   // ~90ms settle window
+  }
+
+  // mouseup is the primary "at rest" signal for Windows mouse drag (C1)
+  document.addEventListener('mouseup',function(){ onSelectionActivity(); });
+  // selectionchange catches keyboard-extend + programmatic; also debounced
+  document.addEventListener('selectionchange',function(){ onSelectionActivity(); });
+
+  function positionFloat(rect){
+    var top=window.scrollY+rect.top-46;
+    var left=window.scrollX+rect.left+Math.min(rect.width/2,120);
+    float.style.top=Math.max(4,top)+'px';
+    float.style.left=Math.max(4,left)+'px';
+  }
+
+  /* ============================================================================
+     C2 — the Comment button must NOT collapse the selection.
+     Bound on mousedown + preventDefault: the mousedown default is what moves the
+     caret / clears the selection, so preventing it keeps the highlight intact.
+     The handler reads the STORED `captured` range, not the live selection.
+     ============================================================================ */
+  float.addEventListener('mousedown',function(e){
+    e.preventDefault();               // <-- keeps the selection from collapsing
+    if(!captured){ log('FLOAT click but no captured range'); return; }
+    openBubbleFromCapture(captured);
+  });
+
+  function openBubbleFromCapture(snap){
+    // freeze the anchor text NOW (textContent only)
+    openBubble(snap.source_ref,snap.text,snap.range.getBoundingClientRect());
+  }
+  function openBubbleWhole(ref){
+    // fallback: anchor to the whole paragraph
+    var block=doc.querySelector('.cblock[data-ref="'+cssEsc(ref)+'"]');
+    var p=block.querySelector('.ctext');
+    var r=p.getBoundingClientRect();
+    openBubble(ref,p.textContent,r);
+    log('FALLBACK block-comment ref='+ref);
+  }
+  function cssEsc(s){return s.replace(/([^a-zA-Z0-9_-])/g,'\\$1');}
+
+  var pending=null;  // {id, source_ref, anchor_text}
+  function openBubble(ref,text,rect){
+    pending={id:uuid(),source_ref:ref,anchor_text:text};
+    bAnchor.textContent='ON — '+ref;
+    bQuote.textContent='“'+text+'”';
+    bText.value='';
+    bubble.style.top=(window.scrollY+rect.bottom+10)+'px';
+    bubble.style.left=(window.scrollX+Math.max(4,rect.left))+'px';
+    bubble.classList.add('show');
+    float.classList.remove('show');
+    setTimeout(function(){try{bText.focus();}catch(e){}},0);
+    log('BUBBLE open id='+pending.id.slice(0,8)+' anchor="'+text.slice(0,30)+'"');
+  }
+
+  document.getElementById('b-send').addEventListener('click',function(){
+    if(!pending)return;
+    postComment({id:pending.id,source_ref:pending.source_ref,
+      anchor_text:pending.anchor_text,note:bText.value.trim()});
+    bubble.classList.remove('show');
+    pending=null;captured=null;
+    // clear the live selection now that it's committed
+    try{window.getSelection().removeAllRanges();}catch(e){}
+  });
+  document.getElementById('b-cancel').addEventListener('mousedown',function(e){
+    e.preventDefault();bubble.classList.remove('show');pending=null;
+  });
+
+  // clicking elsewhere hides the floating button (but not while bubble open)
+  document.addEventListener('mousedown',function(e){
+    if(e.target===float||bubble.contains(e.target))return;
+    if(!bubble.classList.contains('show'))float.classList.remove('show');
+  },true);
+
+  /* ============================================================================
+     HARNESS SURFACE — programmatic selection so puppeteer drives it exactly.
+     ============================================================================ */
+  function selectWithin(ref,startChar,endChar){
+    var block=doc.querySelector('.cblock[data-ref="'+cssEsc(ref)+'"]');
+    var tn=findLastTextNode(block.querySelector('.ctext'));
+    // simple single-text-node blocks: select [startChar,endChar)
+    var node=block.querySelector('.ctext').firstChild;
+    var len=node.textContent.length;
+    var a=Math.max(0,Math.min(startChar,len)),b=Math.max(a,Math.min(endChar,len));
+    var range=document.createRange();
+    range.setStart(node,a);range.setEnd(node,b);
+    var sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+    return range;
+  }
+  function selectAcross(refStart,startChar,refEnd,endChar){
+    var b1=doc.querySelector('.cblock[data-ref="'+cssEsc(refStart)+'"]').querySelector('.ctext').firstChild;
+    var b2=doc.querySelector('.cblock[data-ref="'+cssEsc(refEnd)+'"]').querySelector('.ctext').firstChild;
+    var range=document.createRange();
+    range.setStart(b1,Math.min(startChar,b1.textContent.length));
+    range.setEnd(b2,Math.min(endChar,b2.textContent.length));
+    var sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+    return range;
+  }
+
+  window.SpikeSel={
+    build:build,
+    server:function(){return{count:Object.keys(server.comments).length,
+      comments:Object.keys(server.comments).map(function(id){return server.comments[id];})};},
+    captured:function(){return captured&&{text:captured.text,source_ref:captured.source_ref};},
+    floatVisible:function(){return float.classList.contains('show');},
+    bubbleOpen:function(){return bubble.classList.contains('show')?
+      {anchor:pending&&pending.anchor_text,ref:pending&&pending.source_ref}:null},
+    // programmatic drag: select then fire mouseup, wait for debounce
+    dragSelect:function(ref,a,b){selectWithin(ref,a,b);
+      document.dispatchEvent(new Event('mouseup'));
+      return new Promise(function(res){setTimeout(res,140);});},
+    dragSelectAcross:function(r1,a,r2,b){selectAcross(r1,a,r2,b);
+      document.dispatchEvent(new Event('mouseup'));
+      return new Promise(function(res){setTimeout(res,140);});},
+    // tremor: a good select, then a collapsed-caret flicker, then read captured
+    tremorFlicker:function(ref,a,b){
+      selectWithin(ref,a,b);document.dispatchEvent(new Event('mouseup'));
+      return new Promise(function(res){setTimeout(function(){
+        // flicker to a collapsed caret (the tremor)
+        var node=doc.querySelector('.cblock[data-ref="'+cssEsc(ref)+'"]').querySelector('.ctext').firstChild;
+        var r=document.createRange();r.setStart(node,a);r.setEnd(node,a);
+        var sel=window.getSelection();sel.removeAllRanges();sel.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+        setTimeout(res,140);
+      },160);});},
+    clickFloat:function(){float.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));},
+    clickBlockComment:function(ref){
+      doc.querySelector('.block-comment[data-ref="'+cssEsc(ref)+'"]')
+        .dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));},
+    sendBubble:function(note){bText.value=note||'';document.getElementById('b-send').click();},
+    log:function(){return LOG.slice();}
+  };
+
+  build();
+  log('SPIKE 2 ready — 3 blocks, selection capture armed');
+})();
+</script>
+</body>
+</html>

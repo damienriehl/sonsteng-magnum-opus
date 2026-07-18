@@ -28,7 +28,12 @@ import html
 import shutil
 import csv
 import io
+import hashlib
 from collections import defaultdict, OrderedDict
+from html.parser import HTMLParser
+
+import text_norm          # canonical normalization (shared with the Worker/editor)
+import spine_stamp        # deterministic spine_build_id + git traceability
 
 # --------------------------------------------------------------------------- #
 # Paths
@@ -101,6 +106,106 @@ def pct(n, digits=1):
         return "—"
 
 # --------------------------------------------------------------------------- #
+# Editor-map recorder (the round-trip contract, P1)
+# --------------------------------------------------------------------------- #
+# The generator emits editor-map.generated.json — the server-side ALLOWLIST of
+# every EDITABLE block on every generated page. It is NOT shipped in the public
+# site; it is written to build/ for the Worker to bundle. See docs/research/
+# editor-apply-spec.md ("the map is the universal allowlist").
+#
+# HOW IT WORKS (annotate -> walk -> strip):
+#   1. While rendering, editable blocks get a temporary  data-ebsrc="<source_ref>"
+#      attribute and their SOURCE metadata is registered in EDMAP.sources.
+#   2. After the whole site is written, build_editor_map() re-parses each written
+#      page, walks candidate block elements in document order (THE WALKER
+#      CONTRACT below), assigns each an index, and — for annotated ones — joins
+#      the DOM (page, index, rendered-text) with the registered source metadata.
+#   3. The data-ebsrc attributes are then STRIPPED, so the PUBLIC HTML carries
+#      nothing (the Worker re-derives indices by walking the same clean DOM).
+#
+# THE WALKER CONTRACT (the JS injector MUST mirror this byte-for-byte):
+#   - Scope: element descendants of <main> only.
+#   - Candidate elements, in document order: p, li, h1, h2, h3, h4, h5, h6,
+#     blockquote  (the OUTERMOST such element — candidates never nest here).
+#   - index = 0-based position of the element within that ordered candidate list.
+#   - A page's editable blocks are the candidates whose index appears in the map;
+#     every other candidate (computed prose: KPI captions, section intros, TOCs)
+#     is read-only and simply absent from the map.
+#
+# SOURCE_REF GRAMMAR (stable across regenerates):
+#   "<repo-relpath>#<locator>"
+#     - prose from a .md file          -> locator = "p{n}"
+#         e.g. "data/curriculum/m1.md#p12"
+#     - prose from a JSON string field -> locator = "<json.path>.p{n}"
+#         e.g. "data/matters/m03-.../exercise.json#sections.intro.body_md.p3"
+#     - json_scalar (a single field)   -> locator = "<json.path>"  (== json_path)
+#         e.g. "data/matters/m03-.../matter.json#caption"
+#   {n} is the 0-based ordinal of the editable block WITHIN that source render,
+#   so it is stable as long as the source's block order is stable.
+_CANDIDATE_TAGS = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
+
+
+class _EditorMap:
+    """Accumulates SOURCE metadata per source_ref during a build. Page + index +
+    original_hash are resolved later from the written DOM (build_editor_map)."""
+
+    def __init__(self):
+        self.enabled = False
+        self.sources = {}   # source_ref -> metadata dict
+
+    def reset(self):
+        self.enabled = False
+        self.sources = {}
+
+    def register(self, source_ref, kind, original_text, has_inline_formatting,
+                 context, json_path=None):
+        # First registration wins — source_ref is unique per (file, block), so a
+        # repeat is the same block re-rendered (e.g. packet assembled twice).
+        if source_ref not in self.sources:
+            self.sources[source_ref] = {
+                "kind": kind,
+                "original_text": original_text,
+                "has_inline_formatting": bool(has_inline_formatting),
+                "context": context or "",
+                "json_path": json_path,
+            }
+        return source_ref
+
+
+EDMAP = _EditorMap()
+
+_FMT_PATTERNS = [
+    re.compile(r"\*\*[^*]+\*\*"),                 # **bold**
+    re.compile(r"__[^_]+__"),                     # __bold__
+    re.compile(r"(?<![\*\w])\*[^*\n]+\*(?!\*)"),  # *italic*
+    re.compile(r"(?<![_\w])_[^_\n]+_(?!_)"),      # _italic_
+    re.compile(r"\[[^\]]+\]\([^)]+\)"),           # [link](url)
+    re.compile(r"\[\^[^\]]+\]"),                  # [^footnote]
+    re.compile(r"`[^`]+`"),                       # `code`
+]
+
+
+def _has_inline_formatting(src_text):
+    """True when the SOURCE span carries inline markup that plain-text intent
+    cannot round-trip losslessly (bold/italic/link/footnote/code). Such blocks
+    are routed to needs_human by the apply engine (Enhancement item 4)."""
+    return any(p.search(src_text or "") for p in _FMT_PATTERNS)
+
+
+def _eb_scalar_attr(source_ref, original_text, json_path, context):
+    """Register a json_scalar block and return the ` data-ebsrc="..."` attribute
+    to splice into its opening tag (or "" when recording is off)."""
+    if not EDMAP.enabled:
+        return ""
+    EDMAP.register(source_ref, "json_scalar", original_text, False, context, json_path)
+    return ' data-ebsrc="{r}"'.format(r=esc(source_ref))
+
+
+def data_relpath(*parts):
+    """POSIX repo-relative path for a source file, for use as a source_ref base."""
+    return os.path.relpath(os.path.join(*parts), ROOT).replace(os.sep, "/")
+
+# --------------------------------------------------------------------------- #
 # Minimal, safe Markdown -> HTML (stdlib only)
 # Supports: headings, hr, pipe tables, blockquotes, ol/ul, bold/italic/code,
 # paragraphs. All text is HTML-escaped first; only our own tags are emitted.
@@ -116,15 +221,38 @@ def _inline(text):
     text = _ITALIC.sub(lambda m: "<em>" + m.group(1) + "</em>", text)
     return text
 
-def markdown(md):
+def markdown(md, src=None):
+    """Render markdown -> HTML. When `src` is a source_ref base AND the editor
+    map is recording, each editable block (paragraph, heading, list item,
+    blockquote) is annotated with a temporary data-ebsrc attribute and its
+    SOURCE span is registered in EDMAP (see the editor-map recorder above)."""
     lines = md.replace("\r\n", "\n").split("\n")
     out = []
     i = 0
     n = len(lines)
 
+    rec = EDMAP.enabled and src is not None
+    blk = [0]        # 0-based editable-block ordinal within this render
+    ctx = [""]       # nearest preceding heading text -> block context
+
+    def _emit(tag, inner_html, source_span, attrs=""):
+        """Emit one editable block, annotating + registering it when recording."""
+        open_attrs = (" " + attrs) if attrs else ""
+        if not rec:
+            return "<{t}{a}>{i}</{t}>".format(t=tag, a=open_attrs, i=inner_html)
+        nblk = blk[0]
+        blk[0] += 1
+        sep = "." if "#" in src else "#"
+        source_ref = "{s}{sep}p{n}".format(s=src, sep=sep, n=nblk)
+        EDMAP.register(source_ref, "prose", source_span,
+                       _has_inline_formatting(source_span), ctx[0])
+        return "<{t}{a} data-ebsrc=\"{r}\">{i}</{t}>".format(
+            t=tag, a=open_attrs, r=esc(source_ref), i=inner_html)
+
     def flush_para(buf):
         if buf:
-            out.append("<p>" + _inline(" ".join(buf).strip()) + "</p>")
+            raw = " ".join(buf).strip()
+            out.append(_emit("p", _inline(raw), raw))
             buf.clear()
 
     para = []
@@ -150,7 +278,9 @@ def markdown(md):
         if h:
             flush_para(para)
             level = min(len(h.group(1)) + 1, 6)  # demote so page h1 stays unique
-            out.append("<h{l}>{t}</h{l}>".format(l=level, t=_inline(h.group(2).strip())))
+            htext = h.group(2).strip()
+            out.append(_emit("h%d" % level, _inline(htext), htext))
+            ctx[0] = htext  # this heading becomes the context for following blocks
             i += 1
             continue
 
@@ -183,7 +313,8 @@ def markdown(md):
             while i < n and lines[i].strip().startswith(">"):
                 buf.append(lines[i].strip()[1:].strip())
                 i += 1
-            out.append('<blockquote class="md-quote">' + _inline(" ".join(buf)) + "</blockquote>")
+            qraw = " ".join(buf)
+            out.append(_emit("blockquote", _inline(qraw), qraw, attrs='class="md-quote"'))
             continue
 
         # unordered list
@@ -191,7 +322,8 @@ def markdown(md):
             flush_para(para)
             items = []
             while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
-                items.append("<li>" + _inline(re.sub(r"^[-*+]\s+", "", lines[i].strip())) + "</li>")
+                itemraw = re.sub(r"^[-*+]\s+", "", lines[i].strip())
+                items.append(_emit("li", _inline(itemraw), itemraw))
                 i += 1
             out.append("<ul>" + "".join(items) + "</ul>")
             continue
@@ -201,7 +333,8 @@ def markdown(md):
             flush_para(para)
             items = []
             while i < n and re.match(r"^\d+\.\s+", lines[i].strip()):
-                items.append("<li>" + _inline(re.sub(r"^\d+\.\s+", "", lines[i].strip())) + "</li>")
+                itemraw = re.sub(r"^\d+\.\s+", "", lines[i].strip())
+                items.append(_emit("li", _inline(itemraw), itemraw))
                 i += 1
             out.append("<ol>" + "".join(items) + "</ol>")
             continue
@@ -217,6 +350,10 @@ def markdown(md):
 # Page shell
 # --------------------------------------------------------------------------- #
 SITE_TITLE = "Sonsteng Practicum"
+
+# Set once at the top of main(); stamped into every page's <meta name="spine-build">
+# so a served page can be checked against the editor map it was mapped from.
+SPINE_BUILD_ID = ""
 
 def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     """
@@ -242,6 +379,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title} — {site}</title>
 <meta name="description" content="Sonsteng Practicum — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
+<meta name="spine-build" content="{spine_build}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f4efe4'/%3E%3Crect y='1' width='16' height='2' fill='%23a9822f'/%3E%3Crect y='12' width='16' height='1' fill='%23a9822f'/%3E%3Crect x='2' y='6' width='3' height='4' fill='%237c1e2b'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="{up}assets/fonts.css">
 <link rel="stylesheet" href="{up}assets/theme.css">
@@ -279,6 +417,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 </html>""".format(
         title=esc(title), site=esc(SITE_TITLE), up=up, docket=esc(docket),
         bodyclass=esc(body_class), crumb=crumb_bar, body=body,
+        spine_build=esc(SPINE_BUILD_ID),
         root=up + "../",  # THIRD-PARTY.md lives at repo/site's parent; link is best-effort
     )
 
@@ -1189,7 +1328,7 @@ def build_modules(corpus):
   settlement plans, and the reflective portfolio — share a common set of handout templates,
   each with its grading note.</p>
   <p><a class="btn" href="../templates/index.html">Open the deliverable templates</a></p>
-</section>""".format(prose=markdown(volume_md))
+</section>""".format(prose=markdown(volume_md, src=data_relpath(CURRICULUM_DIR, code.lower() + ".md")))
 
         body = """
 <div class="module module--{accent}">
@@ -1244,7 +1383,8 @@ def build_templates(corpus):
     </div>
     <div class="prose">{body}</div>
   </section>""".format(a=anchor, n=num, kicker=esc(t["kicker"]),
-                       ttl=esc(t["title"]), body=markdown(t["md"])))
+                       ttl=esc(t["title"]),
+                       body=markdown(t["md"], src=data_relpath(CURRICULUM_DIR, "templates", t["stem"] + ".md"))))
 
     header = """
 <header class="reveal">
@@ -1495,11 +1635,12 @@ def render_doc_card(matter_dir, relfile, meta_label):
     md = _read_md(matter_dir, relfile)
     if md is None:
         return ""
+    src = data_relpath(matter_dir, relfile)
     return """
   <article class="doc-card">
     <p class="doc-card__meta">{meta}</p>
     {body}
-  </article>""".format(meta=esc(meta_label), body=markdown(md))
+  </article>""".format(meta=esc(meta_label), body=markdown(md, src=src))
 
 def render_ledger_rows(entries, cols, totals=None):
     body = []
@@ -1667,6 +1808,8 @@ def build_one_packet(corpus, m, man):
     up = up_prefix(rel)
     ex = m.get("_exercise")
     sections = (ex or {}).get("sections", {})
+    exercise_rel = data_relpath(m["_dir"], "exercise", "exercise.json")
+    matter_rel = data_relpath(m["_dir"], "matter.json")
     juris = corpus["juris"].get(m.get("jurisdiction") if m.get("tier") == "meridian" else (m.get("jurisdiction") or "").upper(), {})
 
     # --- TOC + parts
@@ -1688,7 +1831,9 @@ def build_one_packet(corpus, m, man):
                      .format(n=len(case_file_cards)))
             parts_html.append((key, num, title, anchor, inner))
         else:
-            parts_html.append((key, num, title, anchor, markdown(sec.get("body_md", ""))))
+            body_src = "{ex}#sections.{k}.body_md".format(ex=exercise_rel, k=key)
+            parts_html.append((key, num, title, anchor,
+                               markdown(sec.get("body_md", ""), src=body_src)))
 
     # --- per-side confidential note (m04/m14 pattern)
     conf_sides = [s for s in (m.get("sides") or []) if s.get("confidential_fact_refs")]
@@ -1800,14 +1945,16 @@ def build_one_packet(corpus, m, man):
     # --- caption header
     jname = juris.get("name", m.get("jurisdiction", ""))
     tier = "meridian" if m.get("tier") == "meridian" else "real"
+    cap_eb = _eb_scalar_attr(matter_rel + "#caption", m.get("caption", ""),
+                             "caption", "matter caption")
     header = """
 <header class="reveal">
   <div class="chips">{tc} <span class="chip">{fee} FEE</span> <span class="chip chip--folio">{mid}</span></div>
-  <h1 style="margin-top:var(--sp-3)">{cap}</h1>
+  <h1 style="margin-top:var(--sp-3)"{cap_eb}>{cap}</h1>
   <p class="lede">{shape} · {jname}</p>
   <div class="chips" aria-label="Skills exercised">{skills}</div>
 </header>""".format(tc=tier_chip(tier, m.get("jurisdiction")), fee=esc((m.get("fee_type") or "").upper()),
-                    mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")),
+                    mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")), cap_eb=cap_eb,
                     shape=esc(SHAPE_LABELS.get(m.get("shape"), m.get("shape", ""))),
                     jname=esc(jname), skills=skill_chips)
 
@@ -1830,12 +1977,15 @@ def build_one_packet(corpus, m, man):
                 content = inner + (("".join(case_file_cards)) if case_file_inline else cf_link_html)
             else:
                 content = inner
+            title_eb = _eb_scalar_attr(
+                "{ex}#sections.{k}.title".format(ex=exercise_rel, k=key),
+                title, "sections.{k}.title".format(k=key), "section title")
             parts_out.append("""
   <section class="part" id="{a}" aria-labelledby="{a}-h">
     <div class="part__head"><span class="part__num" aria-hidden="true">{n}</span>
-      <h2 id="{a}-h">{t}</h2></div>
+      <h2 id="{a}-h"{teb}>{t}</h2></div>
     {c}
-  </section>""".format(a=anchor, n=num, t=esc(title), c=content))
+  </section>""".format(a=anchor, n=num, t=esc(title), teb=title_eb, c=content))
         body = """
 {header}
 <div class="brass-rule" role="presentation"></div>
@@ -2526,6 +2676,154 @@ def build_data_catalog(corpus):
     return catalog
 
 # --------------------------------------------------------------------------- #
+# Editor map — walk the written DOM, join with EDMAP sources, strip annotations
+# --------------------------------------------------------------------------- #
+BUILD_DIR = os.path.join(ROOT, "build")
+EDITOR_MAP_PATH = os.path.join(BUILD_DIR, "editor-map.generated.json")
+_EBSRC_ATTR_RE = re.compile(r'\s+data-ebsrc="[^"]*"')
+
+
+class _BlockWalker(HTMLParser):
+    """Walk candidate block elements (THE WALKER CONTRACT) inside <main>, in
+    document order. Records each candidate's tag, its data-ebsrc (if any), and
+    its concatenated text. Candidates never nest in this generator's output, so
+    a single-open-candidate model is sufficient (a stray nested same-tag is
+    tolerated via depth counting)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.in_main = False
+        self.candidates = []      # ordered: {"tag","ebsrc","text"}
+        self._cur = None
+        self._cur_tag = None
+        self._depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "main":
+            self.in_main = True
+            return
+        if not self.in_main:
+            return
+        if self._cur is not None:
+            if tag == self._cur_tag:
+                self._depth += 1
+            return
+        if tag in _CANDIDATE_TAGS:
+            d = dict(attrs)
+            self._cur = {"tag": tag, "ebsrc": d.get("data-ebsrc"), "text": []}
+            self._cur_tag = tag
+            self._depth = 1
+            self.candidates.append(self._cur)
+
+    def handle_endtag(self, tag):
+        if tag == "main":
+            self.in_main = False
+            return
+        if self._cur is not None and tag == self._cur_tag:
+            self._depth -= 1
+            if self._depth == 0:
+                self._cur = None
+                self._cur_tag = None
+
+    def handle_data(self, data):
+        if self._cur is not None:
+            self._cur["text"].append(data)
+
+
+def _extract_page_blocks(html_text):
+    """Return (editable_entries, has_annotations). Each entry is a partial map
+    block joined from the DOM + EDMAP.sources; index is document-order position
+    among ALL candidates (editable or not)."""
+    walker = _BlockWalker()
+    walker.feed(html_text)
+    entries = []
+    for index, cand in enumerate(walker.candidates):
+        ref = cand["ebsrc"]
+        if not ref:
+            continue
+        meta = EDMAP.sources.get(ref)
+        if meta is None:
+            continue  # annotated but never registered — defensive skip
+        rendered_plain = "".join(cand["text"])
+        block = {
+            "index": index,
+            "kind": meta["kind"],
+            "source_ref": ref,
+            "original_text": meta["original_text"],
+            "original_hash": text_norm.norm_hash(rendered_plain),
+            "has_inline_formatting": meta["has_inline_formatting"],
+            "context": meta["context"],
+        }
+        if meta["kind"] == "json_scalar" and meta.get("json_path"):
+            block["json_path"] = meta["json_path"]
+        entries.append(block)
+    return entries, ("data-ebsrc=" in html_text)
+
+
+def build_editor_map(spine_build_id):
+    """POST-BUILD pass: for every written page, extract editable blocks in the
+    walker's document order, then STRIP the data-ebsrc annotations so the public
+    HTML carries nothing. Writes build/editor-map.generated.json (NOT into the
+    public site). Returns (pages_dict, total_block_count)."""
+    pages = {}
+    total = 0
+    for page in sorted(glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True)):
+        rel = os.path.relpath(page, OUT).replace(os.sep, "/")
+        if rel.startswith("assets/"):
+            continue
+        with open(page, "r", encoding="utf-8") as fh:
+            content = fh.read()
+        entries, annotated = _extract_page_blocks(content)
+        if annotated:
+            # strip every data-ebsrc attribute -> clean public HTML
+            cleaned = _EBSRC_ATTR_RE.sub("", content)
+            with open(page, "w", encoding="utf-8") as fh:
+                fh.write(cleaned)
+        if entries:
+            pages[rel] = entries
+            total += len(entries)
+
+    os.makedirs(BUILD_DIR, exist_ok=True)
+    bundle = {
+        "schema_version": "1.0.0",
+        "generated_by": "tools/build_site.py",
+        "note": ("EDITABLE-BLOCK ALLOWLIST — server-only. The Worker bundles this "
+                 "to validate every source_ref/json_path at suggest AND apply time. "
+                 "Do NOT ship in site/platform/. Regenerated by build_site.py."),
+        "spine_build_id": spine_build_id,
+        "git_base_sha": spine_stamp.git_base_sha(),
+        "walker_contract": (
+            "Within <main>, candidate elements in document order are "
+            "p, li, h1-h6, blockquote (outermost). index = 0-based position in "
+            "that list. Editable blocks are candidates whose index is present here; "
+            "all other candidates are read-only. Mirror byte-for-byte in the injector."),
+        "normalization": ("original_hash = sha256(normalize(rendered_text)); "
+                          "normalize spec is frozen in tools/text_norm.py."),
+        "counts": {},
+        "pages": pages,
+    }
+    for rel, entries in pages.items():
+        bundle["counts"][rel] = len(entries)
+    bundle["counts"]["_total"] = total
+    with open(EDITOR_MAP_PATH, "w", encoding="utf-8") as fh:
+        json.dump(bundle, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    return pages, total
+
+
+def write_build_stamp(spine_build_id):
+    """Emit site/platform/data/.build-stamp.json — the site's copy of the parity
+    fingerprint (matched against the persona + instructor bundles)."""
+    stamp = {
+        "spine_build_id": spine_build_id,
+        "git_base_sha": spine_stamp.git_base_sha(),
+        "generated_from": "build_site.py",
+    }
+    write_file(os.path.join("data", ".build-stamp.json"),
+               json.dumps(stamp, indent=2, ensure_ascii=False) + "\n")
+    return stamp
+
+# --------------------------------------------------------------------------- #
 # Link checker — parse generated HTML, assert every internal href/src resolves
 # --------------------------------------------------------------------------- #
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
@@ -2664,6 +2962,11 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
+    global SPINE_BUILD_ID
+    SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
+    EDMAP.reset()
+    EDMAP.enabled = True                         # record editable blocks while rendering
+
     corpus = load_corpus()
     clean_output()
     write_platform_assets()
@@ -2678,6 +2981,10 @@ def main(argv):
     build_firm_dashboard(corpus)
     build_third_party()
     catalog = build_data_catalog(corpus)
+
+    # ---- editor map + parity stamp (post-build: walk DOM, then strip anchors) ----
+    write_build_stamp(SPINE_BUILD_ID)
+    ed_pages, ed_total = build_editor_map(SPINE_BUILD_ID)
 
     # ---- page budget report ----
     all_pages = []
@@ -2699,6 +3006,9 @@ def main(argv):
     print("catalog: {m} matters · {s} skills · {tk} tasks".format(
         m=len(catalog["matters"]), s=catalog["taxonomy"]["skills_count"],
         tk=catalog["taxonomy"]["tasks_count"]))
+    print("editor map: {t} editable blocks across {p} pages · build/editor-map.generated.json".format(
+        t=ed_total, p=len(ed_pages)))
+    print("spine_build_id: {b}".format(b=SPINE_BUILD_ID[:16]))
     print("\n== page sizes (top 5) ==")
     for p, s in all_pages[:5]:
         print("  {s:>8,} B  {p}".format(s=s, p=p))
