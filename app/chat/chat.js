@@ -1042,22 +1042,93 @@
     refreshDebriefBtn();
   }
 
-  function mintSession() {
-    var path = '/v1/session';
-    // bypass token forwarded here ONLY, and only via query — never stored, logged, or rendered
-    if (cfg.bypass) path += '?bypass=' + encodeURIComponent(cfg.bypass);
-    return api(path, { method: 'GET' }).then(function (out) {
-      if (out.ok && out.data && out.data.session_token) {
-        session = out.data;
-        if (out.data.max_turns) { maxTurns = out.data.max_turns; }
-        saveSession();
-        updateCounter((committed()[committed().length - 1] || {}).turn || 0);
-      } else {
-        var e = (out.data && out.data.error) || {};
-        stageDirection(e.message || 'Couldn’t open a session with the interview server. You can still read your existing transcript; reload to retry the connection.');
+  /* ---------- Turnstile bot-gate (WP6) --------------------------------------
+     The free /v1/session mint is bot-gated. We render a managed Turnstile widget
+     (invisible unless Cloudflare decides to challenge), capture its token, and
+     pass it to mintSession as ?cf_ts=. Carve-outs that need NO token: ?sample=1
+     (never mints) and ?bypass (the server skips the gate for a valid demo
+     token). If the widget can't load (blocked/slow/no sitekey), we mint with an
+     EMPTY token — the server answers a retryable `turnstile_failed`, which
+     mintSession renders as a reload prompt. Never a hard brick. */
+  var turnstile = (function () {
+    var widgetId = null, token = '', settled = false, waiters = [];
+    function sitekey() { return meta('turnstile-sitekey'); }
+    function settle(t) {
+      token = t || ''; settled = true;
+      var w = waiters; waiters = [];
+      w.forEach(function (fn) { try { fn(token); } catch (e) {} });
+    }
+    function container() {
+      var c = document.getElementById('cf-turnstile');
+      if (c) return c;
+      c = document.createElement('div');
+      c.id = 'cf-turnstile'; c.className = 'cf-turnstile';
+      c.setAttribute('aria-hidden', 'true');
+      // Parked off in a corner; a managed challenge (rare) surfaces here.
+      c.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:2147483647';
+      document.body.appendChild(c);
+      return c;
+    }
+    function render() {
+      if (widgetId !== null || !window.turnstile) return;
+      var sk = sitekey();
+      if (!sk) { settle(''); return; }   // no sitekey configured -> mint tokenless
+      try {
+        widgetId = window.turnstile.render(container(), {
+          sitekey: sk,
+          action: 'session-mint',
+          'data-action': 'turnstile-spin-v1',
+          callback: function (t) { settle(t); },
+          'error-callback': function () { settle(''); return true; },
+          'expired-callback': function () { settled = false; token = ''; try { window.turnstile.reset(widgetId); } catch (e) {} }
+        });
+      } catch (e) { settle(''); }
+    }
+    // Turnstile api.js (loaded with ?onload=onloadTurnstileCallback) calls this
+    // when it's ready. Defined on window so the external loader can reach it.
+    window.onloadTurnstileCallback = render;
+    return {
+      init: function () {
+        if (cfg.sample || cfg.bypass) return;   // no token needed
+        container();
+        if (window.turnstile) render();          // script already parsed
+        // Fail-open-to-retryable: if no token within the grace window, release
+        // waiters so mint proceeds tokenless (server -> retryable 403), rather
+        // than hanging the consultation room on a blocked widget.
+        setTimeout(function () { if (!settled) settle(''); }, 8000);
+      },
+      // Promise for the current token (or '' when unavailable / carved out).
+      get: function () {
+        return new Promise(function (resolve) {
+          if (cfg.sample || cfg.bypass) return resolve('');
+          if (settled) return resolve(token);
+          waiters.push(resolve);
+        });
       }
-    }, function () {
-      stageDirection('The interview server didn’t answer. Check your connection or the API address, then reload.');
+    };
+  })();
+
+  function mintSession() {
+    return turnstile.get().then(function (ts) {
+      var params = [];
+      // bypass token forwarded here ONLY, and only via query — never stored, logged, or rendered
+      if (cfg.bypass) params.push('bypass=' + encodeURIComponent(cfg.bypass));
+      // Turnstile token (single-use, ~300s TTL) — query only, never stored/logged.
+      if (ts) params.push('cf_ts=' + encodeURIComponent(ts));
+      var path = '/v1/session' + (params.length ? '?' + params.join('&') : '');
+      return api(path, { method: 'GET' }).then(function (out) {
+        if (out.ok && out.data && out.data.session_token) {
+          session = out.data;
+          if (out.data.max_turns) { maxTurns = out.data.max_turns; }
+          saveSession();
+          updateCounter((committed()[committed().length - 1] || {}).turn || 0);
+        } else {
+          var e = (out.data && out.data.error) || {};
+          stageDirection(e.message || 'Couldn’t open a session with the interview server. You can still read your existing transcript; reload to retry the connection.');
+        }
+      }, function () {
+        stageDirection('The interview server didn’t answer. Check your connection or the API address, then reload.');
+      });
     });
   }
 
@@ -1225,6 +1296,9 @@
     turns = loadTurns();
     if (session && session.max_turns) maxTurns = session.max_turns;
     rehydrate();
+
+    // start the Turnstile bot-gate widget so a token is ready for the mint
+    turnstile.init();
 
     // always (re)mint if no session token in this tab
     if (!session || !session.session_token) {

@@ -2827,6 +2827,12 @@ def write_build_stamp(spine_build_id):
 # Link checker — parse generated HTML, assert every internal href/src resolves
 # --------------------------------------------------------------------------- #
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
+
+# The site is otherwise fully self-contained (zero external requests). The ONE
+# sanctioned external dependency is the Cloudflare Turnstile bot-gate (WP6): its
+# api.js and challenge iframe MUST load from Cloudflare's edge — the token cannot
+# be self-hosted. Any OTHER external http(s) request is still a link-check error.
+_EXTERNAL_ALLOW = ("https://challenges.cloudflare.com/",)
 _ID_RE = re.compile(r'id="([^"]+)"')
 
 def check_links():
@@ -2851,7 +2857,7 @@ def check_links():
             content = fh.read()
         for url in _HREF_RE.findall(content):
             if url.startswith(("http://", "https://", "mailto:", "data:", "javascript:")):
-                if url.startswith(("http://", "https://")):
+                if url.startswith(("http://", "https://")) and not url.startswith(_EXTERNAL_ALLOW):
                     errors.append("{p}: EXTERNAL request {u}".format(p=rel, u=url))
                 continue
             frag = None
@@ -3029,7 +3035,7 @@ def main(argv):
             for e in errors:
                 print("  BROKEN: " + e)
         else:
-            print("all internal links resolve; zero external requests.")
+            print("all internal links resolve; no external requests except the sanctioned Turnstile bot-gate.")
         leaks = check_no_instructor_leaks(corpus)
         print("== instructor-leak sweep ==")
         if leaks:

@@ -20,6 +20,7 @@
 import bundle from "../personas/personas.generated.json" with { type: "json" };
 import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./cors.js";
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
+import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
 import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
@@ -122,6 +123,17 @@ async function handleSession(request, env, origin) {
   let isDemo = false;
   if (bypass && env.DEMO_BYPASS_TOKEN) {
     isDemo = await timingSafeEqualStr(bypass, env.DEMO_BYPASS_TOKEN);
+  }
+
+  // WP6 bot-gate: verify Turnstile BEFORE minting, unless this is a valid demo
+  // bypass (keyless demo/professor flows) or the gate is disabled. The token
+  // rides the query string (never logged — same channel as `bypass`). A
+  // failure is retryable (reload re-runs the widget), never silent-open.
+  const tsToken = url.searchParams.get("cf_ts") || "";
+  const gate = await gateSessionMint({ env, token: tsToken, isDemo, ip: clientIp(request) });
+  if (!gate.ok) {
+    logMeta({ ev: "mint_turnstile_reject", reason: gate.reason });
+    return errorEnvelope(gate.code, gate.message, gate.status);
   }
 
   const ipHash = await hmacHex(env.SESSION_SIGNING_KEY, clientIp(request));

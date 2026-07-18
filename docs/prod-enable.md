@@ -41,6 +41,7 @@ Set each on the production worker (run from `app/worker/`; creds via
     npx wrangler@4 secret put EDIT_TOKEN_JOHN     --env production   # from ~/.secrets/sonsteng-editor-tokens
     npx wrangler@4 secret put EDIT_TOKEN_ROGER    --env production   # from ~/.secrets/sonsteng-editor-tokens
     npx wrangler@4 secret put EDIT_TOKEN_ADMIN    --env production   # from ~/.secrets/sonsteng-editor-tokens
+    npx wrangler@4 secret put TURNSTILE_SECRET    --env production   # WP6 bot-gate secret for the shared Turnstile widget (sitekey 0x4AAAAAAD4uPMN8eNwzYvAy). REQUIRED: env.production sets TURNSTILE_ENABLED="true", so without this secret GET /v1/session rejects every non-bypass mint with turnstile_failed (503). The DEV worker already has it; the widget's domain list already covers sonsteng.damienriehl.com, so no new widget is needed — only this secret.
     # ANTHROPIC_API_KEY is OPTIONAL and gated on Damien (BYOK-forever per q4) — leave unset to keep the hosted pool dormant.
 
 ---

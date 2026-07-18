@@ -70,6 +70,20 @@
     // in every env — flip only after the D7 rehearsal says it feels slow.
     "STREAMING": "false",
 
+    // ---- Turnstile bot-gate (WP6) ------------------------------------------
+    // TURNSTILE_ENABLED: "false" disables the GET /v1/session bot-gate
+    // deployment-wide; ANY other value (incl. unset) = ENABLED (fail-closed).
+    // TURNSTILE_SITEKEY is PUBLIC (rendered in the client) — kept here for env
+    // parity/visibility; the frontend actually reads it from the page's
+    // <meta name="turnstile-sitekey"> (static site can't read wrangler vars).
+    // The verification SECRET is `wrangler secret put TURNSTILE_SECRET` (never
+    // here). Demo-bypass requests skip the gate entirely (keyless flows).
+    // One widget covers DEV + PROD hostnames, so the sitekey is the same in
+    // every env. PROD needs its own TURNSTILE_SECRET set at enable time
+    // (docs/prod-enable.md).
+    "TURNSTILE_ENABLED": "true",
+    "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
+
     // ---- Editor experience -------------------------------------------------
     // EDIT_UPSTREAM: the DEV static origin the proxy-injector fetches (prefix +
     // trailing slash). Every allowlisted page key resolves under it.
@@ -113,6 +127,8 @@
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
         "STREAMING": "false",
+        "TURNSTILE_ENABLED": "true",
+        "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
         "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
         "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
@@ -156,6 +172,12 @@
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
         "STREAMING": "false",
+        // Bot-gate ON in PROD too; the widget's domain list already covers
+        // sonsteng.damienriehl.com, so no new widget at enable time — but PROD
+        // needs its OWN `wrangler secret put TURNSTILE_SECRET --env production`
+        // (docs/prod-enable.md). Same public sitekey as DEV (one widget).
+        "TURNSTILE_ENABLED": "true",
+        "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
         // PROD static is served by Cloudflare Pages at sonsteng.damienriehl.com.
         "EDIT_UPSTREAM": "https://sonsteng.damienriehl.com/platform/",
         // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).

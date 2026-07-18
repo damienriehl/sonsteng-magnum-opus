@@ -73,6 +73,16 @@ Mint a signed, stateless session token.
 `crypto.subtle.timingSafeEqual`; a valid bypass yields pool `"demo"` and skips
 the per-IP mint ceiling (for the two professors). Scrubbed from all logs.
 
+**Query:** `?cf_ts=<turnstile-token>` — the Cloudflare Turnstile token from the
+managed widget rendered client-side (WP6 bot-gate). The Worker calls Turnstile
+`siteverify` **before** minting; a missing/invalid token → `403 turnstile_failed`
+(retryable — the client reloads to re-run the widget). **Skipped** (no
+`siteverify` call) when (a) a valid `?bypass` is present — keyless demo/professor
+flows never see a challenge — or (b) the gate is disabled via
+`TURNSTILE_ENABLED="false"`. Like `bypass`, the token is query-only and scrubbed
+from logs. A widget that fails to load client-side degrades to the retryable
+`turnstile_failed` prompt, never a hard brick.
+
 **200:**
 ```json
 { "session_token": "<hmac-signed>", "sid": "<uuid>", "pool": "public", "max_turns": 20 }
@@ -186,7 +196,11 @@ Always JSON, always with CORS headers (for allowlisted origins):
 ```
 - `code` ∈ `cap_exceeded` | `turn_limit` | `rate_limited` | `validation_error` |
   `upstream_unavailable` | `origin_forbidden` | `session_invalid` |
-  `no_hosted_key`.
+  `no_hosted_key` | `turnstile_failed`.
+- `turnstile_failed` (`GET /v1/session` only): the bot-gate could not verify the
+  request — missing/invalid Turnstile token (`403`) or the gate is enabled but
+  its secret is unset (`503`, deploy error). Always **retryable**: the client
+  reloads to re-run the widget.
 - `in_character` is supplied for `cap_exceeded` / `turn_limit` /
   `upstream_unavailable` (the UI renders the in-character line, e.g. the
   bad-phone-connection message, instead of a raw error).
@@ -200,12 +214,16 @@ Always JSON, always with CORS headers (for allowlisted origins):
 config `MODEL_DEFAULT_ANTHROPIC` / `MODEL_DEFAULT_OPENAI` /
 `MODEL_DEFAULT_GOOGLE` and allowlists `MODEL_ALLOW_ANTHROPIC` /
 `MODEL_ALLOW_OPENAI` / `MODEL_ALLOW_GOOGLE` (comma-separated; see the BYOK
-section table).
+section table). **Turnstile (WP6):** `TURNSTILE_ENABLED` (`"true"` default;
+`"false"` disables the session-mint bot-gate) and `TURNSTILE_SITEKEY` (public;
+mirrored in the chat page's `<meta name="turnstile-sitekey">`, which is what the
+client actually reads).
 
 Secrets (set with `wrangler secret put`, never in source): `SESSION_SIGNING_KEY`,
-`DEMO_BYPASS_TOKEN`, and **optionally** `ANTHROPIC_API_KEY` (gated on Damien;
-while unset the hosted demo pool is dormant and non-BYOK requests get
-`no_hosted_key`).
+`DEMO_BYPASS_TOKEN`, `TURNSTILE_SECRET` (the Turnstile verification secret — the
+gate rejects with `turnstile_failed` when enabled but unset), and **optionally**
+`ANTHROPIC_API_KEY` (gated on Damien; while unset the hosted demo pool is dormant
+and non-BYOK requests get `no_hosted_key`).
 
 ## Privacy / logging
 
