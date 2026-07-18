@@ -61,6 +61,15 @@
     "MAX_TURNS": "20",
     "MAX_SESSIONS_PER_DAY": "200",
 
+    // STREAMING: SSE token streaming for POST /v1/chat (docs/research/
+    // worker-llm-facts.md §4). "false" = the DEFAULT non-streaming path (one
+    // JSON response; client shows a typing indicator). "true" proxies the
+    // provider's SSE through a TransformStream, capturing usage server-side from
+    // the terminal message_delta so all budget/replay bookkeeping is identical.
+    // Anthropic-only; openai/google BYOK fall back to non-streaming. Default OFF
+    // in every env — flip only after the D7 rehearsal says it feels slow.
+    "STREAMING": "false",
+
     // ---- Editor experience -------------------------------------------------
     // EDIT_UPSTREAM: the DEV static origin the proxy-injector fetches (prefix +
     // trailing slash). Every allowlisted page key resolves under it.
@@ -103,6 +112,7 @@
         "DEMO_RESERVE_USD": "3",
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
+        "STREAMING": "false",
         "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
         "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
@@ -145,6 +155,7 @@
         "DEMO_RESERVE_USD": "3",
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
+        "STREAMING": "false",
         // PROD static is served by Cloudflare Pages at sonsteng.damienriehl.com.
         "EDIT_UPSTREAM": "https://sonsteng.damienriehl.com/platform/",
         // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).

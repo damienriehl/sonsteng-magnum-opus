@@ -81,6 +81,100 @@
     });
   }
 
+  /* ---------- POST /v1/chat with SSE-streaming detection --------------------
+     When the Worker's STREAMING flag is ON it answers /v1/chat with
+     `text/event-stream` (+ an `x-sonsteng-stream: 1` header) instead of one JSON
+     body: `event: delta` frames carry incremental text, a terminal `event: done`
+     frame carries the SAME final payload {reply,turn,remaining,state,usage} the
+     non-streaming path returns. We render deltas via onToken() and resolve with
+     that final payload — so send()'s downstream logic is identical either way.
+     When the flag is OFF the Worker returns one JSON body and this behaves
+     EXACTLY like api('/v1/chat'). The dev mock hook never streams, so the
+     test.html harness path is byte-for-byte unchanged. */
+  function postChat(body, onToken) {
+    var mock = window.__SONSTENG_MOCK__;
+    if (typeof mock === 'function') {
+      return Promise.resolve(mock({ path: '/v1/chat', method: 'POST', body: body }));
+    }
+    var fo = { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', credentials: 'omit', body: JSON.stringify(body) };
+    return fetch(apiBase() + '/v1/chat', fo).then(function (res) {
+      var ct = res.headers.get('content-type') || '';
+      var isStream = res.ok && res.body && typeof res.body.getReader === 'function' &&
+        (res.headers.get('x-sonsteng-stream') === '1' || ct.indexOf('text/event-stream') !== -1);
+      if (!isStream) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      }
+      return readChatStream(res, onToken);
+    });
+  }
+
+  // Drive one SSE response: parse frames, dispatch deltas to onToken(), and
+  // resolve with the terminal `done` payload (or a typed error on a broken/early
+  // stream). `emitted` tells runWithRetry a partial reply already rendered, so a
+  // retry must NOT re-stream over it.
+  function readChatStream(res, onToken) {
+    var reader = res.body.getReader();
+    var dec = new TextDecoder();
+    var buf = '';
+    var final = null;
+    var streamErr = null;
+    var emitted = false;
+
+    function handleFrame(frame) {
+      var ev = 'message', dataLines = [];
+      var lines = frame.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].replace(/\r$/, '');
+        if (!line || line.charAt(0) === ':') continue;
+        var ci = line.indexOf(':');
+        var field = ci === -1 ? line : line.slice(0, ci);
+        var val = ci === -1 ? '' : line.slice(ci + 1);
+        if (val.charAt(0) === ' ') val = val.slice(1);
+        if (field === 'event') ev = val;
+        else if (field === 'data') dataLines.push(val);
+      }
+      if (!dataLines.length) return;
+      var data = null; try { data = JSON.parse(dataLines.join('\n')); } catch (e) { return; }
+      if (ev === 'delta') {
+        if (data && typeof data.text === 'string') { emitted = true; try { onToken && onToken(data.text); } catch (e) {} }
+      } else if (ev === 'done') {
+        final = data;
+      } else if (ev === 'error') {
+        streamErr = (data && data.message) || 'stream error';
+      }
+    }
+
+    function drain(flush) {
+      var idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        var frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        if (frame.trim()) handleFrame(frame);
+      }
+      if (flush && buf.trim()) { handleFrame(buf); buf = ''; }
+    }
+
+    function settle() {
+      if (final) return { ok: true, status: res.status, data: final, streamed: true, emitted: emitted };
+      return { ok: false, status: res.status, streamed: true, emitted: emitted,
+               data: { error: { code: 'upstream_unavailable', message: streamErr || 'stream ended early' } } };
+    }
+
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.value) buf += dec.decode(r.value, { stream: true });
+        drain(false);
+        if (r.done) { buf += dec.decode(); drain(true); return settle(); }
+        return pump();
+      });
+    }
+    return pump().catch(function (err) {
+      return { ok: false, status: res.status, streamed: true, emitted: emitted,
+               data: { error: { code: 'network', message: (err && err.message) || 'stream read failed' } } };
+    });
+  }
+
   function uuid() {
     try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -517,12 +611,28 @@
     var byok = window.SonstengBYOK && window.SonstengBYOK.get();
     if (byok) body.byok = byok;   // {provider, api_key, model?} — never logged/rendered
 
-    runWithRetry(body).then(function (out) {
+    // Streaming render target — created lazily on the first token so the typing
+    // indicator stays up until the client actually starts "speaking".
+    var streamNode = null;
+    function onToken(chunk) {
+      if (!streamNode) { hideConsidering(); streamNode = appendMessage('assistant', ''); }
+      var b = streamNode.querySelector('.msg__body');
+      if (b) { b.textContent += chunk; scrollToEnd(); }
+    }
+
+    runWithRetry(body, onToken).then(function (out) {
       hideConsidering();
       if (out.ok) {
         var r = out.data;
         commitTurn(turn_id, text, r);
-        appendMessage('assistant', r.reply);
+        if (out.streamed && streamNode) {
+          // Already rendered incrementally — reconcile to the authoritative final
+          // reply (defends against any delta/full-text drift) instead of duplicating.
+          var b = streamNode.querySelector('.msg__body');
+          if (b && r && r.reply != null) b.textContent = r.reply;
+        } else {
+          appendMessage('assistant', r.reply);
+        }
         updateCounter(r.turn);
         if (cfg.represented) renderRule42();
         if (r.state === 'warning') stageDirection('[' + cfg.client + ' glances at their watch. Time is getting short.]');
@@ -535,17 +645,23 @@
           enableInput();
         }
       } else {
+        // A partially-streamed reply that then errored: drop the partial bubble
+        // so recovery restores a clean slate (same UX as the non-streamed error).
+        if (streamNode && streamNode.parentNode) streamNode.remove();
         handleError(out, turn_id, text, userNode);
       }
       refreshDebriefBtn();
     });
   }
 
-  // one sequential retry, same turn_id, only on network throw or upstream_unavailable
-  function runWithRetry(body) {
+  // one sequential retry, same turn_id, only on network throw or upstream_unavailable.
+  // onToken is threaded to the streaming transport; once a stream has emitted
+  // tokens (out.emitted) we never retry — that would re-render over the partial.
+  function runWithRetry(body, onToken) {
     function attempt(n) {
-      return api('/v1/chat', { body: body }).then(function (out) {
+      return postChat(body, onToken).then(function (out) {
         if (out.ok) return out;
+        if (out.emitted) return out; // partial already rendered — terminal
         var code = out.data && out.data.error && out.data.error.code;
         if (code === 'upstream_unavailable' && n === 0) { setState(S.RETRYING); return attempt(1); }
         return out; // terminal, non-ok

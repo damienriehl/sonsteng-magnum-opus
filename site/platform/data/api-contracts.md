@@ -241,11 +241,15 @@ static site or the persona bundle).
 
 - **Opaque bookmark token → scope record** `{ edit:{granted,ver}, instructor:{granted,ver}, admin:{granted,ver} }`.
   Tokens are deploy **secrets** (`EDIT_TOKEN_<SLOT>`, e.g. `EDIT_TOKEN_JOHN`,
-  `EDIT_TOKEN_ADMIN`); the var `EDIT_TOKEN_SCOPES` (JSON) maps each slot to its
-  granted scopes + per-scope versions:
-  `{"john":{"edit":1,"instructor":1},"admin":{"admin":1}}`. Comparison is
-  constant-time (digest-then-XOR, no short-circuit). **admin is reachable ONLY
-  via the admin token** — never from an edit/instructor token.
+  `EDIT_TOKEN_ROGER`, `EDIT_TOKEN_ADMIN`); the var `EDIT_TOKEN_SCOPES` (JSON) maps
+  each slot to its granted scopes + per-scope versions:
+  `{"john":{"edit":1,"instructor":1},"roger":{"edit":1,"instructor":1},"admin":{"admin":1}}`.
+  Comparison is constant-time (digest-then-XOR, no short-circuit). **admin is
+  reachable ONLY via the admin token** — never from an edit/instructor token.
+- **Attribution labels:** the server-resolved identity is `slot:<name>`
+  (`slot:john`, `slot:roger`). The admin review surface stamps a short human label
+  onto each row via `attributionLabel()` (`editor-auth.js`): `john → "JOS"`,
+  `roger → "RSH"`, unknown slots → the upper-cased slot name (never mis-attributed).
 - **`?t=<opaque>` one-time exchange:** resolves the token, sets an HttpOnly
   cookie, then **302** to the clean URL (the `?t` is stripped so it never lands
   in logs/history). Cookie: `edit_scope=<hmac-signed slot+stamp>; HttpOnly;
@@ -360,12 +364,19 @@ Terminal (⛔): `superseded`, `declined`, `applied`.
 
 ## EditorStore config (wrangler.jsonc)
 
-`vars`: `EDIT_UPSTREAM` (DEV static origin the proxy fetches, with trailing
+`vars`: `EDIT_UPSTREAM` (the static origin the proxy fetches, with trailing
 slash), `EDIT_ORIGIN` (the worker's edit origin = the sole /edit CORS allowlist),
 `EDIT_TOKEN_SCOPES` (slot→scopes JSON), `EDIT_MAX_PENDING_PER_EDITOR` (200),
 `EDIT_MAX_DAILY_PER_EDITOR` (500), `EDIT_MAX_BYTES` (16384).
-Secrets (never in source): `EDIT_TOKEN_JOHN`, `EDIT_TOKEN_ADMIN` (opaque bookmark
-tokens), plus the shared `SESSION_SIGNING_KEY` (signs the edit cookie).
+**Environment-scoped (WP1):** `EDIT_UPSTREAM`/`EDIT_ORIGIN` differ per env — the
+top-level/default (and `env.dev`) point at DEV (`sonsteng-dev…/platform/`,
+worker `sonsteng-chat`); `env.production` points at the PROD CF Pages origin
+(`sonsteng.damienriehl.com/platform/`, separate worker `sonsteng-chat-production`).
+A bare `wrangler deploy` still targets DEV. PROD enable = `docs/prod-enable.md`
+(held). `vars`/`durable_objects` are non-inheritable, so each env re-declares them.
+Secrets (never in source, **per-environment**): `EDIT_TOKEN_JOHN`,
+`EDIT_TOKEN_ROGER`, `EDIT_TOKEN_ADMIN` (opaque bookmark tokens), plus the shared
+`SESSION_SIGNING_KEY` (signs the edit cookie).
 
 ## Privacy / logging / retention
 

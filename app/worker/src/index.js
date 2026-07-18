@@ -26,6 +26,7 @@ import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaL
 import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch } from "./editor.js";
+import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
 export { EditorStore } from "./editor-store.js";
@@ -207,29 +208,65 @@ async function handleChat(request, env, origin) {
     return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
   }
 
-  const result = await callUpstream(up, {
-    system: { prefix: bundle.segment_a, tail: personaTail },
-    messages, maxTokens: CHAT_MAX_TOKENS,
+  const system = { prefix: bundle.segment_a, tail: personaTail };
+  const turn = pre.turn;
+  const state = turn >= caps.maxTurns ? "ended" : turn >= WARNING_TURN ? "warning" : "active";
+  // Assemble the client-facing turn payload from the settled `usage`. Shared by
+  // BOTH the non-streaming and streaming paths so the DO stores a byte-identical
+  // replay record and the client sees the same numbers either way.
+  const buildPayload = (reply, usage) => ({
+    reply,
+    turn,
+    remaining: pre.remaining,
+    state,
+    usage: {
+      input_tokens: usage.input_tokens || 0,
+      output_tokens: usage.output_tokens || 0,
+      cache_read_input_tokens: usage.cache_read_input_tokens || 0,
+    },
   });
+
+  // ---- Streaming path (flag ON + Anthropic only) --------------------------
+  // Proxy the provider's SSE through a TransformStream: relay text deltas as
+  // they arrive, capture usage server-side from the terminal message_delta, and
+  // settle the DO in flush with the EXACT same {usage, payload} contract the
+  // non-streaming path uses below. openai/google BYOK fall through to
+  // non-streaming (their SSE carries no message_delta usage event).
+  if (streamingEnabled(env) && supportsStreaming(up.provider)) {
+    const started = await startAnthropicStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
+    if (!started.ok) {
+      await stub.rollback(session.sid, turnId); // no turn burned, no spend
+      return upstreamFailureResponse(up, started, "chat_upstream_fail");
+    }
+    const transform = makeChatTransform({
+      buildDonePayload: (fullText, usage) => buildPayload(fullText, usage),
+      onSettle: async (payload, usage) => {
+        // usage=null on BYOK: nothing billed to the hosted pools, replay stored.
+        await stub.settle(session.sid, up.skipBudget ? null : usage, turnId, payload);
+        logMeta({ ev: "chat_ok", stream: true, mode: up.mode, provider: up.provider, pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
+      },
+    });
+    const clientStream = started.upstream.body.pipeThrough(transform);
+    // withCors() (applied by the router) preserves this streaming body + headers.
+    return new Response(clientStream, {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store",
+        "x-sonsteng-stream": "1", // robust client-side detection signal
+      },
+    });
+  }
+
+  // ---- Non-streaming path (DEFAULT — byte-for-byte unchanged) --------------
+  const result = await callUpstream(up, { system, messages, maxTokens: CHAT_MAX_TOKENS });
 
   if (!result.ok) {
     await stub.rollback(session.sid, turnId); // no turn burned, no spend
     return upstreamFailureResponse(up, result, "chat_upstream_fail");
   }
 
-  const turn = pre.turn;
-  const state = turn >= caps.maxTurns ? "ended" : turn >= WARNING_TURN ? "warning" : "active";
-  const payload = {
-    reply: result.text,
-    turn,
-    remaining: pre.remaining,
-    state,
-    usage: {
-      input_tokens: result.usage.input_tokens || 0,
-      output_tokens: result.usage.output_tokens || 0,
-      cache_read_input_tokens: result.usage.cache_read_input_tokens || 0,
-    },
-  };
+  const payload = buildPayload(result.text, result.usage);
   // usage=null on BYOK: nothing billed to the hosted pools, replay still stored.
   await stub.settle(session.sid, up.skipBudget ? null : result.usage, turnId, payload);
   logMeta({ ev: "chat_ok", mode: up.mode, provider: up.provider, pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
