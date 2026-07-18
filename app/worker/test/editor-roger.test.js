@@ -11,6 +11,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveAuth, attributionLabel } from "../src/editor-auth.js";
 import { suggestEndpoint, reviewJsonEndpoint } from "../src/editor-endpoints.js";
+import { renderReviewPage } from "../src/editor-review.js";
+import { REVIEW_JS } from "../src/editor-assets.js";
 import { EDITOR_MAP } from "../src/editor-map.js";
 
 // Mirrors the shipped EDIT_TOKEN_SCOPES: roger gets edit+instructor (same as
@@ -119,4 +121,28 @@ test("review endpoint stamps attribution RSH on Roger rows and JOS on John rows"
   assert.equal(byId.b2.attribution, "JOS"); // John
   // The underlying slot identity is preserved (attribution is additive).
   assert.equal(byId.a1.editor, "slot:roger");
+});
+
+// ---- (5) the RENDERED admin review PAGE (the surface Damien actually uses) ---
+// Regression: the /edit/review HTML page embeds items as an escaped JSON island
+// consumed by REVIEW_JS. Before this fix it embedded raw rows (editor "slot:roger")
+// with NO attribution, so the "RSH"/"JOS" labels were invisible on the human
+// review surface — attribution only reached the /edit/v1/review JSON endpoint,
+// which no client renders. The page must stamp attribution too, and REVIEW_JS
+// must display it.
+test("the rendered review PAGE island carries attribution (RSH/JOS), and REVIEW_JS renders it", async () => {
+  const rows = [
+    { id: "a1", editor: "slot:roger", source_ref: PROSE.source_ref, status: "pending", kind: "prose", origin: "human", original_text: "x", new_text: "y" },
+    { id: "b2", editor: "slot:john", source_ref: PROSE.source_ref, status: "pending", kind: "prose", origin: "human", original_text: "x", new_text: "y" },
+  ];
+  const resp = renderReviewPage(rows);
+  const body = await resp.text();
+  const m = body.match(/<script type="application\/json" id="review-data">([\s\S]*?)<\/script>/);
+  assert.ok(m, "review-data island present in the rendered page");
+  const island = JSON.parse(m[1]); // \uXXXX escapes are valid JSON
+  const byId = Object.fromEntries(island.items.map((it) => [it.id, it]));
+  assert.equal(byId.a1.attribution, "RSH"); // Roger — now on the PAGE, not just the JSON API
+  assert.equal(byId.b2.attribution, "JOS"); // John
+  // REVIEW_JS must actually render the attribution field (not only it.editor).
+  assert.ok(/attribution/.test(REVIEW_JS), "REVIEW_JS references the attribution field");
 });

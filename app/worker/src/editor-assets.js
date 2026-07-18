@@ -81,6 +81,7 @@ export const REVIEW_CSS = `.rv-head{border-bottom:2px solid var(--pp-accent);mar
 .rv-item{padding:.85rem 1rem;border-top:1px solid var(--pp-rule)}
 .rv-meta{font-size:.8rem;color:#6b5b46;margin-bottom:.35rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
 .rv-badge{border-radius:99px;padding:.05rem .5rem;font-size:.72rem;background:#eee;color:#333}
+.rv-attr{border-radius:99px;padding:.05rem .5rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;background:#3a2f22;color:#f4efe4}
 .rv-badge.pending{background:#fff3cd;color:#664d03}
 .rv-badge.drift{background:#f8d7da;color:#842029}
 .rv-badge.needs_human{background:#cfe2ff;color:#084298}
@@ -147,8 +148,11 @@ export const REVIEW_JS = `(() => {
     const wrap=document.createElement("div"); wrap.className="rv-item";
     const meta=document.createElement("div"); meta.className="rv-meta";
     const badge=document.createElement("span"); badge.className="rv-badge "+it.status; badge.textContent=it.status;
-    const who=document.createElement("span"); who.textContent=it.editor+" · "+(it.origin||"human")+" · "+(it.kind||"prose");
-    meta.appendChild(badge); meta.appendChild(who);
+    meta.appendChild(badge);
+    // Reviewer attribution ("RSH"/"JOS") as its own labelled chip — the WP2
+    // second-editor signal must be visible on the page Damien reviews from.
+    if(it.attribution){ const attr=document.createElement("span"); attr.className="rv-attr"; attr.textContent=it.attribution; attr.title="Suggested by "+it.attribution; meta.appendChild(attr); }
+    const who=document.createElement("span"); who.textContent=(it.attribution?"":it.editor+" · ")+(it.origin||"human")+" · "+(it.kind||"prose"); meta.appendChild(who);
     if(it.page){ const pg=document.createElement("span"); pg.textContent=it.page; meta.appendChild(pg); }
     wrap.appendChild(meta);
     if(it.kind==="comment"){ const c=document.createElement("div"); c.className="rv-comment"; c.textContent="“"+(it.comment||"")+"”"; wrap.appendChild(c); }
