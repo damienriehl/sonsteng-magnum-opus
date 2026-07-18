@@ -12,7 +12,9 @@ canonical data spine, and it does so as an all-or-nothing transaction:
       -> git worktree add (from base_sha)    # canonical stays byte-clean throughout
       -> regenerate the editor map from CURRENT worktree source (server-truth)
       -> pre-apply DRIFT gate  (rendered-hash mismatch -> drift, drop)
-      -> formatting gate       (has_inline_formatting -> needs_human, v1 rule)
+      -> formatting gate       (has_inline_formatting -> WP7 span-splice: preserve
+                                raw markup when every formatted span is unchanged
+                                in-order, else needs_human)
       -> patch (file-grouped, position DESCENDING):
              prose  -> exact-match -> context-anchor -> needs_human
              json_scalar -> parse -> surgical span-splice (WP5, formatting-
@@ -458,6 +460,159 @@ def _count_and_replace(text, needle, replacement):
     if n != 1:
         return text, n
     return text.replace(needle, replacement), 1
+
+
+# --------------------------------------------------------------------------- #
+# Formatted-block span-splice (WP7 — editor apply v1.1)
+# --------------------------------------------------------------------------- #
+# Today a block with has_inline_formatting routes to needs_human: the editor
+# hands us the PLAIN rendering (markers dropped — `new_text` is `.textContent`),
+# so a naive fixed-string replace of the RAW markdown span can't round-trip.
+#
+# WP7 auto-applies such a block ONLY when every formatted span's rendered text is
+# UNCHANGED and IN ORDER in new_text: we locate the original spans, map each one
+# to its (byte-identical) position in new_text via the plain-text diff's EQUAL
+# blocks, then splice the changed plain segments BETWEEN the untouched spans,
+# preserving each span's raw markup exactly. Any ambiguity (a span's own text
+# changed, a span disappeared, order shifted, duplicate span texts, or a splice
+# that fails the verification gate) declines to needs_human — never a silent
+# corruption.
+#
+# We anchor ONLY the inline markup that build_site._inline actually transforms to
+# a text node (so the plain rendering drops the markers): `code`, **bold**,
+# *italic*. Ordered alternation mirrors the renderer's precedence — code first
+# (its inner bytes are literal), then bold, then italic. Links, __bold__,
+# _italic_ and [^footnotes] are NOT transformed by the renderer (they render
+# literally == their source), so they carry no markup to preserve and simply ride
+# along as plain text.
+_SPAN_RE = re.compile(
+    r"`[^`]+`"                          # `code`
+    r"|\*\*[^*]+\*\*"                    # **bold**
+    r"|(?<![\*\w])\*[^*\n]+\*(?!\*)"     # *italic*
+)
+
+
+def _span_rendered(markup):
+    """The text a formatted span renders to (markers stripped), mirroring
+    build_site._inline for the three transformed span kinds."""
+    if markup.startswith("`"):
+        return markup[1:-1]
+    if markup.startswith("**"):
+        return markup[2:-2]
+    return markup[1:-1]  # *italic*
+
+
+def tokenize_spans(raw):
+    """Split raw markdown into ordered tokens: ``("text", s)`` or
+    ``("span", markup, rendered)``. Only build_site-transformed inline markup
+    (code/bold/italic) becomes a span; everything else is literal text."""
+    tokens = []
+    last = 0
+    for m in _SPAN_RE.finditer(raw or ""):
+        if m.start() > last:
+            tokens.append(("text", raw[last:m.start()]))
+        markup = m.group(0)
+        tokens.append(("span", markup, _span_rendered(markup)))
+        last = m.end()
+    if last < len(raw or ""):
+        tokens.append(("text", (raw or "")[last:]))
+    return tokens
+
+
+def strip_inline_formatting(raw):
+    """Plain rendering of a markdown block = the literal text plus each span's
+    rendered inner text, in order. Mirrors what the browser shows and what the
+    editor captures as new_text."""
+    out = []
+    for tok in tokenize_spans(raw):
+        out.append(tok[1] if tok[0] == "text" else tok[2])
+    return "".join(out)
+
+
+def span_splice(original_raw, new_plain):
+    """Reconstruct a formatting-preserving new raw block from a PLAIN edit.
+
+    Auto-applies ONLY when every original formatted span's rendered text survives
+    unchanged and in order in `new_plain`; the changed plain segments are spliced
+    between the untouched spans with each span's raw markup preserved exactly.
+    Returns the new raw string, or ``None`` (=> caller routes to needs_human) on
+    any ambiguity or verification failure. Never silently corrupts content.
+    """
+    tokens = tokenize_spans(original_raw)
+    spans = [t for t in tokens if t[0] == "span"]
+
+    # No transformed markup to preserve: the plain edit IS the new block. (Blocks
+    # flagged has_inline_formatting only for links/__/_/[^fn] render literally, so
+    # a whole-block replace is already lossless.) Guard against new_plain having
+    # introduced anchor markup of its own.
+    if not spans:
+        if strip_inline_formatting(new_plain) != (new_plain or ""):
+            return None
+        return new_plain
+
+    # Duplicate span texts make span<->occurrence alignment uncertain -> decline.
+    rendered_list = [s[2] for s in spans]
+    if len(set(rendered_list)) != len(rendered_list):
+        return None
+
+    # Build the original plain rendering + each span's char-range within it.
+    orig_plain_parts = []
+    span_ranges = []  # (start, end, markup) in orig_plain coordinates, span order
+    pos = 0
+    for tok in tokens:
+        if tok[0] == "text":
+            orig_plain_parts.append(tok[1])
+            pos += len(tok[1])
+        else:
+            markup, rendered = tok[1], tok[2]
+            span_ranges.append((pos, pos + len(rendered), markup))
+            orig_plain_parts.append(rendered)
+            pos += len(rendered)
+    orig_plain = "".join(orig_plain_parts)
+
+    # Map each original span (by its char-range) to its position in new_plain via
+    # the diff's EQUAL blocks. A span survives iff its WHOLE range lies inside a
+    # single equal block (=> its rendered text is byte-identical, in place).
+    import difflib
+    sm = difflib.SequenceMatcher(None, orig_plain, new_plain or "", autojunk=False)
+    equals = [(i1, i2, j1) for tag, i1, i2, j1, j2 in sm.get_opcodes() if tag == "equal"]
+
+    new_positions = []  # (new_start, new_end, markup) in new_plain, span order
+    for (a, b, markup) in span_ranges:
+        placed = None
+        for (i1, i2, j1) in equals:
+            if i1 <= a and b <= i2:
+                placed = (j1 + (a - i1), j1 + (b - i1), markup)
+                break
+        if placed is None:
+            return None  # span text changed / deleted -> needs_human
+        new_positions.append(placed)
+
+    # Order + non-overlap in new_plain (equal blocks preserve order; be defensive).
+    for (s0, e0, _m0), (s1, _e1, _m1) in zip(new_positions, new_positions[1:]):
+        if s1 < e0:
+            return None
+
+    # Splice: emit the (possibly edited) plain segments verbatim from new_plain,
+    # with the untouched original markups between them.
+    out = []
+    cursor = 0
+    for (ns, ne, markup) in new_positions:
+        out.append((new_plain or "")[cursor:ns])
+        out.append(markup)
+        cursor = ne
+    out.append((new_plain or "")[cursor:])
+    result = "".join(out)
+
+    # VERIFICATION GATE (the correctness proof):
+    #   1) stripping formatting from the result == the suggested plain text, AND
+    #   2) the result's spans are EXACTLY the original's (same markups, same order).
+    if strip_inline_formatting(result) != (new_plain or ""):
+        return None
+    result_spans = [t[1] for t in tokenize_spans(result) if t[0] == "span"]
+    if result_spans != [s[1] for s in spans]:
+        return None
+    return result
 
 
 def apply_file_patches(worktree, relpath, patches):
@@ -988,9 +1143,23 @@ def _gate_group(members, source_index, worktree):
         if r.get("original_hash") and block.get("original_hash") \
                 and r["original_hash"] != block["original_hash"]:
             return OUT_DRIFT, []
-        # FORMATTING gate (v1): has_inline_formatting => needs_human (no merge algo).
+        original_text = block.get("original_text") or r.get("original_text") or ""
+        new_text = r.get("new_text") or ""
+        # FORMATTING gate (v1.1, WP7): try a span-splice that preserves the raw
+        # markup when every formatted span is unchanged in-order; only decline to
+        # needs_human when the splice can't be proven safe. Soundness cross-check:
+        # our plain rendering of the source must match the generator's stored hash
+        # (guards against any tokenizer divergence, e.g. nested markup) before we
+        # trust the diff-based alignment.
         if block.get("has_inline_formatting"):
-            return OUT_NEEDS_HUMAN, []
+            bhash = block.get("original_hash")
+            if bhash and text_norm.norm_hash(
+                    strip_inline_formatting(original_text)) != bhash:
+                return OUT_NEEDS_HUMAN, []
+            spliced = span_splice(original_text, new_text)
+            if spliced is None:
+                return OUT_NEEDS_HUMAN, []
+            new_text = spliced
         kind, json_path = classify(source_ref, block)
         patches.append(Patch(
             suggestion_id=r["id"],
@@ -999,8 +1168,8 @@ def _gate_group(members, source_index, worktree):
             relpath=source_ref.split("#", 1)[0],
             kind=kind,
             json_path=json_path,
-            original_text=block.get("original_text") or r.get("original_text") or "",
-            new_text=r.get("new_text") or "",
+            original_text=original_text,
+            new_text=new_text,
         ))
     return "", patches
 
