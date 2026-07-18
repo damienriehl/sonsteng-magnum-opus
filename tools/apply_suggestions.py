@@ -15,7 +15,9 @@ canonical data spine, and it does so as an all-or-nothing transaction:
       -> formatting gate       (has_inline_formatting -> needs_human, v1 rule)
       -> patch (file-grouped, position DESCENDING):
              prose  -> exact-match -> context-anchor -> needs_human
-             json_scalar -> parse -> set-at-path -> serialize (NEVER text-splice)
+             json_scalar -> parse -> surgical span-splice (WP5, formatting-
+                            preserving; NEVER regex) with a re-parse SAFETY GATE,
+                            falling back to whole-file parse->set->serialize
       -> value-sync PROPOSER   (matter-prefix-bounded literal search; companions
                                 land as pending/origin=companion — NEVER applied here)
       -> validate_spine.py --strict --json     RED = whole-batch accepted_blocked + discard
@@ -33,8 +35,11 @@ AND apply time):
   * subprocess is shell=False EVERYWHERE; git runs with core.hooksPath=/dev/null.
   * Every filesystem write is canonicalized under data/ with reject-on
     `..` / absolute / symlink-escape.
-  * json_scalar writes are parse->set->serialize; prose splices are fixed-string
-    exact matches of the map-resolved source span — never regex, never eval.
+  * json_scalar writes go parse->surgical-splice with a re-parse safety gate
+    (result must deep-equal parse->set-at-path), never regex, never eval; if the
+    span can't be located or verified, we fall back to whole-file
+    parse->set->serialize. prose splices are fixed-string exact matches of the
+    map-resolved source span.
 
 Cross-host mutex: the flock is host-local. The TRUE cross-host mutex is the DO
 `in_flight` lease (claim stamps it; reconcile breaks expired ones). Two hosts can
@@ -65,6 +70,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import text_norm  # noqa: E402  (the ONE canonical normalization contract)
+import json_surgical  # noqa: E402  (WP5: formatting-preserving scalar splices)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS_DIR = os.path.join(REPO_ROOT, "tools")
@@ -477,11 +483,25 @@ def apply_file_patches(worktree, relpath, patches):
             fh.write(new_raw)
         return results
 
-    # .json file: parse once, apply scalar sets + body_md sub-replacements, dump once.
+    # .json file: resolve every edit to a (json_path, new_value) pair, then write
+    # the file with a SINGLE strategy so all edits land atomically.
+    #
+    #   json_scalar      -> new_value = p.new_text (the scalar itself)
+    #   prose_json_body  -> new_value = the body string with the ONE exact-literal
+    #                       old span replaced (n!=1 => needs_human, abandon file)
+    #
+    # The WRITE is formatting-preserving (WP5): a surgical span-splice that edits
+    # only each targeted value's bytes, so a one-scalar edit yields a one-line
+    # diff and a value-rewrite-to-itself is byte-identical. If the surgical path
+    # can't be applied safely (span unlocatable, overlap, or the re-parsed result
+    # doesn't EXACTLY equal parse->set-at-path), we fall back to the v1
+    # whole-file parse->set->serialize path. Either way the logical object is
+    # identical; only the diff minimality differs.
     obj = json.loads(raw)
+    edits = []  # [(json_path, new_value)] in patch order
     for p in patches:
         if p.kind == "json_scalar":
-            json_set(obj, p.json_path, p.new_text)
+            edits.append((p.json_path, p.new_text))
             results[p.suggestion_id] = True
         else:  # prose_json_body
             body = json_get(obj, p.json_path)
@@ -492,13 +512,29 @@ def apply_file_patches(worktree, relpath, patches):
             if n != 1:
                 results[p.suggestion_id] = OUT_NEEDS_HUMAN
                 continue
-            json_set(obj, p.json_path, new_body)
+            edits.append((p.json_path, new_body))
             results[p.suggestion_id] = True
     if OUT_NEEDS_HUMAN in results.values():
         return results  # ambiguity: abandon the whole-file write
+
+    new_raw = write_json_edits(raw, edits)
     with open(abspath, "w", encoding="utf-8") as fh:
-        fh.write(dump_json_like(obj, raw))
+        fh.write(new_raw)
     return results
+
+
+def write_json_edits(raw, edits):
+    """Produce the new text for a .json file with `edits` = [(json_path, value)]
+    applied. Prefers the formatting-preserving surgical splice; on SurgicalError
+    falls back to the v1 whole-file parse->set->serialize. Both yield the same
+    logical object (the surgical path proves it via a re-parse equality gate)."""
+    try:
+        return json_surgical.splice_scalars(raw, edits)
+    except json_surgical.SurgicalError:
+        obj = json.loads(raw)
+        for path, value in edits:
+            json_set(obj, path, value)
+        return dump_json_like(obj, raw)
 
 
 # --------------------------------------------------------------------------- #
