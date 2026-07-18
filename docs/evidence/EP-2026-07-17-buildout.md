@@ -43,6 +43,15 @@
 
 **Report-only observations (design calls, not defects):** no chart hover tooltips (table twins expose all figures); the viz-spec "Patterns" toggle wasn't built; doc-card heading nesting; sub-24px inline links on mobile (WCAG 2.5.8 inline exception).
 
+## Overnight wave (2026-07-17→18, keyless)
+
+- **Keyless sample consultation** — hand-authored 14-turn m05 interview + honest debrief scorecard, played through the live renderers behind `?sample=1`, loudly labeled "SCRIPTED SAMPLE"; entry points on home + m05/m15 packets. The demo works with zero keys.
+- **Curriculum flesh** — M1/M2/M3 handbook prose (1,235–1,302 words each, Practicum-Method-faithful) + six printable course templates on `/platform/templates/`.
+- **20 instructor answer keys** (`exercise/answer-key.md`, instructor-only canary-guarded): model case analysis anchored to facts, full disclosure-tier interview keys with triggers, A-grade deliverable outlines mapped to rubric points, grading discriminators. Real-tier keys carry 90 citations, every one flagged `[instructor: verify before teaching]`, none invented.
+- **Dashboard completion** — hover/keyboard tooltips on all 7 charts + the Patterns toggle (forced-colors auto-on).
+- **Adversarial review, 2 lanes:** Python: leak sweep extended from HTML-only to the whole output tree + sidecar labels rejected if equal to fact text (both proven against planted leaks). JS: **debrief-oracle protection moved from prompt-level to server-side redaction** (Axis-A misses rebuilt from ground-truth fact_map; 6 regression tests), sample-replay storage isolated from live sessions, pending-record duplication fixed. Worker tests 56 → **62/62**; Worker redeployed.
+- Gates after everything: validator PASS (0 ERROR), site `--check` green, INSTRUCTOR-ONLY grep on output = zero hits, DEV + Worker live.
+
 ## Deferred (pending an API key — one command each)
 
 - **Live red-team gate (D3/D4):** `WORKER_URL=… PROVIDER=… API_KEY=… node app/worker/test/redteam.mjs` — concealed-leak, fact-fidelity + verification-pressure, sycophancy, debrief-oracle probes.
