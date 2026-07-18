@@ -39,11 +39,13 @@ function byteLen(...strs) {
 export async function suggestEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
 
-  // Scope: edit-scope suggests target the public map; instructor-scope suggests
-  // target the instructor bundle. A caller with neither is uniform-rejected.
-  const scope = auth.scopes.instructor.granted ? "instructor"
-    : auth.scopes.edit.granted ? "edit" : null;
-  if (!scope || !auth.editor) return editError("forbidden", "No edit scope.", 403);
+  // Scope: a block lives in exactly ONE map (public edit-map XOR instructor
+  // bundle). An editor like John holds BOTH scopes, so we must NOT prefer one by
+  // priority — that would send his public-page edits to the instructor index and
+  // reject them. Instead resolve scope by which of his GRANTED maps actually
+  // contains the source_ref (checked below, after we read the body).
+  if (!auth.editor || (!auth.scopes.edit.granted && !auth.scopes.instructor.granted))
+    return editError("forbidden", "No edit scope.", 403);
 
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
@@ -67,10 +69,19 @@ export async function suggestEndpoint(request, env, auth) {
   if (byteLen(new_text, comment) > ceilings.maxBytes)
     return editError("too_large", "That change is too large. Please split it up.", 413);
 
-  // ALLOWLIST: the source_ref MUST resolve in the correct scope's map. Unknown
-  // (SSRF/forgery) -> validation_error (never a write, never a file path).
-  const requestedKind = comment != null && new_text == null ? "comment" : null;
-  const block = lookupBlock(source_ref, scope);
+  // ALLOWLIST: the source_ref MUST resolve in one of the caller's GRANTED maps.
+  // Unknown in every granted scope (SSRF/forgery) -> validation_error (never a
+  // write, never a file path). Resolve the scope by which granted map holds it.
+  let scope = null;
+  let block = null;
+  if (auth.scopes.edit.granted) {
+    const b = lookupBlock(source_ref, "edit");
+    if (b) { scope = "edit"; block = b; }
+  }
+  if (!block && auth.scopes.instructor.granted) {
+    const b = lookupBlock(source_ref, "instructor");
+    if (b) { scope = "instructor"; block = b; }
+  }
   if (!block) return editError("validation_error", "That block is not editable.", 400);
 
   // json_scalar: json_path must match the map exactly (no path forgery).

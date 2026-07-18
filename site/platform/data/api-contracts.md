@@ -214,6 +214,171 @@ Transcripts are never stored server-side (browser-only). The Worker logs
 names — never message content and never query strings (the bypass token).
 Conversations transit Anthropic's API (disclosed to users).
 
+---
+
+# Editor API — `/edit/*` (Sonsteng Editor Experience)
+
+A self-contained surface for the Worker-injected edit mode, the instructor view,
+and the suggestion review/apply loop. It shares NOTHING with the chat path: its
+own auth (opaque bookmark tokens → signed cookie), its own CORS allowlist (the
+worker's edit origin ONLY), its own CSRF guard, and strict per-response security
+headers. All state lives in the **EditorStore** Durable Object (SQLite, migration
+tag **v2**, appended — v1/BudgetCounter is never altered).
+
+## The map is the universal allowlist (P0 invariant)
+
+Every client-influenced reference — the `/edit/<path>` proxy path, every
+`source_ref`, every `json_path` — is validated **server-side** against the
+generator-emitted `editor-map.generated.json` (public pages) or
+`instructor-bundle.generated.json` (instructor docs), at **suggest AND apply
+time**. Unknown → uniform `404` / `validation_error`, no upstream fetch, no file
+path, no JSON write. Both bundles are copied into the Worker at build time
+(`scripts/bundle-editor-data.mjs`, wired as wrangler's `build.command`) and are
+**server-only** (the instructor bundle carries answer keys — never shipped to the
+static site or the persona bundle).
+
+## Auth, scopes, cookie (Decision 2)
+
+- **Opaque bookmark token → scope record** `{ edit:{granted,ver}, instructor:{granted,ver}, admin:{granted,ver} }`.
+  Tokens are deploy **secrets** (`EDIT_TOKEN_<SLOT>`, e.g. `EDIT_TOKEN_JOHN`,
+  `EDIT_TOKEN_ADMIN`); the var `EDIT_TOKEN_SCOPES` (JSON) maps each slot to its
+  granted scopes + per-scope versions:
+  `{"john":{"edit":1,"instructor":1},"admin":{"admin":1}}`. Comparison is
+  constant-time (digest-then-XOR, no short-circuit). **admin is reachable ONLY
+  via the admin token** — never from an edit/instructor token.
+- **`?t=<opaque>` one-time exchange:** resolves the token, sets an HttpOnly
+  cookie, then **302** to the clean URL (the `?t` is stripped so it never lands
+  in logs/history). Cookie: `edit_scope=<hmac-signed slot+stamp>; HttpOnly;
+  Secure; SameSite=Strict; Path=/edit` (Path=/edit so it reaches BOTH the pages
+  and `/edit/v1/*`). **The raw token is never in the cookie** — only the slot name
+  + a version stamp, HMAC-signed with `SESSION_SIGNING_KEY`.
+- **Independent rotation:** scopes resolve per-request from `EDIT_TOKEN_SCOPES`;
+  bumping a scope's version changes the slot stamp and invalidates every
+  already-issued cookie for that slot (John re-clicks his magic link).
+
+## CSRF + headers (every `/edit` response)
+
+- **Mutations** (`POST suggest|decide|claim|finalize|reconcile`) require the
+  custom header **`X-Edit-Request: 1`** AND a same-origin/absent `Origin` AND a
+  `Sec-Fetch-Site` of `same-origin` when present. (A cross-site POST cannot set
+  the custom header without a preflight our CORS never grants a foreign origin.)
+- **CORS allowlist = the worker's edit origin ONLY** (`EDIT_ORIGIN`); credentials
+  allowed; any other Origin gets no ACAO.
+- Every response carries: `Content-Security-Policy: default-src 'none'; script-src
+  'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src
+  'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
+  `Cache-Control: private, no-store`, `Vary: Cookie`, `Referrer-Policy:
+  no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.
+
+## Proxy-injector — `GET /edit/<path>` (edit scope)
+
+Resolves `<path>` against the page allowlist (unknown → uniform 404, no upstream).
+Fetches `EDIT_UPSTREAM + page` as a **clean subrequest** (no cookie/authorization
+forwarded, no `?t`, `redirect: "manual"`, `cf:{cacheEverything:false,cacheTtl:0}`;
+upstream Set-Cookie/CSP/cache headers dropped). Injects at serve time: a
+server-constant `<base href>` into `/edit` space, the worker-served
+`editor.css`/`editor.js` (`<script src>`, never inline), this page's block map,
+and John's pending items for the page — the last two as **escaped JSON islands**
+(`<script type="application/json" id="editor-map-data">` /`id="edits-data"`;
+`<`,`>`,`&`,`U+2028`,`U+2029` escaped so a `</script>`/XSS payload is inert).
+Same-origin `<a href>`s are rewritten into `/edit` space (HTMLRewriter).
+
+## Instructor view — `GET /edit/instructor/<matter>/<doc>` (instructor scope)
+
+`<matter>` = `mNN`; `<doc>` ∈ `facts | instructor_notes | answer_key` (aliases:
+`notes`, `answer-key`, `key`). Serves the pre-rendered HTML from the instructor
+bundle (already carries `data-ebsrc` anchors), same injection + headers as the
+proxy. **Uniform 404 for BOTH a missing doc AND insufficient scope** (no oracle).
+
+## `POST /edit/v1/suggest` (edit OR instructor scope)
+
+CSRF-guarded. Body (whitelisted):
+
+```json
+{ "id": "<client uuid>", "source_ref": "data/…#locator", "json_path": "…?",
+  "new_text": "plain-text intent", "comment": "…?", "original_hash": "…?" }
+```
+
+- `id`: client uuid (idempotency — a replay returns the stored row, never a second
+  insert). `[A-Za-z0-9_-]{8,64}`.
+- `source_ref` MUST resolve in the caller's scope map (else `validation_error`).
+  `json_scalar` blocks: `json_path` must equal the map's `json_path` (no forgery).
+- **`editor` and `original_text` are resolved SERVER-side** (from the auth slot +
+  the map) — never read from the client. `original_hash`, `kind`, `page`,
+  `json_path`, `context`, `map_version` are taken from the map.
+- If the client sends `original_hash` and it disagrees with the map → `409
+  stale_page` ("reload"). Size cap `EDIT_MAX_BYTES` (16 KB) → graceful `413`.
+- Ceilings: per-editor pending (`EDIT_MAX_PENDING_PER_EDITOR`, 200), daily
+  (`EDIT_MAX_DAILY_PER_EDITOR`, 500), global pending, all → `429`.
+- **200:** `{ "ok": true, "id": "…", "status": "pending", "replay": false }`.
+
+## `GET /edit/v1/pending?page=` (edit/instructor scope)
+
+This editor's own items (non-superseded), for inline closure. `{ ok, items: [...] }`.
+
+## `GET /edit/v1/review` (admin) · `GET /edit/review` (admin, HTML)
+
+All outstanding suggestions (`pending|drift|needs_human|accepted_blocked|accepted|
+in_flight`) grouped by `source_ref` — the cumulative "all-pending" digest. The
+HTML page renders word-level diffs **text-node-only** (never `innerHTML`) from an
+escaped island, with per-item / per-group / bulk Accept-Decline, a drift
+re-anchor action, and a decline-note field.
+
+## `POST /edit/v1/decide` (admin)
+
+CSRF-guarded. `{ "action": "accept|decline|reanchor", "id": "…" | "group_id": "…",
+"note": "…?" }`. **decide is the SOLE writer of `accepted`.** Group accept = one
+atomic txn (pass `group_id`); a **lone-member-of-group accept is rejected**
+(`409 group_accept_required`). `reanchor` moves `drift → pending` (forces
+re-review — never straight to accepted).
+
+## `GET /edit/v1/digest` (admin)
+
+`{ ok, digest: { by_status, pending_by_source, generated_at } }`. Admin-only.
+
+## Apply-engine RPCs — `POST /edit/v1/{claim,finalize,reconcile}` (admin/service)
+
+The `tools/apply_suggestions.py` loop drives these (admin token = service scope).
+- `claim` `{ batch_id, base_sha?, ids? }` → `accepted → in_flight` for **whole
+  groups only** (never partially), stamps a **lease** + `apply_batch_id`, opens
+  the `apply_batches` journal at phase `claimed`.
+- `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
+  drift? }` → journals the phase and resolves the batch's `in_flight` rows.
+- `reconcile` → startup crash recovery: expired-lease batches pre-`merged` roll
+  `in_flight → accepted` (re-queue) + phase `rolled_back`; post-`merged` complete
+  `in_flight → applied`. Orphan `in_flight` (expired lease, no live batch) → back
+  to `accepted`. No limbo. (Also run automatically in the DO constructor.)
+
+## Status machine
+
+`pending → superseded⛔` (same editor re-edits `source_ref`) · `pending →
+declined⛔ / accepted` (decide, the sole `accepted` writer) · `pending/accepted →
+drift` · `accepted → in_flight` (claim) · `in_flight → applied⛔ | accepted_blocked
+| drift | needs_human | accepted` · `accepted_blocked → accepted / declined⛔` ·
+`drift → pending` (re-anchor) · `needs_human → applied⛔ / accepted / declined⛔`.
+Terminal (⛔): `superseded`, `declined`, `applied`.
+
+## EditorStore config (wrangler.jsonc)
+
+`vars`: `EDIT_UPSTREAM` (DEV static origin the proxy fetches, with trailing
+slash), `EDIT_ORIGIN` (the worker's edit origin = the sole /edit CORS allowlist),
+`EDIT_TOKEN_SCOPES` (slot→scopes JSON), `EDIT_MAX_PENDING_PER_EDITOR` (200),
+`EDIT_MAX_DAILY_PER_EDITOR` (500), `EDIT_MAX_BYTES` (16384).
+Secrets (never in source): `EDIT_TOKEN_JOHN`, `EDIT_TOKEN_ADMIN` (opaque bookmark
+tokens), plus the shared `SESSION_SIGNING_KEY` (signs the edit cookie).
+
+## Privacy / logging / retention
+
+- Suggestions are the only new server state (DO SQLite; terminal at
+  `applied/declined/superseded`; `EditorStore.purge(days)` deletes terminal rows
+  after a retention window). Drafts are client-side only.
+- The opaque token, the cookie value, and every secret are **never logged**
+  (enforced by the editor source-scan test, parity with the BYOK key-never-logged
+  guarantee). A "don't paste confidential client info" warning belongs at the
+  input (client-side).
+
+---
+
 ## Build artifact
 
 `personas/personas.generated.json` is produced by

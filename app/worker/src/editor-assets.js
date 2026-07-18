@@ -202,10 +202,15 @@ export const REVIEW_JS = `(() => {
 })();
 `;
 
+// The real editor client, inlined at build by bundle-editor-data.mjs. When the
+// app/editor/ bundle is present these override the stubs above; when absent
+// (unit tests) the module is empty and the stubs are used.
+import * as CLIENT from "../editor-data/editor-client.generated.js";
+
 export function serveAsset(name) {
   const map = {
-    "editor.css": [EDITOR_CSS, "text/css; charset=utf-8"],
-    "editor.js": [EDITOR_JS, "text/javascript; charset=utf-8"],
+    "editor.css": [CLIENT.EDITOR_CSS || EDITOR_CSS, "text/css; charset=utf-8"],
+    "editor.js": [CLIENT.EDITOR_JS || EDITOR_JS, "text/javascript; charset=utf-8"],
     "review.css": [REVIEW_CSS, "text/css; charset=utf-8"],
     "review.js": [REVIEW_JS, "text/javascript; charset=utf-8"],
   };
