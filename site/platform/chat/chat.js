@@ -1070,6 +1070,12 @@
       return c;
     }
     function render() {
+      // Keyless carve-outs never mint a session, so they must never surface the
+      // widget. Guard render() itself (not just init): Cloudflare's api.js calls
+      // window.onloadTurnstileCallback -> render() directly on load, which would
+      // otherwise park a stray "Verify you are human" box on the ?sample=1 demo
+      // and on ?bypass sessions.
+      if (cfg.sample || cfg.bypass) return;
       if (widgetId !== null || !window.turnstile) return;
       var sk = sitekey();
       if (!sk) { settle(''); return; }   // no sitekey configured -> mint tokenless
