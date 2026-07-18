@@ -226,7 +226,6 @@ class HttpRpcClient:
         req.add_header("User-Agent", "sonsteng-apply-engine/1.0")
         if self._token:
             req.add_header("Authorization", "Bearer " + self._token)
-            req.add_header("Cookie", "edit_scope=" + self._token)  # cookie-auth fallback
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
