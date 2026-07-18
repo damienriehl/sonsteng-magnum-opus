@@ -31,7 +31,7 @@
   "fee_type": "hourly",
   "skill_refs": ["SK-LP-13", "SK-LP-07", "SK-LP-10", "SK-LP-17", "SK-LP-01", "SK-LP-16"],
   "task_refs": ["TSK-001", "TSK-022", "TSK-023", "TSK-034", "TSK-044", "TSK-046", "TSK-062", "TSK-029", "TSK-060"],
-  "personas": ["m14.per.nakamura", "m14.per.whitfield"],
+  "personas": ["m14.per.nakamura", "m14.per.whitfield", "m14.per.sandoval"],
   "witnesses": [
     { "id": "m14.wit.deloria", "name": "Rosalind Deloria" },
     { "id": "m14.wit.sandoval", "name": "Everett Sandoval" },

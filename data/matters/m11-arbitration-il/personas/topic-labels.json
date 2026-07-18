@@ -1,10 +1,13 @@
 {
   "_comment": "Curated leak-safe topic labels for m11. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Covers every warned fact_ref across m11 personas.",
   "m11.fact.005": "pressure to work after clock-out",
+  "m11.fact.006": "how work time was recorded",
   "m11.fact.010": "his internal HR complaint",
   "m11.fact.012": "his complaint to the state",
   "m11.fact.013": "the performance improvement plan",
   "m11.fact.016": "the termination decision",
+  "m11.fact.017": "the reasons given for firing",
+  "m11.fact.018": "the headcount-reduction memo",
   "m11.fact.022": "how he reads the timing",
   "m11.fact.023": "unpaid time after the shift",
   "m11.fact.024": "what the manager said",

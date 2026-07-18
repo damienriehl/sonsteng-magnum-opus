@@ -39,7 +39,9 @@
     ],
     "revealed_if_asked": [
       { "fact_ref": "m11.fact.013", "text": "Yes, I put him on a performance improvement plan in December for outbound accuracy and coaching." },
-      { "fact_ref": "m11.fact.016", "text": "The separation was driven by the plan and by a headcount reduction at the site." }
+      { "fact_ref": "m11.fact.016", "text": "The separation was driven by the plan and by a headcount reduction at the site." },
+      { "fact_ref": "m11.fact.017", "text": "The separation notice cited both things — the performance plan and the reduction in force. They were both real factors; I don't see the contradiction you're implying." },
+      { "fact_ref": "m11.fact.018", "text": "The reduction memo eliminated two site supervisor positions. His was one of them. I'm not going to get into who the other was." }
     ],
     "rapport_gated": [],
     "concealed": [
