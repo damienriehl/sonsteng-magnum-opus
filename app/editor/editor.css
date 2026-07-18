@@ -151,6 +151,9 @@ html.type-lg .eb-note { font-size: .95rem; }
   cursor: pointer;
 }
 .editor-banner .segmented-toggle button[aria-pressed="true"] { background: var(--brass, #a9822f); color: var(--ink, #1d1a16); }
+/* Visible focus ring on the type-size toggle (design-direction §9 — a ring on
+   EVERYTHING interactive). Inset so it reads against the green banner. */
+.editor-banner .segmented-toggle button:focus-visible { outline: 2px solid var(--paper, #f4efe4); outline-offset: -3px; }
 
 /* ---------------------------------------------------------------------------
    Fixed keyboard-tracking SAVE BAR + autocorrect preview

@@ -169,6 +169,38 @@ async function run() {
     assert('M1 Word-style margin bubbles render pending/accepted/declined comments',
       margins.length >= 2 && margins.join(' ').indexOf('Not used') !== -1, 'bubbles=' + margins.length);
 
+    /* --- AX: comment dialog a11y — role/aria-modal, Escape-close + focus
+       return, keyboard-operable Cancel (WP10 a11y sweep, design §9) ---------- */
+    await page.evaluate(() => window.SonstengEditor.clickBlockComment(4));
+    const dlg = await page.evaluate(() => {
+      var b = document.querySelector('.comment-bubble');
+      return { open: !!(window.SonstengEditor.bubbleOpen()), role: b && b.getAttribute('role'), modal: b && b.getAttribute('aria-modal') };
+    });
+    assert('AX1 comment surface is a dialog (role=dialog, aria-modal=true)',
+      dlg.open && dlg.role === 'dialog' && dlg.modal === 'true', 'role=' + dlg.role + ' modal=' + dlg.modal);
+
+    // Escape (dispatched from the textarea, must bubble to the dialog) closes it.
+    await page.evaluate(() => {
+      var ta = document.getElementById('eb-comment-text');
+      ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    await sleep(30);
+    const afterEsc = await page.evaluate(() => !!(window.SonstengEditor.bubbleOpen()));
+    assert('AX2 Escape closes the comment dialog', afterEsc === false, 'open=' + afterEsc);
+
+    // Keyboard activation of Cancel (click with detail===0) closes the dialog —
+    // the button was mouse-only (mousedown) before the fix.
+    await page.evaluate(() => window.SonstengEditor.clickBlockComment(4));
+    const reopened = await page.evaluate(() => !!(window.SonstengEditor.bubbleOpen()));
+    await page.evaluate(() => {
+      var cancel = document.querySelector('.comment-bubble .btn--ghost');
+      cancel.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true, cancelable: true }));
+    });
+    await sleep(30);
+    const afterCancelKey = await page.evaluate(() => !!(window.SonstengEditor.bubbleOpen()));
+    assert('AX3 Cancel is keyboard-operable (detail-0 click closes the dialog)',
+      reopened === true && afterCancelKey === false, 'reopened=' + reopened + ' closedByKey=' + (!afterCancelKey));
+
     /* --- L: large-type toggle sets .type-lg on <html> --------------------- */
     await page.evaluate(() => {
       const b = document.querySelector('.editor-banner .segmented-toggle button:last-child');
