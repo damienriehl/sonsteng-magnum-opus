@@ -16,5 +16,24 @@ This is the tort/personal-injury capstone. It runs the full litigation arc — i
 ## Interview/debrief focus
 Ms. Reyes is a **distressed** client under financial pressure. The rapport-gated facts (prior knee soreness; rent arrears) and the concealed fact (phone glance) unlock only under the specified relational triggers — students who lead, pressure, or flatter should not earn them. Debrief on both fact coverage (Axis A) and the client's felt experience of being heard (Axis B).
 
+## Timing (rough clock)
+- Client interview + debrief: ~90 min.
+- Investigation / chronology workshop (eyewitness, crash report, physics): ~90 min.
+- Liability + comparative-fault analysis: ~75 min.
+- Damages / PIP-threshold workshop: ~60 min.
+- Settlement plan + negotiation simulation: ~90 min.
+- (Optional) trial-prep / deposition outlines: out-of-class.
+
+## Discussion questions
+1. With no red-light camera, what evidence actually decides the signal dispute — and why is the independent eyewitness worth more than either driver's word?
+2. Under Florida's post-2023 modified comparative negligence, what happens if a jury puts Ms. Reyes at 51%? How does that reframe the phone-glance fact?
+3. How do you counsel a client about a harmful fact (the phone glance) you have an ethical duty not to help her conceal?
+4. What exactly does the permanency/MMI opinion unlock — the tort threshold, the future-damages claim, or both?
+5. The client is three weeks behind on rent and wants to settle fast. How do you honor that pressure without letting it drive an under-value settlement?
+6. Hutchins has his own concealed distraction (the coffee mug). How would you develop it in his deposition — and why can't you just call him up?
+
+## See also
+Full disclosure-tier interview key, criterion-mapped model answers, and grading discriminators are in `answer-key.md` (instructor-only).
+
 ## Deferred
-Full model answers, damages ranges, and intentional-error variants are deferred to a later pass.
+Intentional-error variants for a later pass.

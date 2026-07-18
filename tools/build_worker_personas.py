@@ -131,13 +131,25 @@ def load_sidecar(path):
     }
 
 
-def derive_topic_label(fact_ref, tier, curated):
+def _norm(s):
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def derive_topic_label(fact_ref, tier, curated, fact_text=""):
     """Curated sidecar label if present; else a CONTENT-FREE neutral placeholder
     keyed by tier. Returns (label, is_fallback). Truncating raw fact text would
     leak the very content the debrief-oracle rule forbids, so un-curated facts
-    get a safe generic label and are reported for ship-time curation."""
+    get a safe generic label and are reported for ship-time curation.
+
+    Guard: a curated label that is VERBATIM the fact text (after whitespace/case
+    normalization) leaks the concealed content it was meant to hide, so it is
+    rejected — the neutral placeholder is used and the fact is reported for
+    curation, exactly as if no label had been supplied."""
     if fact_ref in curated:
-        return curated[fact_ref], False
+        label = curated[fact_ref]
+        if fact_text and _norm(label) == _norm(fact_text):
+            return NEUTRAL_TIER_LABEL.get(tier, "an unexplored topic"), True
+        return label, False
     return NEUTRAL_TIER_LABEL.get(tier, "an unexplored topic"), True
 
 
@@ -153,7 +165,8 @@ def build_persona(persona, curated):
             fref = item.get("fact_ref")
             if not fref:
                 continue
-            label, is_fallback = derive_topic_label(fref, tier, curated)
+            label, is_fallback = derive_topic_label(
+                fref, tier, curated, item.get("text", ""))
             if is_fallback:
                 fallback_refs.append(fref)
             fact_entries[fref] = {"topic_label": label, "tier": tier}

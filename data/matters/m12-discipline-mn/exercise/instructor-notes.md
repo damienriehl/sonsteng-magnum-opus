@@ -23,4 +23,20 @@ The pedagogical core is the split between **neglect** (largely conceded, ordinar
 
 ## Grading notes
 
-Map submissions to the rubric criteria. Reward students who correctly identify and route around the Rule 4.2 problem with Ms. Dieterle; penalize direct contact with her. No answer key is provided — assess reasoning quality against the rubric.
+Map submissions to the rubric criteria. Reward students who correctly identify and route around the Rule 4.2 problem with Ms. Dieterle; penalize direct contact with her. See `answer-key.md` (instructor-only) for the full disclosure-tier interview key and criterion-mapped model answers.
+
+## Teaching arc (suggested sequence)
+
+- **Session 1 — Client interview (the distressed respondent).** Students interview Karsgaard. The objective is to earn the two rapport-gated facts (the read September email; the dying-father autumn) through confidentiality reassurance and non-judgment — not pressure. Debrief on how their reaction to the shameful facts either unlocked or shut down the truth.
+- **Session 2 — The candor reckoning.** Once students learn she read the September email, walk them into counsel's own Rule 3.3 duty: you cannot argue the affidavit was true. Reframe from innocence to mitigation. This is the intellectual and ethical peak.
+- **Session 3 — Witness & the 4.2 boundary.** Emberly (free to interview) corroborates the systems failure and the exhaustion; Dieterle triggers the Rule 4.2 flag. Build the record-anchored timeline.
+- **Session 4 — Brief & sanction.** Draft the pre-hearing brief with the correct standard/burden and a four-factor proportionality argument grounded in comparable outcomes.
+- **Session 5 — Oral argument.** Argue before the referee; field hard candor and sanction questions without evasion.
+
+## Timing (rough clock)
+
+- Client interview + debrief: ~90 min.
+- Candor/ethics workshop: ~60 min.
+- Witness interview + timeline: ~75 min.
+- Brief drafting: out-of-class, ~5–7 hrs; in-class critique ~45 min.
+- Oral argument simulation: ~90 min.

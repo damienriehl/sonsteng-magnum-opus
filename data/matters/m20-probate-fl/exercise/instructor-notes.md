@@ -1,6 +1,6 @@
 # Instructor Notes — In re the Estate of Harold W. Prewitt
 
-*Teaching notes for the instructor only. Do not distribute to students. No answer key is provided; intentional-error and model-answer layers are deferred. Citations below are to Florida authority and are marked instructor-verified-at-publish against the official sources in `data/jurisdictions/real/fl.json`.*
+*Teaching notes for the instructor only. Do not distribute to students. A companion instructor answer key — the three-issue model analysis keyed to fact anchors, the full disclosure-tier interview key (with the Rule 4.2 handling for Dale and the advocate-witness analysis for the drafting firm), a rubric-mapped deliverable outline, and grading guidance — lives at `exercise/answer-key.md` (INSTRUCTOR-ONLY; never rendered). The intentional-error layer remains deferred. Citations below are to Florida authority and are marked instructor-verified-at-publish against the official sources in `data/jurisdictions/real/fl.json`.*
 
 ## What this exercise is teaching
 

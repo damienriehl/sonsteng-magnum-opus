@@ -23,3 +23,28 @@
 
 - The client persona holds three rapport-gated facts (blacklisting fear, private notebook, the August timecard edit) and one concealed fact (the October job application). Coach students that pressure never unlocks these — only the emotional preconditions do.
 - Keep student drafts facts-only; the legal research is the point.
+
+## Teaching arc (suggested sequence)
+
+- **Session 1 — Intake & rapport (client interview).** Students run the Adeyemi persona. The teaching objective is the T-funnel: broad open questions before closed gap-fillers, a genuine wellbeing inquiry, and *following hints* rather than steamrolling. Debrief on which rapport-gated facts they earned and why.
+- **Session 2 — Fact development & the 4.2 trap.** Witness interviews (Ruvalcaba, Nyarko) plus the deliberate Rule 4.2 moment: students who try to interview Pfeiffer or Croll get the coaching flag. Build the exhibit-anchored chronology.
+- **Session 3 — Theory & forum.** Retaliation elements + the arbitration-enforceability layer (class waiver, and the FAA § 1 transportation-worker sleeper). This is the intellectual peak of the matter.
+- **Session 4 — Written advocacy.** Draft the statement of the case (facts-only, exhibit cites) and the preliminary memo (where the law lives).
+- **Session 5 — Hearing & counseling.** Opening/cross/closing built on documents, then settlement counseling toward the client's real (non-monetary) objectives.
+
+## Timing (rough clock)
+
+- Client interview + debrief: ~90 min.
+- Witness interviews + chronology: ~90 min.
+- Theory/forum workshop: ~60–75 min.
+- Statement-of-the-case drafting: out-of-class, ~4–6 hrs; in-class critique ~45 min.
+- Hearing simulation + settlement counseling: ~120 min.
+
+## Discussion questions
+
+1. What single document defeats the employer's ignorance defense, and why can't the case rest on Pfeiffer admitting knowledge?
+2. Do the employer's two rationales (failed PIP + RIF) reinforce or undercut each other? What evidence turns the RIF into pretext?
+3. If FAA § 1 exempts this warehouse supervisor, what happens to the forum — and does that help or hurt the client's real objectives?
+4. Is the class-action waiver enforceable, and what does that do to the crew-wide unpaid-wage recovery Adeyemi wants?
+5. The client's top priority is a neutral reference, not maximum damages. How should that reshape the settlement posture versus pressing to a hearing?
+6. Why is pressuring the client for the timecard-edit fact both an ethics/relational failure and a strategic one?

@@ -29,3 +29,28 @@ This is the first-offense DWI simulation. The pedagogical center is the **client
 ## Business-of-law note
 
 Flat fee $2,500, held as an advance in trust and drawn only as earned; as of the simulation date nothing has been drawn (matter pending). Good vehicle for discussing flat-fee ethics, trust-accounting of advances, and refund of unearned fees.
+
+## Suggested teaching arc and timing
+
+A two-session arc works best; the interview is the spine, and everything else hangs off what the student elicited.
+
+- **Pre-class (async).** Students read the full case file and run **at least one** ungraded interview through the simulated-client engine. Tell them up front that the persona will not hand over the strongest facts to a bulldozer — that framing is the lesson, not a spoiler.
+- **Session 1 — the interview (≈90 min).** (a) 10 min: set the two-axis debrief (fact coverage + the client's felt experience) so students know they are scored on rapport, not just checklist facts. (b) 30 min: two or three volunteers run live interviews; the rest score on the same rubric. (c) 30 min: debrief which gated facts came out and *why* — trace each unlock to a rapport move, and each miss to a bulldozing or accusatorial move. (d) 20 min: the candor problem — how to reconcile "two beers" against the guest check without shaming the client into silence.
+- **Between sessions.** Students draft the preliminary case-analysis memo and the one-page client-advice letter.
+- **Session 2 — analysis, counseling, negotiation (≈90 min).** (a) 25 min: issue-spotting workshop on the pressure points below, insisting on honest ranking rather than a laundry list. (b) 20 min: counseling role-play focused on the license fear and the parallel administrative clock. (c) 30 min: mock plea negotiation toward careless driving; half the room argues the State. (d) 15 min: the Rule 4.2 moment and flat-fee scope, debriefed as professional-judgment questions, not gotchas.
+
+## Facilitation cautions
+
+- **Let the misses happen.** The pedagogy depends on students feeling the cost of a rushed interview. Do not coach the gated facts out for them in the live run; surface the technique gap in the debrief instead.
+- **Keep suppression honest.** Steer the room away from "we win the motion" certainty. The stop is a dashcam-dependent jump ball and the SFST attack is weight, not automatic suppression. Reward students who say "reasonable minds differ."
+- **Center the client, not the doctrine.** The strongest legal theory and the best outcome for Devon can diverge. Push students to choose strategy against his actual objective — the license and the job.
+- **Debrief Rule 4.2, don't just score it.** When the engine fires the no-contact moment, treat it as a professional-judgment discussion about routing through the prosecutor, not a silent penalty.
+
+## Discussion questions
+
+1. Which single fact in this file would you most want the dashcam to confirm, and how does the stop analysis change depending on what the footage shows?
+2. The evidentiary reading is exactly 0.08. Walk through what happens to the State's *per-se* case and its *impairment* case if the margin of error puts the true value below the line — do they rise and fall together?
+3. The client says "two beers, felt fine." What in your interview technique earns the facts he is embarrassed to volunteer, and what technique guarantees you never hear them?
+4. HGN, walk-and-turn, one-leg-stand: which of these does the icy, seven-percent slope actually undermine, and which does it not — and why does the distinction matter to your credibility?
+5. Devon fears losing his license more than he fears jail. How should that reorder your priorities among a suppression motion, a plea to careless driving, and the parallel administrative proceeding?
+6. You want Officer Broshears' account of the stop. Walk through the professionally correct way to get it — and what has gone wrong if you have contacted him directly.

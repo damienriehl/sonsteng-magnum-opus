@@ -23,3 +23,32 @@ The pedagogical spine is the tension between a **sympathetic, overbroad covenant
 - Overlooking the Rule 4.2 problem and "interviewing" Danneker directly.
 - Failing to confront the USB copy and email forward in the fact statement (candor to the tribunal and credibility).
 - Treating the pricing numbers as obviously secret without engaging the loose-handling and staleness evidence.
+
+*(The graded model analysis, the full interview disclosure map for each persona, and the criterion-by-criterion rubric mapping now live in `exercise/answer-key.md` — instructor-only, never rendered to the student site. This file holds teaching-session logistics only; it does not repeat the key.)*
+
+## Teaching arc (session-by-session)
+
+This matter is built to run across roughly three teaching touchpoints. Adapt to your calendar; the sequence matters more than the count.
+
+- **Session 1 — Intake, interview, and the trust problem.** Students run the client interview against Adaeze Okwuosa (guarded disposition) and review the case file to build a chronology. The pedagogical spine is the tension between a *sympathetic, overbroad covenant* and a *client who did something bad* (the USB copy and the forwarded email). The most damaging facts are rapport-gated and surface only with confidentiality reassurance and a non-judgmental posture — the interview is itself a counseling lesson. End the session by having students self-report which facts they earned and which they never reached.
+- **Session 2 — Investigation, ethics gate, and theory of the case.** Students interview the available witnesses (Hollis, Dupont, Bellweather, Calderaro) and hit the Rule 4.2 wall at Priscilla Danneker, the represented director of sales — the app fires a teaching moment, not a silent block. Students separate the trade-secret question (Mer. Stat. § 512.09) from covenant enforceability (Meridian common law — not codified in the canon), and draft the theory of the case. This is where the enforceability/protectability distinction is won or lost.
+- **Session 3 — Drafting and candid counseling debrief.** Students finalize the memorandum opposing the temporary injunction (Mer. R. Civ. P. 65), the witness-contact explanation, and the client-counseling memo. The debrief closes the loop: did the student confront the hard facts, respect the no-contact line, and counsel the frightened client honestly about risk and a possible narrow resolution?
+
+## Timing (rough minutes per activity)
+
+Budget flexes with class size and whether interviews run live in class or as homework. A workable single-block allocation (~150 min) and the take-home split:
+
+- **Client interview (chat engine):** 30–40 min. Guarded client; students must earn the rapport-gated facts. Do not let students rush — the engine will not yield the worst facts to pressure.
+- **Case-file review and chronology:** 25–30 min. Seven exhibits plus four witness statements; the chronology is a graded deliverable.
+- **Witness interviews (incl. the Rule 4.2 gate):** 25–30 min. Includes the deliberate stumble at Danneker; leave time to debrief the ethics moment while it is fresh.
+- **Analysis and drafting (memo + counseling memo):** take-home, 3–5 hrs. Not a class-time activity; the in-class minutes above are the setup.
+- **Counseling-and-ethics debrief:** 30–40 min. The payoff discussion; use the questions below.
+
+## Discussion questions (debrief)
+
+1. Okwuosa copied the entire pricing file and forwarded an internal email. How should those facts appear in the statement of facts opposing the injunction — and what is the cost of trying to bury them versus confronting them?
+2. Northlake calls the spreadsheet its "crown jewel," yet it lived on a shared drive, carried no password or confidential label, and was emailed around routinely. What turns loosely handled information into — or out of — a protectable trade secret, and who are your best witnesses on that question?
+3. Why is the non-solicitation clause a *stronger* clause for the employer than the non-compete, and why does it still likely fail on this record? What is the danger of arguing "she competes, therefore she solicited"?
+4. You want to know why Northlake really sued now. The person who knows is Priscilla Danneker, the represented director of sales. What may you do, what may you not do, and how do you build a pretext argument without her?
+5. Your client's overriding goal is to keep her new job, not to win a principle. When does an aggressive fight serve her, and when does an early, narrow resolution serve her better — and how do you counsel a frightened client toward that choice?
+6. Meridian's canon supplies a trade-secret statute but no non-compete statute. How should a lawyer reason — and write — when the governing rule is common law they must research rather than a statute they can cite?

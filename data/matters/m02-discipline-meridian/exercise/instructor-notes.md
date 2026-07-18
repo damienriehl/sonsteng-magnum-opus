@@ -27,3 +27,31 @@ The whole case turns on whether the temporary shortfall is **negligent commingli
 ## Grading anchors
 
 Rubric total **207** (master-outline pin for PR). See `rubric.json`. Weight the interview/counseling and the sanction-analysis criteria most heavily; the Rule 4.2 handling should be visible in the interview criterion. Do not award full analysis credit to a brief that argues "no intent" while the student's own interview record shows fact 012 was elicited and ignored.
+
+*(The full model answers, the persona-by-persona disclosure table, and the criterion-by-criterion brief map live in `exercise/answer-key.md` — instructor-only. These notes are about **how to teach** the matter; the key is about the **answers**.)*
+
+## Teaching arc (how the pieces build)
+
+The matter is engineered so that **the interview gates the analysis**. A student who does not earn the concealed borrowed-funds fact (012) cannot honestly write the brief, cannot counsel the client on candor, and will fold under the panel's misappropriation question. Teach the sequence in that dependency order, not in the order the deliverables are due:
+
+1. **Interview first, graded work second.** Push students to rehearse the Winterhalt interview in the engine *before* they draft anything. The rapport gates (facts 023, 024) and the concealed fact (012) are the raw material for every later step. Debrief the interview on both axes (fact coverage + the standardized-client relational axis) before they open a word processor.
+2. **The characterization pivot is the spine.** Everything — the memo, the brief, the oral argument, the negotiation — turns on negligent commingling/recordkeeping vs. knowing misappropriation. Make students argue it *both ways* in class before they commit to the defense framing.
+3. **Candor as the student's own duty.** The moment a student earns fact 012, they inherit a Rule 3.3 problem. Use that as the counseling-skill centerpiece (disclosure vs. concealment), not as an afterthought.
+4. **Proportionality as judgment, not arithmetic.** Reward a factor-driven argument over a "correct" sanction number; "reasonable minds differ" across the reprimand-to-short-suspension band.
+
+## Suggested timing (adaptable)
+
+- **Pre-class (async):** each student runs at least one full Winterhalt interview in the persona engine and submits the transcript + self-reflection.
+- **Session 1 (~90 min):** debrief interviews; run the commingling-vs-misappropriation pivot as a structured both-sides exercise; surface who earned fact 012 and how.
+- **Between sessions:** preliminary case-analysis memo (≤4 pp) due; optional Fenwick interview; Rule 4.2 gate on Marchetti.
+- **Session 2 (~90 min):** sanction/proportionality workshop; counseling role-play on candor; introduce the negotiation posture.
+- **Deliverable window:** pre-hearing brief (≤10 pp) due; then live oral argument to the panel + stipulation negotiation with disciplinary counsel.
+
+## Discussion questions
+
+1. Where on the line between negligent commingling and knowing misappropriation does the April use of ~$3,100 fall — and *what single additional fact* would move your answer? What does the record actually establish about his state of mind?
+2. Does "no client lost a dollar" answer the mental-state question, the violation question, or only the sanction question? Keep them separate.
+3. You earn the borrowed-funds fact in the interview. Walk through your Rule 3.3 duty: what must the brief say, what may it frame, and what may it never omit?
+4. The Director will call the failure to self-report an aggravator while you call the cooperation and voluntary admission mitigating. Are those in tension, and how do you argue both honestly?
+5. A student tries to interview Marchetti to lock down the "$600 interest / no loss" testimony. What is the correct move under Rule 4.2, and what do you lose (and keep) by routing through Beckwith?
+6. If the referee signals she is inclined toward a short suspension, when do you pivot from "reprimand only" to negotiating a stayed suspension with probation conditions — and is that a concession or good lawyering?

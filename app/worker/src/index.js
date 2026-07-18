@@ -23,7 +23,7 @@ import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
 import { getProvider } from "./providers/registry.js";
 import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
-import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson } from "./validate.js";
+import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 
 export { BudgetCounter } from "./budget.js";
@@ -286,6 +286,11 @@ async function handleDebrief(request, env, origin) {
     logMeta({ ev: "debrief_invalid", errors: check ? check.errors.slice(0, 5) : ["unparseable"] });
     return errorEnvelope("validation_error", "The debrief could not be generated. Please try again.", 502);
   }
+
+  // DEBRIEF-ORACLE hard guard: rebuild the Axis-A "missed" fields from server
+  // ground truth so no un-elicited fact TEXT can leak to the student, even if the
+  // (possibly BYOK/weak) evaluator model ignored the prompt's own oracle rule.
+  redactDebriefOracle(parsed, persona, bundle.fact_map[personaId] || {});
 
   if (!up.skipBudget) await stub.charge(session.p, result.usage);
   logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });

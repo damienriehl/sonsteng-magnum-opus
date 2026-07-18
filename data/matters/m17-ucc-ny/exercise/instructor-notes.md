@@ -1,6 +1,6 @@
 # Instructor Notes — m17 · Empire Provisions Corp. v. Ostervold Packing Co.
 
-*Teaching notes for the instructor only. Not part of the student packet. Citations below are provided for instructor convenience and are instructor-verified-at-publish against the official New York sources in `data/jurisdictions/real/ny.json`; students research the law themselves. No answer key or intentional-error layer is included at this stage.*
+*Teaching notes for the instructor only. Not part of the student packet. Citations below are provided for instructor convenience and are instructor-verified-at-publish against the official New York sources in `data/jurisdictions/real/ny.json`; students research the law themselves. A companion instructor answer key — the load-by-load model analysis, the full disclosure-tier interview key (with Rule 4.2 handling for Roland Ostervold), a rubric-mapped deliverable outline, and grading guidance — lives at `exercise/answer-key.md` (INSTRUCTOR-ONLY; never rendered). No intentional-error layer is included at this stage.*
 
 ---
 

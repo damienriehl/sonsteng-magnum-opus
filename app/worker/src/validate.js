@@ -94,6 +94,61 @@ export function validateCritiqueScorecard(o) {
   return { ok: e.length === 0, errors: e };
 }
 
+// DEBRIEF-ORACLE hard guard (defense-in-depth over the prompt's own rule).
+// validateDebriefScorecard only checks that the Axis-A "missed" fields are the
+// right SHAPE (string[] / {topic,trigger}[]) — it cannot tell a neutral topic
+// LABEL from a leaked concealed-fact TEXT. A weak or jailbroken BYOK evaluator
+// model (or a transcript-injected instruction) could therefore turn the scorecard
+// into an answer key by echoing un-elicited fact text in those strings. This
+// function REBUILDS the two missed-item fields from server-side ground truth so
+// every emitted string comes ONLY from fact_map.topic_label, never from model
+// output: the miss SET is derived from facts_elicited (already validated as
+// fact_refs) versus the persona's own disclosure tiers. Mutates + returns o.
+export function redactDebriefOracle(o, persona, factMap) {
+  if (!isObj(o) || !isObj(o.axis_a)) return o;
+  const disclosure = (persona && persona.disclosure) || {};
+  const fm = factMap || {};
+  const a = o.axis_a;
+  const elicited = new Set(isArr(a.facts_elicited) ? a.facts_elicited.filter(isStr) : []);
+  const labelFor = (ref) =>
+    (fm[ref] && isStr(fm[ref].topic_label) && fm[ref].topic_label) || "(topic withheld)";
+
+  // Keep the model's chosen trigger ONLY when its topic is already a known, safe
+  // topic_label (a well-behaved model); otherwise fall back to the fact's own
+  // required trigger. A model topic string that is not a known label is never
+  // trusted (it may be leaked fact text) and is discarded.
+  const knownLabels = new Set();
+  for (const tier of ["rapport_gated", "revealed_if_asked", "volunteered", "concealed", "unknown"]) {
+    for (const it of disclosure[tier] || []) {
+      if (isObj(it) && isStr(it.fact_ref)) knownLabels.add(labelFor(it.fact_ref));
+    }
+  }
+  const modelTrigByLabel = {};
+  if (isArr(a.rapport_gated_unearned)) {
+    for (const r of a.rapport_gated_unearned) {
+      if (isObj(r) && isStr(r.topic) && knownLabels.has(r.topic) && TRIGGERS.has(r.trigger_needed))
+        modelTrigByLabel[r.topic] = r.trigger_needed;
+    }
+  }
+
+  const revealedMissed = [];
+  for (const it of disclosure.revealed_if_asked || []) {
+    if (isObj(it) && isStr(it.fact_ref) && !elicited.has(it.fact_ref)) revealedMissed.push(labelFor(it.fact_ref));
+  }
+
+  const unearned = [];
+  for (const it of disclosure.rapport_gated || []) {
+    if (!isObj(it) || !isStr(it.fact_ref) || elicited.has(it.fact_ref)) continue;
+    const label = labelFor(it.fact_ref);
+    const derived = isArr(it.requires) ? it.requires.find((t) => TRIGGERS.has(t)) : null;
+    unearned.push({ topic: label, trigger_needed: modelTrigByLabel[label] || derived || "follow_up_on_hint" });
+  }
+
+  a.revealed_if_asked_missed = revealedMissed;
+  a.rapport_gated_unearned = unearned;
+  return o;
+}
+
 // Best-effort extraction of a single JSON object from model text (tolerates an
 // accidental code fence, though the prompts forbid one). Returns parsed or null.
 export function parseModelJson(text) {

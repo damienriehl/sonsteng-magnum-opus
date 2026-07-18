@@ -25,6 +25,28 @@ This is the Practicum's arbitration shape: a discharge grievance under a collect
 - Osgard is **guarded**. Her two rapport-gated facts (the two-year-old near-miss; the unpaid-bill embarrassment) unlock only on the specified triggers — social pressure never works. The near-miss is the emotional engine of the whole case; students who earn it will counsel her far better on settlement.
 - Dellwood is **cooperative but self-protective**; his candor about the pull-out culture is rapport-gated on a confidentiality reassurance.
 
+## How to teach it — session arc and timing
+
+A companion **answer key** lives at `exercise/answer-key.md` (instructor-only) with the model analysis, the full disclosure map, and the graded-A deliverable outline. These notes stay on *how to teach*; the key holds *the answers*. Do not hand the key to students.
+
+Suggested arc over roughly two weeks / four contact blocks; adjust to your clinic's cadence.
+
+- **Block 1 — Intake and file mastery (~90 min).** Students read the entire case file cold and build a one-page chronology before any interview. Do a rapid cold-call round on "what is missing and what does not line up" to seed the seams. Confirm the conflicts screen and the aligned-interest posture with the Union (business layer) as a quick professional-responsibility warm-up.
+- **Block 2 — Interview lab (~2 hrs).** Students plan their Osgard funnel *before* opening the chat, then run one sustained interview each, followed by the Dellwood interview. Debrief on the two-axis model (fact coverage + the client's felt experience). This is where the rapport-gated near-miss either lands or does not; use the contrast between students who earned it and those who did not.
+- **Block 3 — Theory and written work (~2 hrs + take-home).** Map facts to the just-cause elements, commit to a theory, and draft the statement of the case and the client letter. Workshop two or three drafts live, focusing on how each handles unit 418.
+- **Block 4 — Hearing prep and debrief (~2 hrs).** Direct of Osgard/Dellwood and cross of the (represented, un-interviewed) management witness. Close with the two-axis debrief and a professional-responsibility round on Rule 4.2 and the phone recording.
+
+**Timing watch-points.** Reserve real time for the interview debrief — it is where the pedagogy compounds. Do not let the just-cause doctrine hunt eat the whole matter; the research target is the seven tests and the safe-harbor interaction, not a treatise. Flag the Rule 4.2 moment early so students meet it as counseling, not as a trap sprung at the hearing.
+
+## Discussion questions (seminar / debrief)
+
+1. Osgard volunteers her refusal and her safety email but holds the two-year-old near-miss close. What in an interviewer's behavior earns that disclosure — and what predictably shuts it down? Compare transcripts where it surfaced against where it did not.
+2. Unit 418 held pressure on inspection. How should a first-rate advocate sequence and frame a partly-adverse fact like this — raise it first, bury it, or wait for the other side? What does each choice signal to a neutral?
+3. The District's stated reason narrows from "safety / chain of command" at Step 1 to "insubordination" by Step 3. Why is a shifting rationale such a powerful just-cause lever, and how do Bexley's contemporaneous notes change its evidentiary weight?
+4. A student wants to interview Rennick to "hear his side." Walk through the Rule 4.2 analysis: why is a supervisory manager inside the represented-organization shield when coworker Dellwood is not, and what is the proper route to his account?
+5. The client recorded a hallway conversation and never told anyone. How should counsel counsel her — on legality, on evidentiary use, and on disclosure — and why is "counseling first, tactics second" the right order here?
+6. Osgard says she cares more about vindication than money and would reject a money-only settlement. How does that non-legal goal reshape settlement strategy, and how should a lawyer test whether a stated goal is the real one?
+
 ## Assessment
 
-Rubric total is 202 points (arbitration pin). Weight is deliberately balanced across analysis, fact work, interviewing, written advocacy, and hearing advocacy, with a dedicated professional-responsibility criterion capturing the Rule 4.2 and recording issues.
+Rubric total is 202 points (arbitration pin). Weight is deliberately balanced across analysis, fact work, interviewing, written advocacy, and hearing advocacy, with a dedicated professional-responsibility criterion capturing the Rule 4.2 and recording issues. The graded-A outline and criterion-by-criterion earn/lose guidance are in `answer-key.md` §3–4.

@@ -98,7 +98,15 @@
   function loadSession() { try { return JSON.parse(SS.get(K_SESS) || 'null'); } catch (e) { return null; } }
   function saveSession() { SS.set(K_SESS, JSON.stringify(session)); }
   function loadTurns() { try { var t = JSON.parse(SS.get(K_TURNS) || '[]'); return Array.isArray(t) ? t : []; } catch (e) { return []; } }
-  function saveTurns() { SS.set(K_TURNS, JSON.stringify(turns)); }
+  // In ?sample=1 replay mode the scripted turns must NEVER touch per-tab storage:
+  // the replay reuses commitTurn() (which persists), and K_TURNS is the SAME key a
+  // live interview reads at boot. Without this guard, playing a sample then
+  // navigating the same tab to the live room would rehydrate the fake sample
+  // transcript (inflating the turn counter / debrief gate and polluting the chat
+  // history sent upstream) — and a sample opened after a real interview would
+  // OVERWRITE that live transcript. Sample state is in-memory only; a reload
+  // simply restarts the replay.
+  function saveTurns() { if (cfg.sample) return; SS.set(K_TURNS, JSON.stringify(turns)); }
   function committed() { return turns.filter(function (t) { return t.status === 'committed'; }); }
 
   /* ============================================================================
@@ -427,7 +435,19 @@
      Two-phase storage writes
      ============================================================================ */
   function writePending(turn_id, userText) {
-    turns.push({ turn_id: turn_id, status: 'pending', user: userText, assistant: null, turn: null, remaining: null, state: null });
+    // A resend of a recovered draft reuses its turn_id (idempotency). The matching
+    // 'unresolved' record still lives in turns[]; reuse it in place rather than
+    // pushing a duplicate. Otherwise two records share a turn_id and commitTurn()
+    // (which resolves only the FIRST match) would orphan the other as a permanent
+    // 'pending' phantom that re-triggers "message may not have been delivered"
+    // recovery on every reload.
+    var rec = findTurn(turn_id);
+    if (rec) {
+      rec.status = 'pending'; rec.user = userText;
+      rec.assistant = null; rec.turn = null; rec.remaining = null; rec.state = null;
+    } else {
+      turns.push({ turn_id: turn_id, status: 'pending', user: userText, assistant: null, turn: null, remaining: null, state: null });
+    }
     saveTurns();
   }
   function commitTurn(turn_id, userText, result) {

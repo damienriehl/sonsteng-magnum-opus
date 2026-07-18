@@ -1,6 +1,6 @@
 # Instructor Notes — In re J.C., a Minor (m18)
 
-*Teaching notes only. Not for student distribution. No answer key is provided. Statutory pointers below are for the instructor and were verified against official California sources at publish; confirm currency before class.*
+*Teaching notes only. Not for student distribution. A companion instructor answer key — model case analysis keyed to fact anchors, the full disclosure-tier interview key (with Rule 4.2 handling for the represented co-participant Kayla Trejo and the parent/child confidentiality point), a rubric-mapped deliverable outline, and grading guidance — lives at `exercise/answer-key.md` (INSTRUCTOR-ONLY; never rendered). Statutory pointers below are for the instructor and were verified against official California sources at publish; confirm currency before class.*
 
 ## What this matter teaches
 

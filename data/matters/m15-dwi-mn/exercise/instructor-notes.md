@@ -25,6 +25,22 @@ The second core is **rapport-earned fact development**. Four sensitive facts are
 - How do the mouthwash, the alcohol-based cough syrup, reflux, and a possibly interrupted observation period combine into a mouth-alcohol theory at 0.09?
 - How should counsel counsel a client who omitted a prior DWI, when that prior is the whole reason his CDL is in lifetime jeopardy?
 
+## Teaching arc (suggested sequence)
+
+- **Session 1 — Client interview (the ashamed provider).** Students interview Wenzloff. The objective is to earn all four sensitive facts — the distraction, the mouthwash, the third drink, and (hardest) the prior DWI — through open invitation and non-judgment. Debrief on how their reaction to the shameful facts unlocked or shut down the truth, and on the double-edged nature of each fact.
+- **Session 2 — Issue-spotting workshop.** Separate the criminal charge from the implied-consent revocation; build the four defense threads. Anchor the field-test and breath-test attacks to the BWC/dashcam and the observation-period gap.
+- **Session 3 — Suppression theory.** Draft the omnibus/suppression posture, leading with the mouth-alcohol/observation-period theory paired with the client's own facts.
+- **Session 4 — Counseling & the CDL.** Fill the client's license-timeline knowledge gap; explain the two clocks; set expectations honestly given the prior.
+- **Session 5 — Plea negotiation.** Build a negotiation plan targeting the CDL disqualification trigger, not jail/fine.
+
+## Timing (rough clock)
+
+- Client interview + debrief: ~90 min.
+- Issue-spotting workshop: ~90 min.
+- Suppression-theory drafting: out-of-class, ~4–6 hrs; in-class critique ~45 min.
+- Counseling simulation: ~60 min.
+- Plea-negotiation simulation: ~90 min.
+
 ## Grading notes
 
-Map submissions to the rubric criteria. Reward students who route the Deputy Kallestad request through the prosecutor and who keep the CDL consequence central; penalize direct contact with the represented deputy. No answer key is provided — assess reasoning quality against the rubric.
+Map submissions to the rubric criteria. Reward students who route the Deputy Kallestad request through the prosecutor and who keep the CDL consequence central; penalize direct contact with the represented deputy. See `answer-key.md` (instructor-only) for the full disclosure-tier interview key, criterion-mapped model answers, and A/B/C discriminators.

@@ -2577,8 +2577,27 @@ def check_links():
 # --------------------------------------------------------------------------- #
 # Instructor-leak guard — belt-and-braces sweep of every generated page
 # --------------------------------------------------------------------------- #
+# Files whose bare name is instructor-side by convention and must never be
+# copied whole into the student output. facts.md / instructor-notes.md are the
+# originals; answer-key.md is added by the matter fleet (first line carries the
+# INSTRUCTOR_SENTINEL). Keep this list in sync with the fleet's conventions.
+INSTRUCTOR_FILENAMES = ("facts.md", "instructor-notes.md", "answer-key.md")
+INSTRUCTOR_SENTINEL = "INSTRUCTOR-ONLY"
+# Extensions worth reading as text for the leak sweep. Everything the generator
+# emits is one of these; binary design assets under assets/ are skipped wholesale.
+_LEAK_SCAN_EXT = (".html", ".htm", ".json", ".csv", ".md", ".txt", ".js", ".css", ".svg")
+
 def check_no_instructor_leaks(corpus):
-    """Assert no concealed/rapport-gated persona fact text appears in output."""
+    """Belt-and-braces sweep over EVERY generated output file (not just HTML):
+    the data/ JSON copies, the firm CSVs, and index.json are all scanned too.
+
+    Three nets:
+      1. No concealed/rapport-gated persona fact TEXT appears anywhere in output.
+      2. No file carries the INSTRUCTOR-ONLY sentinel (catches any instructor-side
+         markdown — e.g. a stray answer-key.md — copied whole, whatever its name).
+      3. No known instructor filename (facts.md/instructor-notes.md/answer-key.md)
+         lands in the output tree.
+    """
     leaks = []
     needles = []
     for m in corpus["matters"]:
@@ -2589,19 +2608,38 @@ def check_no_instructor_leaks(corpus):
                     t = (f.get("text") or "").strip()
                     if len(t) > 40:
                         needles.append((p["id"], tier, t[:60]))
-    pages = glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True)
+
+    # Gather every generated text file, skipping the input-only assets/ tree.
     hay = []
-    for pg in pages:
-        with open(pg, "r", encoding="utf-8") as fh:
-            hay.append((os.path.relpath(pg, OUT), fh.read()))
+    for root, dirs, files in os.walk(OUT):
+        if "assets" in dirs and os.path.relpath(root, OUT) == ".":
+            dirs.remove("assets")
+        for fn in files:
+            if not fn.lower().endswith(_LEAK_SCAN_EXT):
+                continue
+            fpath = os.path.join(root, fn)
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
+                    hay.append((os.path.relpath(fpath, OUT), fh.read()))
+            except OSError:
+                continue
+
+    # Net 1: concealed/rapport-gated fact text.
     for pid, tier, frag in needles:
         for rel, content in hay:
             if frag in content:
                 leaks.append("{p} [{t}] leaked into {r}".format(p=pid, t=tier, r=rel))
-    # also assert facts.md / instructor-notes.md file contents never copied
-    for bad in ("facts.md", "instructor-notes.md"):
-        for f in glob.glob(os.path.join(OUT, "**", bad), recursive=True):
-            leaks.append("instructor file copied into output: " + os.path.relpath(f, OUT))
+    # Net 2: the instructor-only sentinel anywhere in output.
+    for rel, content in hay:
+        if INSTRUCTOR_SENTINEL in content:
+            leaks.append("INSTRUCTOR-ONLY sentinel present in output file: " + rel)
+    # Net 3: instructor filenames copied whole (any extension already covered by 2,
+    # but names catch even a renamed-but-emptied file the sentinel scan would miss).
+    for root, dirs, files in os.walk(OUT):
+        for fn in files:
+            if fn in INSTRUCTOR_FILENAMES:
+                leaks.append("instructor file copied into output: "
+                             + os.path.relpath(os.path.join(root, fn), OUT))
     return leaks
 
 # --------------------------------------------------------------------------- #

@@ -19,3 +19,32 @@ This is a three-variable transactional negotiation (access, severed minerals, se
 - The client persona will not volunteer the solar option (fact.030), the real deadline (fact.031), or his true reservation price (fact.032, concealed) without earned rapport. Debrief students who bulldoze the interview.
 - The seller persona is a represented adverse party; if students interview him directly from the buyer side, the Rule 4.2 teaching moment fires. Use it, do not skip it.
 - Money/business layer: hourly engagement at the firm's blended senior rate; an unpaid balance is outstanding (aged) — useful for a business-of-law discussion on billing a mid-stream transactional matter.
+
+## Teaching arc (suggested sequence)
+
+- **Session 1 — Client interview (the guarded planner).** Students interview Nakamura. The objective is to earn the solar option and — critically — the real March 31 deadline through confidentiality reassurance and open invitation, and to catch the buried Rule 4.02 landmine (his direct texting with Whitfield). Debrief on which hints they caught.
+- **Session 2 — Title-issue triage.** Separate the three problems and, above all, identify who controls each cure — access is buyer-solvable via Sandoval; minerals are a third-party constraint; the well is a trade good.
+- **Session 3 — Interest-based negotiation.** Map positions to interests on both sides; find the shared hidden urgency; build the cross-issue trade package.
+- **Session 4 — Drafting.** Deed form/warranty, access-easement cure and cost allocation, and a bounded, relocatable well reservation.
+- **Session 5 — Negotiation simulation + counseling.** Execute the negotiation (routed through Faircloth) and counsel the client on the walk-vs-close decision.
+
+## Timing (rough clock)
+
+- Client interview + debrief: ~90 min.
+- Title-triage workshop: ~60 min.
+- Negotiation-strategy build (SSNP): ~75 min.
+- Drafting deal terms: out-of-class, ~4–6 hrs; in-class critique ~45 min.
+- Negotiation simulation + counseling: ~120 min.
+
+## Discussion questions
+
+1. Which of the three title problems is the real dealbreaker, and why is access buyer-solvable without Whitfield at all?
+2. Why can't the deed "fix" the severed minerals, and what does the accommodation doctrine mean for a surface-hungry solar array?
+3. What is Whitfield's *interest* behind his well *position* — and how does that turn a "line in the sand" into a solvable trade?
+4. The client faces a March 31 developer deadline, not the April 30 closing. How does that reframe the entire negotiation timeline?
+5. The client has been texting the represented seller directly. What exactly do you tell him, and why?
+6. How do you use the client's true reservation price to strategize while guarding it absolutely from the other side?
+
+## See also
+
+Full disclosure-tier interview key, criterion-mapped model answers, and grading discriminators are in `answer-key.md` (instructor-only).

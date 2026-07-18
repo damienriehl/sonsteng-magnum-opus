@@ -1,0 +1,190 @@
+<!-- INSTRUCTOR-ONLY: never render into the student site -->
+# Answer Key — m10 *In re the Estate of Mabel R. Thornquist* (Will Contest, Meridian)
+
+*Instructor-facing model answers and grading guidance. Never distributed to students; never rendered into the platform. The Meridian citations below (`Mer. Stat. § 524.16`; `Mer. R. Prof. Conduct 3.7, 4.2, 1.7, 1.9, 1.10`) come from the canon in `data/jurisdictions/meridian.json` and are each marked `[instructor: verify before teaching]`. **The Meridian canon supplies no substantive wills statute beyond the will-contest limitations period (§ 524.16).** The substantive law of testamentary capacity, undue influence, due execution, and will revival is the student's research task — reason to the elements from general common law and confirm against the analogous real-tier authority before teaching. Student-facing work remains facts-only.*
+
+---
+
+## 1. Model Case Analysis (keyed to fact anchors)
+
+This matter is engineered to reward one discipline above all: **separating testamentary capacity from undue influence.** They are distinct challenges with distinct proof, and — the trap — the *same* facts point in opposite directions on each. A strong analysis holds both at once and never lets the physician's capacity letter do undue-influence work (or vice versa).
+
+### The posture and the stakes
+
+Mabel Thornquist executed a 2024 will leaving the Loon Rush Lake home and residue to her daughter Eleanor, $25,000 to her son Ronald, and naming Eleanor personal representative [m10.fact.023], [m10.fact.024], [m10.fact.025]. Her 2015 will had split the estate roughly equally between the two children [m10.fact.006]. The estate is ~$560,000, of which the lake home is ~$420,000 [m10.fact.045]. **The economic engine of the contest:** if the 2024 will falls, Ronald moves from a $25,000 bequest to roughly half of $560,000 (~$280,000). That gap is why he is fighting, and a top student names it. Ronald filed his objection alleging lack of capacity and undue influence [m10.fact.038], [m10.fact.039]; the matter is before the Hon. Malcolm Ferris in the Probate Division, Sable County [m10.fact.036], [m10.fact.047].
+
+### The SOL / objection-window posture (§ 524.16) — a defense that is NOT available
+
+Walk the dates: the court entered the order admitting the will on **August 11, 2025** [m10.fact.037]; Ronald filed his contest on **September 15, 2025** [m10.fact.038] — 35 days later. Meridian's will-contest limitations period is **one year after the order admitting the will**, `Mer. Stat. § 524.16`, "also barred earlier if not raised within the objection window after notice" `[instructor: verify before teaching]`. Thirty-five days is comfortably inside the one-year outer bound and inside any reasonable post-notice objection window. **Conclusion: the contest is timely.** The teaching point is negative — a student who tries to defend on limitations is *wrong on these facts* and should be corrected. The estate must meet the contest on the merits, not the calendar. An A-answer states the posture and disposes of the SOL cleanly rather than leaning on it.
+
+### Ground A — Testamentary capacity (measured at the moment of execution)
+
+Frame it correctly first: capacity is tested **at the instant of signing** (October 18, 2024 [m10.fact.020]), against the classic triad — did the testator understand (i) the nature and extent of her property, (ii) the natural objects of her bounty, and (iii) the nature of the testamentary act. A diagnosis is not incapacity.
+
+**The estate's capacity case (strong):**
+- **The contemporaneous physician assessment.** Dr. Brashear examined Mabel October 4, 2024 — two weeks before signing [m10.fact.028] — and recorded that she understood the general nature and extent of her property, knew her two children as the natural objects of her bounty, and understood what a will does [m10.fact.029]; her long-term and family memory was intact even though recent-events recall was impaired [m10.fact.030] (exh.005). This is the estate's single best capacity exhibit.
+- **The drafting attorney's contemporaneous observations.** Ellingboe met Mabel alone, had her describe her property and wishes in her own words, and found her "clear and consistent" on property, family, and wishes though she "lost the thread" on unrelated recent-events questions [m10.fact.017] (exh.004). At execution Mabel confirmed the will was hers and stated she wanted Eleanor to have the lake home [m10.fact.018].
+- **The disinterested attesting witness.** Grenfell recalls Mabel seemed tired but "clearly stated she wanted Eleanor to have the lake place," knew it was her house, and knew her two children [m10.fact.034] (witness-grenfell). The self-proving affidavit and attestation recite sound mind and no constraint (exh.001).
+- **State that morning.** By Eleanor's account Mabel was alert and oriented the morning of signing [m10.fact.033]; the aide confirms mornings were Mabel's best time [m10.fact.033] (persona/witness-sundberg).
+
+**The contestant's capacity case (real but thinner):**
+- The **diagnosis** itself — early-stage vascular-type cognitive impairment, following a February 2024 fall and intermittent memory lapses [m10.fact.007], [m10.fact.008].
+- **"Good days and bad days."** Sundberg observed Mabel alert at some times, confused at others, tiring and growing more confused by late afternoon [m10.fact.032] — and the will was signed **in the afternoon** [m10.fact.034], Mabel's weaker window. Sundberg only ever saw the afternoons and cannot speak to the signing day [m10.fact.020].
+- Grenfell's honest concession that Mabel was tired and "once or twice lost her place" [m10.fact.034].
+
+**A-grade capacity conclusion:** capacity is provable. The proof that matters is *moment-of-execution* evidence (Brashear two weeks out, the attorney's colloquy, the attesting witness), and a diagnosis plus "bad afternoons" does not defeat a documented lucid execution. The honest weakness — an afternoon signing during a diagnosed decline — is acknowledged, not hidden. (Burden framing is a research point: whether the self-proving affidavit and attestation shift a prima-facie showing to the estate, after which the contestant must produce evidence of incapacity, is for the student to find in the analogous real law.)
+
+### Ground B — Undue influence (did someone overbear her free will?)
+
+This is the estate's harder ground, and the place where the "presumption" doctrine lives. The classic route: a **confidential relationship** + **suspicious circumstances** + the beneficiary's **active participation in procuring the will** can raise a **presumption of undue influence**, shifting the burden of going forward to the proponent. Whether Meridian recognizes that presumption and how the burden operates is the student's research task; the *facts* line up on the factors either way.
+
+**The contestant's undue-influence stack (the facts that hurt):**
+- **Caregiver-beneficiary living with the testator.** Eleanor moved in March 2024 and ran every aspect of Mabel's daily life — meds, meals, appointments [m10.fact.009].
+- **Fiduciary control of finances.** Eleanor held Mabel's financial power of attorney from April 2024 [m10.fact.010] and was a joint signer on the checking account [m10.fact.011].
+- **Active participation in procuring the will.** Eleanor first raised that Mabel "should update her will" and *made the appointment* [m10.fact.041]; she drove Mabel to the office [m10.fact.016]. This is the single most damaging undue-influence fact and it is **rapport-gated** in the interview (see §2).
+- **A departure from a long-standing equal split** to the caregiver's benefit [m10.fact.006] → [m10.fact.023].
+- **Control-of-access narrative.** Ronald claims Eleanor isolated their mother [m10.fact.040], [m10.fact.014]; the aide overheard Eleanor tell Mabel "Ronald doesn't care about you" [m10.fact.051].
+- **The undocumented withdrawals.** ~$8,000 moved from Mabel's accounts for care and self-reimbursement, partly undocumented [m10.fact.043] (exh.007). This is a fiduciary/candor problem in its own right (below) and colors the influence narrative.
+
+**The estate's independence-of-execution answer (the counter-facts):**
+- **The client met counsel alone.** Ellingboe asked Eleanor to wait in reception and met Mabel privately — a deliberate precaution "where a family caregiver stands to benefit" [m10.fact.017] (exh.004); Eleanor waited outside at both the meeting and the execution [m10.fact.016]. Grenfell confirms Eleanor "was not in the room" [m10.fact.034].
+- **Independent, documented reasons.** Mabel gave two reasons of her own — Eleanor's caregiving sacrifice, and Ronald's earlier $60,000 lifetime gift for a failed business [m10.fact.019], [m10.fact.013] — a *real, pre-existing basis* to treat the children differently, predating the caregiving.
+- **The explanatory letter (exh.002).** In her own voice, signed the same day, Mabel set out why she left the lake home to Eleanor and expressly stated "Eleanor did not ask me for the house… No one told me to… of my own free will" [m10.fact.026], [m10.fact.027]. Strong students treat this two ways: powerful *corroboration of independence*, but also something a contestant will characterize as lawyer-scripted/self-serving — so its weight depends on the credibility of the disinterested surrounding evidence.
+- **A disinterested witness and capacity precautions** deliberately built into the file [m10.fact.021], [m10.fact.022] (exh.004).
+
+**A-grade undue-influence conclusion:** the presumption factors are genuinely present — this is not a frivolous contest — but the estate has a strong independence-of-execution rebuttal built by a careful drafting lawyer. The realistic assessment: the estate can likely rebut the presumption *if* the private-meeting and independent-reasons evidence holds up, but it must be candid about the withdrawals and Eleanor's role in arranging the appointment rather than pretend they don't exist. The best answers explicitly note that Eleanor's confidential/fiduciary role and active participation are what raise the presumption, and that the meeting-alone + own-letter + prior-gift facts are what rebut it.
+
+### Ground C — Due execution / formalities (not a live battleground, but do the work)
+
+The 2024 will was signed by Mabel, attested by two witnesses (Grenfell and the firm's paralegal Delia Fenwick), notarized, and carries a self-proving affidavit [m10.fact.020], [m10.fact.021], [m10.fact.022] (exh.001). The contest pleads only capacity and undue influence [m10.fact.039]; it does **not** attack formalities. A strong student notes that (a) execution formalities appear satisfied and are not contested, but (b) the self-proving affidavit still does evidentiary work — easing the estate's prima-facie case and letting the attesting witnesses' testimony come in efficiently. Do not reward a student who invents a formalities problem that isn't there; do reward one who explains why the affidavit matters procedurally.
+
+### Ground D — The effect of the 2015 prior will if the 2024 will fails
+
+If the 2024 will is set aside, what governs? The 2024 will contains an **express revocation clause** ("I revoke all prior wills and codicils," exh.001, Art. I). The doctrinal move a strong student makes: a revocation clause is itself a testamentary act requiring capacity and freedom from undue influence, so **if the 2024 will fails for incapacity or undue influence, its revocation of the 2015 will generally fails too** — and the 2015 will (exh.003) stands as the last valid instrument, restoring the roughly equal split [m10.fact.006]. The contestant's petition asks in the alternative for exactly this — admit the 2015 will *or* distribute as intestate [m10.exh.006 ¶7]. Note that under *either* fallback (2015 will or intestacy) the two children take equally, so Ronald recovers ~half regardless. Whether Meridian recognizes revival / dependent-relative-revocation and on what terms is a research point (canon supplies no revival statute); reward the student who *spots the revival question* and reasons it, and do not penalize a defensible intestacy analysis reaching the same equal-split result.
+
+### The Rule 3.7 advocate-witness issue (integrated here; full treatment in §2)
+
+The estate's whole defense runs through the testimony of the very lawyer who built the file. Amara Ellingboe **drafted the 2024 will and supervised its execution** [m10.fact.015], [m10.fact.020], [m10.fact.046] (exh.004), and she is the *only* person who conducted the private meeting where the independence-of-execution facts arose [m10.fact.017]. That makes her a **likely necessary witness** on both contested grounds — and squarely triggers `Mer. R. Prof. Conduct 3.7`. Because this is both a merits problem (her testimony is load-bearing) and an ethics problem (can her firm try the case?), it is analyzed in full in §2 under the dedicated Rule 3.7 subsection and mapped to rubric c03.s01 in §3. A top student flags it in the case analysis and cross-references the fuller treatment.
+
+### The A-grade bottom line
+
+The estate should win on **capacity** (documented moment-of-execution evidence beats a diagnosis) and can **rebut undue influence** on the independence-of-execution record — but only if it is candid about the three facts that cut against it: Eleanor's role in arranging the appointment [m10.fact.041], the undocumented withdrawals [m10.fact.043], and the overheard remark [m10.fact.051]. Formalities are satisfied [m10.fact.020]–[m10.fact.022]; the contest is timely [m10.fact.037]–[m10.fact.038]; and the firm must solve the Rule 3.7 problem before it can try the case. The realistic recommendation blends a merits defense with candor about the fiduciary-accounting exposure and a plan to staff any hearing with a lawyer other than Ellingboe.
+
+---
+
+## 2. Interview Answer Key (disclosure tiers per persona)
+
+**Student's role = `m10.role.proponent-counsel` (estate/Eleanor).** Only two personas are interviewable by this side: **Eleanor Thornquist-Reddick** (the client) and **Lorna Sundberg** (the neutral fact witness, available to both sides). **Ronald Thornquist is NOT interviewable by the estate and is a represented adverse party — see the dedicated Rule 4.2 subsection.**
+
+### Persona A — Eleanor Thornquist-Reddick (CLIENT; disposition: distressed; Rule 4.2 N/A; `interviewable_by` proponent-counsel)
+
+| Tier | Topic label | Fact (ref + content) | What elicits it (requires / min_turns or surfacing question) | Common-miss teaching note |
+|---|---|---|---|---|
+| Volunteered | the daughter's caregiving role | [m10.fact.009] — "I moved in with Mom in March 2024 and took care of her every day." | Offered early; any open "tell me what happened" | She leads with her devotion — reward students who *listen* and build the chronology from her narrative rather than interrogating. |
+| Volunteered | what the mother said she wanted | [m10.fact.018] — "Mom told the lawyer, and she told me, that she wanted me to have the lake house." | Volunteered | The estate's theme fact; note it is *her* account of Mabel's wish, corroborated by exh.002/exh.004. |
+| Volunteered | the son's absence | [m10.fact.012] — "Ronald hadn't been to see her in about three years." | Volunteered | Useful context; don't let the student adopt it as fact against Ronald without corroboration. |
+| Revealed-if-asked | the power of attorney | [m10.fact.010] — "Yes, I had power of attorney for her finances starting April 2024." | Direct Q about her authority over Mabel's affairs/finances | The POA is an undue-influence *factor* (confidential/fiduciary relationship). A student who never asks about legal/financial authority misses a pillar of the presumption analysis. |
+| Revealed-if-asked | who brought the mother to the office | [m10.fact.016] — "I drove her, but I sat in the waiting room the whole time." | Direct Q about the will appointment / who was present | Cuts both ways: she drove her (participation) but waited outside (independence). Reward students who see both valences. |
+| Revealed-if-asked | an earlier gift to the son | [m10.fact.013] — "Mom gave Ronald sixty thousand back in 2016 for a business that went under." | Direct Q about family history / why the unequal split | This is the *independent, pre-existing reason* for unequal treatment — a key rebuttal to undue influence. |
+| **Rapport-gated** | who set up the will appointment | [m10.fact.041] — "I was the one who brought up that she should update her will, and I made the appointment." | **min_turns 5**; requires `confidentiality_reassurance` + `nonjudgmental_response` | **The most damaging undue-influence fact** (active participation in procuring the will). Unlocks only after genuine confidentiality reassurance and a non-judgmental reaction. A student who reacts with alarm or leads accusatorily never gets it — teach measured neutrality. Missing this = an incomplete undue-influence picture. |
+| **Rapport-gated** | a phone argument between the siblings | [m10.fact.042] — "About two months before she signed, Ronald and I had an awful phone fight. He said the lake place should be sold and split." | **min_turns 6**; requires `open_ended_invitation` + `follow_up_on_hint` | Surfaces the contestant's real motive and reframes the contest as money-driven. Requires an open invitation and *following her hint* rather than steamrolling. Corroborates Ronald's own [m10.fact.042]. |
+| **Concealed** | money taken from the account | [m10.fact.043] — "Withdrawals — maybe eight thousand — for her care and to pay myself back. Some I don't have clean records for." | Withheld; needs preconditions beyond ordinary rapport (deep trust) | The fiduciary/candor landmine (exh.007). *Concealed*, not merely gated — most students will not surface it, and that is acceptable, but the strongest students do, and then counsel her on accounting/candor rather than burying it. A student who never probes finances because the client is sympathetic commits the signature fact-gathering miss. |
+| Unknown | the private attorney meeting | [m10.fact.017] — "I couldn't tell you what Mom and the lawyer said. I wasn't in the room — that was the point." | She genuinely doesn't know | Correct student move: don't press her for what happened in the room; that testimony belongs to Ellingboe (which is *why* Ellingboe is a necessary witness — tie to §Rule 3.7). |
+
+**Anti-sycophancy reminder (verbatim guardrail):** flattery, insistence, or pressure never unlocks the gated or concealed facts — only the specified emotional preconditions do. A student who tries to bully [m10.fact.041]/[m10.fact.043] out of a grieving, defensive client should be marked down on the relational axis and on c04 (counseling) and coached on why pressure backfires with a `distressed` disposition.
+
+### Persona B — Lorna Sundberg (fact witness / home health aide; disposition: cooperative; Rule 4.2 N/A; `interviewable_by` BOTH sides — free to contact)
+
+| Tier | Topic label | Fact (ref + content) | What elicits it (requires / min_turns or surfacing question) | Common-miss teaching note |
+|---|---|---|---|---|
+| Volunteered | the home aide's observations | [m10.fact.031] — "I was there most weekday afternoons through 2024 into 2025." | Offered early | Establishes her vantage point — and its limit (afternoons only). |
+| Volunteered | the mother's good and bad days | [m10.fact.032] — "Good days and bad days; sometimes sharp, sometimes she'd lose the thread." | Volunteered | Double-edged: helps the contestant on fluctuating capacity, but she never saw the signing. |
+| Revealed-if-asked | the mother's state that morning | [m10.fact.033] — "Mornings were usually her best time." | Direct Q about time-of-day patterns | *Helps the estate* — but note the will was signed in the afternoon [m10.fact.034], so a careful student pins down that Sundberg cannot speak to the actual signing. |
+| Revealed-if-asked | the daughter's caregiving role | [m10.fact.009] — "Eleanor did everything; I never saw her be anything but gentle." | Direct Q about how Eleanor treated Mabel | Neutral-observer corroboration that rebuts the "manipulation/rough treatment" narrative. Strong estate fact from a disinterested source. |
+| **Rapport-gated** | a remark the aide overheard | [m10.fact.051] — "I heard Eleanor tell her, frustrated, 'Ronald doesn't care about you.' Mabel just nodded." | **min_turns 5**; requires `confidentiality_reassurance` + `nonjudgmental_response` | The **adverse** rapport-gated fact — it *hurts* the estate (suggests Eleanor shaping Mabel's view of Ronald). Teaching nuance: a diligent estate lawyer still wants to surface it early so it isn't a surprise at the hearing. Reward the student who elicits it *and* plans for it, not the one who avoids asking because it's unhelpful. |
+| **Rapport-gated** | the aide's worry about bias | [m10.fact.052] — "Eleanor's the one who paid me; I don't want anyone saying I only say nice things because of that." | **min_turns 4**; requires `acknowledged_emotion` | Surfaces her credibility vulnerability. A student who acknowledges her discomfort both unlocks it and learns how to insulate her testimony (she was paid *through* Eleanor). |
+| Concealed | — | (none) | — | Sundberg has no concealed tier. |
+| Unknown | the will signing | [m10.fact.020] — "I wasn't at the lawyer's office; I can't tell you how she was that day." | She genuinely doesn't know | Correct: don't push a witness for facts outside her observation. Reinforces that her value is on *baseline* condition, not the execution moment. |
+
+*Facilitation note:* Sundberg is conflict-averse and fond of the family; her two gated facts are one helpful ([m10.fact.052] insulation) and one harmful ([m10.fact.051]). A strong student treats her as a neutral whose account must be handled carefully, not as a friendly witness to be led.
+
+### Rule 4.2 subsection — Ronald Thornquist is a represented adverse party (DO NOT CONTACT)
+
+**A represented adverse party exists. Ronald Thornquist is represented by Placidia Ohnstad, Esq.** [m10.exh.006], and his persona sets `rule_4_2.applies = true`. Under `Mer. R. Prof. Conduct 4.2` (numbering tracks the ABA Model Rules per the canon) `[instructor: verify before teaching]`, a lawyer representing the estate **must not communicate with Ronald about the subject of the contest without his counsel's consent.** He is `interviewable_by` the *contestant* side only; for the estate's student he is off-limits. The platform surfaces an attempt to interview him as a **coaching flag, not a silent block** — the correct move is to route any contact through Placidia Ohnstad or through formal discovery/the hearing. **A student on the estate's side who tries to interview Ronald directly commits the signature Rule 4.2 error of this matter (rubric c03.s02).** Grade: full credit for spotting that he is represented and routing around him; automatic hit on c03.s02 (and a re-write demand) for contacting him directly.
+
+### Rule 3.7 ADVOCATE-WITNESS subsection — Amara Ellingboe (necessary witness; firm imputation)
+
+This is the deliberate professional-responsibility teaching point of the matter (rubric c03.s01) and the estate's structural problem.
+
+**Why Ellingboe is a *likely necessary* witness (not merely a possible one).** The estate's defense on both contested grounds is built out of facts only Ellingboe can testify to:
+- On **capacity**, she conducted the execution colloquy and observed Mabel confirm the will and state her wishes at the signing [m10.fact.020], [m10.fact.018] (exh.004) — moment-of-execution testimony that is the estate's best capacity evidence alongside Brashear.
+- On **undue influence**, she is the *only* witness to the **private meeting** where Mabel, alone, described her property and gave her independent reasons [m10.fact.017], [m10.fact.019] (exh.004). No one else was in the room — Eleanor waited outside [m10.fact.016] and genuinely doesn't know what was said [m10.fact.017]. The independence-of-execution rebuttal therefore *depends* on Ellingboe's testimony.
+- She anticipated exactly this in her own file memo: "If this will is ever contested, I am a likely witness on the client's capacity and the absence of undue influence" [m10.fact.046] (exh.004); the engagement letter and conflicts check flagged it at intake (business.json). Her testimony is **necessary** — not cumulative — because the private-meeting facts are not obtainable from an equally competent source (Fenwick and Grenfell witnessed the *execution* but not the private meeting).
+
+**The Rule 3.7(a) bar and its exceptions.** `Mer. R. Prof. Conduct 3.7(a)` `[instructor: verify before teaching]`: a lawyer shall not act as advocate **at a trial** in which the lawyer is likely to be a necessary witness, unless (1) the testimony relates to an **uncontested** issue; (2) it relates to the **nature and value of legal services**; or (3) disqualification would work **substantial hardship** on the client. Apply them:
+- (1) is **unavailable** — capacity and undue influence are the very contested issues [m10.fact.039].
+- (2) is **inapplicable** — her testimony is about facts, not her fee.
+- (3) is the only plausible exception (a two-lawyer firm, a client of modest means, existing familiarity), but it is a hard sell and risky given the firm's own stake; don't let a student treat it as an easy out.
+
+So Ellingboe herself **generally may not both testify and act as trial advocate**.
+
+**The firm-imputation nuance — `Rule 3.7(b)` / `Rule 1.10`.** Here is the move that separates A from B answers. Rule 3.7(a)'s bar on the *individual witness-lawyer* is **not automatically imputed to her firm.** `Mer. R. Prof. Conduct 3.7(b)` `[instructor: verify before teaching]`: a lawyer *may* act as advocate in a trial in which **another lawyer in the firm** is likely to be called as a witness **unless precluded from doing so by Rule 1.7 or Rule 1.9.** Ellingboe & Ravndal is a two-lawyer firm (exercise intro), so the other partner (Ravndal) could in principle try the contest while Ellingboe testifies — **subject to the 1.7/1.10 caveat.** And that caveat has teeth here: the firm has a **personal-interest conflict** under `Rule 1.7(a)(2)` — if the will it drafted is set aside for incapacity or undue influence, the firm faces a reputational and potential malpractice narrative about its own drafting/supervision work [m10.fact.046], [m10.fact.048]; the will even names "my attorney's firm to designate a successor" PR (exh.001, Art. V), deepening the firm's ongoing stake. If that personal interest **materially limits** the representation, it is imputed to the whole firm under `Rule 1.10` `[instructor: verify before teaching]`, and *neither* lawyer could serve as trial advocate without an effective-consent analysis.
+
+**The clean answer / best practice.** The safest course — and the one a top student recommends — is to **bring in independent outside trial counsel** to try the contest, freeing Ellingboe to testify as the necessary fact witness while the firm continues in a non-advocate support role (or steps aside for trial). This resolves both 3.7 and the 1.7/1.10 personal-interest problem, and it is exactly what the engagement letter foreshadowed ("we would discuss… another lawyer"). At minimum the firm owes the client a candid conversation (informed consent) about the conflict and the staffing plan.
+
+**How to grade the 3.7 spot:**
+- **A:** identifies Ellingboe as a *necessary* witness and ties it to the private-meeting/execution facts; states the 3.7(a) bar; correctly works the three exceptions; distinguishes the individual 3.7(a) bar from 3.7(b) firm imputation; spots the firm's own 1.7 personal-interest conflict and its 1.10 imputation risk; recommends independent trial counsel + informed consent.
+- **B:** spots that "the drafting lawyer is now a witness" and that the firm has a problem, but conflates the individual bar with automatic total firm disqualification, or misses the 3.7(b)/1.10 nuance, or doesn't identify the firm's *personal-interest* conflict as the reason imputation might bite.
+- **C or below:** misses the advocate-witness issue entirely, or treats the physician's letter / self-proving affidavit as curing it. **The 3.7 spot is an A/B discriminator** (see §4).
+
+---
+
+## 3. Deliverable Model-Answer Outline (mapped to rubric.json)
+
+**Declared total: 210 points.** Letter-grade map (exact): **A = 210, A- = 200, B+ = 189, B = 178.** Map each deliverable element to its criterion/subcriterion id and weight.
+
+### c01 — Client interview and fact gathering (60 pts) [SK-LP-07 / TSK-023]
+- **c01.s01 — Rapport and eliciting difficult facts (35):** Builds genuine rapport with a grieving, defensive client and surfaces the rapport-gated and concealed adverse facts **without pressure or leading** — Eleanor's role arranging the will [m10.fact.041], the phone fight [m10.fact.042], and (for the strongest) the account withdrawals [m10.fact.043]. Full marks require earning at least the two gated facts through confidentiality reassurance, open invitation, and non-judgmental response; the concealed withdrawals are a stretch reward, not a floor. Marks *off* for accusatory or pressuring technique (the facts won't unlock, and the relational axis penalizes it).
+- **c01.s02 — Chronology and completeness (25):** Assembles the accurate chronology (backbone below) and covers all four domains — capacity, caregiving, finances, family history — without material gaps. Must probe finances despite a sympathetic client [m10.fact.010], [m10.fact.043] and pin down time-of-day capacity patterns [m10.fact.032], [m10.fact.033].
+
+### c02 — Capacity and undue-influence analysis (70 pts) [SK-LP-02 / TSK-010]
+- **c02.s01 — Testamentary capacity (35):** Frames capacity as measured **at execution**; weighs Brashear's Oct. 4 assessment [m10.fact.028]–[m10.fact.030] (exh.005), the attorney's and Grenfell's observations [m10.fact.017], [m10.fact.034], and the cognitive diagnosis [m10.fact.008]; correctly concludes a diagnosis ≠ incapacity while candidly noting the afternoon signing during a decline [m10.fact.032], [m10.fact.034].
+- **c02.s02 — Undue influence and presumption (35):** Identifies the confidential-relationship / suspicious-circumstances / active-participation factors [m10.fact.009], [m10.fact.010], [m10.fact.041], the possible burden-shifting **presumption**, and the estate's independence-of-execution counter-facts — met counsel alone [m10.fact.017], independent documented reasons [m10.fact.019], the signed explanatory letter [m10.fact.026]/[m10.fact.027] (exh.002). Best answers keep this **separate** from the capacity analysis and address the revival/2015-will consequence [m10.fact.006] (exh.003) if the will fails.
+
+### c03 — Professional responsibility (40 pts) [SK-LP-16 / TSK-060]
+- **c03.s01 — Lawyer-as-witness (20) [TSK-058]:** Recognizes Ellingboe as a **likely necessary witness** [m10.fact.046] (exh.004) and analyzes how the firm may proceed — the 3.7(a) bar and exceptions, the 3.7(b)/1.10 firm-imputation nuance and the firm's 1.7 personal-interest conflict, and the independent-trial-counsel solution. **This is where the §2 Rule 3.7 analysis maps.** (Note: the rubric's dedicated professional-responsibility criterion exists precisely for this — full-value only for the imputation-aware answer.)
+- **c03.s02 — No-contact with represented party (20):** Recognizes Ronald is represented by Placidia Ohnstad [m10.exh.006] and that direct contact is prohibited under Rule 4.2; routes contact through counsel. Automatic loss (and re-write) if the student contacts him directly.
+
+### c04 — Counseling the distressed client (25 pts) [SK-LP-10 / TSK-037]
+- Counsels a grieving, defensive Eleanor with candor and care: manages her fear of being cast as a manipulator (persona objectives/fears) while still addressing the adverse facts — the undocumented withdrawals as a **fiduciary-accounting and candor** issue [m10.fact.043], her role arranging the will [m10.fact.041] — and her duties as a fiduciary defending the will. Full marks blend empathy with honesty: neither bulldozes her nor flinches from the hard facts.
+
+### c05 — Interview memo and litigation posture (15 pts) [SK-LP-17 / TSK-048]
+- A clear, well-organized interview memo that (a) states the estate's problem, (b) analyzes capacity and undue influence **separately** with facts/exhibits mapped to each, (c) identifies the ethics issues (3.7 lawyer-as-witness; 4.2 no-contact), and (d) recommends next steps — obtain independent trial counsel, prepare the fiduciary accounting, line up Brashear/Grenfell/Sundberg, and preserve the explanatory letter. Facts-only in anything client-facing; legal research in the memo.
+
+**Chronology backbone (grade c01.s02 / c05 against this):**
+2015-05-12 prior will, equal split [m10.fact.006] → 2017 Ferdinand dies [m10.fact.001] → 2024-02 fall + memory lapses [m10.fact.007] → diagnosis [m10.fact.008] → 2024-03 Eleanor moves in as caregiver [m10.fact.009] → 2024-04 POA [m10.fact.010] + joint signer [m10.fact.011] → **Eleanor raises updating the will + makes the appointment [m10.fact.041]** → ~2 months pre-signing, sibling phone fight [m10.fact.042] → 2024-09-16 intake/engagement → 2024-09 private meeting, Mabel alone [m10.fact.017] → 2024-10-04 Brashear capacity exam [m10.fact.028] → **2024-10-18 will + explanatory letter executed, two witnesses, self-proving affidavit [m10.fact.020]–[m10.fact.022]** → 2025-06-22 Mabel dies [m10.fact.035] → 2025-08-11 order admitting will [m10.fact.037] → 2025-09-15 contest filed [m10.fact.038].
+
+---
+
+## 4. Grading Guidance
+
+### A / B / C discriminators (keyed to the letter-grade bands: A=210, A-=200, B+=189, B=178)
+
+- **A (≈200–210):** Cleanly *separates* capacity from undue influence and never lets one carry the other's burden; frames capacity at the moment of execution and undue influence on the confidential-relationship/suspicious-circumstances/active-participation factors with the burden-shifting presumption; earns at least the two rapport-gated client facts [m10.fact.041], [m10.fact.042] **without pressure** and probes the withdrawals [m10.fact.043]; **spots the Rule 3.7 advocate-witness problem AND the 3.7(b)/1.10 firm-imputation nuance and recommends independent trial counsel**; handles Rule 4.2 flawlessly; addresses the 2015-will revival consequence; and counsels Eleanor with candor about the fiduciary-accounting exposure. Disposes of the SOL correctly (timely — not a defense).
+- **B (≈178–189):** Solid, separated capacity/undue-influence analysis and an accurate chronology; spots that the drafting lawyer is now a witness *and* that Ronald is represented — but treats the 3.7 problem shallowly (conflates the individual bar with automatic firm disqualification, or misses the imputation/personal-interest nuance), earns fewer gated facts, or under-probes the withdrawals. Reaches the right merits result without the full ethics sophistication.
+- **C and below:** Merges capacity and undue influence (or uses the physician's letter to disprove undue influence — the classic error); **misses or mishandles the Rule 3.7 advocate-witness issue**; contacts Ronald directly (Rule 4.2 failure); pressures the client for gated facts and gets nothing; or tries to win on the (unavailable) statute of limitations.
+
+### Common errors (build on instructor-notes §"Common student misses")
+1. **Using the capacity evidence to disprove undue influence.** Brashear's letter speaks only to capacity and expressly declines to opine on execution circumstances [m10.exh.005]. Treating it as proof of no undue influence is the signature analytical error — coach hard.
+2. **Missing that the drafting firm is now a witness** — and, one level deeper, missing the *firm-imputation* nuance (3.7(b)/1.10) even when the individual 3.7(a) problem is spotted. **This is the A/B discriminator.**
+3. **Contacting Ronald directly** — the signature Rule 4.2 failure; automatic hit on c03.s02.
+4. **Failing to probe the withdrawals** [m10.fact.043] because the client is sympathetic — leaves the estate exposed to a self-dealing narrative and misses the fiduciary/candor counseling in c04.
+5. **Pressuring the client** for the gated facts [m10.fact.041]/[m10.fact.042] — violates the relational axis, retraumatizes a `distressed` client, and (correctly) unlocks nothing.
+6. **Over-relying on the statute of limitations** — the contest is timely [m10.fact.037]–[m10.fact.038]; a limitations defense is wrong on these facts.
+7. **Inventing a formalities defect** — execution is clean and uncontested [m10.fact.020]–[m10.fact.022]; reward the affidavit's *evidentiary* role, not a phantom attack.
+
+### Re-write-loop demands (trigger a mandatory revision if)
+- The student **interviewed or contacted Ronald directly** — require a written Rule 4.2 analysis and a corrected fact-development plan routing contact through Placidia Ohnstad.
+- The memo **merges capacity and undue influence** or uses the capacity evidence to rebut undue influence — require a rewrite that analyzes each ground on its own elements and evidence.
+- The analysis **never addresses the Rule 3.7 advocate-witness problem** — require a supplement covering the necessary-witness finding, the 3.7(a) exceptions, the 3.7(b)/1.10 firm-imputation question, and a staffing recommendation.
+- The chronology **omits Eleanor's role arranging the will [m10.fact.041]** or the undocumented withdrawals [m10.fact.043] — require a corrected, fact-anchored chronology and a candor/fiduciary-accounting plan.

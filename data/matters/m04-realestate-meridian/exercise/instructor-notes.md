@@ -27,6 +27,29 @@ Ruth Renard is a represented opposing party. A student playing buyer's counsel w
 
 Hourly engagement; partners at $250 (Ellingboe) / $225 (Ravndal). Two invoices; inv.001 paid in full, inv.002 ($1,842.50) recently issued and outstanding — a normal, modest receivable, no trust account for this matter. Use the time entries to discuss scoping a transactional matter and billing narrative discipline.
 
+## Suggested teaching arc & timing
+
+A two-session (or one long-block) arc. The answer key (`answer-key.md`) holds the model answers; this arc is only *how to run the room*.
+
+- **Session 1 — interview & diagnosis (~90 min).**
+  - *0–15:* Frame the transactional posture (deal, not lawsuit) and the two access wrinkles. Do **not** pre-answer easement-vs-license.
+  - *15–55:* Students run the Meskin client interview on the chat engine; a few also try Delahaye. Circulate and note who earns the rapport-gated facts vs. who bullies (fails by design).
+  - *55–90:* Live debrief of the interview: what did you surface, and *how*? Surface the Rule 4.2 trap for anyone who tried to interview Renard.
+- **Between sessions:** students draft the SSNP and the access contingency; you spot-check for the two failure modes (flat "it's an easement"; banking on the vacation).
+- **Session 2 — negotiation & drafting (~90 min).**
+  - *0–20:* Cold-call the easement-vs-license split; force both sides on the board before anyone concludes.
+  - *20–60:* Negotiation round with seller's side; watch for confidential-fact leaks and whether leverage is led by the title refusal or the client's urgency.
+  - *60–90:* Redline the access contingency together; stress-test the outer date against the (undisclosed) Aug 15 cliff; close on the counseling memo's "reasonable minds differ" honesty.
+
+## Discussion questions
+
+1. The 1978 instrument is recorded and notarized but says "neighborly relations" and names the Renards with no "heirs and assigns." Which way does each feature cut — and why is *curing* smarter than litigating the answer?
+2. If long, open use can fix the location of an indefinitely described right of way, does the 15-foot deviation *toward* Delahaye's cabin help or hurt the buyer? Who bears that uncertainty at closing?
+3. The city planner says the vacation "might help, might do nothing." What has to be true — geographically and under shoreland rules — for Verdant Shore Road to become real access, and how do you draft for a contingency you can't predict?
+4. Your client's best leverage is objective (the title company won't insure) and his worst exposure is confidential (the Aug 15 deadline). How do you run the negotiation so the first does the work and the second never shows?
+5. Ruth is represented; Corwin is not. Walk the line between Rule 4.2 and Rule 4.3 — what may you say to Corwin, and what must you not?
+6. Delahaye quietly wanted to buy 4400 himself. How does a latent rival-buyer change the way you negotiate a $25k easement from him?
+
 ## Facilitation tips
 
 - In the client interview, watch whether students earn the rapport-gated facts (ceiling price $395k, the management LOI, the septic surprise) through confidentiality reassurance and process explanation — or try to bully them out, which should fail by design.

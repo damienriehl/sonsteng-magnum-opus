@@ -1,6 +1,6 @@
 # Instructor Notes — m16 Hudson Valley Biometrics v. Iyer (Non-Compete / Trade Secret, New York)
 
-*Instructor-facing only. Never distribute with the student packet. Citations below are navigational pointers to official New York sources, marked instructor-verified-at-publish. No answer key or intentional-error set is included in this build.*
+*Instructor-facing only. Never distribute with the student packet. Citations below are navigational pointers to official New York sources, marked instructor-verified-at-publish. A companion instructor answer key — model case analysis keyed to fact anchors, the full disclosure-tier interview key (with the Rule 4.2 handling for Steinhauer), a rubric-mapped deliverable outline, and grading guidance — lives at `exercise/answer-key.md` (INSTRUCTOR-ONLY; never rendered). No intentional-error set is included in this build.*
 
 ## What the exercise is testing
 

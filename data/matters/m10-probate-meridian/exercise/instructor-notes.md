@@ -27,3 +27,40 @@ The rapport-gated facts (fact.041, fact.042 for the client; fact.051, fact.052 f
 - Missing that the drafting firm is now a witness.
 - Contacting Ronald directly.
 - Failing to probe the withdrawals because the client is sympathetic.
+
+---
+
+*The sections below were added with the instructor answer key (`exercise/answer-key.md`). They cover how to **run and debrief** the exercise; the model analysis, disclosure-tier tables, rubric mapping, and grading bands live in the answer key and are not repeated here. Cross-reference the key for anything substantive.*
+
+## Teaching arc (how the session should move)
+
+1. **Set the frame — two doctrines, not one.** Open by insisting on the capacity/undue-influence split before any facts are discussed. The whole matter is designed so that students who blur them fail predictably (see the answer key's Common Errors). Put the two questions on the board: *Did she understand what she was doing?* vs. *Did someone overbear her free will?*
+2. **Prep and chronology.** Students build a chronology and an interview plan from the case file. The trap to surface early: nearly every "good" estate fact has a shadow (the private meeting *and* Eleanor arranging the appointment; the explanatory letter *and* the possibility it reads as scripted; the disinterested witness *and* the tired afternoon).
+3. **The client interview (the graded core).** Eleanor is `distressed` and defensive; the two rapport-gated facts and the concealed withdrawals unlock only through confidentiality reassurance, open invitation, and a non-judgmental response — never pressure. This is where relational skill and fact-gathering are tested together.
+4. **Analysis + counseling.** Students separate the grounds, map the evidence, and counsel a grieving fiduciary about the adverse facts (the withdrawals especially) with candor and care.
+5. **The professional-responsibility reveal.** Save deliberate time for the advocate-witness dilemma and the Rule 4.2 no-contact issue — these are the moves that most distinguish strong students, and they are easy to skate past if the debrief runs short.
+6. **Optional witness interview.** If assigned, Sundberg (neutral, available to both sides) tests whether students can handle a witness whose account both helps and hurts.
+
+## Timing (roughly a 2-hour block; scale to your slot)
+
+- **Framing + chronology review — 15 min.** Lock in the two-doctrine split; take chronologies.
+- **Interview-plan share-out — 15 min.** Which facts do students most need to confirm, and how will they earn the sensitive ones?
+- **Client interview (Eleanor) — 30–40 min.** Live or asynchronous; ~20 exchanges. If live, rotate students so several attempt the rapport-gated turns.
+- **Optional Sundberg interview — 15 min.** Only if the section has time.
+- **Analysis / counseling work — 20 min.** Draft the capacity-vs-undue-influence split and the counseling approach to the withdrawals.
+- **Debrief discussion — 25–30 min.** Run the questions below; the advocate-witness dilemma should get the largest single share.
+
+## Debrief discussion questions
+
+1. **The two doctrines.** Where does the *same* fact (the private meeting; the explanatory letter; Eleanor holding the POA) point one way on capacity and the opposite way on undue influence? What does that teach about why the doctrines must be argued separately?
+2. **Advocate-witness dilemma (spend real time here).** Amara Ellingboe drafted the will and is the only witness to the private meeting — should she testify, try the contest, both, or neither? Walk the Rule 3.7(a) exceptions, then the harder question: can her *partner* try the case while she testifies, or does the firm's stake in defending its own drafting work impute a conflict to the whole two-lawyer firm? What would you actually do on Monday morning? (See the answer key's Rule 3.7 subsection.)
+3. **Earning the hard facts.** Which interviewing moves unlocked Eleanor's role in arranging the will and the account withdrawals — and which moves shut her down? What does a `distressed` client teach about pressure vs. patience?
+4. **Counseling the sympathetic fiduciary.** How do you tell a grieving daughter that her undocumented withdrawals look like self-dealing *without* either alarming her into concealment or soft-pedaling a real fiduciary/candor problem?
+5. **Rule 4.2 in a family fight.** Ronald is family, not a stranger — does that make the no-contact rule feel different? Why does it still bind, and what is the correct route to his account?
+6. **If the will falls, then what?** If the 2024 will is set aside, does the 2015 will revive, or does the estate pass by intestacy — and why does Ronald end up in roughly the same place either way? What does the ~$25,000-vs-~$280,000 gap tell you about the real drivers of this contest?
+
+## Facilitation notes
+
+- **Don't let the ethics issues get crowded out.** The advocate-witness and no-contact points are the highest-value discriminators; protect their time in the debrief.
+- **Reward candor over cleverness.** The strongest students are the ones who *name* the estate's bad facts (the withdrawals, the arranged appointment, the overheard remark) and plan for them — not the ones who build a tidy one-sided story.
+- **Calibrate on the relational axis.** A student who "got" a gated fact by pressuring the client should score *lower*, not higher — the persona engine will not reward pressure, and neither should you.
