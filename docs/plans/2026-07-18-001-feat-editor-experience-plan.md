@@ -1,9 +1,10 @@
 ---
 title: "feat: Sonsteng Editor Experience — Worker-injected edit mode, Word-style comments, instructor view, value-synced apply loop"
 type: feat
-status: active
+status: completed
 date: 2026-07-18
 origin: docs/brainstorms/2026-07-18-editor-experience-brainstorm.md
+evidence: docs/evidence/EP-2026-07-18-editor.md — shipped DEV; 119 worker / 14 apply / 22 client tests + live browser UAT; PROD injector wiring deferred.
 ---
 
 # ✨ The Sonsteng Editor Experience
@@ -117,10 +118,32 @@ Hand-authored HTML: gets a hand-built block map (section anchors) + an HTML-dire
 
 ## Acceptance Criteria
 
-Adopt SpecFlow's **E1–E18 verbatim** as the gate (student-isolation, leaked-link containment, John's happy path with keyboard-safe Save, block-comment fallback, draft survival, paste/unicode grace, formatting round-trip, idempotency, supersede, drift, ambiguity, accepted-blocked, full two-target round trip, review XSS, spam/DoS caps, pitch-page path, cumulative digest, token lifecycle) — plus:
-- [ ] **E19 Value-sync:** editing a JSON-rendered scalar patches the JSON source and syndicates on regenerate; editing a prose-embedded value proposes companion edits; a value edit that breaks reconciliation ends `accepted_blocked`, never ships.
-- [ ] **E20 Windows-primary:** the full happy path driven on Windows-Chrome viewport with mouse selection-commenting; Word-idiom familiarity check (selection → bubble → note reads like Word's flow).
-- [ ] All existing gates stay green: validator PASS, `--check` + leak-sweep (extended), Worker tests (62 + new), chat/critique untouched.
+**Status (2026-07-18):** all E1–E20 verified live on DEV. Evidence: `docs/evidence/EP-2026-07-18-editor.md`. The only pending item is PROD injector wiring (deferred by design — DEV first; PROD needs only pointing `EDIT_UPSTREAM` at Pages).
+
+SpecFlow's **E1–E18** adopted verbatim as the gate:
+- [x] **E1** Student isolation — public build carries zero editor bytes / source-path leakage.
+- [x] **E2** Leaked-link containment — edit scope = suggestions-spam only (rate-capped); instructor scope independently rotatable; uniform-404 instructor routes.
+- [x] **E3** John's happy path with keyboard-safe Save (keyboard-tracking save bar).
+- [x] **E4** Block-comment fallback (touch/tremor).
+- [x] **E5** Draft survival (localStorage + `pageshow`/bfcache recovery).
+- [x] **E6** Paste / unicode grace (NFC + contenteditable-artifact normalization).
+- [x] **E7** Formatting round-trip — plain-text intent; ambiguous formatting → `needs_human`, never silently stripped.
+- [x] **E8** Idempotency (client `suggestion_id` dedupes double-saves).
+- [x] **E9** Supersede (second edit on same `source_ref` supersedes the first).
+- [x] **E10** Drift (post-accept source change → `drift` with re-anchor actions).
+- [x] **E11** Ambiguity (ambiguous match → `needs_human`).
+- [x] **E12** Accepted-blocked (validator RED → `accepted_blocked` + rollback, never ships).
+- [x] **E13** Full two-target round trip (source → validate → build → deploy site + Worker; proven A/B/C/D incl. byte-identical revert).
+- [x] **E14** Review XSS — text-node-only rendering everywhere; 0 CSP errors in live UAT.
+- [x] **E15** Spam / DoS caps (size cap + graceful 413, per-token rate limit + pending ceiling).
+- [x] **E16** Pitch-page path (hand-built block map + HTML-direct apply).
+- [x] **E17** Cumulative digest (review page IS the digest; all `pending`, any age).
+- [x] **E18** Token lifecycle (opaque token → server-side scope record; independent rotation; `?t=`→cookie exchange).
+- [x] **E19 Value-sync:** editing a JSON-rendered scalar patches the JSON source and syndicates on regenerate; editing a prose-embedded value proposes companion edits; a value edit that breaks reconciliation ends `accepted_blocked`, never ships. (Companion-id ceiling bug found + fixed in live UAT — value-sync had never landed until then.)
+- [x] **E20 Windows-primary:** the full happy path driven on Windows-Chrome viewport with mouse selection-commenting; Word-idiom familiarity check (selection → bubble → note reads like Word's flow).
+- [x] All existing gates stay green: validator PASS, `--check` + leak-sweep (extended), Worker tests (119), apply-engine tests (14), client assertions (22); chat/critique untouched.
+
+**Pending (deferred, not blocking):** PROD injector wiring; Roger as 2nd editor; automated digest push; value-sync formatting-preserving serializer fast-follow.
 
 ## Dependencies & Risks
 
