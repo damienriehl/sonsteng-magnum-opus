@@ -11,11 +11,25 @@
   "compatibility_date": "2026-07-17",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } },
-  "durable_objects": {
-    "bindings": [{ "name": "BUDGET", "class_name": "BudgetCounter" }]
+
+  // The generator-emitted editor map + server-only instructor bundle are copied
+  // into src's import tree (editor-data/) before wrangler bundles. Regenerate the
+  // sources first: `python3 tools/build_site.py --check && python3 tools/build_instructor_bundle.py`.
+  "build": {
+    "command": "node scripts/bundle-editor-data.mjs"
   },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "BUDGET", "class_name": "BudgetCounter" },
+      { "name": "EDITOR", "class_name": "EditorStore" }
+    ]
+  },
+  // Migrations are APPEND-ONLY: v1 (BudgetCounter) is never altered; v2 adds the
+  // EditorStore SQLite class for the editor experience.
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["BudgetCounter"] }
+    { "tag": "v1", "new_sqlite_classes": ["BudgetCounter"] },
+    { "tag": "v2", "new_sqlite_classes": ["EditorStore"] }
   ],
   "vars": {
     "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
@@ -28,6 +42,22 @@
     "PUBLIC_BUDGET_USD": "7",
     "DEMO_RESERVE_USD": "3",
     "MAX_TURNS": "20",
-    "MAX_SESSIONS_PER_DAY": "200"
+    "MAX_SESSIONS_PER_DAY": "200",
+
+    // ---- Editor experience -------------------------------------------------
+    // EDIT_UPSTREAM: the DEV static origin the proxy-injector fetches (prefix +
+    // trailing slash). Every allowlisted page key resolves under it.
+    "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
+    // EDIT_ORIGIN: the worker's OWN edit origin — the SOLE /edit CORS allowlist.
+    "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
+    // Scope grants per token slot (independent per-scope version for rotation).
+    // The opaque token values are SECRETS: EDIT_TOKEN_JOHN, EDIT_TOKEN_ADMIN
+    // (set with `wrangler secret put`, never here). admin is reachable ONLY via
+    // the admin token — never from edit/instructor tokens.
+    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+    // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
+    "EDIT_MAX_PENDING_PER_EDITOR": "200",
+    "EDIT_MAX_DAILY_PER_EDITOR": "500",
+    "EDIT_MAX_BYTES": "16384"
   }
 }

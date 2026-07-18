@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DEV HARNESS — Sonsteng Editor (mock, Worker-free)</title>
+
+<!-- DEV-ONLY: relaxes CSP so the in-page mock + control script run. The real
+     Worker-injected page ships the strict production CSP (no inline script). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:">
+
+<link rel="stylesheet" href="../../site/platform/assets/fonts.css">
+<link rel="stylesheet" href="../../site/platform/assets/theme.css">
+<link rel="stylesheet" href="editor.css">
+<style>
+  /* harness chrome only — never in production */
+  #harness{position:fixed;top:3.6rem;left:0;right:0;z-index:60;background:var(--ink,#1d1a16);
+    color:var(--ink-invert,#f4efe4);border-bottom:2.5px solid var(--brass,#a9822f);
+    padding:.5rem .8rem;font-family:var(--font-mono,monospace);font-size:.7rem;
+    text-transform:uppercase;letter-spacing:.05em}
+  #harness .row{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+  #harness b{color:var(--brass-lite,#c19a44)}
+  #harness button,#harness a{font-family:var(--font-mono,monospace);font-size:.66rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--ink-invert,#f4efe4);background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.25);border-radius:3px;padding:.35em .55em;cursor:pointer;text-decoration:none}
+  #harness button.hot{background:var(--claret,#7c1e2b);border-color:var(--claret,#7c1e2b)}
+  #editor-log{margin-top:.35rem;max-height:6rem;overflow:auto;white-space:pre-wrap;color:var(--brass-lite,#c19a44);font-size:.64rem}
+  .wrap{max-width:44rem;margin:0 auto;padding:2rem 1.4rem 8rem}
+  h1{font-family:var(--font-display,Georgia,serif);font-size:1.7rem;letter-spacing:-.01em}
+  main .prose{line-height:1.7}
+  .kpi{font-family:var(--font-mono,monospace);color:var(--ink-faint,#8a7f6d);text-transform:uppercase;letter-spacing:.06em;font-size:.8rem}
+  /* the harness sits below the editor banner; push content clear of both */
+  body{padding-top:9rem !important}
+</style>
+</head>
+<body>
+
+<!-- =========================================================================
+     THE FAKE INJECTED PAGE. <main> contains candidate blocks in document order.
+     THE WALKER CONTRACT (mirror of build_site.py): candidates = p,li,h1-h6,
+     blockquote (outermost); index = 0-based position among candidates.
+       idx 0  h1              read-only (NOT in map)
+       idx 1  p  plain prose  EDITABLE            (map)
+       idx 2  p  json_scalar  COMMENT-ONLY        (map)
+       idx 3  p  formatted    COMMENT-ONLY        (map, has_inline_formatting)
+       idx 4  p  plain prose  EDITABLE            (map)  <- selection-comment + status
+       idx 5  p  computed KPI read-only (NOT in map)
+     ========================================================================= -->
+<div class="wrap">
+  <main id="main" class="prose">
+    <h1>State v. Halvard — Suppression Exercise</h1>
+
+    <p>You are an attorney representing Devon Halvard, who was arrested on suspicion of driving while impaired after a late-night traffic stop on an icy county road. The State's evidence rests on a breath test administered at the station and the arresting officer's account of the stop.</p>
+
+    <p>Halden Regional District v. Devon Halvard (DWI · Suppression)</p>
+
+    <p><strong>Written objectives.</strong> Diagnose the lawfulness of the stop, marshal the facts that bear on reasonable articulable suspicion, and produce a suppression memorandum that states the controlling standard before applying it to the icy-road facts.</p>
+
+    <p>The client wants the breath-test result kept out and is worried about losing the delivery-route license that supports the family. He has no prior record and coaches a youth hockey team on weekends.</p>
+
+    <p class="kpi">EDITABLE BLOCKS: 4 · READ-ONLY CANDIDATES: 2 · COMPUTED, NEVER EDITABLE</p>
+  </main>
+</div>
+
+<!-- The Worker injects TWO islands (escaped JSON). Read via textContent + JSON.parse.
+     #editor-map-data = { version, page?, blocks:[…] }  ·  #edits-data = { items:[…] } -->
+<script type="application/json" id="editor-map-data">
+{
+  "version": "harness-v1",
+  "page": "matters/m05-dwi-meridian/index.html",
+  "blocks": [
+    { "index": 1, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.intro.body_md.p0",
+      "original_text": "You are an attorney representing Devon Halvard, who was arrested on suspicion of driving while impaired after a late-night traffic stop on an icy county road. The State's evidence rests on a breath test administered at the station and the arresting officer's account of the stop.",
+      "original_hash": "hash-idx1-v1", "has_inline_formatting": false, "context": "exercise intro" },
+    { "index": 2, "kind": "json_scalar", "source_ref": "data/matters/m05-dwi-meridian/matter.json#caption",
+      "original_text": "Halden Regional District v. Devon Halvard (DWI · Suppression)",
+      "original_hash": "hash-idx2-v1", "has_inline_formatting": false, "context": "matter caption", "json_path": "caption" },
+    { "index": 3, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.objectives.body_md.p0",
+      "original_text": "**Written objectives.** Diagnose the lawfulness of the stop, marshal the facts that bear on reasonable articulable suspicion, and produce a suppression memorandum that states the controlling standard before applying it to the icy-road facts.",
+      "original_hash": "hash-idx3-v1", "has_inline_formatting": true, "context": "exercise objectives" },
+    { "index": 4, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.goals.body_md.p0",
+      "original_text": "The client wants the breath-test result kept out and is worried about losing the delivery-route license that supports the family. He has no prior record and coaches a youth hockey team on weekends.",
+      "original_hash": "hash-idx4-v1", "has_inline_formatting": false, "context": "client goals" }
+  ]
+}
+</script>
+<script type="application/json" id="edits-data">
+{
+  "items": []
+}
+</script>
+
+<!-- harness control strip -->
+<div id="harness">
+  <div class="row">
+    <b>EDITOR DEV HARNESS · MOCK</b>
+    <span id="hready">blocks: —</span>
+    <button type="button" id="btnRepoll">Re-poll pending</button>
+    <button type="button" id="btnArm401" class="hot">Arm 401 once</button>
+    <button type="button" id="btnArmRate" class="hot">Arm rate-limit once</button>
+    <button type="button" id="btnArmStale" class="hot">Arm stale-page</button>
+    <button type="button" id="btnArm413" class="hot">Arm oversize (413)</button>
+    <button type="button" id="btnSlow">Toggle slow 600ms</button>
+    <button type="button" id="btnFailOnce" class="hot">Arm network fail-once</button>
+    <button type="button" id="btnReset">Reset drafts</button>
+  </div>
+  <div id="editor-log"></div>
+</div>
+
+<script>
+/* ===== in-page mock: stubs /edit/v1/* so every path runs Worker-free ===== */
+(function () {
+  var P = new URLSearchParams(location.search);
+  var log = function (m) { var l = document.getElementById('editor-log'); if (l) l.textContent = '[' + new Date().toLocaleTimeString() + '] ' + m + '\n' + l.textContent; };
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // Mirror the Worker: derive kind/block_index from source_ref via the map island.
+  try {
+    var mapNode = document.getElementById('editor-map-data');
+    window.__HARNESS_MAP__ = mapNode ? (JSON.parse(mapNode.textContent).blocks || []) : [];
+  } catch (e) { window.__HARNESS_MAP__ = []; }
+
+  var ctrl = {
+    slowMs: P.get('scenario') === 'slow' ? 600 : 0,
+    forceNext: P.get('scenario') === 'fail401' ? 'no_edit_auth'
+             : P.get('scenario') === 'rate_limited' ? 'rate_limited'
+             : (P.get('scenario') === 'stale_page' || P.get('scenario') === 'map_stale') ? 'stale_page'
+             : P.get('scenario') === 'oversize' ? 'validation_error'
+             : P.get('scenario') === 'fail_once' ? 'network' : null,
+    forcePersist: (P.get('scenario') === 'stale_page' || P.get('scenario') === 'map_stale'),   // stale_page isn't "recover on resend"
+    server: { suggestions: {}, calls: 0, ids: [] }
+  };
+  window.__MOCK_CTRL__ = {
+    forceOnce: function (code) { ctrl.forceNext = code; ctrl.forcePersist = false; log('ARM once: ' + code); },
+    forcePersistent: function (code) { ctrl.forceNext = code; ctrl.forcePersist = true; log('ARM persistent: ' + code); },
+    setSlow: function (ms) { ctrl.slowMs = ms | 0; log('slow=' + ctrl.slowMs + 'ms'); },
+    server: function () { return { calls: ctrl.server.calls, count: Object.keys(ctrl.server.suggestions).length, ids: ctrl.server.ids.slice() }; },
+    clear: function () { ctrl.server = { suggestions: {}, calls: 0, ids: [] }; }
+  };
+
+  var CODE_STATUS = { no_edit_auth: 401, rate_limited: 429, validation_error: 413, stale_page: 409, network: 0 };
+
+  // canned demo items so margin bubbles + inline statuses render on first poll
+  var DEMO_PENDING = [
+    { block_index: 4, source_ref: 'data/matters/m05-dwi-meridian/exercise/exercise.json#sections.goals.body_md.p0',
+      status: 'declined', kind: 'comment', preview: 'Should we mention the hockey team here?', note: 'Kept it out of the public copy — good instinct though.' },
+    { block_index: 3, source_ref: 'data/matters/m05-dwi-meridian/exercise/exercise.json#sections.objectives.body_md.p0',
+      status: 'accepted', kind: 'comment', preview: 'Please soften "marshal" to "gather".' }
+  ];
+
+  window.__EDITOR_MOCK__ = function (req) {
+    var path = req.path, method = req.method, body = req.body || {};
+    log('-> ' + method + ' ' + path + (body.id ? ' id=' + String(body.id).slice(0, 8) : ''));
+    // contract check: mutations must carry the custom header
+    if (method !== 'GET' && !(req.headers && req.headers['X-Edit-Request'] === '1')) {
+      return wait(ctrl.slowMs).then(function () { return { ok: false, status: 403, data: { error: { code: 'validation_error', message: 'missing X-Edit-Request header' } } }; });
+    }
+    return wait(ctrl.slowMs).then(function () {
+
+      if (path.indexOf('/pending') === 0) {
+        var items = DEMO_PENDING.slice();
+        Object.keys(ctrl.server.suggestions).forEach(function (id) {
+          var s = ctrl.server.suggestions[id];
+          items.push({ block_index: s.block_index, source_ref: s.source_ref, status: 'pending', kind: s.kind, preview: (s.new_text || s.comment || '').slice(0, 80) });
+        });
+        return { ok: true, status: 200, data: { items: items } };
+      }
+
+      if (path.indexOf('/suggest') === 0) {
+        ctrl.server.calls++;
+        // forced error?
+        if (ctrl.forceNext) {
+          var code = ctrl.forceNext;
+          if (!ctrl.forcePersist) ctrl.forceNext = null;    // consume (recover on resend)
+          if (code === 'network') { log('   forced NETWORK fail'); return { ok: false, status: 0, data: { error: { code: 'network' } }, network: true }; }
+          log('   forced ' + code);
+          return { ok: false, status: CODE_STATUS[code], data: { error: { code: code } } };
+        }
+        // idempotent upsert keyed by id => dedupe. Server DERIVES kind/page from
+        // the map (source_ref); the client no longer sends kind/block_index/page.
+        // Infer kind + block_index here the way the Worker would, from source_ref.
+        var derivedKind = body.comment != null && body.new_text == null ? 'comment' : 'prose';
+        var mapBlock = (window.__HARNESS_MAP__ || []).filter(function (b) { return b.source_ref === body.source_ref; })[0];
+        var derivedIndex = mapBlock ? mapBlock.index : null;
+        var existed = !!ctrl.server.suggestions[body.id];
+        ctrl.server.suggestions[body.id] = {
+          id: body.id, kind: derivedKind, block_index: derivedIndex,
+          source_ref: body.source_ref, new_text: body.new_text, comment: body.comment, status: 'pending'
+        };
+        if (!existed) ctrl.server.ids.push(body.id);
+        log('   accept id=' + String(body.id).slice(0, 8) + (existed ? ' (dedup)' : ' (new)') + ' total=' + Object.keys(ctrl.server.suggestions).length);
+        return { ok: true, status: 200, data: { status: 'pending' } };
+      }
+
+      return { ok: false, status: 404, data: { error: { code: 'validation_error', message: 'unknown path' } } };
+    });
+  };
+})();
+</script>
+
+<!-- load the production client (reads the island, wires the page) -->
+<script src="editor.js"></script>
+
+<!-- harness control wiring -->
+<script>
+(function () {
+  function tick() {
+    var api = window.SonstengEditor;
+    if (api) document.getElementById('hready').textContent = 'blocks: ' + api.ready();
+  }
+  setInterval(tick, 400);
+  var $ = function (id) { return document.getElementById(id); };
+  $('btnRepoll').onclick = function () { window.SonstengEditor && window.SonstengEditor.repoll(); };
+  $('btnArm401').onclick = function () { window.__MOCK_CTRL__.forceOnce('no_edit_auth'); };
+  $('btnArmRate').onclick = function () { window.__MOCK_CTRL__.forceOnce('rate_limited'); };
+  $('btnArmStale').onclick = function () { window.__MOCK_CTRL__.forcePersistent('stale_page'); };
+  $('btnArm413').onclick = function () { window.__MOCK_CTRL__.forceOnce('validation_error'); };
+  $('btnFailOnce').onclick = function () { window.__MOCK_CTRL__.forceOnce('network'); };
+  var slow = false;
+  $('btnSlow').onclick = function () { slow = !slow; window.__MOCK_CTRL__.setSlow(slow ? 600 : 0); };
+  $('btnReset').onclick = function () { try { sessionStorage.clear(); localStorage.removeItem('sonsteng_type_lg'); } catch (e) {} location.reload(); };
+})();
+</script>
+</body>
+</html>

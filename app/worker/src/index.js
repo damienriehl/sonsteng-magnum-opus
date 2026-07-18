@@ -25,8 +25,10 @@ import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
+import { editorFetch } from "./editor.js";
 
 export { BudgetCounter } from "./budget.js";
+export { EditorStore } from "./editor-store.js";
 
 // ---- Tunables ---------------------------------------------------------------
 const PER_IP_MINT_CEILING = 20;      // coarse per-IP session-mint brake (~20/day)
@@ -352,6 +354,22 @@ export default {
   async fetch(request, env, ctx) {
     const allowed = parseAllowedOrigins(env.ALLOWED_ORIGINS);
     const url = new URL(request.url);
+
+    // The /edit surface is a self-contained router with its OWN auth, CORS
+    // allowlist (the worker's edit origin only), CSRF guard, and strict security
+    // headers. It never touches the chat/BYOK path below. Delegated before the
+    // chat CORS handling so /edit responses carry the edit headers, not chat CORS.
+    if (url.pathname === "/edit" || url.pathname.startsWith("/edit/")) {
+      try {
+        return await editorFetch(request, env, ctx);
+      } catch (err) {
+        logMeta({ ev: "edit_unhandled", msg: String(err && err.message) });
+        return new Response("Not found.", {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store" },
+        });
+      }
+    }
 
     if (request.method === "OPTIONS") return handlePreflight(request, allowed);
 

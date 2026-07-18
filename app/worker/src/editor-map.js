@@ -1,0 +1,213 @@
+// editor-map.js — the UNIVERSAL ALLOWLIST (docs/research/editor-apply-spec.md,
+// prime invariant #1). Every client-influenced reference — the /edit/<path>
+// proxy path, every source_ref, every json_path — is validated here, server-side,
+// against the generator-emitted maps. Unknown => null (the caller returns a
+// uniform 404 / validation_error). No client value ever reaches a fetch, file
+// path, or JSON write unchecked.
+//
+// The two bundles are inlined at build time (scripts/bundle-editor-data.mjs copies
+// build/*.generated.json into editor-data/). They are SERVER-ONLY (the instructor
+// bundle carries answer keys) and never shipped to the public site.
+
+import EDITOR_MAP from "../editor-data/editor-map.generated.json" with { type: "json" };
+import INSTRUCTOR_BUNDLE from "../editor-data/instructor-bundle.generated.json" with { type: "json" };
+
+// spine_build_id pins map<->page compatibility. The injector stamps it into the
+// page so a mismatched (stale) client reload is caught gracefully.
+export const MAP_VERSION = EDITOR_MAP.spine_build_id || "";
+export const INSTRUCTOR_VERSION = INSTRUCTOR_BUNDLE.spine_build_id || "";
+
+// ---- Page-path allowlist (proxy SSRF guard) ---------------------------------
+// The map's page keys are site-relative, e.g. "matters/m01-.../index.html".
+// A request may address a page as the key itself, its directory form (trailing
+// "index.html" dropped), or with/without a trailing slash. We build an exact
+// lookup of every acceptable request form -> canonical page key. Nothing else
+// resolves — no traversal, no wildcard, no upstream guess.
+const PAGE_KEYS = Object.keys(EDITOR_MAP.pages || {});
+const PATH_TO_PAGE = new Map();
+for (const key of PAGE_KEYS) {
+  PATH_TO_PAGE.set(key, key); // full "…/index.html"
+  if (key.endsWith("/index.html")) {
+    const dir = key.slice(0, -"index.html".length); // "matters/m01-.../"
+    PATH_TO_PAGE.set(dir, key); // trailing slash
+    PATH_TO_PAGE.set(dir.replace(/\/$/, ""), key); // no trailing slash
+  }
+}
+
+// A path is structurally hostile if it contains traversal, a scheme, a protocol-
+// relative prefix, a backslash, an embedded NUL/control char, or a leading slash
+// beyond the single one we strip. These are rejected BEFORE any lookup.
+function isHostilePath(raw) {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 512) return true;
+  if (raw.includes("\\")) return true; // backslash
+  if (/[\u0000-\u001f\u007f]/.test(raw)) return true; // control chars
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return true; // scheme: http:, javascript:, data:
+  if (raw.startsWith("//")) return true; // protocol-relative //evil
+  if (raw.split("/").some((seg) => seg === "..")) return true; // traversal
+  return false;
+}
+
+// Resolve a raw /edit/<path> tail to { pageKey, blocks } or null. Decodes percent-
+// encoding first (so %2e%2e traversal is caught), strips ONE leading slash.
+export function resolvePagePath(rawPath) {
+  let path = rawPath;
+  try {
+    path = decodeURIComponent(rawPath);
+  } catch {
+    return null; // malformed percent-encoding
+  }
+  if (path.startsWith("/")) path = path.slice(1);
+  if (isHostilePath(path)) return null;
+  const pageKey = PATH_TO_PAGE.get(path);
+  if (!pageKey) return null;
+  return { pageKey, blocks: EDITOR_MAP.pages[pageKey] || [] };
+}
+
+// Build the upstream URL for an allowlisted page key and assert it stays inside
+// the EDIT_UPSTREAM origin+prefix (defense in depth over the allowlist). Returns
+// a URL or null. editUpstream e.g. "https://sonsteng-dev.damienriehl.com/platform/".
+export function buildUpstreamUrl(pageKey, editUpstream) {
+  let base;
+  try {
+    base = new URL(editUpstream);
+  } catch {
+    return null;
+  }
+  const url = new URL(pageKey, base);
+  if (url.origin !== base.origin) return null; // never leave the origin
+  // pathname must stay under the upstream prefix (the base path).
+  const basePath = base.pathname.endsWith("/") ? base.pathname : base.pathname + "/";
+  if (!url.pathname.startsWith(basePath)) return null;
+  if (url.search || url.hash) return null; // no query/fragment smuggling
+  return url;
+}
+
+// ---- source_ref / json_path allowlist (suggest + apply validation) ----------
+// Index every editable block by source_ref, with its page + descriptor. A
+// source_ref that is not in this index cannot be suggested against.
+const BLOCK_BY_SRCREF = new Map();
+for (const [pageKey, blocks] of Object.entries(EDITOR_MAP.pages || {})) {
+  for (const b of blocks) {
+    if (!BLOCK_BY_SRCREF.has(b.source_ref)) {
+      BLOCK_BY_SRCREF.set(b.source_ref, { ...b, page: pageKey });
+    }
+  }
+}
+
+// Instructor blocks live in the instructor bundle (their own allowlist).
+const INSTR_BLOCK_BY_SRCREF = new Map();
+const INSTR_DOC_BY_KEY = new Map(); // "m01/facts" -> doc
+for (const doc of INSTRUCTOR_BUNDLE.docs || []) {
+  INSTR_DOC_BY_KEY.set(`${doc.matter_id}/${doc.doc_type}`, doc);
+  for (const b of doc.blocks || []) {
+    if (!INSTR_BLOCK_BY_SRCREF.has(b.source_ref)) {
+      INSTR_BLOCK_BY_SRCREF.set(b.source_ref, { ...b, matter_id: doc.matter_id, doc_type: doc.doc_type });
+    }
+  }
+}
+
+// Look up an editable block for a suggest, honoring scope. Returns the block
+// descriptor (incl. server-authoritative original_text/original_hash/kind/
+// json_path) or null. This is the server-side gate — the client's proposed
+// source_ref/json_path never bypass it.
+export function lookupBlock(source_ref, scope) {
+  const map = scope === "instructor" ? INSTR_BLOCK_BY_SRCREF : BLOCK_BY_SRCREF;
+  const block = map.get(source_ref);
+  if (!block) return null;
+  return block;
+}
+
+// Validate a json_scalar suggest: the block must be kind json_scalar and its
+// json_path must equal the map's json_path for that source_ref (no path forgery).
+export function validateJsonScalar(source_ref, json_path, scope) {
+  const block = lookupBlock(source_ref, scope);
+  if (!block || block.kind !== "json_scalar") return null;
+  if (json_path != null && json_path !== block.json_path) return null;
+  return block;
+}
+
+// ---- Instructor doc resolution ---------------------------------------------
+// Resolve (matter, docType) to the pre-rendered doc, or null. doc_type is
+// normalized: "instructor-notes"/"instructor_notes"/"notes" -> instructor_notes,
+// "answer-key"/"answer_key"/"key" -> answer_key, "facts" -> facts.
+const DOC_TYPE_ALIASES = {
+  facts: "facts",
+  "instructor-notes": "instructor_notes",
+  instructor_notes: "instructor_notes",
+  notes: "instructor_notes",
+  "answer-key": "answer_key",
+  answer_key: "answer_key",
+  key: "answer_key",
+};
+
+export function resolveInstructorDoc(matter, docType) {
+  if (typeof matter !== "string" || typeof docType !== "string") return null;
+  if (!/^m\d{2}$/.test(matter)) return null; // strict matter id form
+  const canonical = DOC_TYPE_ALIASES[docType.toLowerCase()];
+  if (!canonical) return null;
+  return INSTR_DOC_BY_KEY.get(`${matter}/${canonical}`) || null;
+}
+
+// ---- JSON island escaping (XSS-safe embedding) ------------------------------
+// Serialize `obj` for embedding inside <script type="application/json">…</script>.
+// Escapes the characters that could break out of the script element or the JSON
+// text: <, >, & (so "</script>" and HTML entities are inert), and U+2028/U+2029
+// (valid JSON, but invalid raw in a script/JS context). NEVER interpolate client
+// text into HTML — this is the only sanctioned embedding path.
+export function escapeJsonIsland(obj) {
+  return JSON.stringify(obj)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+// Escape a plain string for safe insertion as HTML TEXT content (not attributes).
+// Used only for server-owned constants; client text is never HTML-interpolated.
+export function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
+// Per-page block descriptor exposed to the editor client (the allowlist for that
+// page). No secrets — original_text is the same text the page renders.
+export function pageBlockDescriptors(blocks) {
+  return blocks.map((b) => ({
+    index: b.index,
+    kind: b.kind,
+    source_ref: b.source_ref,
+    json_path: b.json_path || null,
+    original_text: b.original_text,
+    original_hash: b.original_hash,
+    has_inline_formatting: !!b.has_inline_formatting,
+    context: b.context || "",
+  }));
+}
+
+// Project raw DO suggestion rows into the injected #edits-data item shape the
+// editor client reads: { block_index, source_ref, status, kind, preview, note? }.
+// block_index is the trailing segment of block_anchor ("page:index"); preview is
+// the comment text (comments) or the proposed new_text (edits), capped.
+export function projectPendingItems(items, previewMax = 200) {
+  return (items || []).map((it) => {
+    const anchor = it.block_anchor || "";
+    const idx = parseInt(anchor.slice(anchor.lastIndexOf(":") + 1), 10);
+    const preview = (it.kind === "comment" ? it.comment : it.new_text) || "";
+    const out = {
+      block_index: Number.isFinite(idx) ? idx : null,
+      source_ref: it.source_ref,
+      status: it.status,
+      kind: it.kind,
+      preview: preview.length > previewMax ? preview.slice(0, previewMax) : preview,
+    };
+    if (it.decision_note) out.note = it.decision_note;
+    return out;
+  });
+}
+
+export { EDITOR_MAP, INSTRUCTOR_BUNDLE };

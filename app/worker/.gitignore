@@ -6,3 +6,6 @@
 .wrangler/
 node_modules/
 dist/
+
+# Generated editor bundles copied in by scripts/bundle-editor-data.mjs (never commit).
+editor-data/
