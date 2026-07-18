@@ -1,11 +1,13 @@
-STATE: working — weekend fast-follow wave queued; main = platform v0 + editor, DEV-deployed; PROD held.
+STATE: review-needed — weekend wave WP1-WP10 COMPLETE on feat/weekend-fast-follows (pushed); all gates green; DEV redeployed; PROD held; decision batch awaiting Damien at dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
-**Fresh session:** read this file + `docs/decisions/2026-07-18-qa-answers.md`, then execute
-the Weekend Work Plan below via parallel Opus subagents (keep the orchestrator context clean —
-ALL file-reading/editing/verification in subagents). Batch any decisions for Damien ~10pm
-Central 2026-07-18 as a cockpit QA artifact (house rule).
+**Fresh session:** read this file + `docs/decisions/2026-07-18-qa-answers.md`. The weekend
+fast-follow wave (WP1-WP10) is DONE on `feat/weekend-fast-follows` — see "Weekend wave
+results (2026-07-18)" below. The only thing left is Damien's decision batch (artifact
+`dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html`, brief
+`briefs/qa/sonsteng-2026-07-18-weekend.json`): answers → merge to main → send John his
+editor link → Wed walkthrough.
 
 This repo self-documents (cockpit convention: RESUME.md + the STATE line at top). You have
 the project memory (`project_sonsteng_magnum_opus.md`) plus this doc — that is enough to
@@ -20,27 +22,38 @@ continue losslessly with no conversation history.
   pitch + platform (Hetzner box `hetzner-dev`, `/opt/sonsteng`, docker compose project
   `sonsteng`).
 - **Worker:** https://sonsteng-chat.damienriehl.workers.dev — chat/critique/debrief +
-  the `/edit` proxy-injector editor. `GET /v1/session` → 200 (health/config; the interview
-  flow POSTs to other routes). Config in `app/worker/wrangler.jsonc`.
+  the `/edit` proxy-injector editor. Since WP6, `GET /v1/session` is Turnstile-gated:
+  untokened → **403 `turnstile_failed`**; `?bypass=<demo-token>` → 200 (session_token).
+  `/edit` unauthorized → uniform 404. Config in `app/worker/wrangler.jsonc`.
 - **PROD:** https://sonsteng.damienriehl.com serves only the ORIGINAL pitch. Do NOT deploy
   PROD this weekend (build wiring only — see WP1).
 
-**Branch state:** ALL merged to `main` (fast-forward). `main` tip = editor tip
-(`c10abd7`). Feature branches `feat/curriculum-buildout` and `feat/editor-experience`
-are fully contained in main. main is pushed to origin.
+**Branch state:** the weekend wave lives on `feat/weekend-fast-follows` (pushed to origin),
+built on the earlier `main` (platform v0 + editor). It is **NOT merged to `main`** — held
+pending Damien's decision-3 answer (see the weekend artifact). The pre-weekend `main` tip is
+still editor tip (`c10abd7`); the WP10 quality-lane branches (`feat/wp10-editor`,
+`feat/wp10-matters`) plus the WP1-WP8 lane branches (`feat/wp-worker`, `feat/wp-apply`,
+`feat/wp-digest`) are all folded into `feat/weekend-fast-follows` and kept for history.
 
-**Test/gate counts (all green at merge):**
-- Worker tests: **119**
-- Apply-engine tests: **14**
-- Editor-client assertions: **22**
+**Test/gate counts (all green on `feat/weekend-fast-follows`):**
+- Worker tests: **175** (`cd app/worker && node --test test/*.test.js`)
+- Apply-engine tests: **66** (`pytest tools/tests/test_apply_suggestions.py test_json_surgical.py test_span_splice.py`)
+- Digest-push tests: **22** (`pytest tools/tests/test_digest_push.py`)
+- Editor-client assertions: **25** (`DISPLAY=:0 node app/editor/verify-editor.js` — 25/25)
 - `validate_spine.py`: **PASS** (0 ERROR), 20/20 per-matter self-gates
-- `build_site.py --check` + leak-sweep: green
+- `build_site.py --check` + leak-sweep: green; two-bundle parity (`check_build_parity.py`): PASS
+  (spine_build_id `1ddab816d04a6d59`)
 
 **Where everything is documented:**
 - Plans: `docs/plans/2026-07-17-001-feat-curriculum-buildout-plan.md`,
   `docs/plans/2026-07-18-001-feat-editor-experience-plan.md`
 - Evidence packs: `docs/evidence/EP-2026-07-17-buildout.md`,
-  `docs/evidence/EP-2026-07-18-editor.md` (+ screenshots in `docs/evidence/EP-2026-07-17/`)
+  `docs/evidence/EP-2026-07-18-editor.md` (+ screenshots in `docs/evidence/EP-2026-07-17/`);
+  **weekend-wave additions:** `docs/evidence/EP-2026-07-19-offline-redteam.md` (WP8 offline
+  red-team), `docs/evidence/EP-2026-07-18-walkthrough-rehearsal.md` +
+  `docs/evidence/EP-2026-07-18-walkthrough/` (WP9 rehearsal screenshots)
+- PROD-enable one-command runbook (WP1): `docs/prod-enable.md` (documented, NOT run)
+- Digest-push (ntfy) design + install (WP3): `docs/digest-push.md`
 - Demo runbook: `docs/demo-runbook-2026-07-18.md`
 - Editor guide for John: `docs/editor-guide-for-john.md`
 - Research/briefing docs: `docs/research/*` — key ones:
@@ -60,134 +73,67 @@ are fully contained in main. main is pushed to origin.
 - `~/.secrets/sonsteng-demo-bypass` — demo bypass token
 - `~/.config/cloudflare/creds.env` — Cloudflare API creds for wrangler/CF API
 
-**Cockpit decision record:** form at
-`dashboard.damienriehl.com/sonsteng-decisions-2026-07-18.html`; brief
-`~/Coding Projects/briefs/qa/sonsteng-2026-07-18-decisions.json` (marked ANSWERED
-2026-07-18 → pointer to `docs/decisions/2026-07-18-qa-answers.md`).
+**Cockpit decision records:**
+- Pre-weekend (ANSWERED): form `dashboard.damienriehl.com/sonsteng-decisions-2026-07-18.html`;
+  brief `~/Coding Projects/briefs/qa/sonsteng-2026-07-18-decisions.json` → answers in
+  `docs/decisions/2026-07-18-qa-answers.md`.
+- **Weekend wave (OPEN — awaiting Damien):** artifact
+  `dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html`; brief
+  `~/Coding Projects/briefs/qa/sonsteng-2026-07-18-weekend.json`. Its decision-3 (merge
+  `feat/weekend-fast-follows` → `main`) gates the merge; other asks: walkthrough date,
+  John-link send.
 
 ---
 
-## WEEKEND WORK PLAN
+## Weekend wave results (2026-07-18) — WP1–WP10 COMPLETE
 
-Damien's q7 answer: **build ALL fast-follows this weekend** ("do everything you can…lot of
-usage to burn up"). q4: **BYOK-forever, no live provider key** — so anything needing a live
-key is keyless-substituted (WP8) or deferred. q3: **never deploy PROD** — build wiring, leave
-the flip to Damien.
+All ten fast-follows shipped on `feat/weekend-fast-follows` (built off the pre-weekend
+`main`). DEV redeployed (worker + Hetzner site); PROD held. Merge to `main` awaits Damien's
+decision-3 in the weekend artifact.
 
-**Every package must:** name its owned paths (one-writer rule — no two agents write the same
-file), pass its gates before hand-back (worker tests green, `validate_spine.py` PASS,
-`build_site.py --check` green, editor parity PASS where touched), and **must not deploy PROD**.
-DEV redeploy is allowed via `deploy/deploy-dev.sh main`.
+**Per-WP (all done):**
+- **WP1 — PROD injector wiring:** `wrangler.jsonc` env-scoped `EDIT_UPSTREAM`/`EDIT_ORIGIN`
+  (`env.dev`/`env.production`); one-command PROD-enable documented in `docs/prod-enable.md`.
+  Built, NOT flipped.
+- **WP2 — Roger as second editor:** `EDIT_TOKEN_ROGER` slot + `EDIT_TOKEN_SCOPES` `"roger"`
+  entry, attribution label **"RSH"**; worker test proves mint + attribution.
+- **WP3 — Digest push (ntfy):** batched cumulative pending-suggestion push (topic
+  `damien-homebox-736591e7`); review page stays canonical. Design in `docs/digest-push.md`.
+- **WP4 — SSE streaming (flagged OFF):** TransformStream streaming behind `STREAMING` env
+  var, defaults `false` (non-streaming typing indicator remains the default path).
+- **WP5 — Value-sync formatting-preserving serializer:** minimal-diff scalar edits
+  (key order/spacing preserved); apply-engine tests green.
+- **WP6 — Turnstile on `/v1/session`:** bot-gate live (`TURNSTILE_ENABLED=true`,
+  sitekey `0x4AAAAAAD4uPMN8eNwzYvAy`); untokened → 403 `turnstile_failed`, demo bypass → 200.
+- **WP7 — Formatted-block span-splice (apply v1.1):** auto-applies formatted blocks when every
+  formatted span's text is unchanged in-order; `needs_human` fallback otherwise.
+- **WP8 — Offline red-team approximation:** Opus adversarial battery + synthetic-output
+  redaction-path asserts (honest partial substitute; `redteam.mjs` untouched). Evidence:
+  `docs/evidence/EP-2026-07-19-offline-redteam.md`.
+- **WP9 — Walkthrough prep:** demo runbook rehearsed keyless end-to-end on DEV; screenshots
+  refreshed. Evidence: `docs/evidence/EP-2026-07-18-walkthrough-rehearsal.md` +
+  `docs/evidence/EP-2026-07-18-walkthrough/`.
+- **WP10 — Quality passes:** editor attribution-surfacing fix + a11y sweep of `/edit`
+  (`feat/wp10-editor`); cross-matter persona deepening on the 5 thinnest matters m11–m16 —
+  new personas Fontaine (m13), Sandoval (m14), Vandermeer (m16) (`feat/wp10-matters`).
 
-**Parallelism:** WP1–WP7 are independent → launch as parallel Opus subagents. WP8 runs after
-WP7. WP9 runs after WP1–WP8 land. WP10 fills remaining budget.
+**Final gate numbers (all green):**
+- Worker: **175/175** · Apply: **66/66** · Digest: **22/22** · Editor-client: **25/25**
+- `validate_spine.py`: **PASS** 0 ERROR, 20/20 · `build_site.py --check`: green ·
+  two-bundle parity: PASS (`1ddab816d04a6d59`)
+- Persona bundle: 59 personas, 501 facts, 20 rubrics
 
-### WP1 — PROD injector wiring (BUILD, do NOT flip)
-- **Goal:** make PROD-enable a one-command step without performing it.
-- Parameterize `EDIT_UPSTREAM` per environment. Today `wrangler.jsonc` hard-codes the DEV
-  origin `https://sonsteng-dev.damienriehl.com/platform/`. Add an env-scoped config (wrangler
-  `env.production` / `env.dev` vars block) so the PROD value points at the CF Pages origin
-  (PROD static: `sonsteng.damienriehl.com` served by CF Pages). Keep `EDIT_ORIGIN` correct
-  per env.
-- Document the exact one-command PROD enable (the `wrangler deploy --env production` +
-  `deploy/deploy-prod.sh` sequence) in a short section of `docs/demo-runbook-2026-07-18.md`
-  or a new `docs/prod-enable.md`. **Do not run it.**
-- **Owned paths:** `app/worker/wrangler.jsonc`, `docs/prod-enable.md` (or the runbook's PROD
-  section — pick ONE writer). Binding ref: editor plan §"PROD injector wiring", `wrangler.jsonc`
-  Editor block.
-- **Gate:** worker tests green; no PROD deploy.
+**Branch state:** `feat/weekend-fast-follows` pushed to origin, **unmerged to `main`** pending
+Damien's decision-3 (merge approval). Lane branches kept for history.
 
-### WP2 — Roger as second editor
-- Add a second token slot `EDIT_TOKEN_ROGER` + a scope record in `EDIT_TOKEN_SCOPES`
-  (today: `{"john":{"edit":1,"instructor":1},"admin":{"admin":1}}` → add
-  `"roger":{"edit":1,"instructor":1}`). Attribution label **"RSH"** on Roger's suggestions.
-- Add a worker test proving Roger's token mints an edit scope and attributions carry "RSH".
-  Store the actual token value only in `~/.secrets/sonsteng-editor-tokens` (path only) +
-  `wrangler secret put`.
-- **Owned paths:** `app/worker/wrangler.jsonc` (COORDINATE with WP1 — same file; sequence
-  WP1 then WP2, or have one agent own wrangler.jsonc for both), attribution code in
-  `app/worker/src/`, a new test in `app/worker/test/`. Binding ref: editor plan
-  §"Roger as second editor (token model ready)".
-- **Gate:** worker tests green.
+**Pending decisions (OPEN):** artifact
+`dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html`; brief
+`briefs/qa/sonsteng-2026-07-18-weekend.json`. Key asks: (1) walkthrough date (Wed Jul 23?),
+(2) John editor-link send, (3) merge `feat/weekend-fast-follows` → `main`, plus any
+judgment calls (streaming-default flip, PROD-enable timing).
 
-### WP3 — Digest push (ntfy)
-- Fire an **ntfy** notification (topic `damien-homebox-736591e7`) when pending suggestions
-  > 0, **batched** and respecting **cumulative** semantics (days accumulate; one sweep
-  reviews all). The **review page stays canonical**; push is strictly additive (per
-  `docs/plans/2026-07-18-001…` decision 6). Trigger from the apply engine / a small cron —
-  automated push only fires when pending accumulates (do not spam per-suggestion).
-- **Owned paths:** apply-engine notify hook in `tools/` (apply engine) + a small cron script;
-  `docs/` note. Binding ref: editor plan decision 6, `editor-apply-spec.md`.
-- **Gate:** apply-engine tests green; validator PASS.
-
-### WP4 — SSE streaming for chat (behind a flag)
-- Implement TransformStream streaming per `docs/research/worker-llm-facts.md` §4
-  (sniff terminal `message_delta` for `usage`) + app/worker streaming guidance. **Behind a
-  config flag; non-streaming stays the default** until the D7 rehearsal says otherwise.
-  Client shows a typing indicator today — keep that as the non-streaming path.
-- **Owned paths:** `app/worker/src/` chat handler, `app/chat/chat.js`, a `STREAMING` flag in
-  `wrangler.jsonc` (COORDINATE with WP1/WP2 on that file). Binding ref: worker-llm-facts §4.
-- **Gate:** worker tests green; flag defaults OFF.
-
-### WP5 — Value-sync formatting-preserving JSON serializer
-- Apply-engine fast-follow noted in the editor plan (§ "value-sync formatting-preserving
-  serializer fast-follow"). v1 value-sync is exact-literal, structurally-scoped; upgrade the
-  JSON write path to preserve source formatting (key order, spacing) on scalar edits so
-  value-sync diffs stay minimal.
-- **Owned paths:** value-sync/serializer module in `tools/` + its test in `tools/tests/`.
-  Binding ref: apply-engine report, `editor-apply-spec.md` §value-sync.
-- **Gate:** apply-engine tests green; validator PASS.
-
-### WP6 — Turnstile on `/v1/session` mint
-- Bot-gate the free session-mint endpoint with Cloudflare Turnstile per the security review.
-  **Use the `cloudflare:turnstile-spin` skill** (scans codebase, creates the widget via CF
-  API, deploys the siteverify path, writes frontend snippets). Creds at
-  `~/.config/cloudflare/creds.env`.
-- **Owned paths:** session-mint handler in `app/worker/src/`, the chat frontend session call
-  in `app/chat/`, Turnstile config. Binding ref: security review section of the editor plan.
-- **Gate:** worker tests green; session mint still works for legit clients.
-
-### WP7 — Formatted-block span-splice (editor apply v1.1)
-- The labeled fast-follow in the editor plan: today `has_inline_formatting` blocks route to
-  `needs_human`. Implement **auto-apply of formatted blocks when every formatted span's text
-  is unchanged in-order** (splice the changed plain text between untouched formatted spans).
-  Keep the `needs_human` fallback whenever a formatted span's own text changed or order
-  shifted.
-- **Owned paths:** the apply-engine block-apply module in `tools/` + tests. Binding ref:
-  editor plan §"span-splice = labeled fast-follow", `editor-apply-spec.md`.
-- **Gate:** apply-engine tests green; validator PASS. **Do after WP5 if both touch the same
-  apply module — coordinate one-writer.**
-
-### WP8 — Offline red-team approximation (runs AFTER WP7)
-- BYOK-forever ⇒ no live key ⇒ `redteam.mjs` can't run live. Build an **Opus agent battery**
-  that adversarially probes the persona SYSTEM PROMPTS + debrief redaction **offline**: an
-  Opus agent plays the jailbreaking student against the *rendered* persona prompt using its
-  own reasoning, and verifies the **server-side redaction paths** with synthetic model
-  outputs (feed crafted model responses through the redaction code, assert leaks are
-  stripped). Label it clearly as an **honest partial substitute** for `redteam.mjs` (no live
-  model calls). `redteam.mjs` stays untouched and ready for any future key.
-- **Owned paths:** a new offline harness under `tools/` or `app/worker/test/` (new files
-  only — do NOT modify `redteam.mjs`); an evidence note. Binding ref: worker-llm-facts §2
-  (cache/redaction asserts), the debrief-oracle server-side redaction code.
-- **Gate:** the redaction-path assertions pass against synthetic outputs.
-
-### WP9 — Walkthrough prep (~Wed, runs AFTER WP1–WP8)
-- Rehearse `docs/demo-runbook-2026-07-18.md` end-to-end on DEV via the **keyless paths**
-  (sample consultation replay, packets, dashboard, editor). Fix anything rough. Refresh
-  screenshots in the evidence pack (`docs/evidence/EP-2026-07-17/` + editor EP).
-- **Owned paths:** `docs/demo-runbook-2026-07-18.md`, evidence screenshots. Visual QA note:
-  RC-spawned sessions have no DISPLAY → use puppeteer headful on Xwayland :0 per
-  `reference_visual_qa_no_display.md` (per-section viewport shots, not tall full-page).
-- **Gate:** every runbook beat plays keyless on DEV.
-
-### WP10 — Quality passes (leftover budget)
-- `/code-review`-style adversarial review of the EDITOR code paths not yet reviewed
-  post-integration-fixes.
-- a11y sweep of `/edit` against `docs/research/design-direction.md` §9.
-- Cross-matter voice/consistency polish on the **5 thinnest matters** (pick by the depth
-  stats in the buildout evidence pack).
-- **Owned paths:** whatever each sub-pass touches — one writer per file; fixes only, no new
-  scope. **Gate:** all existing gates stay green.
+**Next steps:** Damien answers the batch → merge `feat/weekend-fast-follows` → `main` →
+send John his editor magic link → Wed walkthrough.
 
 ---
 
@@ -206,13 +152,12 @@ WP7. WP9 runs after WP1–WP8 land. WP10 fills remaining budget.
 - **Feature branch per operation** (`feedback_feature_branch_per_operation.md`); MIT license
   default (`feedback_mit_license.md`); log OSS in THIRD-PARTY.md.
 
-## ~10pm Central decision batch (deliver as a fresh cockpit QA artifact)
-Likely to need Damien:
-1. **Confirm the walkthrough date** — q6 said "maybe Wednesday" (2026-07-23) but not firm.
-2. **John-link send** — q5: Damien test-drives the editor himself first, THEN sends John his
-   magic link. Prompt him whether he has test-driven, and offer to build+send the URL.
-3. **Any judgment calls the weekend work surfaces** — e.g., Turnstile widget provisioning
-   choices, streaming default flip, PROD-enable timing, any fast-follow that hits an
-   ambiguous product call.
-Deliver as a new cockpit QA artifact (recommended picks flagged, notes fields, Copy-answers
-paste-back with the execCommand clipboard fallback).
+## Decision batch — DELIVERED (awaiting Damien's answers)
+Shipped as the interactive cockpit QA artifact
+`dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html` (brief
+`briefs/qa/sonsteng-2026-07-18-weekend.json`). Open asks:
+1. **Walkthrough date** — confirm Wed Jul 23 (runbook rehearsed READY, keyless demo carries it).
+2. **John-link send** — Damien test-drives the editor first, then send John his magic link.
+3. **Merge `feat/weekend-fast-follows` → `main`** (decision-3; gates the merge), plus any
+   judgment calls (streaming-default flip, PROD-enable timing).
+When answered: merge → send John's link → Wed walkthrough.
