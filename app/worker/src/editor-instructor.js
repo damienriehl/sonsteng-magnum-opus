@@ -43,9 +43,17 @@ export function renderInstructorDoc(doc, pending) {
   const html =
     "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+    // Empty data: icon suppresses the browser's default /favicon.ico request
+    // (which would resolve under /edit and 404). img-src 'self' data: permits it.
+    "<link rel=\"icon\" href=\"data:,\">" +
     `<base href="${base}">` +
     `<meta name="editor-map-version" content="${escapeHtml(INSTRUCTOR_VERSION)}">` +
     `<title>${title}</title>` +
+    // Shared site CSS (proxied same-origin under /edit/site-assets/) so the
+    // instructor doc is styled like the real packet, then the editor chrome CSS.
+    "<link rel=\"stylesheet\" href=\"/edit/site-assets/fonts.css\">" +
+    "<link rel=\"stylesheet\" href=\"/edit/site-assets/theme.css\">" +
+    "<link rel=\"stylesheet\" href=\"/edit/site-assets/platform.css\">" +
     "<link rel=\"stylesheet\" href=\"/edit/assets/editor.css\">" +
     "</head><body><main>" +
     doc.html +

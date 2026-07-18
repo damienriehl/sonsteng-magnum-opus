@@ -7,7 +7,7 @@
 import { withEditHeaders, uniform404, editSecurityHeaders } from "./editor-http.js";
 import { resolveAuth, resolveOpaqueToken, mintCookieValue, buildSetCookie } from "./editor-auth.js";
 import { resolvePagePath, resolveInstructorDoc } from "./editor-map.js";
-import { handleEditPage } from "./editor-inject.js";
+import { handleEditPage, serveSiteAsset } from "./editor-inject.js";
 import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
 import { serveAsset } from "./editor-assets.js";
@@ -67,6 +67,15 @@ export async function editorFetch(request, env, ctx) {
     if (request.method !== "GET") return wrap(uniform404());
     const name = path.slice("/edit/assets/".length);
     const asset = serveAsset(name);
+    return wrap(asset || uniform404());
+  }
+
+  // ---- shared SITE assets (theme/fonts/platform CSS proxied from upstream) ---
+  // No auth: same public CSS the origin page serves; referenced by wrapped pages.
+  if (path.startsWith("/edit/site-assets/")) {
+    if (request.method !== "GET") return wrap(uniform404());
+    const name = path.slice("/edit/site-assets/".length);
+    const asset = await serveSiteAsset(env, name);
     return wrap(asset || uniform404());
   }
 

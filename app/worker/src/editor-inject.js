@@ -19,13 +19,57 @@
 
 import { buildUpstreamUrl, escapeJsonIsland, pageBlockDescriptors, projectPendingItems, MAP_VERSION } from "./editor-map.js";
 
+// The shared site assets the wrapped student pages reference. Each maps its
+// served basename (/edit/site-assets/<name>) to its EDIT_UPSTREAM-relative path.
+// theme.css/fonts.css live under assets/; platform.css sits at the site root.
+// This is a fixed allowlist — no client value ever picks the upstream path.
+export const SITE_ASSET_UPSTREAM = {
+  "theme.css": "assets/theme.css",
+  "fonts.css": "assets/fonts.css",
+  "platform.css": "platform.css",
+};
+const SITE_ASSET_NAMES = new Set(Object.keys(SITE_ASSET_UPSTREAM));
+
 // Build a clean upstream subrequest that forwards NOTHING sensitive.
-function cleanSubrequest(url) {
+function cleanSubrequest(url, accept = "text/html") {
   return new Request(url.toString(), {
     method: "GET",
-    headers: { accept: "text/html", "user-agent": "sonsteng-editor-proxy" },
+    headers: { accept, "user-agent": "sonsteng-editor-proxy" },
     redirect: "manual",
     cf: { cacheEverything: false, cacheTtl: 0 },
+  });
+}
+
+// Serve a shared site asset (theme.css/fonts.css/platform.css) by proxying the
+// clean subrequest to EDIT_UPSTREAM. Returns a Response or null (router -> 404).
+// Same SSRF discipline as buildUpstreamUrl: stay inside the upstream origin+prefix,
+// no query/hash, and we build our own Response so no upstream header survives.
+export async function serveSiteAsset(env, name) {
+  const rel = SITE_ASSET_UPSTREAM[name];
+  if (!rel) return null;
+  let base, url;
+  try {
+    base = new URL(env.EDIT_UPSTREAM);
+    url = new URL(rel, base);
+  } catch {
+    return null;
+  }
+  if (url.origin !== base.origin) return null;
+  const basePath = base.pathname.endsWith("/") ? base.pathname : base.pathname + "/";
+  if (!url.pathname.startsWith(basePath)) return null;
+  let resp;
+  try {
+    resp = await fetch(cleanSubrequest(url, "text/css,*/*"));
+  } catch {
+    return null;
+  }
+  if (resp.status >= 300 && resp.status < 400) return null; // never follow
+  if (!resp.ok) return null;
+  // We only allow-list .css assets; force the type so upstream sniffing can't
+  // reclassify it. Body is streamed; no upstream Set-Cookie/CSP/cache survives.
+  return new Response(resp.body, {
+    status: 200,
+    headers: { "content-type": "text/css; charset=utf-8" },
   });
 }
 
@@ -82,6 +126,39 @@ class LinkRewriter {
   }
 }
 
+// HTMLRewriter handler that rewrites the wrapped page's shared-stylesheet <link>s
+// (../assets/theme.css, ../assets/fonts.css, ../platform.css — resolved by
+// basename) into the same-origin /edit/site-assets/ proxy route so they load
+// under the strict CSP. Non-stylesheet links (icon, preload) are left untouched.
+export class AssetLinkRewriter {
+  element(el) {
+    const rel = (el.getAttribute("rel") || "").toLowerCase();
+    if (!/\bstylesheet\b/.test(rel)) return;
+    const href = el.getAttribute("href");
+    if (!href) return;
+    const m = href.match(/([^/?#]+\.css)(?:[?#].*)?$/i);
+    if (!m) return;
+    const name = m[1];
+    if (SITE_ASSET_NAMES.has(name)) el.setAttribute("href", "/edit/site-assets/" + name);
+  }
+}
+
+// HTMLRewriter handler that STRIPS the wrapped page's OWN scripts (inline and
+// external, e.g. platform.js scroll-spy/toggles). Edit mode does not need them,
+// and the races review wanted the origin page's interactive handlers neutralized
+// (they fight contenteditable + mutate the DOM under the anchors). Removing them
+// lets script-src stay STRICT 'self' — only editor.js runs. JSON data islands
+// (type=application/json / ld+json) are DATA, not executed, so they are kept.
+// NOTE: content the injector appends to <head> (editor.js + the islands) is added
+// AFTER parsing and is NOT re-processed by this handler, so it is never stripped.
+export class ScriptStripper {
+  element(el) {
+    const type = (el.getAttribute("type") || "").trim().toLowerCase();
+    if (type === "application/json" || type === "application/ld+json") return; // data — keep
+    el.remove();
+  }
+}
+
 // HTMLRewriter handler injecting our chrome into <head>.
 class HeadInjector {
   constructor(html) { this.html = html; }
@@ -133,6 +210,8 @@ export async function handleEditPage(env, { pageKey, blocks, pending }) {
   const rewritten = new HTMLRewriter()
     .on("head", new HeadInjector(headHtml))
     .on("a[href]", new LinkRewriter(upstream))
+    .on("link[rel]", new AssetLinkRewriter())
+    .on("script", new ScriptStripper())
     .transform(clean);
   return rewritten;
 }

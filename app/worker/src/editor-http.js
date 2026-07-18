@@ -11,11 +11,19 @@
 import { json } from "./errors.js";
 
 // Content-Security-Policy for injected/served /edit HTML (Enhancement item 2):
-// nothing loads except from our own origin; no inline script; no framing.
+// everything same-origin. SCRIPTS stay STRICT ('self' only, NO unsafe-inline) —
+// the injector strips the wrapped page's own scripts, so only the worker-served
+// editor.js runs. STYLE is relaxed to 'unsafe-inline' because the generated
+// student pages legitimately carry inline <style> blocks and style= attributes;
+// this does NOT reopen the suggestion-XSS hole (suggestion/comment content is
+// rendered by editor.js via textContent from the JSON island, never inline-
+// interpolated). Fonts are base64 data: URIs inside fonts.css (font-src data:);
+// the shared theme/fonts/platform CSS is proxied same-origin under /edit/site-
+// assets/ so style-src 'self' still covers it.
 export const EDIT_CSP =
-  "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; " +
-  "img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self'; " +
-  "frame-ancestors 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
+  "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 
 // Headers applied to EVERY /edit response (HTML and JSON, success and error).
 export function editSecurityHeaders(extra = {}) {
