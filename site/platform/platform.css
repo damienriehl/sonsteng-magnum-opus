@@ -43,6 +43,23 @@
   font-size:clamp(5rem,10vw,9rem);line-height:.85;letter-spacing:-.04em;color:var(--brass);opacity:.9}
 .module--claret .module-numeral{color:var(--claret)}
 .module--green .module-numeral{color:var(--green)}
+
+/* ---- curriculum prose (module volumes + templates) ---- */
+.prose{max-width:var(--maxw-read)}
+.prose>p,.prose>ul,.prose>ol,.prose>blockquote,.prose .tablewrap{margin:0 0 var(--sp-6)}
+.prose>h3,.prose>h4,.prose>h5{font-family:var(--font-display);line-height:1.15;
+  margin:var(--sp-8) 0 var(--sp-3)}
+.prose>h3{font-size:var(--fs-lg)}
+.prose>h4{font-size:var(--fs-md)}
+.prose>ul,.prose>ol{padding-left:var(--sp-6)}
+.prose>ul>li,.prose>ol>li{margin:.3rem 0}
+.volume-prose{margin:var(--sp-8) 0}
+.templates-cta{margin:var(--sp-8) 0}
+/* first heading of a volume shouldn't push a big top gap under the eyebrow */
+.volume-prose .prose>h3:first-child{margin-top:var(--sp-3)}
+.template-doc{border-top:var(--rule) solid var(--line);padding-top:var(--sp-6)}
+.template-doc .part__head p.eyebrow{margin-bottom:.15rem}
+
 .index-rows{border-top:var(--rule) solid var(--line)}
 .index-row{display:flex;gap:var(--sp-6);align-items:baseline;justify-content:space-between;
   padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
@@ -156,8 +173,27 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
   letter-spacing:.08em;padding:.5em .8em;border:var(--rule) solid var(--brass);border-radius:var(--radius);
   color:var(--ink);background:var(--brass-wash)}
 
+/* ---- viz interaction: focusable marks, shared tooltip, patterns ---- */
+.viz-mark{outline:none}
+.viz-mark:focus-visible{outline:var(--rule-bold) solid var(--brass);outline-offset:1px}
+.viz-tip{position:fixed;left:0;top:0;z-index:80;pointer-events:none;max-width:min(24rem,86vw);
+  display:flex;align-items:baseline;gap:.5em;background:var(--ink);color:var(--ink-invert);
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);line-height:1.35;
+  padding:.45em .6em;border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.30)}
+.viz-tip[hidden]{display:none}
+.viz-tip__sw{flex:none;width:.78em;height:.78em;border-radius:2px;align-self:center}
+.viz-tip__v{font-weight:700;white-space:nowrap}
+.viz-tip__l{opacity:.82}
+/* Pattern overlays: off by default, revealed by the PATTERNS toggle. The
+   forced-colors media query auto-reveals them even without JS, so series stay
+   distinguishable when the OS collapses the palette. */
+.viz-pat{opacity:0}
+.patterns-on .viz-pat{opacity:1}
+@media (forced-colors: active){ .viz-pat{opacity:1} }
+
 @media print{
   .type-toggle,.viz-toggle,.viz-filter,.lib-toolbar,.cta-row,.skip-link,.downloads{display:none !important}
+  .viz-tip{display:none !important}          /* tooltips never print */
   .viz-table[hidden]{display:block !important}
   .viz-card,.card{break-inside:avoid}
   /* packet prints as one full-width column (TOC rail is hidden by theme.css) */

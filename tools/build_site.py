@@ -39,6 +39,7 @@ APP_CHAT = os.path.join(ROOT, "app", "chat")
 SITE = os.path.join(ROOT, "site")
 OUT = os.path.join(SITE, "platform")          # generation root
 MATTERS_DIR = os.path.join(DATA, "matters")
+CURRICULUM_DIR = os.path.join(DATA, "curriculum")   # handbook prose + deliverable templates
 
 # --------------------------------------------------------------------------- #
 # Small helpers
@@ -49,6 +50,13 @@ def esc(s):
 def load_json(path):
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+def load_text(path):
+    """Read a UTF-8 text file (curriculum markdown); '' if absent."""
+    if not os.path.exists(path):
+        return ""
+    with open(path, "r", encoding="utf-8") as fh:
+        return fh.read()
 
 def write_file(relpath, content):
     """relpath is relative to OUT (site/platform)."""
@@ -369,10 +377,39 @@ def load_corpus():
     skills = load_json(os.path.join(DATA, "taxonomy", "skills.json"))
     tasks = load_json(os.path.join(DATA, "taxonomy", "tasks.json"))
     firm = load_json(os.path.join(DATA, "firm", "firm.json"))
+    curriculum = load_curriculum()
     return {
         "manifest": manifest, "matters": matters, "by_id": by_id,
         "juris": juris, "skills": skills, "tasks": tasks, "firm": firm,
+        "curriculum": curriculum,
     }
+
+# --------------------------------------------------------------------------- #
+# Curriculum handbook layer — volume prose + deliverable templates
+# --------------------------------------------------------------------------- #
+# The six course deliverable templates, in teaching order. Each is authored as
+# clean markdown under data/curriculum/templates/ and rendered by the generator
+# onto a single print-friendly platform/templates/ page (see build_templates).
+CURRICULUM_TEMPLATES = [
+    ("time-sheet",                 "Weekly Time Sheet",            "TIME & BILLING"),
+    ("engagement-letter-checklist","Engagement-Letter Checklist",  "CLIENT INTAKE"),
+    ("client-interview-plan",      "Client-Interview Plan",        "FACT DEVELOPMENT"),
+    ("ssnp",                       "Strategic Settlement & Negotiation Plan", "NEGOTIATION"),
+    ("learning-portfolio",         "Learning Portfolio",           "REFLECTION"),
+    ("reflective-report",          "Reflective Report",            "REFLECTION"),
+]
+
+def load_curriculum():
+    """Load the three volume-prose files (m1/m2/m3.md) and the six deliverable
+    templates as raw markdown. Missing files degrade gracefully to ''."""
+    volumes = {}
+    for code in ("M1", "M2", "M3"):
+        volumes[code] = load_text(os.path.join(CURRICULUM_DIR, code.lower() + ".md"))
+    templates = []
+    for stem, title, kicker in CURRICULUM_TEMPLATES:
+        md = load_text(os.path.join(CURRICULUM_DIR, "templates", stem + ".md"))
+        templates.append({"stem": stem, "title": title, "kicker": kicker, "md": md})
+    return {"volumes": volumes, "templates": templates}
 
 # --------------------------------------------------------------------------- #
 # Business math helpers
@@ -403,6 +440,60 @@ def _text(x, y, s, cls="chart-lbl", anchor="start", extra=""):
 def _rect(x, y, w, h, fill, rx=0, extra=""):
     return '<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{f}" {e}/>'.format(
         x=round(x, 1), y=round(y, 1), w=round(max(w, 0), 1), h=round(h, 1), rx=rx, f=fill, e=extra)
+
+def viz_mark(parts, hits, x, y, w, h, fill, value, label, color,
+             rx=0, pat=None, seg=False, hit=None):
+    """Emit one interactive chart mark.
+
+    parts : list — receives the visible <rect> and, when `pat` is given, a
+            pattern <rect> overlay (pointer-events:none; shown only when the
+            PATTERNS toggle is on or under forced-colors).
+    hits  : list — receives a transparent, keyboard-focusable hit-rect that
+            owns pointer/focus and carries the tooltip payload: value LEADS
+            (data-v, rendered strong), label FOLLOWS (data-l), and data-c keys
+            the swatch. aria-label mirrors the readout so the mark reads the
+            same to assistive tech (role="img"). Hit-rects render last (on top)
+            so thin marks still get a >=24px hit target.
+    seg   : True for a segment inside a stacked bar — hit-rect keeps the
+            segment width (only height grows to the 24px floor), so adjacent
+            segments never overlap.
+    hit   : (hx,hy,hw,hh) explicit override — used for vertical columns.
+    """
+    x = float(x); y = float(y); w = float(max(w, 0)); h = float(h)
+    parts.append('<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{f}"/>'.format(
+        x=round(x, 1), y=round(y, 1), w=round(w, 1), h=round(h, 1), rx=rx, f=fill))
+    if pat:
+        parts.append('<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" '
+                     'fill="url(#{p})" class="viz-pat" pointer-events="none"/>'.format(
+            x=round(x, 1), y=round(y, 1), w=round(w, 1), h=round(h, 1), rx=rx, p=pat))
+    if hit is not None:
+        hx, hy, hw, hh = hit
+    elif seg:
+        hh = max(h, 24.0); hy = y - (hh - h) / 2; hx = x; hw = w
+    else:
+        hh = max(h, 24.0); hy = y - (hh - h) / 2; hx = x; hw = max(w, 24.0)
+    aria = value + ("  " + label if label else "")
+    hits.append('<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="transparent" '
+                'class="viz-mark" tabindex="0" role="img" data-v="{v}" data-l="{l}" '
+                'data-c="{c}" aria-label="{a}"/>'.format(
+        x=round(hx, 1), y=round(hy, 1), w=round(max(hw, 0), 1), h=round(hh, 1),
+        v=esc(value), l=esc(label), c=color, a=esc(aria)))
+
+# 8 diagonal line-textures (45deg / 135deg, four densities each). Assigned per
+# chart: categorical charts use distinct angle+density per slot; the ordinal
+# funnel and AR severity ramps order density by magnitude. Strokes keep an
+# explicit color, but forced-color-adjust stays "auto" so under forced-colors
+# the OS remaps them to a system color (guaranteed visible without JS).
+def _pattern_defs():
+    specs = [("p45_6", 45, 6), ("p45_5", 45, 5), ("p45_4", 45, 4), ("p45_3", 45, 3),
+             ("p135_6", 135, 6), ("p135_5", 135, 5), ("p135_4", 135, 4), ("p135_3", 135, 3)]
+    pats = "".join(
+        '<pattern id="{i}" patternUnits="userSpaceOnUse" width="{s}" height="{s}" '
+        'patternTransform="rotate({a})"><line x1="0" y1="0" x2="0" y2="{s}" '
+        'stroke="#0b0b0b" stroke-opacity=".5" stroke-width="1.1"/></pattern>'.format(i=i, s=s, a=a)
+        for i, a, s in specs)
+    return ('<svg class="viz-defs" width="0" height="0" aria-hidden="true" focusable="false" '
+            'style="position:absolute;width:0;height:0"><defs>' + pats + '</defs></svg>')
 
 def chart_card(cid, title, caption, svg, table_html, story=""):
     return """
@@ -504,6 +595,23 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
   font-size:clamp(5rem,10vw,9rem);line-height:.85;letter-spacing:-.04em;color:var(--brass);opacity:.9}
 .module--claret .module-numeral{color:var(--claret)}
 .module--green .module-numeral{color:var(--green)}
+
+/* ---- curriculum prose (module volumes + templates) ---- */
+.prose{max-width:var(--maxw-read)}
+.prose>p,.prose>ul,.prose>ol,.prose>blockquote,.prose .tablewrap{margin:0 0 var(--sp-6)}
+.prose>h3,.prose>h4,.prose>h5{font-family:var(--font-display);line-height:1.15;
+  margin:var(--sp-8) 0 var(--sp-3)}
+.prose>h3{font-size:var(--fs-lg)}
+.prose>h4{font-size:var(--fs-md)}
+.prose>ul,.prose>ol{padding-left:var(--sp-6)}
+.prose>ul>li,.prose>ol>li{margin:.3rem 0}
+.volume-prose{margin:var(--sp-8) 0}
+.templates-cta{margin:var(--sp-8) 0}
+/* first heading of a volume shouldn't push a big top gap under the eyebrow */
+.volume-prose .prose>h3:first-child{margin-top:var(--sp-3)}
+.template-doc{border-top:var(--rule) solid var(--line);padding-top:var(--sp-6)}
+.template-doc .part__head p.eyebrow{margin-bottom:.15rem}
+
 .index-rows{border-top:var(--rule) solid var(--line)}
 .index-row{display:flex;gap:var(--sp-6);align-items:baseline;justify-content:space-between;
   padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
@@ -617,8 +725,27 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
   letter-spacing:.08em;padding:.5em .8em;border:var(--rule) solid var(--brass);border-radius:var(--radius);
   color:var(--ink);background:var(--brass-wash)}
 
+/* ---- viz interaction: focusable marks, shared tooltip, patterns ---- */
+.viz-mark{outline:none}
+.viz-mark:focus-visible{outline:var(--rule-bold) solid var(--brass);outline-offset:1px}
+.viz-tip{position:fixed;left:0;top:0;z-index:80;pointer-events:none;max-width:min(24rem,86vw);
+  display:flex;align-items:baseline;gap:.5em;background:var(--ink);color:var(--ink-invert);
+  font-family:var(--font-mono);font-size:var(--fs-mono-xs);line-height:1.35;
+  padding:.45em .6em;border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.30)}
+.viz-tip[hidden]{display:none}
+.viz-tip__sw{flex:none;width:.78em;height:.78em;border-radius:2px;align-self:center}
+.viz-tip__v{font-weight:700;white-space:nowrap}
+.viz-tip__l{opacity:.82}
+/* Pattern overlays: off by default, revealed by the PATTERNS toggle. The
+   forced-colors media query auto-reveals them even without JS, so series stay
+   distinguishable when the OS collapses the palette. */
+.viz-pat{opacity:0}
+.patterns-on .viz-pat{opacity:1}
+@media (forced-colors: active){ .viz-pat{opacity:1} }
+
 @media print{
   .type-toggle,.viz-toggle,.viz-filter,.lib-toolbar,.cta-row,.skip-link,.downloads{display:none !important}
+  .viz-tip{display:none !important}          /* tooltips never print */
   .viz-table[hidden]{display:block !important}
   .viz-card,.card{break-inside:avoid}
   /* packet prints as one full-width column (TOC rail is hidden by theme.css) */
@@ -706,6 +833,101 @@ PLATFORM_JS = r"""/* platform.js — progressive enhancement for the Practicum P
     }, { rootMargin:'-10% 0px -75% 0px', threshold:0 });
     document.querySelectorAll('.part[id]').forEach(function(p){ obs.observe(p); });
   }
+
+  /* ---- firm dashboard: PATTERNS toggle ---- */
+  var root = document.documentElement;
+  var patBtn = document.getElementById('viz-patterns');
+  if (patBtn){
+    var forced = window.matchMedia ? window.matchMedia('(forced-colors: active)') : null;
+    function applyPatterns(on){
+      root.classList.toggle('patterns-on', on);
+      patBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    function storedPref(){
+      try{ return localStorage.getItem('sonsteng-viz-patterns') === '1'; }catch(e){ return false; }
+    }
+    /* Auto-on under forced-colors; otherwise honor the saved preference (off by default). */
+    applyPatterns((forced && forced.matches) || storedPref());
+    patBtn.addEventListener('click', function(){
+      var on = !root.classList.contains('patterns-on');
+      applyPatterns(on);
+      try{ localStorage.setItem('sonsteng-viz-patterns', on ? '1' : '0'); }catch(e){}
+    });
+    if (forced && forced.addEventListener){
+      forced.addEventListener('change', function(e){ applyPatterns(e.matches || storedPref()); });
+    }
+  }
+
+  /* ---- firm dashboard: shared tooltip (value leads, label follows, swatch) ---- */
+  var tip = document.getElementById('viz-tip');
+  var marks = document.querySelectorAll('.viz-mark');
+  if (tip && marks.length){
+    var tSw = tip.querySelector('.viz-tip__sw');
+    var tV  = tip.querySelector('.viz-tip__v');
+    var tL  = tip.querySelector('.viz-tip__l');
+    var tapMark = null;   // set only when a tooltip is pinned open by a touch tap
+    var lastPtr = 'mouse';
+    function place(cx, cy){
+      var pad = 10, r = tip.getBoundingClientRect();
+      var x = cx + 14, y = cy + 16;
+      if (x + r.width + pad > window.innerWidth) x = cx - r.width - 14;
+      if (x < pad) x = pad;
+      if (y + r.height + pad > window.innerHeight) y = cy - r.height - 16;
+      if (y < pad) y = pad;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    }
+    function show(mark, cx, cy){
+      tV.textContent = mark.getAttribute('data-v') || '';   // textContent only — names are untrusted
+      tL.textContent = mark.getAttribute('data-l') || '';
+      tSw.style.background = mark.getAttribute('data-c') || 'transparent';
+      tip.hidden = false;
+      place(cx, cy);
+    }
+    function hide(){ tip.hidden = true; tapMark = null; }
+    function edgeTop(mark){ var b = mark.getBoundingClientRect(); return [b.left + b.width / 2, b.top]; }
+    function isMark(el){ return el && el.classList && el.classList.contains('viz-mark'); }
+    marks.forEach(function(mark){
+      mark.addEventListener('pointerdown', function(ev){ lastPtr = ev.pointerType || 'mouse'; });
+      mark.addEventListener('pointerenter', function(ev){
+        if (ev.pointerType === 'touch') return;   // touch is handled via tap toggle
+        show(mark, ev.clientX, ev.clientY);
+      });
+      mark.addEventListener('pointermove', function(ev){
+        if (ev.pointerType === 'touch' || tip.hidden) return;
+        place(ev.clientX, ev.clientY);
+      });
+      mark.addEventListener('pointerleave', function(ev){
+        if (ev.pointerType === 'touch' || tapMark) return;
+        hide();
+      });
+      // Keyboard focus mirrors hover (skip when the focus was driven by a touch —
+      // touch uses the tap toggle below so the two don't fight).
+      mark.addEventListener('focus', function(){
+        if (lastPtr === 'touch') return;
+        var c = edgeTop(mark); show(mark, c[0], c[1]);
+      });
+      mark.addEventListener('blur', function(){ if (!tapMark) hide(); });
+      mark.addEventListener('click', function(){          // touch tap toggles open/closed
+        if (lastPtr !== 'touch') return;
+        if (tapMark === mark && !tip.hidden){ hide(); }
+        else { tapMark = mark; var c = edgeTop(mark); show(mark, c[0], c[1]); }
+      });
+    });
+    document.addEventListener('click', function(e){   // tap outside any mark dismisses
+      if (!isMark(e.target)) hide();
+    });
+    document.addEventListener('scroll', function(){
+      if (tip.hidden) return;
+      // A focused mark keeps its tooltip pinned (the browser's focus-scroll must
+      // not dismiss it); mouse/touch tooltips dismiss on scroll.
+      if (isMark(document.activeElement) && !tapMark){
+        var c = edgeTop(document.activeElement); place(c[0], c[1]);
+      } else { hide(); }
+    }, true);
+    window.addEventListener('keydown', function(e){ if (e.key === 'Escape'){ hide();
+      if (isMark(document.activeElement)) document.activeElement.blur(); } });
+  }
 })();
 """
 
@@ -772,6 +994,22 @@ def critique_href(relpath, m):
     return (up_prefix(relpath) + "chat/critique.html?matter=" + quote(m["id"])
             + "&title=" + quote(m.get("caption", "")))
 
+# The keyless scripted-sample consultation. Every entry point across the site links
+# to the SAME recording (m05 · Devon Halvard) so professors can experience a client
+# interview + debrief before any API key exists. Backed by app/chat/sample-m05.json.
+SAMPLE_MATTER_ID = "m05"
+SAMPLE_PERSONA_ID = "m05.per.halvard"
+SAMPLE_TITLE = "State of Meridian v. Devon R. Halvard"
+SAMPLE_CLIENT = "Devon Halvard"
+
+def sample_href(relpath):
+    return (up_prefix(relpath) + "chat/index.html?matter=" + quote(SAMPLE_MATTER_ID)
+            + "&persona=" + quote(SAMPLE_PERSONA_ID)
+            + "&title=" + quote(SAMPLE_TITLE)
+            + "&client=" + quote(SAMPLE_CLIENT)
+            + "&role=" + quote("Client (criminal defendant)")
+            + "&sample=1")
+
 # --------------------------------------------------------------------------- #
 # Page — platform home
 # --------------------------------------------------------------------------- #
@@ -831,6 +1069,14 @@ def build_home(corpus):
   <div class="section-head"><p class="eyebrow">THE APPARATUS</p>
   <h2 id="explore-h">Explore the practicum</h2></div>
   <div class="entry-cards stagger">
+    <a class="card" href="{sample}">
+      <p class="card__meta">NO KEY REQUIRED</p>
+      <h3>Watch a sample consultation ▸</h3>
+      <p class="matter-card__premise">A recorded client interview — Devon Halvard, charged with DWI —
+      played back turn by turn, then graded. See the consultation room and the debrief in action
+      before you bring your own key. Scripted sample, not a live AI client.</p>
+      <span class="arrow-link">Play the sample</span>
+    </a>
     <a class="card" href="skills/index.html">
       <p class="card__meta">TAXONOMY</p>
       <h3>Skills browser</h3>
@@ -852,6 +1098,14 @@ def build_home(corpus):
       Fees, realization, AR aging, trust accounting, and budget, charted and taught.</p>
       <span class="arrow-link">Open the ledger</span>
     </a>
+    <a class="card" href="templates/index.html">
+      <p class="card__meta">COURSE DELIVERABLES</p>
+      <h3>Deliverable templates</h3>
+      <p class="matter-card__premise">The six recurring course handouts — time sheet, engagement
+      letter, interview plan, settlement plan, portfolio, and reflective report — each with its
+      grading note. Print-ready.</p>
+      <span class="arrow-link">Open the templates</span>
+    </a>
     <div class="card">
       <p class="card__meta">ABOUT THE METHOD</p>
       <h3>The centaur layer</h3>
@@ -863,7 +1117,8 @@ def build_home(corpus):
     </div>
   </div>
 </section>
-""".format(vols="".join(vols), ns=n_surveyed, nt=n_tasks, nm=n_matters, blurb=esc(CENTAUR_BLURB))
+""".format(vols="".join(vols), ns=n_surveyed, nt=n_tasks, nm=n_matters,
+           blurb=esc(CENTAUR_BLURB), sample=esc(sample_href(rel)))
     write_file(rel, page_shell(rel, "Platform Home", "PLATFORM · HOME", [], body))
 
 # --------------------------------------------------------------------------- #
@@ -917,6 +1172,25 @@ def build_modules(corpus):
                 cap=esc(m.get("caption", "")))
             for m in linked)
 
+        # --- the volume prose: the real handbook teaching for this module ---
+        volume_md = ((corpus.get("curriculum") or {}).get("volumes") or {}).get(code, "")
+        prose_section = ""
+        if volume_md.strip():
+            prose_section = """
+<section class="volume-prose reveal" aria-label="The volume">
+  <p class="eyebrow">THE VOLUME · HOW THIS MODULE TEACHES</p>
+  <div class="prose">{prose}</div>
+</section>
+<div class="brass-rule" role="presentation"></div>
+<section class="templates-cta reveal" aria-labelledby="mod-tpl-h">
+  <div class="section-head"><p class="eyebrow">DELIVERABLES</p>
+  <h2 id="mod-tpl-h">Course templates</h2></div>
+  <p>The deliverables named above — time sheets, engagement letters, interview plans,
+  settlement plans, and the reflective portfolio — share a common set of handout templates,
+  each with its grading note.</p>
+  <p><a class="btn" href="../templates/index.html">Open the deliverable templates</a></p>
+</section>""".format(prose=markdown(volume_md))
+
         body = """
 <div class="module module--{accent}">
 <section class="reveal">
@@ -926,6 +1200,7 @@ def build_modules(corpus):
   <p class="card__meta">{ntasks} TASKS · {nsk} SKILLS · {nm} LINKED MATTERS</p>
 </section>
 <div class="brass-rule" role="presentation"></div>
+{prose_section}
 <section aria-label="Tasks in this module">
   <p class="eyebrow">RULED INDEX · TASKS BY SKILL</p>
   {rows}
@@ -938,12 +1213,70 @@ def build_modules(corpus):
 """.format(accent=("brass" if meta["accent"] == "brass" else meta["accent"]),
            code=esc(code), n=code[1], title=esc(meta["title"]), thesis=esc(meta["thesis"]),
            ntasks=len(mod_tasks), nsk=len(by_skill), nm=len(linked),
-           rows="".join(rows), mcards=matter_cards)
+           prose_section=prose_section, rows="".join(rows), mcards=matter_cards)
         write_file(rel, page_shell(
             rel, "Module {c} — {t}".format(c=code, t=meta["title"]),
             "{c} · MODULES".format(c=code),
             [("Home", "../index.html"), ("Modules", None), (code, None)],
             body, body_class="module--" + meta["accent"]))
+
+# --------------------------------------------------------------------------- #
+# Page — course deliverable templates (single print-friendly handout page)
+# --------------------------------------------------------------------------- #
+def build_templates(corpus):
+    rel = "templates/index.html"
+    templates = ((corpus.get("curriculum") or {}).get("templates") or [])
+    present = [t for t in templates if (t.get("md") or "").strip()]
+
+    toc_items = []
+    parts = []
+    for idx, t in enumerate(present, start=1):
+        anchor = "tpl-" + t["stem"]
+        num = "{:02d}".format(idx)
+        toc_items.append('<a href="#{a}">{n} · {ttl}</a>'.format(a=anchor, n=num, ttl=esc(t["title"])))
+        parts.append("""
+  <section class="part template-doc" id="{a}" aria-labelledby="{a}-h">
+    <div class="part__head"><span class="part__num" aria-hidden="true">{n}</span>
+      <div>
+        <p class="eyebrow">{kicker}</p>
+        <h2 id="{a}-h">{ttl}</h2>
+      </div>
+    </div>
+    <div class="prose">{body}</div>
+  </section>""".format(a=anchor, n=num, kicker=esc(t["kicker"]),
+                       ttl=esc(t["title"]), body=markdown(t["md"])))
+
+    header = """
+<header class="reveal">
+  <p class="eyebrow">THE PRACTICUM PRESS · COURSE DELIVERABLES</p>
+  <h1>Deliverable templates</h1>
+  <p class="lede">The handout templates for the six recurring course deliverables — the time
+  sheet, engagement-letter checklist, client-interview plan, settlement &amp; negotiation plan,
+  learning portfolio, and reflective report. Each carries its own &ldquo;how it&rsquo;s
+  graded&rdquo; note. These pages are built to print; use your browser&rsquo;s print command for
+  a clean, black-on-white handout.</p>
+  <div class="chips" aria-label="Related modules">
+    <a class="chip chip--matter" href="../modules/m1.html">M1 · FOUNDATIONAL</a>
+    <a class="chip chip--matter" href="../modules/m2.html">M2 · SUBSTANTIVE + SKILLS</a>
+    <a class="chip chip--matter" href="../modules/m3.html">M3 · TRANSITION</a>
+  </div>
+</header>"""
+
+    body = """
+{header}
+<div class="brass-rule" role="presentation"></div>
+<div class="packet-layout">
+  <nav class="toc-rail" aria-label="Templates">
+    {toc}
+  </nav>
+  <div class="packet-body">
+    {parts}
+  </div>
+</div>""".format(header=header, toc="\n    ".join(toc_items), parts="".join(parts))
+
+    write_file(rel, page_shell(
+        rel, "Deliverable templates", "TEMPLATES · COURSE DELIVERABLES",
+        [("Home", "../index.html"), ("Templates", None)], body))
 
 # --------------------------------------------------------------------------- #
 # Page — skills browser
@@ -1414,18 +1747,27 @@ def build_one_packet(corpus, m, man):
     </div>""".format(name=esc(ident.get("name", "")), role=esc(ident.get("role", "")),
                      chips=" ".join(chips), cta=cta))
 
+    # Keyless sample: both DWI packets (Meridian m05 + real-state m15) link to the m05 recording,
+    # so it can be experienced with no API key before any live interview.
+    sample_cta = ""
+    if m["id"] in ("m05", "m15"):
+        sample_cta = ('<a class="btn btn--ghost" href="{h}">Watch a sample consultation ▸</a>'
+                      .format(h=esc(sample_href(rel))))
+
     interview_html = """
   <section class="part no-print" id="interview" aria-labelledby="interview-h">
     <div class="part__head"><span class="part__num" aria-hidden="true">☎</span>
       <h2 id="interview-h">Interviews &amp; critique</h2></div>
     <p>Conduct your simulated interviews through the persona engine. The client is yours to
     interview; the represented persona is the Rule 4.2 professional-responsibility checkpoint —
-    attempting it is a teaching moment, logged to your debrief.</p>
+    attempting it is a teaching moment, logged to your debrief.
+    No API key yet? Watch a fully recorded sample interview and debrief first.</p>
     {rows}
     <div class="cta-row">
+      {sample}
       <a class="btn" href="{crit}">Submit a deliverable for critique</a>
     </div>
-  </section>""".format(rows="".join(persona_rows), crit=esc(critique_href(rel, m)))
+  </section>""".format(rows="".join(persona_rows), crit=esc(critique_href(rel, m)), sample=sample_cta)
 
     # --- rubric
     rubric_html = build_rubric_section(m, rel)
@@ -1564,6 +1906,15 @@ VIZ = {
 }
 FEE_COLORS = {"hourly": VIZ["cat1"], "contingency": VIZ["cat2"],
               "flat": VIZ["cat3"], "retainer": VIZ["cat4"]}
+# Pattern slots (used only when PATTERNS is on / under forced-colors). Categorical
+# charts get distinct angle+density per slot; ordinal/severity ramps order density
+# by magnitude (sparse -> dense). Single-hue charts (book, trust) carry no pattern —
+# one series has nothing to disambiguate when the palette collapses.
+FEE_PAT = {"hourly": "p45_5", "contingency": "p135_5", "flat": "p45_3", "retainer": "p135_3"}
+UTIL_PAT = {"FIRM-TK-01": "p45_5", "FIRM-TK-02": "p135_5"}
+FUNNEL_PAT = ["p45_6", "p45_4", "p45_3"]          # worked -> billed -> collected
+AR_PAT = {"b0_30": "p45_6", "b31_60": "p45_5", "b61_90": "p45_4", "b90_plus": "p45_3"}
+BUDGET_PAT = {True: "p45_5", False: "p135_5"}      # favorable / unfavorable
 AR_BUCKETS = [("b0_30", "0–30", VIZ["good"], "✓"), ("b31_60", "31–60", VIZ["warning"], "◔"),
               ("b61_90", "61–90", VIZ["serious"], "◑"), ("b90_plus", "90+", VIZ["critical"], "⚠")]
 
@@ -1721,23 +2072,26 @@ def build_firm_dashboard(corpus):
     maxf = fees_rows[0]["fees"] if fees_rows else 1
     H = (rowh + gap) * len(fees_rows) + 34
     parts = []
+    hits = []
     boundary_y = (rowh + gap) * top80_idx - gap / 2 + 8
     parts.append('<line x1="{x0}" y1="8" x2="{x0}" y2="{h}" class="chart-axis"/>'.format(x0=LBL, h=H - 22))
     for i, r in enumerate(fees_rows):
         y = 8 + i * (rowh + gap)
         w = BARMAX * r["fees"] / maxf
         parts.append(_text(LBL - 6, y + 14, r["matter_id"].upper() + " " + (r["client"][:16] or ""), anchor="end"))
-        parts.append(_rect(LBL, y, w, rowh, VIZ["cat1"], rx=0,
-                           extra='data-tip="{c} · {v} · {ft} · {p:.1f}% of book"'.format(
-                               c=esc(r["client"]), v=money(r["fees"]), ft=esc(r["fee_type"]),
-                               p=r["fees"] / fees_total * 100)))
+        viz_mark(parts, hits, LBL, y, w, rowh, VIZ["cat1"],
+                 money(r["fees"]),
+                 "{m} · {c} · {ft} · {p:.1f}% of book".format(
+                     m=r["matter_id"].upper(), c=r["client"], ft=r["fee_type"],
+                     p=r["fees"] / fees_total * 100),
+                 VIZ["cat1"])
         if i < 3:
             parts.append(_text(LBL + w + 5, y + 14, money_compact(r["fees"]), cls="chart-val"))
     parts.append('<line x1="{x0}" y1="{y}" x2="{x1}" y2="{y}" stroke="{c}" stroke-width="1" stroke-dasharray="4 3"/>'.format(
         x0=LBL, x1=W - 8, y=boundary_y, c=VIZ["axis"]))
     parts.append(_text(W - 8, boundary_y - 4, "Top {n} = 80% of fees".format(n=top80_idx),
                        cls="chart-anno", anchor="end"))
-    svg1 = _svg(W, H, "".join(parts), "Fees by matter, sorted descending")
+    svg1 = _svg(W, H, "".join(parts) + "".join(hits), "Fees by matter, sorted descending")
     tbl1 = _table("Book of business — fees by matter",
                   ["Matter", "Client", "Fee type", "Fees", "Cumulative %"],
                   [[r["matter_id"].upper(), r["client"], r["fee_type"],
@@ -1752,13 +2106,17 @@ def build_firm_dashboard(corpus):
     W2, H2, LBL2 = 640, 120, 120
     barw = W2 - LBL2 - 16
     parts = []
+    hits = []
     y = 14
     x = LBL2
     parts.append(_text(LBL2 - 6, y + 16, "$ share", anchor="end"))
     for ft in fee_order:
         share = fee_mix[ft]["fees"] / fees_total
         w = barw * share
-        parts.append(_rect(x + 1, y, max(w - 2, 0), 24, FEE_COLORS[ft]))
+        viz_mark(parts, hits, x + 1, y, max(w - 2, 0), 24, FEE_COLORS[ft],
+                 money(fee_mix[ft]["fees"]),
+                 "{n} · {p:.1f}% of fees".format(n=ft.upper(), p=share * 100),
+                 FEE_COLORS[ft], pat=FEE_PAT[ft], seg=True)
         if share > 0.09:
             lum_ink = "#ffffff" if ft in ("hourly", "contingency", "retainer") else "#0b0b0b"
             parts.append(_text(x + w / 2, y + 16, "{:.0f}%".format(share * 100),
@@ -1771,13 +2129,16 @@ def build_firm_dashboard(corpus):
     for ft in fee_order:
         share = fee_mix[ft]["count"] / len(fees_rows)
         w = barw * share
-        parts.append(_rect(x + 1, y, max(w - 2, 0), 24, FEE_COLORS[ft]))
+        viz_mark(parts, hits, x + 1, y, max(w - 2, 0), 24, FEE_COLORS[ft],
+                 "{n} matters".format(n=fee_mix[ft]["count"]),
+                 "{n} · {p:.1f}% of matters".format(n=ft.upper(), p=share * 100),
+                 FEE_COLORS[ft], pat=FEE_PAT[ft], seg=True)
         if share > 0.09:
             lum_ink = "#ffffff" if ft in ("hourly", "contingency", "retainer") else "#0b0b0b"
             parts.append(_text(x + w / 2, y + 16, str(fee_mix[ft]["count"]),
                                cls="chart-val", anchor="middle", extra='fill="{c}"'.format(c=lum_ink)))
         x += w
-    svg2 = _svg(W2, H2, "".join(parts), "Fee-arrangement mix, dollar share and matter count")
+    svg2 = _svg(W2, H2, "".join(parts) + "".join(hits), "Fee-arrangement mix, dollar share and matter count")
     legend2 = ('<div class="legend">' + "".join(
         '<span><i style="background:{c}"></i>{n}</span>'.format(c=FEE_COLORS[ft], n=esc(ft.upper()))
         for ft in fee_order) + "</div>")
@@ -1797,7 +2158,11 @@ def build_firm_dashboard(corpus):
     max_h = 180.0
     groupw = plot_w / len(months)
     bw = min(12, groupw / 3)
+    half = groupw / 2
+    tk_a = tk_names.get("FIRM-TK-01", "Timekeeper A")
+    tk_b = tk_names.get("FIRM-TK-02", "Timekeeper B")
     parts = []
+    hits = []
     for gy in (0, 60, 120, 180):
         yy = 16 + plot_h * (1 - gy / max_h)
         parts.append('<line x1="{x0}" y1="{y}" x2="{x1}" y2="{y}" stroke="{c}" stroke-width="1"/>'.format(
@@ -1809,10 +2174,12 @@ def build_firm_dashboard(corpus):
         a = util_by.get((mo, "FIRM-TK-01"), 0)
         b = util_by.get((mo, "FIRM-TK-02"), 0)
         ha, hb = plot_h * a / max_h, plot_h * b / max_h
-        parts.append(_rect(gx - bw - 1, 16 + plot_h - ha, bw, ha, VIZ["cat1"],
-                           extra='data-tip="{mo} · A {a}h"'.format(mo=mo, a=a)))
-        parts.append(_rect(gx + 1, 16 + plot_h - hb, bw, hb, VIZ["cat2"],
-                           extra='data-tip="{mo} · B {b}h"'.format(mo=mo, b=b)))
+        viz_mark(parts, hits, gx - bw - 1, 16 + plot_h - ha, bw, ha, VIZ["cat1"],
+                 "{a}h".format(a=a), "{mo} · {tk}".format(mo=mo, tk=tk_a), VIZ["cat1"],
+                 pat=UTIL_PAT["FIRM-TK-01"], hit=(gx - half, 16, half, plot_h))
+        viz_mark(parts, hits, gx + 1, 16 + plot_h - hb, bw, hb, VIZ["cat2"],
+                 "{b}h".format(b=b), "{mo} · {tk}".format(mo=mo, tk=tk_b), VIZ["cat2"],
+                 pat=UTIL_PAT["FIRM-TK-02"], hit=(gx, 16, half, plot_h))
         if i == len(months) - 1:
             parts.append(_text(gx - bw / 2 - 1, 16 + plot_h - ha - 4, str(a), cls="chart-val", anchor="middle"))
             parts.append(_text(gx + bw / 2 + 1, 16 + plot_h - hb - 4, str(b), cls="chart-val", anchor="middle"))
@@ -1821,7 +2188,7 @@ def build_firm_dashboard(corpus):
     parts.append('<line x1="{x0}" y1="{y}" x2="{x1}" y2="{y}" stroke="#0b0b0b" stroke-width="2" opacity=".55"/>'.format(
         x0=PAD3, x1=W3 - 10, y=round(ty, 1)))
     parts.append(_text(W3 - 12, ty - 5, "Target {t:.0f}h".format(t=target_h), cls="chart-anno", anchor="end"))
-    svg3 = _svg(W3, H3, "".join(parts), "Monthly billable hours by timekeeper against a 150-hour target")
+    svg3 = _svg(W3, H3, "".join(parts) + "".join(hits), "Monthly billable hours by timekeeper against a 150-hour target")
     legend3 = ('<div class="legend">'
                '<span><i style="background:{c1}"></i>{a}</span>'
                '<span><i style="background:{c2}"></i>{b}</span></div>').format(
@@ -1844,11 +2211,14 @@ def build_firm_dashboard(corpus):
     stages = [("Worked", worked, VIZ["ord1"]), ("Billed", billed, VIZ["ord2"]),
               ("Collected", collected, VIZ["ord3"])]
     parts = []
+    hits = []
     y = 12
     for i, (name, val, col) in enumerate(stages):
         w = barmax4 * val / worked
         parts.append(_text(LBL4 - 6, y + 18, name, anchor="end"))
-        parts.append(_rect(LBL4, y, w, 26, col))
+        viz_mark(parts, hits, LBL4, y, w, 26, col,
+                 money(val), "{s} · {p:.1f}% of worked".format(s=name, p=val / worked * 100),
+                 col, pat=FUNNEL_PAT[i])
         parts.append(_text(LBL4 + w + 6, y + 18, money(val), cls="chart-val"))
         if i == 0:
             anno = "−{d} write-downs · realization {r:.0f}%".format(d=money_compact(writedowns), r=realization * 100)
@@ -1859,7 +2229,7 @@ def build_firm_dashboard(corpus):
         if anno:
             parts.append(_text(LBL4 + 8, y + 26 + 15, anno, cls="chart-anno"))
         y += 26 + 32
-    svg4 = _svg(W4, H4, "".join(parts), "Realization funnel from worked to billed to collected")
+    svg4 = _svg(W4, H4, "".join(parts) + "".join(hits), "Realization funnel from worked to billed to collected")
     tbl4 = _table("Realization funnel", ["Stage", "$", "% of worked", "Step loss", "Step rate"],
                   [["Worked", money(worked), "100.0%", "—", "—"],
                    ["Billed", money(billed), "{:.1f}%".format(billed / worked * 100),
@@ -1885,6 +2255,7 @@ def build_firm_dashboard(corpus):
     H5 = 10 + len(ar_display) * (rowh5 + gap5) + 6
     maxar = max(r["total"] for r in ar_display)
     parts = []
+    hits = []
     for i, r in enumerate(ar_display):
         y = 10 + i * (rowh5 + gap5)
         parts.append(_text(LBL5 - 6, y + 15, r["label"][:26], anchor="end"))
@@ -1894,12 +2265,13 @@ def build_firm_dashboard(corpus):
             if v <= 0:
                 continue
             w = barmax5 * v / maxar
-            parts.append(_rect(x, y, max(w - 2, 1), rowh5, col,
-                               extra='data-tip="{b} days · {v}"'.format(b=blabel, v=money(v))))
+            viz_mark(parts, hits, x, y, max(w - 2, 1), rowh5, col,
+                     money(v), "{ic} {b} days · {row}".format(ic=icon, b=blabel, row=r["label"]),
+                     col, pat=AR_PAT[key], seg=True)
             if key == "b90_plus":
                 parts.append(_text(x + max(w - 2, 1) + 5, y + 15, "⚠ " + money_compact(v), cls="chart-val"))
             x += w
-    svg5 = _svg(W5, H5, "".join(parts), "Accounts receivable aging by bucket, firm total and top matters")
+    svg5 = _svg(W5, H5, "".join(parts) + "".join(hits), "Accounts receivable aging by bucket, firm total and top matters")
     legend5 = ('<div class="legend">' + "".join(
         '<span><i style="background:{c}"></i>{ic} {b} DAYS</span>'.format(c=c, ic=ic, b=b)
         for _, b, c, ic in AR_BUCKETS) + "</div>")
@@ -1919,15 +2291,20 @@ def build_firm_dashboard(corpus):
     rowh6, gap6 = 22, 10
     H6 = 12 + len(holdings) * (rowh6 + gap6)
     maxt = max(h["amount"] for h in holdings)
+    rec_word = "✓ reconciled" if trust["three_way_reconciled"] else "⚠ discrepancy"
     parts = []
+    hits = []
     for i, h in enumerate(holdings):
         y = 12 + i * (rowh6 + gap6)
         cname = client_names.get(man_by_id.get(h["matter_id"], {}).get("client_id"), "")
         parts.append(_text(LBL6 - 6, y + 15, h["matter_id"].upper() + " · " + cname[:18], anchor="end"))
         w = barmax6 * h["amount"] / maxt
-        parts.append(_rect(LBL6, y, w, rowh6, VIZ["cat1"]))
+        viz_mark(parts, hits, LBL6, y, w, rowh6, VIZ["cat1"],
+                 money(h["amount"]),
+                 "{m} · {c} · {r}".format(m=h["matter_id"].upper(), c=cname, r=rec_word),
+                 VIZ["cat1"])
         parts.append(_text(LBL6 + w + 6, y + 15, money(h["amount"]) + "  ✓", cls="chart-val"))
-    svg6 = _svg(W6, H6, "".join(parts), "Trust balances by matter, each reconciled")
+    svg6 = _svg(W6, H6, "".join(parts) + "".join(hits), "Trust balances by matter, each reconciled")
     banner = ('<p class="kpi-tile__chip" style="display:inline-block;margin-bottom:var(--sp-2)">'
               '✓ TRUST LEDGER VS BANK · BALANCED AT {b} · THREE-WAY RECONCILED {d}</p>').format(
         b=money(trust["balance"]), d=esc(trust["last_reconciled"])) if trust["three_way_reconciled"] else (
@@ -1952,24 +2329,28 @@ def build_firm_dashboard(corpus):
     H7 = 14 + len(budget) * (rowh7 + gap7)
     maxvar = max(abs(b["actual"] - b["budget"]) for b in budget)
     parts = ['<line x1="{c}" y1="6" x2="{c}" y2="{h}" class="chart-axis"/>'.format(c=center, h=H7 - 8)]
+    hits = []
     for i, b in enumerate(budget):
         y = 14 + i * (rowh7 + gap7)
         var = b["actual"] - b["budget"]
         col = VIZ["div_under"] if b["variance_is_good"] else VIZ["div_over"]
         w = halfmax * abs(var) / maxvar
+        vlabel = "{n} · {g}".format(n=b["name"], g="Favorable" if b["variance_is_good"] else "Unfavorable")
+        vval = ("+" if var >= 0 else "−") + money(abs(var))
         parts.append(_text(LBL7 - 6, y + 14, b["name"][:26], anchor="end"))
+        pat = BUDGET_PAT[bool(b["variance_is_good"])]
         if var >= 0:
-            parts.append(_rect(center, y, w, rowh7, col))
+            viz_mark(parts, hits, center, y, w, rowh7, col, vval, vlabel, col, pat=pat)
             parts.append(_text(center + w + 5, y + 14, "{s}{v}".format(s="+", v=money_compact(var)), cls="chart-val"))
         else:
-            parts.append(_rect(center - w, y, w, rowh7, col))
+            viz_mark(parts, hits, center - w, y, w, rowh7, col, vval, vlabel, col, pat=pat)
             if w > 70:   # long bar: label would collide with the row label — set it inside
                 parts.append(_text(center - w + 6, y + 14, "−" + money_compact(abs(var)),
                                    cls="chart-val", extra='fill="#ffffff"'))
             else:
                 parts.append(_text(center - w - 5, y + 14, "−" + money_compact(abs(var)),
                                    cls="chart-val", anchor="end"))
-    svg7 = _svg(W7, H7, "".join(parts), "Budget versus actual variance by line, centered on zero")
+    svg7 = _svg(W7, H7, "".join(parts) + "".join(hits), "Budget versus actual variance by line, centered on zero")
     legend7 = ('<div class="legend">'
                '<span><i style="background:{f}"></i>✓ FAVORABLE</span>'
                '<span><i style="background:{u}"></i>⚠ UNFAVORABLE</span></div>').format(
@@ -2005,8 +2386,10 @@ def build_firm_dashboard(corpus):
   <span><span class="label">PERIOD</span> <span class="chip">TRAILING 12 MO</span></span>
   <span><span class="label">TIMEKEEPER</span> <span class="chip">ALL</span></span>
   <span><span class="label">STATUS</span> <span class="chip">ALL MATTERS</span></span>
+  <button type="button" class="viz-toggle mono" id="viz-patterns" aria-pressed="false" title="Overlay line patterns on chart fills (accessibility / print)">PATTERNS</button>
   <span class="viz-note">One reporting period ships tonight; the dataset is a single trailing-12-month snapshot.</span>
 </div>
+{defs}
 
 <section aria-label="Key performance indicators">
   <div class="kpi-row">{kpis}</div>
@@ -2027,8 +2410,10 @@ def build_firm_dashboard(corpus):
   <h2 id="dl-h">Downloads</h2></div>
   <div class="downloads">{dls}</div>
 </section>
+
+<div id="viz-tip" class="viz-tip" aria-hidden="true" hidden><span class="viz-tip__sw" aria-hidden="true"></span><span class="viz-tip__v"></span><span class="viz-tip__l"></span></div>
 """.format(asof=esc(firm["as_of_date"]), name=esc(ident["name"]),
-           note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis),
+           note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis), defs=_pattern_defs(),
            c1=chart1, c2=chart2, c3=chart3, c4=chart4, c5=chart5, c6=chart6, c7=chart7,
            dls="".join(dls))
     write_file(rel, page_shell(rel, "Firm Dashboard", "FIRM · PRACTICE LEDGER",
@@ -2248,6 +2633,7 @@ def main(argv):
 
     build_home(corpus)
     build_modules(corpus)
+    build_templates(corpus)
     build_skills(corpus)
     build_matter_library(corpus)
     packet_sizes = build_packet_pages(corpus)

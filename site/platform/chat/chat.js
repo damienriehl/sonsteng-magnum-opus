@@ -32,7 +32,8 @@
     packet: Q.get('packet') || '',
     represented: Q.get('represented') === '1',
     bypass: Q.get('bypass') || '',           // forwarded on /session ONLY; never logged/rendered
-    apiParam: Q.get('api') || ''
+    apiParam: Q.get('api') || '',
+    sample: Q.get('sample') === '1'          // scripted-replay demo: no API, no key, no session
   };
 
   /* ---------- API base resolution chain ------------------------------------
@@ -174,6 +175,13 @@
     '.reflect{margin-top:var(--sp-8)}',
     '.reflect textarea{width:100%;min-height:96px;font-family:var(--font-body);font-size:1.1rem;background:var(--paper);border:var(--rule) solid var(--line);border-left:var(--rule-bold) solid var(--green);border-radius:var(--radius);padding:var(--sp-3) var(--sp-6);resize:vertical}',
     'html.type-lg .reflect textarea{font-size:1.32rem}',
+    /* scripted-sample replay banner (pinned above the composer) */
+    '.sample-banner{position:sticky;bottom:0;z-index:5;margin:var(--sp-8) 0 0;padding:var(--sp-3) var(--sp-6);background:var(--paper-3);border:var(--rule) solid var(--line);border-left:var(--rule-bold) solid var(--claret);border-radius:0 var(--radius) var(--radius) 0;box-shadow:var(--shadow)}',
+    '.sample-banner__label{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--claret)}',
+    '.sample-banner__tag{font-style:normal;font-weight:700}',
+    '.sample-banner__note{font-family:var(--font-body);font-style:italic;color:var(--ink-soft);font-size:var(--fs-sm);margin:var(--sp-2) 0 var(--sp-3);max-width:62ch}',
+    '.sample-banner__controls{display:flex;gap:var(--sp-3);align-items:center;flex-wrap:wrap}',
+    '.sample-banner__status{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);margin-left:auto}',
     '.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}'
   ].join('\n');
 
@@ -457,6 +465,7 @@
      The send flow — the core race-proof path
      ============================================================================ */
   function submit() {
+    if (cfg.sample) return;                        // replay demo: the composer never sends
     if (state !== S.IDLE) return;                 // a turn may only begin from IDLE
     var text = (refs.input.value || '').trim();
     if (!text) return;
@@ -916,12 +925,164 @@
     });
   }
 
+  /* ============================================================================
+     Scripted-sample replay (?sample=1) — no API, no key, no session.
+     Reuses the live renderers (appendMessage / showConsidering / stageDirection /
+     updateCounter / commitTurn / renderDebrief / transcript export) so the demo is
+     the real consultation room, only driven from a hand-authored recording.
+     ============================================================================ */
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  var sample = null;                     // {turns:[{counsel,client,stage?}], scorecard}
+  var play = { i: 0, playing: false, done: false, timer: null, pending: null };
+  var sampleRefs = {};
+
+  function setupSample() {
+    // Strip live-only affordances; the composer is a labeled dead-end in a replay.
+    if (refs.chambers) { refs.chambers.remove(); refs.chambers = null; }
+    disableInput();
+    refs.input.setAttribute('placeholder', 'This is a replay — add a key to interview the client yourself');
+    refs.input.value = '';
+    // the live "Prepare debrief" button would call the API — the replay renders its own
+    if (refs.debriefBtn) refs.debriefBtn.style.display = 'none';
+
+    buildSampleBanner();
+
+    // fetch the recording (same-origin static file next to index.html)
+    var url = 'sample-' + encodeURIComponent(cfg.matter_id || 'm05') + '.json';
+    fetch(url, { cache: 'no-store', credentials: 'omit' }).then(function (res) {
+      if (!res.ok) throw new Error('http ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      sample = data;
+      maxTurns = (data.turns && data.turns.length) || maxTurns;
+      updateCounter(0);
+      sampleRefs.status.textContent = 'READY · ' + pad2(sample.turns.length) + ' TURNS';
+      sampleRefs.playBtn.disabled = false;
+    }).catch(function () {
+      sampleRefs.status.textContent = 'UNAVAILABLE';
+      stageDirection('This sample recording could not be loaded. Reload the page to try again.');
+    });
+  }
+
+  function buildSampleBanner() {
+    var b = el('div', 'sample-banner');
+    b.setAttribute('role', 'region');
+    b.setAttribute('aria-label', 'Scripted sample controls');
+
+    var label = el('div', 'sample-banner__label');
+    label.appendChild(el('span', 'sample-banner__tag', 'SCRIPTED SAMPLE'));
+    label.appendChild(el('span', null, 'a recorded consultation, not a live AI client'));
+    b.appendChild(label);
+    b.appendChild(el('p', 'sample-banner__note',
+      'This is a fixed, hand-authored recording of a client interview, played back for you. Nothing here is generated live. To interview the client yourself, add your own API key.'));
+
+    var ctr = el('div', 'sample-banner__controls');
+    var playBtn = el('button', 'btn', 'Play sample ▸'); playBtn.type = 'button'; playBtn.disabled = true;
+    var skipBtn = el('button', 'btn btn--ghost', 'Skip to debrief'); skipBtn.type = 'button'; skipBtn.disabled = true;
+    var status = el('span', 'sample-banner__status'); status.setAttribute('aria-live', 'polite'); status.textContent = 'LOADING…';
+    ctr.appendChild(playBtn); ctr.appendChild(skipBtn); ctr.appendChild(status);
+    b.appendChild(ctr);
+
+    // pin the banner directly above the composer
+    refs.form.parentNode.insertBefore(b, refs.form);
+    sampleRefs = { banner: b, playBtn: playBtn, skipBtn: skipBtn, status: status };
+
+    playBtn.addEventListener('click', function () { play.playing ? pauseSample() : playSample(); });
+    skipBtn.addEventListener('click', skipToDebrief);
+  }
+
+  function sampleStatus(word) {
+    sampleRefs.status.textContent = word + ' · ' + pad2(play.i) + ' / ' + pad2(sample.turns.length);
+  }
+
+  function playSample() {
+    if (!sample || play.done) return;
+    play.playing = true;
+    sampleRefs.playBtn.textContent = 'Pause';
+    sampleRefs.skipBtn.disabled = false;
+    sampleStatus('PLAYING');
+    stepSample();
+  }
+
+  function pauseSample() {
+    play.playing = false;
+    if (play.timer) { clearTimeout(play.timer); play.timer = null; }
+    hideConsidering();   // the pending turn's counsel bubble stays; its client half resumes later
+    sampleRefs.playBtn.textContent = 'Play sample ▸';
+    sampleStatus('PAUSED');
+  }
+
+  // A turn plays in two halves: startTurn() shows the counsel line + "considering";
+  // finishTurn() reveals the client's reply and advances. play.pending holds the
+  // in-flight turn between the halves so pause/resume and skip never re-append it.
+  function stepSample() {
+    if (!play.playing) return;
+    if (play.pending) { finishTurn(); return; }          // resumed mid-considering
+    if (play.i >= sample.turns.length) { finishSample(); return; }
+    var t = sample.turns[play.i];
+    appendMessage('user', t.counsel);
+    play.pending = t;
+    if (reduceMotion) { finishTurn(); }
+    else { showConsidering(); play.timer = setTimeout(finishTurn, 1200); }
+  }
+
+  function finishTurn() {
+    if (!play.playing) return;
+    hideConsidering();
+    renderClientTurn(play.pending);
+    play.pending = null;
+    play.i += 1;
+    sampleStatus('PLAYING');
+    play.timer = setTimeout(stepSample, reduceMotion ? 0 : 700);
+  }
+
+  function renderClientTurn(t) {
+    if (t.stage) stageDirection(t.stage);
+    appendMessage('assistant', t.client);
+    var idx = play.i + 1;
+    commitTurn(uuid(), t.counsel, { reply: t.client, turn: idx, remaining: sample.turns.length - idx, state: 'ok' });
+    updateCounter(idx);
+  }
+
+  function skipToDebrief() {
+    if (!sample) return;
+    if (play.timer) { clearTimeout(play.timer); play.timer = null; }
+    play.playing = false;
+    hideConsidering();
+    // complete any in-flight turn (counsel already on screen) without re-appending it
+    if (play.pending) { renderClientTurn(play.pending); play.pending = null; play.i += 1; }
+    while (play.i < sample.turns.length) {
+      var t = sample.turns[play.i];
+      appendMessage('user', t.counsel);
+      renderClientTurn(t);
+      play.i += 1;
+    }
+    finishSample();
+  }
+
+  function finishSample() {
+    play.playing = false;
+    play.done = true;
+    play.pending = null;
+    if (play.timer) { clearTimeout(play.timer); play.timer = null; }
+    hideConsidering();
+    sampleRefs.playBtn.disabled = true;
+    sampleRefs.playBtn.textContent = 'Replay finished';
+    sampleRefs.skipBtn.disabled = true;
+    sampleRefs.status.textContent = 'COMPLETE · ' + pad2(sample.turns.length) + ' / ' + pad2(sample.turns.length);
+    stageDirection('[End of the scripted sample. Below is the debrief this interview would earn — add your own key to conduct one yourself.]');
+    if (sample.scorecard) renderDebrief(sample.scorecard);
+  }
+
   function boot() {
     injectStyle();
     // restore prefs
     if (LS.get('sonsteng_type_lg') === '1') document.documentElement.classList.add('type-lg');
     build();
     if (LS.get('sonsteng_type_lg') === '1') { refs.typeLg.setAttribute('aria-pressed', 'true'); refs.typeStd.setAttribute('aria-pressed', 'false'); }
+
+    if (cfg.sample) { setupSample(); return; }   // replay demo: no session, no transport
 
     // restore session + transcript for this tab
     session = loadSession();

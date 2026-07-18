@@ -1,0 +1,124 @@
+{
+  "_comment": "SCRIPTED SAMPLE consultation for the keyless demo (?sample=1). Hand-authored, pedagogically-worked replay of a client interview with Devon R. Halvard (m05). This is NOT a live AI transcript and is NOT student data — it is a fixed recording played back turn-by-turn by chat.js so the platform can be experienced before any API key exists. Every fact spoken by the client anchors to data/matters/m05-dwi-meridian/facts.md and the persona's disclosure tiers in personas/halvard.json. The client is played distressed-and-guarded per the persona: he minimizes, holds back what embarrasses him, and opens up only as trust is earned on screen. The concealed whiskey-shot fact (m05.fact.008) is never revealed; two revealed-if-asked topics and one rapport-gated fact are deliberately left un-elicited so the debrief has honest misses to teach from.",
+  "schema_version": "1.0.0",
+  "matter_id": "m05",
+  "persona_id": "m05.per.halvard",
+  "title": "State of Meridian v. Devon R. Halvard",
+  "client": "Devon Halvard",
+  "role": "Client (criminal defendant)",
+  "turns": [
+    {
+      "counsel": "Devon, thank you for coming in. Before we get into any of the details of the case — I just want to check in with you as a person. How are you holding up with all of this?",
+      "client": "Honestly? Not great. I haven't really been sleeping. I keep going over it in my head, and I keep thinking I've already lost my job over one stupid night. I've never had anything like this happen to me before."
+    },
+    {
+      "counsel": "That's a heavy thing to be carrying, and I'm sorry you're in it. There's no rush here. Whenever you're ready, just tell me what happened that night in your own words — start wherever feels natural to you.",
+      "client": "Okay. So it was a Saturday, after we closed the restaurant. We had a little birthday thing for one of the cooks — our sous chef. I had a couple of ales while everyone ate, over a few hours, and then I headed home. I wasn't even a mile from the place when an officer pulled me over. He said my taillight was out. And then it just... turned into this whole thing, and I got arrested. I've never been arrested in my life."
+    },
+    {
+      "counsel": "I hear you — one night, and now it feels like everything's on the line. You mentioned your job. Can you help me understand how much your license matters to you here?",
+      "client": "It's basically everything. I'm a line cook — the kitchen doesn't close until almost midnight, and there's no bus running by then. I drive to work every single day. If I lose my license, I lose the job. That's the part that scares me more than anything else, more than any of it."
+    },
+    {
+      "counsel": "Let's talk about the stop itself for a minute. He told you the taillight was out — what went through your mind when you heard that?",
+      "client": "I was honestly surprised. I thought the light worked fine. My car's older, but it passed a check not that long ago, so I had no idea anything was wrong back there. I wasn't trying to get away with anything — I didn't even know it was out."
+    },
+    {
+      "counsel": "Okay. After he pulled you over, what did he have you do next?",
+      "client": "He had me get out and do those roadside tests — walk in a line, stand on one leg, follow his little light with my eyes. But the spot where he had me do it, it was on this slope, all packed ice and old snow. It wasn't flat at all."
+    },
+    {
+      "counsel": "You said it wasn't flat — tell me more about that. What was the ground actually like where he had you standing?",
+      "client": "It sloped down toward a storm drain, and it was slick the whole way. I actually asked him if we could move somewhere flatter, somewhere with better footing. He just told me to do it right there. So I did the tests standing on the ice."
+    },
+    {
+      "counsel": "That matters, and I'm glad you told me. Before we go further, I want to understand the whole picture of that day — not just the stop. What had your day been like, leading up to that night?",
+      "stage": "[Devon lets out a breath, like he's deciding whether it's worth saying.]",
+      "client": "Long. Really long. I'd been on a double — like fourteen hours on my feet by the time we closed. By the time he had me out there balancing on one leg, I was running on fumes. I could barely think straight, and I don't think that had anything to do with drinking. I was just wrecked."
+    },
+    {
+      "counsel": "Devon, being exhausted after a fourteen-hour shift and stumbling on ice doesn't make you a criminal, and it doesn't make you drunk. I'm not here to judge you — I'm on your side. If there's anything else that made those tests hard for you, you can tell me. It stays between us.",
+      "stage": "[He looks down at the table for a moment, then back up.]",
+      "client": "There's... okay. There's something I don't really tell people. I've got this inner-ear thing — the doctor called it positional vertigo. Standing on one leg, walking heel-to-toe, that kind of thing is genuinely hard for me even stone-cold sober. I felt like an idiot out there, and I was too embarrassed to say anything to the officer. I figured he'd just think I was making excuses."
+    },
+    {
+      "counsel": "Thank you for trusting me with that — it's exactly the kind of thing that matters here, and it's not an excuse. Now, after the roadside tests, they took you in. What happened with the breath test at the station?",
+      "client": "They had me blow into the machine there. It came back 0.08. Right at the line, they said. I keep thinking about those couple of minutes right before I blew, but... I don't know. It all happened so fast."
+    },
+    {
+      "counsel": "0.08 — okay, so right at the legal threshold. Let's set that number aside for a second. Had you ever been through anything like a police stop before this?",
+      "client": "No, never. Not even a real ticket, except one speeding thing years ago. This is all completely new to me — I genuinely don't know how any of it is supposed to work."
+    },
+    {
+      "counsel": "Do you happen to know whether that breath machine had been calibrated recently, or how much margin of error a device like that has?",
+      "client": "I couldn't tell you. I don't really remember anyone saying anything about that. I'm not sure how the machine even works, honestly — I just did what they told me to do."
+    },
+    {
+      "counsel": "That's alright — that part's our job to look into, not yours. If we could get one thing right for you out of all of this, what would matter most to you?",
+      "client": "Keeping my license, so I can keep working. That's the whole thing. I don't want to go to jail, and I really don't want this following me around forever — but honestly, if I can just keep driving to work, I can handle the rest."
+    },
+    {
+      "counsel": "Here's roughly what happens from here: we'll get the squad and body-camera video, and there's a hearing where we can challenge whether the stop was valid and whether those field tests should count at all. Given the ice and the slope, we have real arguments there.",
+      "client": "Okay. But my license — do I actually lose it? And when? Nobody's really explained that part to me, and that's the thing I can't stop worrying about."
+    },
+    {
+      "counsel": "That's a fair question, and I promise we'll walk through the license piece in detail — there's a separate process for it, and we'll deal with it head-on so you're not left in the dark. For today, you've given me a lot to work with. Let's get started.",
+      "stage": "[Devon nods slowly. Some of the tension seems to leave his shoulders.]",
+      "client": "Okay. Thank you — really. I feel a little less like the ground's falling out from under me. I'll get you whatever you need."
+    }
+  ],
+  "scorecard": {
+    "schema_version": "1.0.0",
+    "matter_id": "m05",
+    "persona_id": "m05.per.halvard",
+    "axis_a": {
+      "facts_elicited": [
+        "m05.fact.007",
+        "m05.fact.013",
+        "m05.fact.004",
+        "m05.fact.003",
+        "m05.fact.014",
+        "m05.fact.018",
+        "m05.fact.019",
+        "m05.fact.022",
+        "m05.fact.021",
+        "m05.fact.027"
+      ],
+      "revealed_if_asked_missed": [
+        "whether he had eaten"
+      ],
+      "rapport_gated_unearned": [
+        {
+          "topic": "how he felt just before the breath test",
+          "trigger_needed": "follow_up_on_hint"
+        }
+      ],
+      "rule_4_2_flags": []
+    },
+    "axis_b": {
+      "rapport_opening": {
+        "score": 8,
+        "comment": "You opened by asking how Devon was doing as a person, before a single fact — and it settled him. The one thing missing: you never told him plainly that this conversation is private and privileged, which is what makes a scared client feel truly safe to talk."
+      },
+      "listening_t_funnel": {
+        "score": 7,
+        "comment": "Strong broad-before-narrow questions — you invited his story before drilling in, and you let him finish. But when he trailed off about 'those couple of minutes right before' he blew into the machine, you moved on. That hint was worth chasing."
+      },
+      "understanding_goals": {
+        "score": 8,
+        "comment": "You drew out what he's actually afraid of — losing the license, and with it the job — not just the criminal charge. Naming his real objective early is exactly right."
+      },
+      "explanation_next_steps": {
+        "score": 6,
+        "comment": "You sketched the video and the hearing well, but left his most urgent question — whether and when he loses his license — only half-answered. He walked out still unsure of the timeline."
+      },
+      "overall_confidence": {
+        "score": 8,
+        "comment": "I'd come back to this lawyer. For the first time since it happened, I felt like someone was on my side and actually listening to me."
+      }
+    },
+    "ethics_score": 1,
+    "narrative": "This was a genuinely strong first interview. You started by asking how Devon was holding up as a person, not as a case file, and you gave him room to tell the story his own way. That patience paid off: because you stayed warm and didn't judge him, he trusted you with the two things he was most ashamed of — the fourteen-hour double shift that left him exhausted, and the inner-ear condition that makes those balance tests hard for him even sober. Those are case-changing facts, and they surfaced only because you earned them. You also drew out the icy, sloped ground and his request to move to flatter footing — concrete, usable detail for challenging the field sobriety tests. Two things to carry into the next one. When Devon trailed off about the minutes right before he blew into the machine, he was handing you a thread and you let it drop; follow those hints, because that is often where the case is. And you never asked a plain question that can matter a great deal in a breath-test case: whether he had eaten. Finally, he left still unsure whether and when he loses his license — the very thing he's most afraid of — so closing that loop would have sent him out steadier. Strong, human work. Tighten the follow-through and you are doing this at a high level.",
+    "self_reflection_prompt": "Look back at the moment Devon said he 'keeps thinking about those couple of minutes right before' the breath test, and then went quiet. What do you think he was inviting you to ask — and what will you do differently the next time a client trails off like that?"
+  }
+}
