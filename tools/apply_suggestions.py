@@ -589,7 +589,7 @@ def propose_value_sync(worktree, applied_patches, source_index, client, batch_id
                         worktree, matter, old_tok, new_tok, kind, source_index,
                         exclude=patch.source_ref):
                     payload = {
-                        "id": "companion-%s-%s" % (_slug(old_tok), _slug(target_ref)),
+                        "id": _companion_id(old_tok, target_ref),
                         "origin": "companion",
                         "kind": occ["kind"],
                         "source_ref": target_ref,
@@ -658,6 +658,18 @@ def _find_anchored_occurrences(worktree, matter, old_tok, new_tok, kind, source_
 
 def _slug(s):
     return re.sub(r"[^A-Za-z0-9]+", "-", s).strip("-")[:40] or "x"
+
+
+def _companion_id(old_tok, target_ref):
+    """A deterministic companion suggestion id that fits the Worker's uuid ceiling
+    (`[a-zA-Z0-9_-]{8,64}`). The naive "companion-<slug>-<slug>" form overran 64
+    chars for real source_refs and was rejected at /system-suggest with
+    validation_error; we keep a short readable prefix and append a stable hash of
+    (old literal, target_ref) so the id is unique per target AND idempotent across
+    retries of the same proposal."""
+    import hashlib
+    h = hashlib.sha256(("%s|%s" % (old_tok, target_ref)).encode("utf-8")).hexdigest()[:16]
+    return ("companion-%s-%s" % (_slug(old_tok)[:24], h))[:64]
 
 
 # --------------------------------------------------------------------------- #

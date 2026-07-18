@@ -594,6 +594,21 @@ class HttpRpcRoutingTest(unittest.TestCase):
         self.assertEqual(seen["method"], "POST")
         self.assertEqual(seen["body"]["origin"], "companion")
 
+    def test_companion_id_fits_worker_uuid_ceiling(self):
+        # The Worker's suggest/system-suggest endpoints require the id to match
+        # ^[a-zA-Z0-9_-]{8,64}$. Real source_refs are long; the id must still fit.
+        import re as _re
+        pat = _re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
+        long_ref = ("data/matters/m01-arbitration-meridian/case-file/"
+                    "statement-rennick.md#sections.deep.body_md.p12")
+        cid = ap._companion_id("Gerald Rennick", long_ref)
+        self.assertTrue(pat.match(cid), "companion id %r must match the uuid ceiling" % cid)
+        # deterministic + unique per target_ref
+        self.assertEqual(cid, ap._companion_id("Gerald Rennick", long_ref))
+        other = ap._companion_id("Gerald Rennick", long_ref + "x")
+        self.assertNotEqual(cid, other)
+        self.assertTrue(pat.match(other))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
