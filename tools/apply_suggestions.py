@@ -221,6 +221,9 @@ class HttpRpcClient:
         req.add_header("Content-Type", "application/json")
         req.add_header("X-Edit-Request", "1")
         req.add_header("Accept", "application/json")
+        # Cloudflare edge bot-mitigation bans the default python-urllib UA
+        # (error 1010) before the Worker sees the request; send a normal UA.
+        req.add_header("User-Agent", "sonsteng-apply-engine/1.0")
         if self._token:
             req.add_header("Authorization", "Bearer " + self._token)
             req.add_header("Cookie", "edit_scope=" + self._token)  # cookie-auth fallback
