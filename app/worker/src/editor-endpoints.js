@@ -135,6 +135,110 @@ export async function suggestEndpoint(request, env, auth) {
   return json({ ok: true, id, status: result.suggestion.status, replay: !!result.replay });
 }
 
+// ---- POST /edit/v1/system-suggest (admin/service scope) ---------------------
+// The apply-engine's SYSTEM proposers (value-sync companions, ai_rewrite) post
+// here. Unlike /suggest (human editors, origin:"human", edit/instructor scope),
+// this endpoint requires ADMIN scope (reached only via the Bearer service token)
+// and accepts ONLY system origins {companion, ai_rewrite}. Everything the store
+// records — editor slot, original_text/hash, kind, page, json_path — is resolved
+// SERVER-side from the map (the client body is never trusted); only origin,
+// group_id, and the client uuid/new_text/comment come from the caller.
+const SYSTEM_ORIGINS = new Set(["companion", "ai_rewrite"]);
+
+export async function systemSuggestEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
+
+  // Admin/service scope ONLY (the apply engine's Bearer token). A human
+  // edit/instructor token cannot reach this endpoint.
+  if (!auth.editor || !auth.scopes.admin.granted)
+    return editError("forbidden", "Admin/service scope required.", 403);
+
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+
+  const id = body.id;
+  const source_ref = body.source_ref;
+  const json_path = body.json_path != null ? String(body.json_path) : null;
+  const new_text = typeof body.new_text === "string" ? body.new_text : null;
+  const comment = typeof body.comment === "string" ? body.comment : null;
+  const origin = typeof body.origin === "string" ? body.origin : null;
+  const group_id = typeof body.group_id === "string" ? body.group_id : null;
+
+  if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(id))
+    return editError("validation_error", "A valid suggestion id (uuid) is required.", 400);
+  if (typeof source_ref !== "string")
+    return editError("validation_error", "source_ref is required.", 400);
+  // System origins ONLY — reject "human" (that is the /suggest endpoint) and any
+  // unknown origin (no client-chosen provenance beyond the two we sanction).
+  if (!origin || !SYSTEM_ORIGINS.has(origin))
+    return editError("validation_error", "origin must be companion or ai_rewrite.", 400);
+  if (new_text == null && comment == null)
+    return editError("validation_error", "Provide new_text or a comment.", 400);
+
+  // Size ceiling -> graceful 413.
+  const ceilings = ceilingsFor(env);
+  if (byteLen(new_text, comment) > ceilings.maxBytes)
+    return editError("too_large", "That change is too large. Please split it up.", 413);
+
+  // ALLOWLIST: the source_ref MUST resolve in one of the maps (edit first, then
+  // instructor — same dual-scope resolution as /suggest, minus the human's
+  // per-scope grant gate: admin is the authority for both indices). Unknown in
+  // BOTH (SSRF/forgery) -> validation_error (never a write, never a file path).
+  let scope = null;
+  let block = lookupBlock(source_ref, "edit");
+  if (block) { scope = "edit"; }
+  if (!block) {
+    block = lookupBlock(source_ref, "instructor");
+    if (block) { scope = "instructor"; }
+  }
+  if (!block) return editError("validation_error", "That block is not editable.", 400);
+
+  // json_scalar: json_path must match the map exactly (no path forgery).
+  if (new_text != null && block.kind === "json_scalar") {
+    if (!validateJsonScalar(source_ref, json_path, scope))
+      return editError("validation_error", "That field cannot be edited that way.", 400);
+  }
+  // comment-only blocks accept comments only.
+  if (block.kind === "comment_only" && new_text != null)
+    return editError("validation_error", "That block can only be commented on.", 400);
+
+  // The kind we STORE is derived from the map (+ comment intent), never trusted.
+  const kind = new_text == null ? "comment" : block.kind;
+
+  const stub = editorStub(env);
+  const result = await stub.suggest({
+    id,
+    editor: auth.editor,           // SERVER-resolved service slot identity
+    scope,
+    origin,                        // client-supplied but constrained to system set
+    kind,
+    page: block.page || null,
+    block_anchor: `${block.page || (block.matter_id + "/" + block.doc_type)}:${block.index}`,
+    source_ref,                    // allowlisted
+    json_path: block.kind === "json_scalar" ? block.json_path : null,
+    original_text: block.original_text, // SERVER-resolved from the map
+    original_hash: block.original_hash, // SERVER-authoritative
+    new_text,
+    comment,
+    context: block.context || "",
+    map_version: MAP_VERSION,
+    group_id,                      // system suggestions carry the proposer's group
+  }, ceilings);
+
+  if (!result.ok) {
+    const map = {
+      too_large: [413, "That change is too large."],
+      pending_ceiling: [429, "The review queue for that editor is full."],
+      global_ceiling: [429, "The review queue is full right now. Please try later."],
+      daily_cap: [429, "Daily change limit reached."],
+      validation_error: [400, "That change could not be saved."],
+    };
+    const [status, message] = map[result.reason] || [400, "That change could not be saved."];
+    return editError(result.reason, message, status);
+  }
+  return json({ ok: true, id, status: result.suggestion.status, replay: !!result.replay });
+}
+
 // ---- GET /edit/v1/pending?page= (edit/instructor scope) ---------------------
 export async function pendingEndpoint(request, env, auth) {
   if (!auth.editor || (!auth.scopes.edit.granted && !auth.scopes.instructor.granted))

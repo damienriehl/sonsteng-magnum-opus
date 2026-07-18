@@ -12,8 +12,8 @@ import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
 import { serveAsset } from "./editor-assets.js";
 import {
-  suggestEndpoint, pendingEndpoint, reviewJsonEndpoint, decideEndpoint,
-  digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
+  suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
+  decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -73,6 +73,8 @@ export async function editorFetch(request, env, ctx) {
   // ---- /edit/v1/* JSON endpoints --------------------------------------------
   if (path === "/edit/v1/suggest" && request.method === "POST")
     return wrap(await suggestEndpoint(request, env, auth));
+  if (path === "/edit/v1/system-suggest" && request.method === "POST")
+    return wrap(await systemSuggestEndpoint(request, env, auth));
   if (path === "/edit/v1/pending" && request.method === "GET")
     return wrap(await pendingEndpoint(request, env, auth));
   if (path === "/edit/v1/review" && request.method === "GET")

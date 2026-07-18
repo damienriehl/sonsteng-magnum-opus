@@ -559,5 +559,41 @@ class ApplyEngineTest(unittest.TestCase):
         return out.stdout.strip()
 
 
+class HttpRpcRoutingTest(unittest.TestCase):
+    """The HTTP client's companion proposer MUST hit the admin-scoped
+    /system-suggest endpoint (NOT the human /suggest endpoint, which hardcodes
+    origin:human and would 403 the admin service token)."""
+
+    def test_propose_companion_posts_to_system_suggest(self):
+        import io
+        import urllib.request as urlreq
+        seen = {}
+
+        class _Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            seen["url"] = req.full_url
+            seen["method"] = req.get_method()
+            seen["body"] = json.loads(req.data.decode("utf-8"))
+            return _Resp(json.dumps({"ok": True, "id": "x", "status": "pending"}).encode())
+
+        orig = urlreq.urlopen
+        urlreq.urlopen = fake_urlopen
+        try:
+            client = ap.HttpRpcClient("https://w.example.com/edit/v1", "tok")
+            client.propose_companion({"id": "companion-1", "origin": "companion",
+                                      "source_ref": "data/x#p0", "new_text": "n"})
+        finally:
+            urlreq.urlopen = orig
+        self.assertEqual(seen["url"], "https://w.example.com/edit/v1/system-suggest")
+        self.assertEqual(seen["method"], "POST")
+        self.assertEqual(seen["body"]["origin"], "companion")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

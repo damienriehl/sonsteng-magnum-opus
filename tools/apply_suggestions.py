@@ -202,7 +202,10 @@ class HttpRpcClient:
       * POST /claim   {batch_id, base_sha?}   -> { ok, batch_id, claimed:[id...], lease_expires_at }
       * GET  /review                          -> { ok, items:[<full suggestion rows>] }  (admin)
       * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?}
-      * POST /suggest  {id, source_ref, ...}  -> companion proposer (origin=companion, pending)
+      * POST /system-suggest {id, source_ref, origin, ...} -> SYSTEM proposer
+            (origin=companion|ai_rewrite, pending). Admin scope only; the human
+            /suggest endpoint hardcodes origin:human and is edit/instructor-scoped,
+            so system-generated provenance MUST use this admin-scoped path.
 
     Auth: the admin bookmark token in EDIT_SERVICE_TOKEN (== service scope). The
     token is sent as a Bearer credential and is NEVER logged. CSRF header
@@ -251,8 +254,11 @@ class HttpRpcClient:
     def propose_companion(self, companion):
         # Companions are born pending/origin=companion; the Worker resolves
         # editor/original_text server-side and enforces the group. Structurally
-        # cannot auto-apply (only admin decide -> accepted).
-        return self._req("POST", "/suggest", companion)
+        # cannot auto-apply (only admin decide -> accepted). SYSTEM provenance
+        # (companion/ai_rewrite) goes to the admin-scoped /system-suggest endpoint;
+        # the human /suggest endpoint hardcodes origin:human and would 403 the
+        # admin service token ("No edit scope").
+        return self._req("POST", "/system-suggest", companion)
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
                  needs_human=None, drift=None, base_sha=None):
