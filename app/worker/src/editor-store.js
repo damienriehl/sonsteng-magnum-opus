@@ -25,6 +25,7 @@ export class EditorStore extends DurableObject {
 
   suggest(input, ceilings) { return this.core.suggest(input, ceilings); }
   listForEditor(editor, page) { return this.core.listForEditor(editor, page); }
+  listForPage(page) { return this.core.listForPage(page); }
   listAll() { return this.core.listAll(); }
   decide(args) { return this.core.decide(args); }
   markDrift(id) { return this.core.markDrift(id); }

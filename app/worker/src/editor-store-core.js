@@ -229,6 +229,21 @@ export class EditorStoreCore {
     return this._all(q, ...params);
   }
 
+  // Cross-editor page overlay: EVERY editor's active (non-superseded) suggestions
+  // on one page, newest first — the source for the WYSIWYG pending-overlay so an
+  // editor sees co-editors' in-flight suggestions on the same page. Each row keeps
+  // its own `editor` identity, so projectPendingItems stamps the right attribution
+  // (JOS/RSH/…) downstream. Page is REQUIRED: this is a page-scoped read, never a
+  // global dump — scope enforcement (edit/instructor) happens at the router before
+  // this is ever called.
+  listForPage(page) {
+    const hidden = [STATUS.SUPERSEDED];
+    return this._all(
+      `SELECT ${SELECT_COLS} FROM suggestions WHERE page=? AND status NOT IN ('${hidden.join("','")}') ORDER BY created_at DESC`,
+      page
+    );
+  }
+
   // Admin review: everything that needs a human decision or is mid-apply, so the
   // reviewer sweeps all outstanding work at once (the cumulative digest view).
   listAll() {

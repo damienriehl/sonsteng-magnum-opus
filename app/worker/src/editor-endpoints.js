@@ -246,7 +246,14 @@ export async function pendingEndpoint(request, env, auth) {
     return editError("forbidden", "No edit scope.", 403);
   const url = new URL(request.url);
   const page = url.searchParams.get("page") || null;
-  const rows = await editorStub(env).listForEditor(auth.editor, page);
+  // Cross-editor overlay: for a page-scoped request, source EVERY editor's active
+  // suggestions on that page (attribution stamped per-row by projectPendingItems)
+  // so a co-editor's in-flight work paints too. The scope gate above (edit OR
+  // instructor) already fenced this call. A page-less call keeps the caller's own
+  // items — there is no page to scope a cross-editor read to.
+  const rows = page
+    ? await editorStub(env).listForPage(page)
+    : await editorStub(env).listForEditor(auth.editor, null);
   // Project to the client's #edits-data item shape (block_index/preview/note).
   return json({ ok: true, items: projectPendingItems(rows) });
 }

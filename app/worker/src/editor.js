@@ -123,7 +123,11 @@ export async function editorFetch(request, env, ctx) {
     const resolved = resolvePagePath(tail);
     // Uniform 404 for unknown path AND insufficient scope (no upstream fetch).
     if (!resolved || !auth.scopes.edit.granted) return wrap(uniform404());
-    const pending = await editorStub(env).listForEditor(auth.editor, resolved.pageKey);
+    // Cross-editor overlay: the island carries EVERY editor's active suggestions
+    // for this page (attribution stamped per-row by projectPendingItems), not just
+    // the caller's own. The edit-scope gate above already fenced non-editors out —
+    // only an edit-scope holder (admin preview included) ever reaches this source.
+    const pending = await editorStub(env).listForPage(resolved.pageKey);
     return wrap(await handleEditPage(env, { ...resolved, pending }));
   }
 

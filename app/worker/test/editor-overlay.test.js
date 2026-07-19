@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { projectPendingItems } from "../src/editor-map.js";
+import { makeCore } from "./editor-sql-helper.mjs";
 
 const ROWS = [
   { block_anchor: "matters/m01/index.html:3", source_ref: "sref-a", status: "pending",
@@ -65,4 +66,51 @@ test("rows with no editor/new_text/hash stay backward-compatible (no undefined f
   assert.ok(!("new_text" in out[0]));
   assert.ok(!("base_hash" in out[0]));
   assert.ok(!("attribution" in out[0]));
+});
+
+// Cross-editor hydration: the pending-overlay source (listForPage) returns EVERY
+// editor's active suggestions on one page, so when editor A loads that page the
+// island/pending payload includes co-editor B's item, correctly attributed. This
+// exercises the exact router/endpoint pipeline: listForPage -> projectPendingItems.
+function sug(over) {
+  return {
+    id: over.id,
+    editor: over.editor,
+    scope: "edit",
+    origin: "human",
+    kind: "prose",
+    page: over.page,
+    block_anchor: `${over.page}:${over.block ?? 3}`,
+    source_ref: over.source_ref,
+    original_text: "The original text.",
+    original_hash: over.original_hash || "h0",
+    new_text: over.new_text,
+    comment: null,
+    context: "intro",
+    map_version: "v-test",
+    group_id: null,
+  };
+}
+
+test("cross-editor: page-scoped source surfaces BOTH editors' pending items with per-author attribution", () => {
+  const core = makeCore();
+  const PAGE = "matters/m01/index.html";
+  // John (slot:john -> JOS) and Roger (slot:roger -> RSH) each suggest on the SAME page.
+  core.suggest(sug({ id: "j1", editor: "slot:john", page: PAGE, block: 3,
+    source_ref: "sref-john", new_text: "John's revision." }));
+  core.suggest(sug({ id: "r1", editor: "slot:roger", page: PAGE, block: 5,
+    source_ref: "sref-roger", new_text: "Roger's revision." }));
+  // A different page must NOT bleed into this page's overlay.
+  core.suggest(sug({ id: "j2", editor: "slot:john", page: "matters/m02/index.html",
+    block: 1, source_ref: "sref-other", new_text: "Elsewhere." }));
+
+  // What editor A (John) receives when loading PAGE: the page-scoped, cross-editor read.
+  const items = projectPendingItems(core.listForPage(PAGE));
+  const bySref = Object.fromEntries(items.map((i) => [i.source_ref, i]));
+
+  assert.equal(items.length, 2);                       // both on-page items, no off-page bleed
+  assert.equal(bySref["sref-john"].attribution, "JOS"); // caller's own
+  assert.equal(bySref["sref-roger"].attribution, "RSH");// co-editor B, attributed
+  assert.equal(bySref["sref-roger"].new_text, "Roger's revision."); // full text for hydration
+  assert.ok(!("sref-other" in bySref));                // page scoping holds
 });
