@@ -384,14 +384,13 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
             _git(["checkout", "--", "."], repo_root)
             return False, "revert_conflict"
 
-        # Regenerate derived output (site + history) from the reverted sources so
-        # the single commit is self-consistent.
+        # Regenerate the SITE from the reverted sources so the single commit is
+        # self-consistent (site/ is tracked and must ride the commit).
         rebuilt, _ = do_rebuild()
         if not rebuilt:
             _git(["revert", "--abort"], repo_root)
             _git(["reset", "--hard", "HEAD"], repo_root)
             return False, "rebuild_failed"
-        do_history()  # non-gating
 
         short = "%s..%s" % (first[:8], last[:8])
         msg = ("revert(history): %s run %s\n\n"
@@ -402,6 +401,10 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
         if rc != 0:
             _git(["reset", "--hard", "HEAD"], repo_root)
             return False, "commit_failed"
+        # Regenerate history AFTER the revert commit lands so git log includes the
+        # revert revision (build/ + worker import tree; both gitignored — never
+        # dirties the tree). Non-gating.
+        do_history()
         rc, sha = _git(["rev-parse", "HEAD"], repo_root)
         return True, sha.strip()
 
