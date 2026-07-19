@@ -127,14 +127,15 @@
              : P.get('scenario') === 'oversize' ? 'validation_error'
              : P.get('scenario') === 'fail_once' ? 'network' : null,
     forcePersist: (P.get('scenario') === 'stale_page' || P.get('scenario') === 'map_stale'),   // stale_page isn't "recover on resend"
-    server: { suggestions: {}, calls: 0, ids: [] }
+    server: { suggestions: {}, calls: 0, ids: [], last: null }
   };
   window.__MOCK_CTRL__ = {
     forceOnce: function (code) { ctrl.forceNext = code; ctrl.forcePersist = false; log('ARM once: ' + code); },
     forcePersistent: function (code) { ctrl.forceNext = code; ctrl.forcePersist = true; log('ARM persistent: ' + code); },
     setSlow: function (ms) { ctrl.slowMs = ms | 0; log('slow=' + ctrl.slowMs + 'ms'); },
     server: function () { return { calls: ctrl.server.calls, count: Object.keys(ctrl.server.suggestions).length, ids: ctrl.server.ids.slice() }; },
-    clear: function () { ctrl.server = { suggestions: {}, calls: 0, ids: [] }; }
+    last: function () { return ctrl.server.last; },   // last /suggest body (for hash bookkeeping asserts)
+    clear: function () { ctrl.server = { suggestions: {}, calls: 0, ids: [], last: null }; }
   };
 
   var CODE_STATUS = { no_edit_auth: 401, rate_limited: 429, validation_error: 413, stale_page: 409, network: 0 };
@@ -167,6 +168,7 @@
 
       if (path.indexOf('/suggest') === 0) {
         ctrl.server.calls++;
+        ctrl.server.last = body;   // capture the exact payload (id/source_ref/new_text/original_hash)
         // forced error?
         if (ctrl.forceNext) {
           var code = ctrl.forceNext;

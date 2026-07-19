@@ -514,8 +514,13 @@
     clearDraft(s);
     s.suggestionId = null;                          // discard drops the id
     hideReauth(s); hideNote(s); hidePreview(); hideBar();
+    s._hydrated = false; s._attr = '';
+    s.el.classList.remove('eb--pending'); s.el.removeAttribute('data-eb-pending');
     setLocalStatus(s, 'Change discarded', null);
     log('CANCEL discard ref=' + s.ref);
+    // A discarded block's RESTING state is any outstanding suggestion (WYSIWYG),
+    // not the bare original — re-sync from the server so the overlay re-applies.
+    repollPending();
   }
 
   /* ============================================================================
@@ -811,15 +816,96 @@
     pending: 'pending', accepted: 'ok', applied: 'ok', accepted_blocked: 'warn',
     declined: 'stop', drift: 'warn', needs_human: 'warn', superseded: 'faint'
   };
+
+  /* ---------- PENDING OVERLAY (WYSIWYG across reloads) ---------------------
+     Statuses whose new_text is the block's INTENDED content and should be
+     painted into the block on load, so a reload reproduces the same visual
+     state as just-after-save. This is the store's listAll() "active" set MINUS
+     drift:
+       pending          — awaiting Damien's review
+       accepted         — accepted, not yet applied to the site
+       accepted_blocked — accepted, but an apply-time fix is pending
+       in_flight        — mid-apply (claimed + leased)
+       needs_human      — Damien will hand-apply (ambiguous / formatted)
+     DELIBERATELY EXCLUDED (fall back to today's pill-only behavior):
+       drift               the anchor moved; new_text was authored against text
+                           that no longer exists at this block, so overlaying it
+                           would misrepresent (the client stale-guard catches it
+                           too, but we exclude the status on principle);
+       applied             already live in the served page HTML (a no-op overlay);
+       declined/superseded terminal reverts — the block must show its ORIGINAL.
+     Hydration is DISPLAY-ONLY and never mutates originalText / originalHash /
+     snapshot / dirty / suggestionId, so a bad overlay can never poison a save
+     (worst case = wrong text on screen; the block still re-edits + re-saves
+     against the canonical original from the map). textContent only (no innerHTML). */
+  var HYDRATE_STATUSES = {
+    pending: 1, accepted: 1, accepted_blocked: 1, in_flight: 1, needs_human: 1
+  };
+
   var marginBubbles = [];   // track so we can clear between polls
 
   function clearMargins() {
     marginBubbles.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
     marginBubbles = [];
   }
+
+  // A persisted, still-valid unsent draft for this block (keyed source_ref+hash).
+  function draftPresent(s) {
+    var rec = loadDraft(s);
+    return !!(rec && rec.original_hash === s.originalHash);
+  }
+
+  // Can this pending item paint its new_text into the block RIGHT NOW? Guards:
+  // hydratable status, an edit (not a comment) with real new_text, the block is
+  // IDLE (never clobber a live edit), no unsent draft (a draft is newer intent
+  // and WINS), and the suggestion's baseline still matches the block (stale
+  // guard vs the map island's hash + version).
+  function canHydrate(s, item) {
+    if (!s) return false;
+    if (item.kind === 'comment') return false;
+    if (!HYDRATE_STATUSES[item.status]) return false;
+    if (typeof item.new_text !== 'string' || item.new_text === '') return false;
+    if (s.state !== ST.IDLE) return false;
+    if (draftPresent(s)) return false;
+    if (item.base_hash != null && item.base_hash !== s.originalHash) return false;   // source moved
+    if (item.map_version && MAP_ISLAND.version && item.map_version !== MAP_ISLAND.version) return false;
+    return true;
+  }
+  function paintHydration(s, item, label, tone) {
+    s.el.textContent = item.new_text;                 // textContent ONLY (XSS-safe)
+    s.el.classList.add('eb--pending');
+    s.el.setAttribute('data-eb-pending', '1');
+    s._hydrated = true;
+    s._attr = item.attribution || '';
+    setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
+    if (item.preview) statusPill(s).setAttribute('title', item.preview);
+  }
+  // Revert a block we hydrated earlier this session back to its canonical
+  // original (e.g. the suggestion was declined/superseded between polls). Never
+  // yanks text out from under a live edit or an unsent draft.
+  function clearHydration(s) {
+    if (!s || !s._hydrated) return;
+    if (s.state !== ST.IDLE || draftPresent(s)) return;
+    s.el.textContent = s.originalText;
+    s.el.classList.remove('eb--pending');
+    s.el.removeAttribute('data-eb-pending');
+    s._hydrated = false; s._attr = '';
+  }
+
   function renderPending(items) {
     clearMargins();
-    (items || []).forEach(function (item) {
+    items = items || [];
+    // Reconcile hydration first: any block we hydrated before but that is no
+    // longer hydratable this pass reverts to its original text.
+    var willHydrate = {};
+    items.forEach(function (item) {
+      if (canHydrate(byIndex[item.block_index], item)) willHydrate[item.block_index] = true;
+    });
+    Object.keys(byIndex).forEach(function (idx) {
+      if (!willHydrate[idx]) clearHydration(byIndex[idx]);
+    });
+
+    items.forEach(function (item) {
       var s = byIndex[item.block_index];
       if (!s) return;
       var label = STATUS_LABELS[item.status] || item.status || 'Sent';
@@ -828,7 +914,7 @@
         var b = el('div', 'eb-comment-bubble eb-comment-bubble--' + tone);
         b.setAttribute('role', 'note');
         var head = el('div', 'eb-comment-bubble__head');
-        head.appendChild(el('span', 'eb-comment-bubble__who', 'Your comment'));
+        head.appendChild(el('span', 'eb-comment-bubble__who', item.attribution ? ('Comment · ' + item.attribution) : 'Your comment'));
         head.appendChild(el('span', 'eb-comment-bubble__status', label));
         b.appendChild(head);
         if (item.preview) b.appendChild(el('p', 'eb-comment-bubble__body', item.preview));
@@ -837,9 +923,15 @@
         s.el.classList.add('eb--has-margin');
         marginBubbles.push(b);
       } else {
-        // prose suggestion — inline status pill (+ decline note if present)
-        setLocalStatus(s, label, tone);
-        if (item.preview) statusPill(s).setAttribute('title', item.preview);
+        // prose/json_scalar suggestion — paint the new_text into the block
+        // (WYSIWYG) when it's safe, else fall back to the pill-only status
+        // (today's behavior). Attribution rides on the pill either way.
+        if (canHydrate(s, item)) {
+          paintHydration(s, item, label, tone);
+        } else {
+          setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
+          if (item.preview) statusPill(s).setAttribute('title', item.preview);
+        }
         if (item.note) { showNote(s, 'Damien: ' + item.note); }
       }
     });
@@ -956,9 +1048,15 @@
       var s = byIndex[index]; return s && {
         index: s.index, ref: s.ref, kind: s.kind, editable: s.editable, commentOnly: s.commentOnly,
         state: s.state, dirty: s.dirty, suggestionId: s.suggestionId, snapshot: s.snapshot,
-        originalHash: s.originalHash, statusText: s._status ? s._status.textContent : ''
+        originalHash: s.originalHash, originalText: s.originalText,
+        hydrated: !!s._hydrated, attribution: s._attr || '',
+        statusText: s._status ? s._status.textContent : ''
       };
     },
+    // hydration harness hooks: render an arbitrary #edits-data item set (the
+    // SAME entry point boot + repoll use) and read a block's draft key.
+    applyPending: function (items) { renderPending(items); },
+    draftKeyFor: function (index) { var s = byIndex[index]; return s ? draftKey(s) : null; },
     blockText: function (index) { var s = byIndex[index]; return s ? s.el.textContent : ''; },
     statusText: function (index) { var s = byIndex[index]; return s && s._status ? s._status.textContent : ''; },
     noteText: function (index) { var s = byIndex[index]; return s && s._note && s._note.classList.contains('show') ? s._note.textContent : ''; },

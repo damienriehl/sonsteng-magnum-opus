@@ -37,6 +37,17 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
 .eb.dirty { border-left-color: var(--brass, #a9822f); }
 .eb[contenteditable] { outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px; }
 
+/* Pending overlay (WYSIWYG across reloads): a block showing an outstanding
+   suggestion's proposed text. Subtle but distinct from .editing (claret) —
+   a brass rule + a faint brass wash mark it as "suggested, awaiting review",
+   the Google-Docs suggestion mental model. The eb-status pill (with the author
+   attribution) carries the words; this is the quiet ambient signal. */
+.eb--pending {
+  border-left-color: var(--brass, #a9822f);
+  background: var(--brass-wash, rgba(169, 130, 47, .10));
+}
+.eb--pending.editing { border-left-color: var(--claret, #7c1e2b); }   /* editing wins */
+
 /* per-block tool row (word-labeled buttons: "Edit", "Comment") */
 .eb-tools {
   display: flex;
