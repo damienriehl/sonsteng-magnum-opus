@@ -56,7 +56,7 @@ Type=oneshot
 EnvironmentFile=$ENV_FILE
 Environment=HOME=$HOME
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/bin/python3 $REPO_ROOT/tools/digest_push.py
+ExecStart=/usr/bin/python3 "$REPO_ROOT/tools/digest_push.py"
 EOF
 
 cat > "$UNIT_DIR/$TIMER" <<EOF

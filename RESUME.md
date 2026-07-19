@@ -1,13 +1,15 @@
-STATE: review-needed — weekend wave WP1-WP10 COMPLETE on feat/weekend-fast-follows (pushed); all gates green; DEV redeployed; PROD held; decision batch awaiting Damien at dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html
+STATE: working — weekend decisions ANSWERED + APPLIED 2026-07-18 eve (merge 97cbd5a to main, gates 175+88 green; digest timer INSTALLED + proven; walkthrough CONFIRMED Wed Jul 23); PROD held; next session: P1+C1 hardening, firm-copy reword, spine-test fixture nit; REMIND Damien Sun eve: John-link test-drive
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
-**Fresh session:** read this file + `docs/decisions/2026-07-18-qa-answers.md`. The weekend
-fast-follow wave (WP1-WP10) is DONE on `feat/weekend-fast-follows` — see "Weekend wave
-results (2026-07-18)" below. The only thing left is Damien's decision batch (artifact
-`dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html`, brief
-`briefs/qa/sonsteng-2026-07-18-weekend.json`): answers → merge to main → send John his
-editor link → Wed walkthrough.
+**Fresh session:** read this file + `docs/decisions/2026-07-18-weekend-answers.md` (all 10
+weekend answers + dispositions; older context in `docs/decisions/2026-07-18-qa-answers.md`).
+The wave is MERGED to `main` (`97cbd5a`); DEV runs it; PROD stays held. Remaining queue:
+**(a)** P1 anti-encoding persona clause + C1 fail-closed scorecard redaction, **(b)** firm-
+dashboard copy reword, **(c)** `test_validate_spine.py` fixture nit, **(d)** Sunday-evening
+reminder → Damien test-drives the editor, then John's (+ Roger's) links go out, **(e)** Wed
+Jul 23 walkthrough (runbook `docs/demo-runbook-2026-07-18.md`; Rule 4.2 beat demoed LIVE
+with a pasted key per decision 8).
 
 This repo self-documents (cockpit convention: RESUME.md + the STATE line at top). You have
 the project memory (`project_sonsteng_magnum_opus.md`) plus this doc — that is enough to
