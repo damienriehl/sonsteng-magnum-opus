@@ -33,8 +33,8 @@ test("buildSystemPrompt reproduces the golden file byte-for-byte", () => {
   assert.ok(a.equals(b));
 });
 
-test("segment_a is embedded verbatim (18010 chars) and byte-stable", () => {
-  assert.equal(bundle.segment_a.length, 18010);
+test("segment_a is embedded verbatim (18316 chars) and byte-stable", () => {
+  assert.equal(bundle.segment_a.length, 18316);
   // Rendering twice yields identical bytes (cache byte-stability invariant).
   const one = buildSystemPrompt(bundle.segment_a, persona);
   const two = buildSystemPrompt(bundle.segment_a, persona);

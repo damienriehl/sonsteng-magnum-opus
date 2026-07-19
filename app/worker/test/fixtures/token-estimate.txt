@@ -1,14 +1,14 @@
 SEGMENT A TOKEN ESTIMATE — sonsteng persona system prompt
 =========================================================
-Measured: 2026-07-17
+Measured: 2026-07-17 (updated 2026-07-19: +P1 anti-encoding/translation clause)
 File: app/worker/prompts/system-template.md
 Segment: the verbatim SHARED CACHEABLE PREFIX between the markers
          <!-- ===== BEGIN SEGMENT A (verbatim) ===== --> ...
          <!-- ===== END SEGMENT A ===== -->
 
 RAW SIZE
-  characters : 18010
-  words      : 3125
+  characters : 18316
+  words      : 3181
 
 TOKEN ESTIMATE
   No real tokenizer (tiktoken / anthropic SDK) is installed in this environment,
@@ -16,21 +16,23 @@ TOKEN ESTIMATE
   more conservative chars/4.0 (English prose typically runs ~3.5-4.2 chars/token;
   the Anthropic tokenizer sits in that band for plain instructional prose).
 
-  chars / 3.5  = 5146 est. tokens   <-- primary heuristic
-  chars / 4.0  = 4502 est. tokens   <-- conservative cross-check
+  chars / 3.5  = 5233 est. tokens   <-- primary heuristic
+  chars / 4.0  = 4579 est. tokens   <-- conservative cross-check
 
 HAIKU 4.5 CACHE FLOOR
   Minimum cacheable prefix = 4096 tokens (docs/research/worker-llm-facts.md §2).
 
-  Primary heuristic margin : 1050 tokens  (25.6% over floor)
-  Conservative margin      : 406 tokens  (9.9% over floor)
+  Primary heuristic margin : 1137 tokens  (27.8% over floor)
+  Conservative margin      : 483 tokens  (11.8% over floor)
 
 RESULT
   PASS. Segment A clears the 4096-token cache floor under BOTH estimates, and
-  clears the task's >=4600 est.-token target (chars/3.5 = 5146) with the required
-  ~10% margin. Because even the conservative chars/4.0 estimate (4502) exceeds
+  clears the task's >=4600 est.-token target (chars/3.5 = 5233) with the required
+  ~10% margin. Because even the conservative chars/4.0 estimate (4579) exceeds
   4096, the shared prefix is expected to actually cache on Haiku 4.5 rather than
-  silently returning cache_creation_input_tokens: 0.
+  silently returning cache_creation_input_tokens: 0. The P1 clause was APPENDED to
+  the "Stay inside the fourth wall" section (never reordered), so the change only
+  raises the margin — it cannot drop the prefix below the floor.
 
 VERIFY-AT-RUNTIME (red-team harness, not doable offline here)
   The authoritative check is a live token count. Either:
@@ -41,4 +43,4 @@ VERIFY-AT-RUNTIME (red-team harness, not doable offline here)
 
 RENDERED GOLDEN (Segment A + Segment B for persona m00.per.tester)
   app/worker/test/fixtures/rendered-system-prompt-m00.txt
-  total characters : 22186   (Segment A + blank line + Segment B tail)
+  total characters : 22492   (Segment A + blank line + Segment B tail)
