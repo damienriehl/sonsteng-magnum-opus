@@ -1,4 +1,4 @@
-STATE: working — weekend decisions ANSWERED + APPLIED 2026-07-18 eve (merge 97cbd5a to main, gates 175+88 green; digest timer INSTALLED + proven; walkthrough CONFIRMED Wed Jul 23); PROD held; next session: P1+C1 hardening, firm-copy reword, spine-test fixture nit; REMIND Damien Sun eve: John-link test-drive
+STATE: working — Sunday hardening+overlay batch MERGED to main 2026-07-19 (hardening: P1 anti-encoding clause, C1 fail-closed debrief leak detection 40/40 HARDENED, firm-copy reword, pytest fixture; WYSIWYG pending-overlay hydration incl. cross-editor listForPage; gates: worker 189, pytest 88, editor-client 32/32, validate_spine PASS/0-ERROR, redteam 40/40); DEV redeployed (worker sonsteng-chat + Hetzner site), all smoke green; PROD held; next up: canonical-docs plan awaiting Damien's brainstorm answers (artifact canonical-docs-brainstorm-2026-07-19.html), then the fence build; REMIND Damien: John+Roger editor link test-drive
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
@@ -124,6 +124,54 @@ decision-3 in the weekend artifact.
 - `validate_spine.py`: **PASS** 0 ERROR, 20/20 · `build_site.py --check`: green ·
   two-bundle parity: PASS (`1ddab816d04a6d59`)
 - Persona bundle: 59 personas, 501 facts, 20 rubrics
+
+---
+
+## Sunday hardening + WYSIWYG overlay batch (2026-07-19) — MERGED to main
+
+Two disjoint lane branches merged to `main` (no source conflicts), regenerated,
+full-gated, DEV redeployed. PROD untouched.
+
+**Hardening batch** (`feat/hardening-batch`):
+- **P1** — anti-encoding/translation-trick persona clause added to the system prompt
+  (`prompts/system-template.md` + regenerated persona bundle).
+- **C1** — **fail-closed** debrief-leak detection in `src/validate.js` + `src/index.js`:
+  if the scorecard-redaction check can't run, the debrief path closes rather than leaks.
+  Offline red-team probe now **40/40 HARDENED** (5 personas × 8 angles, 0 PARTIAL/EXPOSED);
+  evidence `docs/evidence/EP-2026-07-19-offline-redteam.md`.
+- **Firm-copy reword** — the firm-dashboard `viz-note` no longer says "ships tonight"; now
+  a neutral "single trailing-12-month snapshot — one reporting period" line.
+- **pytest fixture** rename nit in `tools/tests/test_validate_spine.py`.
+
+**WYSIWYG pending-overlay hydration** (`feat/editor-wysiwyg-overlay`):
+- Server projection (`editor-map.js` `projectPendingItems`) ships full `new_text`, baseline
+  hash + `map_version` stale guards, and per-author `attribution` (JOS/RSH). Client paints the
+  just-after-save state on reload; **display-only** (never writes canonical `originalHash`).
+- **Cross-editor hydration** (integration step): added page-scoped `listForPage(page)` on the
+  editor store (all editors' non-superseded suggestions on one page) and swapped the two
+  `listForEditor` call-sites feeding the **/pending endpoint** (`editor-endpoints.js`) and the
+  **injected island** (`editor.js`). Every editor's active suggestions for the page now flow to
+  the client, each attributed by `projectPendingItems`. Scope rules hold — the edit-scope gate
+  (island) / edit-or-instructor gate (/pending) runs BEFORE sourcing, so only scope holders
+  (admin preview included) reach the cross-editor read; the instructor doc view (null-page,
+  prefix-filtered) stays per-editor. New worker test proves two editors on one page → the
+  page-scoped source returns both, attributed JOS/RSH, no off-page bleed.
+
+**Final gate numbers (all green):**
+- Worker: **189/189** (182 hardening + 6 overlay + 1 cross-editor; `node --test test/*.test.js`,
+  glob excludes `redteam.mjs`) · pytest `tools/tests/`: **88 passed, 0 errors**
+- Editor-client `verify-editor.js`: **32/32** (DISPLAY=:0 snap chromium) · `validate_spine.py`:
+  **PASS** 0 ERROR · `build_site.py --check`: green · offline red-team probe: **40/40 HARDENED**
+- Regen content-stable (`spine_build_id 1ddab816d04a6d59`); only the site build-stamp SHA moved.
+
+**DEV redeploy + smoke (all green):** worker bare `wrangler deploy` → `sonsteng-chat`
+(version `9fe7d9e7`); site `deploy/deploy-dev.sh main`. Smoke: `/platform/` **200** ·
+untokened `GET /v1/session` **403 `turnstile_failed`** · demo-bypass mint **200** · firm page
+shows the NEW neutral copy (no "ships tonight") · `/edit/assets/editor.js` **200** + contains
+`paintHydration` · debrief-path leak-detection worker test **20/20** (offline; no live key).
+
+**Next up:** canonical-docs plan, awaiting Damien's brainstorm answers (artifact
+`canonical-docs-brainstorm-2026-07-19.html`); the fence build follows that.
 
 **Branch state:** `feat/weekend-fast-follows` pushed to origin, **unmerged to `main`** pending
 Damien's decision-3 (merge approval). Lane branches kept for history.
