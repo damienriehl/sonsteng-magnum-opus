@@ -1,7 +1,7 @@
 ---
 date: 2026-07-19
 topic: canonical-docs-redline-history
-status: open-questions-pending
+status: resolved — ready for ce-plan
 decision_record: dashboard.damienriehl.com/canonical-docs-brainstorm-2026-07-19.html (11 answers, 2026-07-19)
 companion: fence-litigation/docs/brainstorms/2026-07-19-canonical-discovery-editor-brainstorm.md
 ---
@@ -48,13 +48,17 @@ both and add rendering + direct-apply mode. Rejected: an app-level revision data
   runs as an agent on the home box (authorized under the Claude-Max building allowance),
   not as a live Worker-side model call.
 
-## Open Questions
+## Resolved Questions (Damien, 2026-07-19)
 
-1. **Editorial-pass timing** — per-edit, end-of-session (inactivity), or periodic
-   (end-of-day)? (Damien's 1b note explicitly deferred this.)
-2. **Auto-save revision coalescing** — with auto-save, does every typing pause become a
-   revision, or do we coalesce same-author-same-block bursts into one revision?
+1. **Editorial-pass timing → session-end + daily sweep.** After ~30 min of editor
+   inactivity, a home-box agent reviews that session's edits and flags issues; a daily
+   sweep catches anything missed.
+2. **Auto-save revision coalescing → coalesce bursts (~10 min).** Every typing pause
+   auto-saves, but consecutive same-editor-same-block saves within ~10 minutes amend
+   into one revision.
 
 ## Next Steps
 
-→ `/ce:plan` (after open questions resolve), implementation queued per Damien's answers.
+→ `/ce:plan` — implementation per Damien's answers. Note: the fence companion build is
+the priority track and ships in full on 2026-07-19 (his call); sonsteng canonical mode
+follows.
