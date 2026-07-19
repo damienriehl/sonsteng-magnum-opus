@@ -23,7 +23,10 @@ export class EditorStore extends DurableObject {
     });
   }
 
-  suggest(input, ceilings) { return this.core.suggest(input, ceilings); }
+  suggest(input, ceilings, opts) { return this.core.suggest(input, ceilings, opts); }
+  recordHeartbeat(beat) { return this.core.recordHeartbeat(beat); }
+  getHeartbeat() { return this.core.getHeartbeat(); }
+  heartbeatAgeS() { return this.core.heartbeatAgeS(); }
   listForEditor(editor, page) { return this.core.listForEditor(editor, page); }
   listForPage(page) { return this.core.listForPage(page); }
   listAll() { return this.core.listAll(); }

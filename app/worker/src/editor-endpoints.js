@@ -120,7 +120,7 @@ export async function suggestEndpoint(request, env, auth) {
     context: block.context || "",
     map_version: MAP_VERSION,
     group_id: null,
-  }, ceilings);
+  }, ceilings, { directApply: env.DIRECT_APPLY === "true" });
 
   if (!result.ok) {
     const map = {
@@ -128,6 +128,9 @@ export async function suggestEndpoint(request, env, auth) {
       pending_ceiling: [429, "You have a lot of changes waiting for review already."],
       global_ceiling: [429, "The review queue is full right now. Please try later."],
       daily_cap: [429, "You've hit today's change limit. Thank you — pick back up tomorrow."],
+      // id_conflict: the client reused an idempotency id with a NEW payload — it
+      // must rotate the id and resend (never silently swallowed → no lost edit).
+      id_conflict: [409, "That change needs a fresh send — please try again."],
       validation_error: [400, "That change could not be saved."],
     };
     const [status, message] = map[result.reason] || [400, "That change could not be saved."];
@@ -251,11 +254,40 @@ export async function pendingEndpoint(request, env, auth) {
   // so a co-editor's in-flight work paints too. The scope gate above (edit OR
   // instructor) already fenced this call. A page-less call keeps the caller's own
   // items — there is no page to scope a cross-editor read to.
+  const stub = editorStub(env);
   const rows = page
-    ? await editorStub(env).listForPage(page)
-    : await editorStub(env).listForEditor(auth.editor, null);
-  // Project to the client's #edits-data item shape (block_index/preview/note).
-  return json({ ok: true, items: projectPendingItems(rows) });
+    ? await stub.listForPage(page)
+    : await stub.listForEditor(auth.editor, null);
+  // Project to the client's #edits-data item shape (block_index/preview/note),
+  // plus the SL6 liveness signals the client banner reads: heartbeat_age_s (null
+  // if the daemon has never checked in) and direct_apply (auto-apply mode on/off).
+  const heartbeat_age_s = await stub.heartbeatAgeS();
+  return json({
+    ok: true,
+    items: projectPendingItems(rows),
+    heartbeat_age_s,
+    direct_apply: env.DIRECT_APPLY === "true",
+  });
+}
+
+// ---- POST /edit/v1/heartbeat (admin/service scope) --------------------------
+// The home-box apply DAEMON beacons here after each run so the editor banner can
+// honestly report whether auto-apply is live (SL6). Body: { ok, applied, ts }.
+// Admin scope ONLY (reached via the Bearer service token) + the CSRF custom
+// header — identical posture to /claim and /finalize. Age is measured from the
+// worker's receive clock, so a skewed daemon clock cannot fake freshness.
+export async function heartbeatEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const beat = {
+    ok: body.ok === true || body.ok === 1,
+    applied: Number.isFinite(body.applied) ? body.applied : 0,
+    ts: Number.isFinite(body.ts) ? body.ts : Date.now(),
+  };
+  const result = await editorStub(env).recordHeartbeat(beat);
+  return json({ ok: true, received_at: result.received_at });
 }
 
 // ---- GET /edit/v1/review (admin; all pending grouped) -----------------------

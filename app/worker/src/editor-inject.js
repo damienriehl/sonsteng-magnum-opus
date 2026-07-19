@@ -171,7 +171,7 @@ class HeadInjector {
 // Serve an allowlisted page: fetch clean, inject, return HTML. `pending` is the
 // array of this editor's pending items for THIS page (resolved by the router
 // from the DO). Returns a Response (headers finalized by the router wrap).
-export async function handleEditPage(env, { pageKey, blocks, pending }) {
+export async function handleEditPage(env, { pageKey, blocks, pending, heartbeatAgeS = null, directApply = false }) {
   const upstream = buildUpstreamUrl(pageKey, env.EDIT_UPSTREAM);
   if (!upstream) return friendly(404, "That page is not available for editing.");
 
@@ -189,7 +189,11 @@ export async function handleEditPage(env, { pageKey, blocks, pending }) {
 
   const base = baseHrefFor(pageKey);
   const mapIsland = escapeJsonIsland({ version: MAP_VERSION, page: pageKey, blocks: pageBlockDescriptors(blocks) });
-  const editsIsland = escapeJsonIsland({ items: projectPendingItems(pending) });
+  const editsIsland = escapeJsonIsland({
+    items: projectPendingItems(pending),
+    heartbeat_age_s: heartbeatAgeS,
+    direct_apply: directApply,
+  });
 
   const headHtml = {
     base:

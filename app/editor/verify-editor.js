@@ -314,6 +314,101 @@ async function run() {
     await page.close();
   }
 
+  /* ============ AUTO-SAVE / UNMASK / HEARTBEAT / FLUSH (fresh page) ======== */
+  {
+    const page = await boot(browser, 1280, 1500);
+    const AUTOSAVE_WAIT = 2900;   // > AUTOSAVE_MS (2500) so the debounce fires
+
+    /* --- AS1 debounce coalescing: rapid edits => ONE auto-send, no Save ---- */
+    await page.evaluate(() => window.__MOCK_CTRL__.clear());
+    const asBefore = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'Auto edit one.'));
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'Auto edit two.'));
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'Auto edit three — the keeper.'));
+    await sleep(AUTOSAVE_WAIT);
+    const asSrv = await page.evaluate(() => window.__MOCK_CTRL__.server());
+    const asLast = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    const asBlk = await page.evaluate(() => window.SonstengEditor.block(1));
+    assert('AS1 typing auto-saves after the debounce (one send, latest text, no Save button)',
+      (asSrv.calls - asBefore) === 1 && asLast && /the keeper/.test(asLast.new_text || '') && asBlk.dirty === false,
+      'call-delta=' + (asSrv.calls - asBefore) + ' dirty=' + asBlk.dirty);
+
+    /* --- AS2 rotation: the next burst uses a FRESH idempotency id ---------- */
+    const idsBeforeRot = await page.evaluate(() => window.__MOCK_CTRL__.server().ids.slice());
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'A second, separate burst of typing.'));
+    await sleep(AUTOSAVE_WAIT);
+    const idsAfterRot = await page.evaluate(() => window.__MOCK_CTRL__.server().ids.slice());
+    const newIds = idsAfterRot.filter((x) => idsBeforeRot.indexOf(x) === -1);
+    assert('AS2 each burst rotates the idempotency id (fresh id, not a same-id replay)',
+      idsAfterRot.length === idsBeforeRot.length + 1 && newIds.length === 1,
+      'ids before=' + idsBeforeRot.length + ' after=' + idsAfterRot.length);
+
+    /* --- AS3 in-flight serialization: the debounce send is the sole flight - */
+    await page.evaluate(() => window.__MOCK_CTRL__.setSlow(700));
+    const asBefore3 = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'An edit sent over a slow link.'));
+    await sleep(AUTOSAVE_WAIT);
+    const midFlight = await page.evaluate(() => window.SonstengEditor.block(1).state);
+    await page.waitForFunction(() => window.SonstengEditor.block(1).state !== 'SAVING' && window.SonstengEditor.block(1).dirty === false, { timeout: 5000 });
+    const asSrv3 = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    assert('AS3 one in-flight auto-save per block (SAVING during the await; exactly one send)',
+      midFlight === 'SAVING' && (asSrv3 - asBefore3) === 1, 'mid=' + midFlight + ' delta=' + (asSrv3 - asBefore3));
+    await page.evaluate(() => window.__MOCK_CTRL__.setSlow(0));
+
+    /* --- UN1 needs_human UNMASK: text shown, but framed as a warning ------- */
+    const UNREF = await page.evaluate(() => window.SonstengEditor.block(4).ref);
+    await page.evaluate((ref) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'needs_human', kind: 'prose',
+        new_text: 'An edit the apply engine could not land automatically.',
+        base_hash: window.SonstengEditor.block(4).originalHash, map_version: (window.__HARNESS_MAP__ && 'harness-v1'),
+        attribution: 'JOS', preview: 'needs attention' }
+    ]), UNREF);
+    const un = await page.evaluate(() => ({
+      text: window.SonstengEditor.blockText(4), warn: window.SonstengEditor.blockWarn(4),
+      st: window.SonstengEditor.statusText(4)
+    }));
+    assert('UN1 needs_human unmasks: edited text shown WITH a warning frame + "not applied" pill',
+      /could not land automatically/.test(un.text) && un.warn === true && /Needs attention/.test(un.st),
+      'warn=' + un.warn + ' pill="' + un.st + '"');
+
+    /* --- HB1/HB2/HB3 heartbeat banner states (DIRECT_APPLY on) ------------- */
+    await sleep(900);   // let any trailing (slow) re-poll from AS3 settle first
+    // A helper: set the mode + age, re-poll, and wait for the banner to reflect it.
+    async function pollBanner(age, match) {
+      await page.evaluate((a) => { window.__MOCK_CTRL__.setDirectApply(true); window.__MOCK_CTRL__.setHeartbeatAge(a); }, age);
+      await page.evaluate(() => window.SonstengEditor.repoll());
+      await page.waitForFunction((re) => new RegExp(re, 'i').test(window.SonstengEditor.bannerText()), { timeout: 4000 }, match).catch(() => {});
+      return page.evaluate(() => ({ t: window.SonstengEditor.bannerText(), w: window.SonstengEditor.bannerWarn() }));
+    }
+    const hbFresh = await pollBanner(60, 'go live automatically');   // fresh (<5 min)
+    assert('HB1 fresh heartbeat → subtle "edits go live automatically" (no warning)',
+      /go live automatically/i.test(hbFresh.t) && hbFresh.w === false, 'banner="' + hbFresh.t + '" warn=' + hbFresh.w);
+
+    const hbStale = await pollBanner(900, 'paused');                 // stale (>10 min)
+    assert('HB2 stale heartbeat → warning "auto-apply paused … edits are safe and queued"',
+      /paused/i.test(hbStale.t) && /safe and queued/i.test(hbStale.t) && hbStale.w === true, 'banner="' + hbStale.t + '" warn=' + hbStale.w);
+
+    const hbNone = await pollBanner(null, 'paused');                 // never checked in
+    assert('HB3 no heartbeat yet → warning banner (never a false "live" claim)',
+      hbNone.w === true && /paused/i.test(hbNone.t), 'banner="' + hbNone.t + '" warn=' + hbNone.w);
+
+    /* --- FL1 flush-on-hide: an unsent dirty edit is flushed on pagehide ---- */
+    await page.evaluate(() => window.__MOCK_CTRL__.setDirectApply(false));
+    await page.evaluate(() => window.__MOCK_CTRL__.clear());
+    const FLREF = await page.evaluate(() => window.SonstengEditor.block(4).ref);
+    await page.evaluate(() => window.SonstengEditor.typeInto(4, 'A mid-type edit interrupted by leaving the page.'));
+    // fire pagehide BEFORE the 2.5s debounce would send — the flush must catch it
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    await sleep(150);
+    const flSrv = await page.evaluate(() => window.__MOCK_CTRL__.server());
+    const flLast = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    assert('FL1 flush-on-hide sends the unsent edit (keepalive) before the debounce fires',
+      flSrv.count >= 1 && flLast && /interrupted by leaving/.test(flLast.new_text || ''),
+      'count=' + flSrv.count + ' text="' + ((flLast && flLast.new_text) || '').slice(0, 30) + '"');
+
+    await page.close();
+  }
+
   await browser.close();
 
   const passed = results.filter(r => r.pass).length;

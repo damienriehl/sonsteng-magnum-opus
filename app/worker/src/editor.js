@@ -14,6 +14,7 @@ import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
+  heartbeatEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -98,6 +99,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await finalizeEndpoint(request, env, auth));
   if (path === "/edit/v1/reconcile" && request.method === "POST")
     return wrap(await reconcileEndpoint(request, env, auth));
+  if (path === "/edit/v1/heartbeat" && request.method === "POST")
+    return wrap(await heartbeatEndpoint(request, env, auth));
 
   // ---- admin review page ----------------------------------------------------
   if (path === "/edit/review") {
@@ -127,8 +130,14 @@ export async function editorFetch(request, env, ctx) {
     // for this page (attribution stamped per-row by projectPendingItems), not just
     // the caller's own. The edit-scope gate above already fenced non-editors out —
     // only an edit-scope holder (admin preview included) ever reaches this source.
-    const pending = await editorStub(env).listForPage(resolved.pageKey);
-    return wrap(await handleEditPage(env, { ...resolved, pending }));
+    const stub = editorStub(env);
+    const pending = await stub.listForPage(resolved.pageKey);
+    // SL6 liveness for the injected island (same signals GET /pending carries):
+    // the daemon-heartbeat age + whether auto-apply (DIRECT_APPLY) is on, so the
+    // banner reads honestly on first paint (before any repoll).
+    const heartbeatAgeS = await stub.heartbeatAgeS();
+    const directApply = env.DIRECT_APPLY === "true";
+    return wrap(await handleEditPage(env, { ...resolved, pending, heartbeatAgeS, directApply }));
   }
 
   return wrap(uniform404());

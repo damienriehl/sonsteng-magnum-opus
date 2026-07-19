@@ -29,7 +29,10 @@ export const ALLOWED_TRANSITIONS = {
     STATUS.SUPERSEDED, STATUS.DECLINED, STATUS.ACCEPTED, STATUS.DRIFT,
   ]),
   [STATUS.ACCEPTED]: new Set([
-    STATUS.IN_FLIGHT, STATUS.DRIFT,
+    // superseded: DIRECT_APPLY only — the SAME editor re-edits the SAME source_ref
+    // before the daemon claims the accepted-but-unapplied row (last-edit-wins,
+    // exactly like pending). Never for an in_flight (claimed + leased) row.
+    STATUS.IN_FLIGHT, STATUS.DRIFT, STATUS.SUPERSEDED,
   ]),
   [STATUS.IN_FLIGHT]: new Set([
     STATUS.APPLIED, STATUS.ACCEPTED_BLOCKED, STATUS.DRIFT,

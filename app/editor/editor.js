@@ -64,6 +64,16 @@
 
   var API_BASE = '/edit/v1';
 
+  /* ---------- auto-save timing (fence durability spec) ---------------------
+     Typing pauses ~AUTOSAVE_MS → one debounced auto-send per block. One save is
+     in flight at a time (guarded by state===SAVING); input during a send queues
+     one more. A network failure backs off (RETRY_BASE_MS × 2ⁿ, capped) and
+     retries. The idempotency id is FRESH per burst and rotated on every success,
+     so a same-id-different-payload replay can never silently drop a later edit. */
+  var AUTOSAVE_MS = 2500;
+  var RETRY_BASE_MS = 4000;
+  var RETRY_MAX_MS = 60000;
+
   /* ---------- storage: probe-write with in-memory fallback (VERBATIM) ------- */
   function makeStore(backing) {
     var mem = {}, live = false;
@@ -152,6 +162,7 @@
       return Promise.resolve(mock({ path: path, method: opts.method || 'POST', body: opts.body || null, headers: headers }));
     }
     var fo = { method: opts.method || 'POST', headers: headers, cache: 'no-store', credentials: 'same-origin' };
+    if (opts.keepalive) fo.keepalive = true;   // survive pagehide/visibilitychange
     if (opts.body) { fo.headers['content-type'] = 'application/json'; fo.body = JSON.stringify(opts.body); }
     return fetch(API_BASE + path, fo).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (data) {
@@ -192,6 +203,24 @@
   var MAP = MAP_ISLAND.blocks || [];
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
   var PAGE = MAP_ISLAND.page || derivePage();
+
+  /* ---------- SL6 liveness (apply-daemon heartbeat + direct-apply mode) -----
+     The injected island seeds these; every /pending re-poll refreshes them. The
+     age is a snapshot at projection time, so we anchor it to load time and let it
+     grow locally (the banner degrades to the "paused" warning even with no poll). */
+  var DIRECT_APPLY = EDITS_ISLAND.direct_apply === true;
+  var hbBaseAge = (typeof EDITS_ISLAND.heartbeat_age_s === 'number') ? EDITS_ISLAND.heartbeat_age_s : null;
+  var hbBaseAt = Date.now();
+  function setHeartbeat(ageS, directApply) {
+    if (typeof directApply === 'boolean') DIRECT_APPLY = directApply;
+    hbBaseAge = (typeof ageS === 'number') ? ageS : null;
+    hbBaseAt = Date.now();
+    updateBanner();
+  }
+  function currentHbAge() {
+    if (hbBaseAge == null) return null;
+    return hbBaseAge + Math.floor((Date.now() - hbBaseAt) / 1000);
+  }
 
   /* ============================================================================
      2. THE WALKER CONTRACT — mirror the generator's block-walk byte-for-byte.
@@ -236,6 +265,7 @@
       originalText: desc.original_text != null ? desc.original_text : (elx.textContent || ''),
       originalHash: desc.original_hash || '',
       suggestionId: null, snapshot: null, state: ST.IDLE, dirty: false,
+      _debounce: null, _retry: null, _retryDelay: 0, _queued: false, // auto-save
       pendingComment: null   // {id, anchor_text} while a comment bubble is open on this block
     };
     s.snapshot = s.originalText;
@@ -384,6 +414,7 @@
       saveDraft(s);                                     // R1: flush-to-DRAFT only
       setLocalStatus(s, s.dirty ? 'Draft saved — not sent yet' : '', s.dirty ? 'draft' : null);
       if (activeRef === s.ref) syncBar(s);
+      scheduleAutoSave(s);                              // debounced auto-send (~2.5s)
     });
 
     /* blur => flush-to-draft ONLY. Inert: never commit, never discard (R1/R6). */
@@ -413,15 +444,51 @@
     log('EDIT enter ref=' + s.ref + ' id=' + (s.suggestionId || '').slice(0, 8));
   }
 
-  /* ---------- COMMIT: the synchronous critical section BEFORE any await ----- */
-  function sendSuggestion(s) {
+  /* ---------- AUTO-SAVE scheduling (debounce + backoff) -------------------- */
+  function scheduleAutoSave(s) {
+    if (!s.editable) return;
+    if (s._debounce) { clearTimeout(s._debounce); s._debounce = null; }
+    if (!s.dirty) return;
+    s._debounce = setTimeout(function () { s._debounce = null; autoSaveFire(s); }, AUTOSAVE_MS);
+  }
+  function autoSaveFire(s) {
+    if (!s.dirty) return;
+    if (s.state === ST.SAVING) { s._queued = true; return; }   // one in-flight per block
+    // Re-auth is an explicit user action — never auto-resend behind a shown prompt.
+    if (s._reauth && s._reauth.classList.contains('show')) return;
+    sendSuggestion(s, { auto: true });
+  }
+  function armRetry(s) {
+    s._retryDelay = s._retryDelay ? Math.min(s._retryDelay * 2, RETRY_MAX_MS) : RETRY_BASE_MS;
+    if (s._retry) clearTimeout(s._retry);
+    s._retry = setTimeout(function () {
+      s._retry = null;
+      if (s.dirty && s.state !== ST.SAVING) sendSuggestion(s, { auto: true });
+    }, s._retryDelay);
+    log('RETRY armed ref=' + s.ref + ' in ' + s._retryDelay + 'ms');
+  }
+  function clearTimers(s) {
+    if (s._debounce) { clearTimeout(s._debounce); s._debounce = null; }
+    if (s._retry) { clearTimeout(s._retry); s._retry = null; }
+    s._retryDelay = 0; s._queued = false;
+  }
+
+  /* ---------- COMMIT: the synchronous critical section BEFORE any await -----
+     opts.auto = the debounced auto-send (keeps the block editable so typing flows
+     on); no opts = the explicit bar Save (exits edit on success, as before). The
+     client NEVER invents a "saved" status — the pill reflects the store's status
+     returned by the endpoint (and re-poll). The idempotency id is rotated on
+     success so the next burst is a distinct request. */
+  function sendSuggestion(s, opts) {
+    opts = opts || {};
     if (s.state === ST.SAVING) return;              // in-flight guard (dedupe layer 1)
-    if (!s.dirty) { setLocalStatus(s, 'No change to send', null); return; }
+    if (!s.dirty) { if (!opts.auto) setLocalStatus(s, 'No change to send', null); return; }
+    clearTimeout(s._debounce); s._debounce = null;  // a send is happening now
     // ---- synchronous critical section (chat.js §Input; spike R3/R4) ----
     s.state = ST.SAVING;
     barDisable(true);                               // sync disable BEFORE await (R3/R4)
-    setLocalStatus(s, 'Sending…', null);
-    setBarStatus('Sending your change…');
+    setLocalStatus(s, 'Saving…', 'sending');
+    setBarStatus('Saving your change…');
     var id = s.suggestionId || (s.suggestionId = uuid());
     var textAtClick = s.snapshot;                   // R3: read SNAPSHOT, not live DOM
     // Worker contract: server derives editor/original_text/kind/page/map_version
@@ -429,34 +496,70 @@
     // json_path?, new_text, original_hash }.
     var payload = { id: id, source_ref: s.ref, new_text: textAtClick, original_hash: s.originalHash };
     if (s.jsonPath) payload.json_path = s.jsonPath;
-    log('SEND ref=' + s.ref + ' id=' + id.slice(0, 8) + ' state=SAVING (disabled)');
+    log('SEND ref=' + s.ref + ' id=' + id.slice(0, 8) + ' state=SAVING (disabled)' + (opts.auto ? ' auto' : ''));
 
     api('/suggest', { body: payload }).then(function (out) {
       if (out.ok) {
-        s.state = ST.IDLE;
-        s.el.classList.remove('editing', 'dirty');
-        s.el.removeAttribute('contenteditable');
-        s.dirty = false;
+        if (s._retry) { clearTimeout(s._retry); s._retry = null; }
+        s._retryDelay = 0;
         clearDraft(s);
-        s.suggestionId = null;
         s.originalText = textAtClick;               // the sent text is now the baseline
-        setLocalStatus(s, 'Sent ✓', 'sent');
-        hidePreview(); hideBar();
-        log('SENT ref=' + s.ref + ' (id cleared, draft purged)');
+        s.suggestionId = null;                      // rotate: next burst mints a fresh id
+        // Honest status from the STORE (accepted "Going live…" under DIRECT_APPLY,
+        // else "Pending review") — never an optimistic "Saved".
+        var srv = (out.data && out.data.status) || 'pending';
+        var lbl = STATUS_LABELS[srv] || 'Sent';
+        var tone = STATUS_TONE[srv] || 'sending';
+        // Did the user type MORE while this send was in flight?
+        var stillDirty = normalize(s.snapshot) !== normalize(s.originalText);
+        s.dirty = stillDirty;
+        if (opts.auto) {
+          // keep the block editable so typing continues seamlessly
+          s.state = ST.EDITING; barDisable(false);
+          if (stillDirty) {
+            s.suggestionId = uuid();                // fresh id for the continued burst
+            setLocalStatus(s, 'Draft saved — not sent yet', 'draft');
+            saveDraft(s); scheduleAutoSave(s);
+          } else {
+            s.el.classList.remove('dirty');
+            setLocalStatus(s, lbl + (s._attr ? ' · ' + s._attr : ''), tone);
+          }
+        } else {
+          // explicit bar Save: commit + exit edit (unchanged UX)
+          s.state = ST.IDLE;
+          s.el.classList.remove('editing', 'dirty');
+          s.el.removeAttribute('contenteditable');
+          setLocalStatus(s, lbl, tone);
+          hidePreview(); hideBar();
+        }
+        s._queued = false;
+        log('SENT ref=' + s.ref + ' status=' + srv + (opts.auto ? ' (kept editing)' : ' (id cleared)'));
         repollPending();                            // pull canonical server status
       } else {
-        handleSendError(s, out);
+        handleSendError(s, out, opts);
       }
     });
   }
 
-  function handleSendError(s, out) {
+  function handleSendError(s, out, opts) {
+    opts = opts || {};
     var data = out.data || {};
     // Read data.error.code FIRST (authoritative), fall back to the HTTP-status map.
     var code = (data.error && data.error.code) || data.code ||
       (out.status === 401 ? 'no_edit_auth' : out.status === 429 ? 'rate_limited' :
        out.status === 413 ? 'validation_error' : (out.status === 409 || out.status === 410) ? 'stale_page' : 'network');
 
+    if (code === 'id_conflict') {
+      // The server saw this idempotency id with a DIFFERENT payload (rotation raced
+      // a replay). Rotate to a fresh id and resend — the newer edit must land, never
+      // be swallowed. Keep the draft + dirty so nothing is lost.
+      s.state = ST.EDITING; barDisable(false);
+      s.suggestionId = uuid();
+      saveDraft(s);
+      log('SEND id_conflict ref=' + s.ref + ' -> rotated id, resending');
+      sendSuggestion(s, { auto: true });
+      return;
+    }
     if (code === 'no_edit_auth') {
       // R5: preserve draft + id; friendly re-auth; resend reuses the same id.
       s.state = ST.EDITING; barDisable(false);
@@ -494,17 +597,20 @@
       log('SEND stale_page ref=' + s.ref + ' (block reset)');
       return;
     }
-    // network / unknown -> recoverable, draft preserved
+    // network / unknown -> recoverable, draft preserved. Auto-save arms a backoff
+    // retry (the user need not press anything); the manual bar keeps its Save CTA.
     s.state = ST.EDITING; barDisable(false);
     saveDraft(s);
-    setLocalStatus(s, 'That didn’t send', 'err');
-    setBarStatus('That didn’t send — please check your connection and press Save again.');
+    setLocalStatus(s, 'Not sent — will retry', 'err');
+    setBarStatus('That didn’t send — it will retry automatically, or press Save to try now.');
+    if (opts.auto) armRetry(s);
     log('SEND error ref=' + s.ref + ' status=' + out.status + ' code=' + code);
   }
 
   /* ---------- DISCARD: only from explicit Cancel (R1) --------------------- */
   function discard(s) {
     if (s.state === ST.SAVING) return;
+    clearTimers(s);                                 // cancel any pending auto-send/retry
     s.state = ST.IDLE;
     s.snapshot = s.originalText;
     setBlockText(s, s.originalText);
@@ -807,15 +913,25 @@
         bubbles for comments. Rendered from #edits-data initially, then synced
         from GET /edit/v1/pending?page= .  textContent only.
      ============================================================================ */
+  // Honest, store-driven pill wording (SL1). "Saved/Live" language appears ONLY
+  // for store-confirmed states: `applied` (git-confirmed live) and — softened —
+  // `accepted`/`in_flight` which say "Going live…" (in the pipeline, not yet live).
+  // `needs_human` is UNMASKED: an explicit "needs attention — not applied" warning.
   var STATUS_LABELS = {
-    pending: 'Pending review', accepted: 'Accepted ✓', accepted_blocked: 'Accepted — needs a fix',
-    declined: 'Not used', drift: 'Needs another look', needs_human: 'Damien will apply this',
+    pending: 'Pending review',
+    accepted: 'Going live…', in_flight: 'Going live…',
+    accepted_blocked: 'Accepted — needs a fix',
+    declined: 'Not used', drift: 'Needs another look',
+    needs_human: 'Needs attention — not applied',
     applied: 'Live on the site ✓', superseded: 'Replaced by a newer edit'
   };
   var STATUS_TONE = {
-    pending: 'pending', accepted: 'ok', applied: 'ok', accepted_blocked: 'warn',
-    declined: 'stop', drift: 'warn', needs_human: 'warn', superseded: 'faint'
+    pending: 'pending', accepted: 'live', in_flight: 'live', applied: 'ok',
+    accepted_blocked: 'warn', declined: 'stop', drift: 'warn',
+    needs_human: 'warn', superseded: 'faint'
   };
+  // Statuses that render an UNMASKED warning frame on the block (honest failure).
+  var UNMASK_STATUSES = { needs_human: 1 };
 
   /* ---------- PENDING OVERLAY (WYSIWYG across reloads) ---------------------
      Statuses whose new_text is the block's INTENDED content and should be
@@ -875,6 +991,12 @@
     s.el.textContent = item.new_text;                 // textContent ONLY (XSS-safe)
     s.el.classList.add('eb--pending');
     s.el.setAttribute('data-eb-pending', '1');
+    // SL1 unmask: needs_human still SHOWS the edited text, but framed as an
+    // explicit warning (never masquerading as applied). The pill already says
+    // "needs attention — not applied"; the frame makes it visible on the block.
+    var unmask = !!UNMASK_STATUSES[item.status];
+    s.el.classList.toggle('eb--warn', unmask);
+    if (unmask) s.el.setAttribute('data-eb-warn', '1'); else s.el.removeAttribute('data-eb-warn');
     s._hydrated = true;
     s._attr = item.attribution || '';
     setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
@@ -887,8 +1009,9 @@
     if (!s || !s._hydrated) return;
     if (s.state !== ST.IDLE || draftPresent(s)) return;
     s.el.textContent = s.originalText;
-    s.el.classList.remove('eb--pending');
+    s.el.classList.remove('eb--pending', 'eb--warn');
     s.el.removeAttribute('data-eb-pending');
+    s.el.removeAttribute('data-eb-warn');
     s._hydrated = false; s._attr = '';
   }
 
@@ -945,6 +1068,8 @@
       polling = false;
       if (out.ok && out.data && Array.isArray(out.data.items)) {
         renderPending(out.data.items);
+        // Refresh the SL6 liveness signals + banner from the same projection.
+        setHeartbeat(out.data.heartbeat_age_s, out.data.direct_apply);
         log('PENDING synced: ' + out.data.items.length + ' item(s)');
       }
     });
@@ -953,11 +1078,14 @@
   /* ============================================================================
      9. Persistent banner + large-type toggle (design-direction §9)
      ============================================================================ */
+  var bannerEl, bannerMsgEl;
   function buildBanner() {
     var banner = el('div', 'editor-banner'); banner.setAttribute('role', 'region'); banner.setAttribute('aria-label', 'Editing mode');
+    bannerEl = banner;
     var msg = el('div', 'editor-banner__msg');
     msg.appendChild(el('span', 'editor-banner__tag', 'EDITING'));
-    msg.appendChild(el('span', null, 'You’re editing — changes go to Damien for review.'));
+    bannerMsgEl = el('span', null, 'You’re editing — changes go to Damien for review.');
+    msg.appendChild(bannerMsgEl);
     banner.appendChild(msg);
 
     var tg = el('div', 'segmented-toggle'); tg.setAttribute('role', 'group'); tg.setAttribute('aria-label', 'Type size');
@@ -977,6 +1105,38 @@
     bStd.addEventListener('click', function () { setTypeLg(false); });
     bLg.addEventListener('click', function () { setTypeLg(true); });
     if (LS.get('sonsteng_type_lg') === '1') setTypeLg(true);
+    updateBanner();
+    // Let the banner degrade to "paused" locally even if a re-poll never lands.
+    setInterval(updateBanner, 30000);
+  }
+
+  /* ---------- SL6 banner honesty: fresh / paused auto-apply -----------------
+     Only DIRECT_APPLY (auto-apply) mode makes freshness claims. Fresh (<5 min)
+     → subtle "edits go live automatically (~2 min)"; stale (>10 min, or the
+     daemon has never checked in) → warning "auto-apply paused — last run N min
+     ago; edits are safe and queued". In classic suggestion mode the banner keeps
+     its original "changes go to Damien for review" copy. */
+  function updateBanner() {
+    if (!bannerEl || !bannerMsgEl) return;
+    if (!DIRECT_APPLY) {
+      bannerEl.classList.remove('editor-banner--warn');
+      bannerMsgEl.textContent = 'You’re editing — changes go to Damien for review.';
+      return;
+    }
+    var age = currentHbAge();
+    if (age == null || age >= 600) {
+      bannerEl.classList.add('editor-banner--warn');
+      var mins = age == null ? null : Math.floor(age / 60);
+      bannerMsgEl.textContent = mins == null
+        ? 'Auto-apply paused — the apply service hasn’t checked in yet. Your edits are safe and queued.'
+        : 'Auto-apply paused — last run ' + mins + ' min ago. Your edits are safe and queued.';
+    } else if (age < 300) {
+      bannerEl.classList.remove('editor-banner--warn');
+      bannerMsgEl.textContent = 'Your edits go live automatically (~2 min).';
+    } else {
+      bannerEl.classList.remove('editor-banner--warn');
+      bannerMsgEl.textContent = 'Your edits go live automatically.';
+    }
   }
 
   /* ============================================================================
@@ -999,7 +1159,29 @@
       if (document.visibilityState === 'visible') {
         Object.keys(sessions).forEach(function (ref) { reconcileDraft(sessions[ref]); });
         repollPending();
+      } else {
+        flushOnHide();   // tab hidden → flush unsent edits (keepalive)
       }
+    });
+    // pagehide is the reliable "leaving" signal (bfcache + real unload). Flush any
+    // unsent dirty edit with a keepalive request so a mid-type navigation never
+    // silently drops it; the localStorage draft remains the durable backup.
+    window.addEventListener('pagehide', function () { flushOnHide(); });
+  }
+
+  // Best-effort keepalive flush of every unsent dirty block. Idempotent: the id is
+  // reused so a later draft-wins reload replays the SAME payload (server dedupes on
+  // the fingerprint). Never rotates here — the page is going away.
+  function flushOnHide() {
+    Object.keys(sessions).forEach(function (ref) {
+      var s = sessions[ref];
+      if (!s.editable || !s.dirty || s.state === ST.SAVING) return;
+      var id = s.suggestionId || (s.suggestionId = uuid());
+      var payload = { id: id, source_ref: s.ref, new_text: s.snapshot, original_hash: s.originalHash };
+      if (s.jsonPath) payload.json_path = s.jsonPath;
+      saveDraft(s);   // draft is the durable backup regardless of the request outcome
+      try { api('/suggest', { body: payload, keepalive: true }); } catch (e) {}
+      log('FLUSH-ON-HIDE ref=' + s.ref + ' id=' + id.slice(0, 8));
     });
   }
 
@@ -1062,6 +1244,10 @@
     noteText: function (index) { var s = byIndex[index]; return s && s._note && s._note.classList.contains('show') ? s._note.textContent : ''; },
     reauthShown: function (index) { var s = byIndex[index]; return !!(s && s._reauth && s._reauth.classList.contains('show')); },
     marginBubbles: function () { return marginBubbles.map(function (n) { return n.textContent; }); },
+    bannerText: function () { return bannerMsgEl ? bannerMsgEl.textContent : ''; },
+    bannerWarn: function () { return !!(bannerEl && bannerEl.classList.contains('editor-banner--warn')); },
+    blockWarn: function (index) { var s = byIndex[index]; return !!(s && s.el.classList.contains('eb--warn')); },
+    refreshBanner: function () { updateBanner(); },
     barVisible: function () { return !!(bar && !bar.hidden); },
     previewVisible: function () { return !!(barPreview && !barPreview.hidden); },
     previewText: function () { return barPreview && !barPreview.hidden ? barPreviewText.textContent : null; },
