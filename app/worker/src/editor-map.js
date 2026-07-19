@@ -11,6 +11,7 @@
 
 import EDITOR_MAP from "../editor-data/editor-map.generated.json" with { type: "json" };
 import INSTRUCTOR_BUNDLE from "../editor-data/instructor-bundle.generated.json" with { type: "json" };
+import { attributionLabel } from "./editor-auth.js";
 
 // spine_build_id pins map<->page compatibility. The injector stamps it into the
 // page so a mismatched (stale) client reload is caught gracefully.
@@ -190,14 +191,31 @@ export function pageBlockDescriptors(blocks) {
 }
 
 // Project raw DO suggestion rows into the injected #edits-data item shape the
-// editor client reads: { block_index, source_ref, status, kind, preview, note? }.
-// block_index is the trailing segment of block_anchor ("page:index"); preview is
-// the comment text (comments) or the proposed new_text (edits), capped.
+// editor client reads. Base shape: { block_index, source_ref, status, kind,
+// preview, note? }. block_index is the trailing segment of block_anchor
+// ("page:index"); preview is the comment text (comments) or the proposed
+// new_text (edits), CAPPED (tooltip/summary).
+//
+// WYSIWYG-across-reloads overlay (pending-overlay client) — additive fields:
+//   * new_text     — the FULL proposed text for EDIT kinds (prose/json_scalar),
+//                    so the client can paint it into the block on load. Comments
+//                    never carry it (they render as margin bubbles, not text).
+//   * base_hash    — the suggestion's original_hash: the baseline it was authored
+//                    against. The client stale-guards it against the block's
+//                    CURRENT original_hash (map island); a moved source skips
+//                    hydration and falls back to the pill-only status.
+//   * map_version  — the suggestion's map_version, a second stale guard against
+//                    the injected map island's version (spine_build_id drift).
+//   * attribution  — JOS/RSH/… from the server-resolved editor identity (the
+//                    Google-Docs "suggested by" signal; stamped exactly like the
+//                    admin review surface, never trusted from the client body).
+// All fields are additive; older clients ignore what they don't read.
 export function projectPendingItems(items, previewMax = 200) {
   return (items || []).map((it) => {
     const anchor = it.block_anchor || "";
     const idx = parseInt(anchor.slice(anchor.lastIndexOf(":") + 1), 10);
-    const preview = (it.kind === "comment" ? it.comment : it.new_text) || "";
+    const isComment = it.kind === "comment";
+    const preview = (isComment ? it.comment : it.new_text) || "";
     const out = {
       block_index: Number.isFinite(idx) ? idx : null,
       source_ref: it.source_ref,
@@ -205,6 +223,11 @@ export function projectPendingItems(items, previewMax = 200) {
       kind: it.kind,
       preview: preview.length > previewMax ? preview.slice(0, previewMax) : preview,
     };
+    if (!isComment && typeof it.new_text === "string") out.new_text = it.new_text;
+    if (it.original_hash != null) out.base_hash = it.original_hash;
+    if (it.map_version != null) out.map_version = it.map_version;
+    const attr = attributionLabel(it.editor);
+    if (attr) out.attribution = attr;
     if (it.decision_note) out.note = it.decision_note;
     return out;
   });
