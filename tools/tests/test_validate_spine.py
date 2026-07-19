@@ -56,7 +56,9 @@ EXAMPLE_TYPES = {
 }
 
 
-def test_examples(schemas: vs.SchemaSet):
+def check_examples(schemas: vs.SchemaSet):  # NOT a pytest test — helper called from main();
+    # renamed off the test_* prefix so bare `pytest tools/tests/` does not miscollect it
+    # (its `schemas` arg would be resolved as a missing fixture). Standalone self-test only.
     rows = []
     ok = True
     for fname, etype in sorted(EXAMPLE_TYPES.items()):
@@ -546,7 +548,7 @@ def main():
 
     # ---- Part 1: examples ------------------------------------------------
     print("\n[1] Schema-example structural self-test")
-    ex_ok, rows = test_examples(schemas)
+    ex_ok, rows = check_examples(schemas)
     all_ok &= ex_ok
     for fname, status, note in rows:
         line = f"    {status:12} {fname}"
