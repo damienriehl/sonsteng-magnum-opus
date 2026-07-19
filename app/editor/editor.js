@@ -616,7 +616,7 @@
     floatBtn.setAttribute('aria-label', 'Comment on the selected text');
     document.body.appendChild(floatBtn);
 
-    bubble = el('div', 'comment-bubble'); bubble.setAttribute('role', 'dialog'); bubble.setAttribute('aria-label', 'Leave a comment');
+    bubble = el('div', 'comment-bubble'); bubble.setAttribute('role', 'dialog'); bubble.setAttribute('aria-modal', 'true'); bubble.setAttribute('aria-label', 'Leave a comment');
     bAnchor = el('div', 'comment-bubble__anchor', 'On —');
     bQuote = el('p', 'comment-bubble__quote');
     var lab = el('label', 'comment-bubble__label', 'Your note for Damien'); lab.setAttribute('for', 'eb-comment-text');
@@ -633,8 +633,25 @@
       if (!captured) { log('FLOAT click but no captured range'); return; }
       openBubbleFromCapture(captured);
     });
+    // Keyboard path: a focused float button activated by Enter/Space fires `click`
+    // with detail===0 (no preceding mousedown), so mouse users are unaffected but
+    // keyboard users can open the comment dialog after a keyboard text selection.
+    floatBtn.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;                     // mouse already handled on mousedown
+      if (!captured) { log('FLOAT key but no captured range'); return; }
+      openBubbleFromCapture(captured);
+    });
     bSend.addEventListener('click', sendComment);
+    // Cancel must be operable by BOTH mouse (mousedown+preventDefault keeps the
+    // caret) AND keyboard (Enter/Space -> click, detail===0). Without the click
+    // handler the dialog's Cancel was mouse-only — a keyboard trap.
     bCancel.addEventListener('mousedown', function (e) { e.preventDefault(); closeBubble(); });
+    bCancel.addEventListener('click', function (e) { if (e.detail === 0) closeBubble(); });
+    // Escape closes the dialog and returns focus to the trigger (WCAG 2.1.2 no
+    // keyboard trap + 2.4.3 focus order). keydown bubbles up from the textarea.
+    bubble.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); closeBubble(); }
+    });
 
     // clicking elsewhere hides the floating button (but not while a bubble is open)
     document.addEventListener('mousedown', function (e) {
@@ -717,6 +734,9 @@
     log('FALLBACK block-comment ref=' + s.ref);
   }
   function openBubble(s, text, rect) {
+    // Remember what to return focus to when the dialog closes (the Comment
+    // affordance for keyboard opens; null for mouse, where activeElement is body).
+    bubbleReturnFocus = (document.activeElement && document.activeElement !== document.body) ? document.activeElement : null;
     s.pendingComment = { id: uuid(), anchor_text: text };
     activeCommentSession = s;
     bAnchor.textContent = 'On — ' + (s.context || s.ref);
@@ -731,11 +751,15 @@
     log('BUBBLE open id=' + s.pendingComment.id.slice(0, 8) + ' anchor="' + text.slice(0, 30) + '"');
   }
   var activeCommentSession = null;
+  var bubbleReturnFocus = null;
   function closeBubble() {
     bubble.classList.remove('show');
     if (activeCommentSession) activeCommentSession.pendingComment = null;
     activeCommentSession = null;
     try { window.getSelection().removeAllRanges(); } catch (e) {}
+    // Return focus to the trigger so keyboard users are not dropped at <body>.
+    var rf = bubbleReturnFocus; bubbleReturnFocus = null;
+    if (rf && rf.isConnected && typeof rf.focus === 'function') { try { rf.focus(); } catch (e) {} }
   }
 
   function sendComment() {

@@ -81,6 +81,100 @@
     });
   }
 
+  /* ---------- POST /v1/chat with SSE-streaming detection --------------------
+     When the Worker's STREAMING flag is ON it answers /v1/chat with
+     `text/event-stream` (+ an `x-sonsteng-stream: 1` header) instead of one JSON
+     body: `event: delta` frames carry incremental text, a terminal `event: done`
+     frame carries the SAME final payload {reply,turn,remaining,state,usage} the
+     non-streaming path returns. We render deltas via onToken() and resolve with
+     that final payload — so send()'s downstream logic is identical either way.
+     When the flag is OFF the Worker returns one JSON body and this behaves
+     EXACTLY like api('/v1/chat'). The dev mock hook never streams, so the
+     test.html harness path is byte-for-byte unchanged. */
+  function postChat(body, onToken) {
+    var mock = window.__SONSTENG_MOCK__;
+    if (typeof mock === 'function') {
+      return Promise.resolve(mock({ path: '/v1/chat', method: 'POST', body: body }));
+    }
+    var fo = { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', credentials: 'omit', body: JSON.stringify(body) };
+    return fetch(apiBase() + '/v1/chat', fo).then(function (res) {
+      var ct = res.headers.get('content-type') || '';
+      var isStream = res.ok && res.body && typeof res.body.getReader === 'function' &&
+        (res.headers.get('x-sonsteng-stream') === '1' || ct.indexOf('text/event-stream') !== -1);
+      if (!isStream) {
+        return res.json().catch(function () { return null; }).then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      }
+      return readChatStream(res, onToken);
+    });
+  }
+
+  // Drive one SSE response: parse frames, dispatch deltas to onToken(), and
+  // resolve with the terminal `done` payload (or a typed error on a broken/early
+  // stream). `emitted` tells runWithRetry a partial reply already rendered, so a
+  // retry must NOT re-stream over it.
+  function readChatStream(res, onToken) {
+    var reader = res.body.getReader();
+    var dec = new TextDecoder();
+    var buf = '';
+    var final = null;
+    var streamErr = null;
+    var emitted = false;
+
+    function handleFrame(frame) {
+      var ev = 'message', dataLines = [];
+      var lines = frame.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].replace(/\r$/, '');
+        if (!line || line.charAt(0) === ':') continue;
+        var ci = line.indexOf(':');
+        var field = ci === -1 ? line : line.slice(0, ci);
+        var val = ci === -1 ? '' : line.slice(ci + 1);
+        if (val.charAt(0) === ' ') val = val.slice(1);
+        if (field === 'event') ev = val;
+        else if (field === 'data') dataLines.push(val);
+      }
+      if (!dataLines.length) return;
+      var data = null; try { data = JSON.parse(dataLines.join('\n')); } catch (e) { return; }
+      if (ev === 'delta') {
+        if (data && typeof data.text === 'string') { emitted = true; try { onToken && onToken(data.text); } catch (e) {} }
+      } else if (ev === 'done') {
+        final = data;
+      } else if (ev === 'error') {
+        streamErr = (data && data.message) || 'stream error';
+      }
+    }
+
+    function drain(flush) {
+      var idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        var frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        if (frame.trim()) handleFrame(frame);
+      }
+      if (flush && buf.trim()) { handleFrame(buf); buf = ''; }
+    }
+
+    function settle() {
+      if (final) return { ok: true, status: res.status, data: final, streamed: true, emitted: emitted };
+      return { ok: false, status: res.status, streamed: true, emitted: emitted,
+               data: { error: { code: 'upstream_unavailable', message: streamErr || 'stream ended early' } } };
+    }
+
+    function pump() {
+      return reader.read().then(function (r) {
+        if (r.value) buf += dec.decode(r.value, { stream: true });
+        drain(false);
+        if (r.done) { buf += dec.decode(); drain(true); return settle(); }
+        return pump();
+      });
+    }
+    return pump().catch(function (err) {
+      return { ok: false, status: res.status, streamed: true, emitted: emitted,
+               data: { error: { code: 'network', message: (err && err.message) || 'stream read failed' } } };
+    });
+  }
+
   function uuid() {
     try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -517,12 +611,28 @@
     var byok = window.SonstengBYOK && window.SonstengBYOK.get();
     if (byok) body.byok = byok;   // {provider, api_key, model?} — never logged/rendered
 
-    runWithRetry(body).then(function (out) {
+    // Streaming render target — created lazily on the first token so the typing
+    // indicator stays up until the client actually starts "speaking".
+    var streamNode = null;
+    function onToken(chunk) {
+      if (!streamNode) { hideConsidering(); streamNode = appendMessage('assistant', ''); }
+      var b = streamNode.querySelector('.msg__body');
+      if (b) { b.textContent += chunk; scrollToEnd(); }
+    }
+
+    runWithRetry(body, onToken).then(function (out) {
       hideConsidering();
       if (out.ok) {
         var r = out.data;
         commitTurn(turn_id, text, r);
-        appendMessage('assistant', r.reply);
+        if (out.streamed && streamNode) {
+          // Already rendered incrementally — reconcile to the authoritative final
+          // reply (defends against any delta/full-text drift) instead of duplicating.
+          var b = streamNode.querySelector('.msg__body');
+          if (b && r && r.reply != null) b.textContent = r.reply;
+        } else {
+          appendMessage('assistant', r.reply);
+        }
         updateCounter(r.turn);
         if (cfg.represented) renderRule42();
         if (r.state === 'warning') stageDirection('[' + cfg.client + ' glances at their watch. Time is getting short.]');
@@ -535,17 +645,23 @@
           enableInput();
         }
       } else {
+        // A partially-streamed reply that then errored: drop the partial bubble
+        // so recovery restores a clean slate (same UX as the non-streamed error).
+        if (streamNode && streamNode.parentNode) streamNode.remove();
         handleError(out, turn_id, text, userNode);
       }
       refreshDebriefBtn();
     });
   }
 
-  // one sequential retry, same turn_id, only on network throw or upstream_unavailable
-  function runWithRetry(body) {
+  // one sequential retry, same turn_id, only on network throw or upstream_unavailable.
+  // onToken is threaded to the streaming transport; once a stream has emitted
+  // tokens (out.emitted) we never retry — that would re-render over the partial.
+  function runWithRetry(body, onToken) {
     function attempt(n) {
-      return api('/v1/chat', { body: body }).then(function (out) {
+      return postChat(body, onToken).then(function (out) {
         if (out.ok) return out;
+        if (out.emitted) return out; // partial already rendered — terminal
         var code = out.data && out.data.error && out.data.error.code;
         if (code === 'upstream_unavailable' && n === 0) { setState(S.RETRYING); return attempt(1); }
         return out; // terminal, non-ok
@@ -926,22 +1042,99 @@
     refreshDebriefBtn();
   }
 
-  function mintSession() {
-    var path = '/v1/session';
-    // bypass token forwarded here ONLY, and only via query — never stored, logged, or rendered
-    if (cfg.bypass) path += '?bypass=' + encodeURIComponent(cfg.bypass);
-    return api(path, { method: 'GET' }).then(function (out) {
-      if (out.ok && out.data && out.data.session_token) {
-        session = out.data;
-        if (out.data.max_turns) { maxTurns = out.data.max_turns; }
-        saveSession();
-        updateCounter((committed()[committed().length - 1] || {}).turn || 0);
-      } else {
-        var e = (out.data && out.data.error) || {};
-        stageDirection(e.message || 'Couldn’t open a session with the interview server. You can still read your existing transcript; reload to retry the connection.');
+  /* ---------- Turnstile bot-gate (WP6) --------------------------------------
+     The free /v1/session mint is bot-gated. We render a managed Turnstile widget
+     (invisible unless Cloudflare decides to challenge), capture its token, and
+     pass it to mintSession as ?cf_ts=. Carve-outs that need NO token: ?sample=1
+     (never mints) and ?bypass (the server skips the gate for a valid demo
+     token). If the widget can't load (blocked/slow/no sitekey), we mint with an
+     EMPTY token — the server answers a retryable `turnstile_failed`, which
+     mintSession renders as a reload prompt. Never a hard brick. */
+  var turnstile = (function () {
+    var widgetId = null, token = '', settled = false, waiters = [];
+    function sitekey() { return meta('turnstile-sitekey'); }
+    function settle(t) {
+      token = t || ''; settled = true;
+      var w = waiters; waiters = [];
+      w.forEach(function (fn) { try { fn(token); } catch (e) {} });
+    }
+    function container() {
+      var c = document.getElementById('cf-turnstile');
+      if (c) return c;
+      c = document.createElement('div');
+      c.id = 'cf-turnstile'; c.className = 'cf-turnstile';
+      c.setAttribute('aria-hidden', 'true');
+      // Parked off in a corner; a managed challenge (rare) surfaces here.
+      c.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:2147483647';
+      document.body.appendChild(c);
+      return c;
+    }
+    function render() {
+      // Keyless carve-outs never mint a session, so they must never surface the
+      // widget. Guard render() itself (not just init): Cloudflare's api.js calls
+      // window.onloadTurnstileCallback -> render() directly on load, which would
+      // otherwise park a stray "Verify you are human" box on the ?sample=1 demo
+      // and on ?bypass sessions.
+      if (cfg.sample || cfg.bypass) return;
+      if (widgetId !== null || !window.turnstile) return;
+      var sk = sitekey();
+      if (!sk) { settle(''); return; }   // no sitekey configured -> mint tokenless
+      try {
+        widgetId = window.turnstile.render(container(), {
+          sitekey: sk,
+          action: 'session-mint',
+          'data-action': 'turnstile-spin-v1',
+          callback: function (t) { settle(t); },
+          'error-callback': function () { settle(''); return true; },
+          'expired-callback': function () { settled = false; token = ''; try { window.turnstile.reset(widgetId); } catch (e) {} }
+        });
+      } catch (e) { settle(''); }
+    }
+    // Turnstile api.js (loaded with ?onload=onloadTurnstileCallback) calls this
+    // when it's ready. Defined on window so the external loader can reach it.
+    window.onloadTurnstileCallback = render;
+    return {
+      init: function () {
+        if (cfg.sample || cfg.bypass) return;   // no token needed
+        container();
+        if (window.turnstile) render();          // script already parsed
+        // Fail-open-to-retryable: if no token within the grace window, release
+        // waiters so mint proceeds tokenless (server -> retryable 403), rather
+        // than hanging the consultation room on a blocked widget.
+        setTimeout(function () { if (!settled) settle(''); }, 8000);
+      },
+      // Promise for the current token (or '' when unavailable / carved out).
+      get: function () {
+        return new Promise(function (resolve) {
+          if (cfg.sample || cfg.bypass) return resolve('');
+          if (settled) return resolve(token);
+          waiters.push(resolve);
+        });
       }
-    }, function () {
-      stageDirection('The interview server didn’t answer. Check your connection or the API address, then reload.');
+    };
+  })();
+
+  function mintSession() {
+    return turnstile.get().then(function (ts) {
+      var params = [];
+      // bypass token forwarded here ONLY, and only via query — never stored, logged, or rendered
+      if (cfg.bypass) params.push('bypass=' + encodeURIComponent(cfg.bypass));
+      // Turnstile token (single-use, ~300s TTL) — query only, never stored/logged.
+      if (ts) params.push('cf_ts=' + encodeURIComponent(ts));
+      var path = '/v1/session' + (params.length ? '?' + params.join('&') : '');
+      return api(path, { method: 'GET' }).then(function (out) {
+        if (out.ok && out.data && out.data.session_token) {
+          session = out.data;
+          if (out.data.max_turns) { maxTurns = out.data.max_turns; }
+          saveSession();
+          updateCounter((committed()[committed().length - 1] || {}).turn || 0);
+        } else {
+          var e = (out.data && out.data.error) || {};
+          stageDirection(e.message || 'Couldn’t open a session with the interview server. You can still read your existing transcript; reload to retry the connection.');
+        }
+      }, function () {
+        stageDirection('The interview server didn’t answer. Check your connection or the API address, then reload.');
+      });
     });
   }
 
@@ -1109,6 +1302,9 @@
     turns = loadTurns();
     if (session && session.max_turns) maxTurns = session.max_turns;
     rehydrate();
+
+    // start the Turnstile bot-gate widget so a token is ready for the mint
+    turnstile.init();
 
     // always (re)mint if no session token in this tab
     if (!session || !session.session_token) {

@@ -24,11 +24,19 @@
                                  client half only.
   - img-src 'self' data:      : local + data-URI only.
   - base-uri 'none'; form-action 'none' : hardening (no <base> hijack, no form posts).
+  - script-src / frame-src add challenges.cloudflare.com : the Turnstile bot-gate
+    (WP6) loads its api.js and renders its challenge in a same-origin-parented
+    iframe from challenges.cloudflare.com. connect-src '*' already covers its XHR.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src *; img-src 'self' data:; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'none'">
 
 <!-- API base override (lowest precedence after '/api'); leave content empty by default. -->
 <meta name="sonsteng-api" content="https://sonsteng-chat.damienriehl.workers.dev">
+
+<!-- Turnstile sitekey (PUBLIC) for the session-mint bot-gate. chat.js reads this
+     to render the managed widget. One widget covers DEV + PROD hostnames, so the
+     same sitekey works in both environments. -->
+<meta name="turnstile-sitekey" content="0x4AAAAAAD4uPMN8eNwzYvAy">
 
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
@@ -45,6 +53,10 @@
       <div class="stage-direction">This client interview needs JavaScript enabled to run.</div>
     </div>
   </noscript>
+  <!-- Turnstile bot-gate: explicit render so chat.js controls the widget and
+       reads its token before minting a session. onload fires window.
+       onloadTurnstileCallback (defined in chat.js). async+defer: non-blocking. -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit" async defer></script>
   <script src="byok.js"></script>
   <script src="chat.js"></script>
 </body>

@@ -6,6 +6,21 @@
   // Provider-agnostic BYOK: users may bring their own anthropic/openai/google
   // key per request; if ANTHROPIC_API_KEY is unset the hosted demo pool is
   // dormant and non-BYOK requests get the typed no_hosted_key error.
+  //
+  // ENVIRONMENTS (Editor experience — PROD injector wiring, WP1):
+  //   * TOP-LEVEL (this default block) = DEV. A bare `wrangler deploy` (no --env)
+  //     deploys the DEV worker `sonsteng-chat` exactly as it has always worked —
+  //     EDIT_UPSTREAM points at the DEV static origin. DO NOT CHANGE THIS if you
+  //     only mean to touch PROD.
+  //   * env.dev = an explicit mirror of the top-level DEV config (so
+  //     `wrangler deploy --env dev` is equivalent to the default deploy).
+  //   * env.production = the held PROD injector. Deployed ONLY by the documented
+  //     one-command enable in docs/prod-enable.md — never as part of routine work.
+  //     Its EDIT_UPSTREAM points at the PROD CF Pages origin.
+  // Wrangler inheritance note: `vars` and `durable_objects` are NON-inheritable,
+  // so each named environment RE-DECLARES them in full. `main`, `build`,
+  // `migrations`, `observability`, and the compatibility keys ARE inherited from
+  // the top level, so they are declared once here.
   "name": "sonsteng-chat",
   "main": "src/index.js",
   "compatibility_date": "2026-07-17",
@@ -26,11 +41,13 @@
     ]
   },
   // Migrations are APPEND-ONLY: v1 (BudgetCounter) is never altered; v2 adds the
-  // EditorStore SQLite class for the editor experience.
+  // EditorStore SQLite class for the editor experience. Inherited by every env.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["BudgetCounter"] },
     { "tag": "v2", "new_sqlite_classes": ["EditorStore"] }
   ],
+
+  // ---- TOP-LEVEL vars = DEV defaults (the default `wrangler deploy` target) ----
   "vars": {
     "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
     "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
@@ -44,6 +61,29 @@
     "MAX_TURNS": "20",
     "MAX_SESSIONS_PER_DAY": "200",
 
+    // STREAMING: SSE token streaming for POST /v1/chat (docs/research/
+    // worker-llm-facts.md §4). "false" = the DEFAULT non-streaming path (one
+    // JSON response; client shows a typing indicator). "true" proxies the
+    // provider's SSE through a TransformStream, capturing usage server-side from
+    // the terminal message_delta so all budget/replay bookkeeping is identical.
+    // Anthropic-only; openai/google BYOK fall back to non-streaming. Default OFF
+    // in every env — flip only after the D7 rehearsal says it feels slow.
+    "STREAMING": "false",
+
+    // ---- Turnstile bot-gate (WP6) ------------------------------------------
+    // TURNSTILE_ENABLED: "false" disables the GET /v1/session bot-gate
+    // deployment-wide; ANY other value (incl. unset) = ENABLED (fail-closed).
+    // TURNSTILE_SITEKEY is PUBLIC (rendered in the client) — kept here for env
+    // parity/visibility; the frontend actually reads it from the page's
+    // <meta name="turnstile-sitekey"> (static site can't read wrangler vars).
+    // The verification SECRET is `wrangler secret put TURNSTILE_SECRET` (never
+    // here). Demo-bypass requests skip the gate entirely (keyless flows).
+    // One widget covers DEV + PROD hostnames, so the sitekey is the same in
+    // every env. PROD needs its own TURNSTILE_SECRET set at enable time
+    // (docs/prod-enable.md).
+    "TURNSTILE_ENABLED": "true",
+    "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
+
     // ---- Editor experience -------------------------------------------------
     // EDIT_UPSTREAM: the DEV static origin the proxy-injector fetches (prefix +
     // trailing slash). Every allowlisted page key resolves under it.
@@ -51,13 +91,102 @@
     // EDIT_ORIGIN: the worker's OWN edit origin — the SOLE /edit CORS allowlist.
     "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
     // Scope grants per token slot (independent per-scope version for rotation).
-    // The opaque token values are SECRETS: EDIT_TOKEN_JOHN, EDIT_TOKEN_ADMIN
-    // (set with `wrangler secret put`, never here). admin is reachable ONLY via
-    // the admin token — never from edit/instructor tokens.
-    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+    // The opaque token values are SECRETS: EDIT_TOKEN_JOHN, EDIT_TOKEN_ROGER,
+    // EDIT_TOKEN_ADMIN (set with `wrangler secret put`, never here). admin is
+    // reachable ONLY via the admin token — never from edit/instructor tokens.
+    // john -> "JOS", roger -> "RSH" attribution labels (see editor-auth.js).
+    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
     // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
     "EDIT_MAX_PENDING_PER_EDITOR": "200",
     "EDIT_MAX_DAILY_PER_EDITOR": "500",
     "EDIT_MAX_BYTES": "16384"
+  },
+
+  "env": {
+    // ---- DEV (explicit mirror of the top-level default) --------------------
+    // `wrangler deploy --env dev` == the default deploy. Kept in sync with the
+    // top-level vars block above.
+    "dev": {
+      "name": "sonsteng-chat",
+      "durable_objects": {
+        "bindings": [
+          { "name": "BUDGET", "class_name": "BudgetCounter" },
+          { "name": "EDITOR", "class_name": "EditorStore" }
+        ]
+      },
+      "vars": {
+        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+        "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
+        "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
+        "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
+        "MODEL_ALLOW_ANTHROPIC": "claude-haiku-4-5,claude-haiku-4-5-20251001,claude-sonnet-4-5",
+        "MODEL_ALLOW_OPENAI": "gpt-4o-mini,gpt-4o",
+        "MODEL_ALLOW_GOOGLE": "gemini-2.0-flash,gemini-2.5-flash",
+        "PUBLIC_BUDGET_USD": "7",
+        "DEMO_RESERVE_USD": "3",
+        "MAX_TURNS": "20",
+        "MAX_SESSIONS_PER_DAY": "200",
+        "STREAMING": "false",
+        "TURNSTILE_ENABLED": "true",
+        "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
+        "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
+        "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        "EDIT_MAX_PENDING_PER_EDITOR": "200",
+        "EDIT_MAX_DAILY_PER_EDITOR": "500",
+        "EDIT_MAX_BYTES": "16384"
+      }
+    },
+
+    // ---- PRODUCTION (HELD — enable only via docs/prod-enable.md) -----------
+    // A SEPARATE worker instance (`sonsteng-chat-production`) so DEV keeps
+    // working untouched while PROD is enabled. The ONLY per-env deltas from DEV
+    // are EDIT_UPSTREAM (-> PROD CF Pages origin) and EDIT_ORIGIN (-> the PROD
+    // worker's own origin).
+    //
+    // ⚠ DAMIEN DECISION — EDIT_ORIGIN below assumes the PROD worker is reachable
+    // at its default workers.dev subdomain (sonsteng-chat-production.
+    // damienriehl.workers.dev). If PROD instead mounts the worker on a custom
+    // route/subdomain (e.g. edit.sonsteng.damienriehl.com or a route on
+    // sonsteng.damienriehl.com), set EDIT_ORIGIN to THAT origin and add a
+    // `routes` block here. EDIT_ORIGIN is the sole /edit CORS allowlist, so it
+    // MUST equal the browser origin the editor is actually served from.
+    "production": {
+      "name": "sonsteng-chat-production",
+      "durable_objects": {
+        "bindings": [
+          { "name": "BUDGET", "class_name": "BudgetCounter" },
+          { "name": "EDITOR", "class_name": "EditorStore" }
+        ]
+      },
+      "vars": {
+        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+        "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
+        "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
+        "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
+        "MODEL_ALLOW_ANTHROPIC": "claude-haiku-4-5,claude-haiku-4-5-20251001,claude-sonnet-4-5",
+        "MODEL_ALLOW_OPENAI": "gpt-4o-mini,gpt-4o",
+        "MODEL_ALLOW_GOOGLE": "gemini-2.0-flash,gemini-2.5-flash",
+        "PUBLIC_BUDGET_USD": "7",
+        "DEMO_RESERVE_USD": "3",
+        "MAX_TURNS": "20",
+        "MAX_SESSIONS_PER_DAY": "200",
+        "STREAMING": "false",
+        // Bot-gate ON in PROD too; the widget's domain list already covers
+        // sonsteng.damienriehl.com, so no new widget at enable time — but PROD
+        // needs its OWN `wrangler secret put TURNSTILE_SECRET --env production`
+        // (docs/prod-enable.md). Same public sitekey as DEV (one widget).
+        "TURNSTILE_ENABLED": "true",
+        "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
+        // PROD static is served by Cloudflare Pages at sonsteng.damienriehl.com.
+        "EDIT_UPSTREAM": "https://sonsteng.damienriehl.com/platform/",
+        // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).
+        "EDIT_ORIGIN": "https://sonsteng-chat-production.damienriehl.workers.dev",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        "EDIT_MAX_PENDING_PER_EDITOR": "200",
+        "EDIT_MAX_DAILY_PER_EDITOR": "500",
+        "EDIT_MAX_BYTES": "16384"
+      }
+    }
   }
 }

@@ -30,7 +30,7 @@
   "fee_type": "contingency",
   "skill_refs": ["SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-13", "SK-LP-02", "SK-LP-16"],
   "task_refs": ["TSK-022", "TSK-023", "TSK-024", "TSK-025", "TSK-001", "TSK-010", "TSK-034", "TSK-035", "TSK-044", "TSK-060"],
-  "personas": ["m13.per.reyes", "m13.per.hutchins"],
+  "personas": ["m13.per.reyes", "m13.per.hutchins", "m13.per.fontaine"],
   "witnesses": [
     { "id": "m13.wit.reyes", "name": "Sofia Reyes" },
     { "id": "m13.wit.hutchins", "name": "Bradley Hutchins" },

@@ -1172,6 +1172,16 @@
       ],
       "personas": [
         {
+          "id": "m13.per.fontaine",
+          "name": "Gerald Fontaine",
+          "role": "independent eyewitness",
+          "interviewable_by": [
+            "m13.role.plaintiff",
+            "m13.role.defense"
+          ],
+          "represented": false
+        },
+        {
           "id": "m13.per.hutchins",
           "name": "Bradley Hutchins",
           "role": "defendant driver",
@@ -1271,6 +1281,16 @@
           "role": "client / buyer",
           "interviewable_by": [
             "m14.role.buyer-counsel"
+          ],
+          "represented": false
+        },
+        {
+          "id": "m14.per.sandoval",
+          "name": "Everett Sandoval",
+          "role": "adjoining landowner (fact witness)",
+          "interviewable_by": [
+            "m14.role.buyer-counsel",
+            "m14.role.seller-counsel"
           ],
           "represented": false
         },
@@ -1456,6 +1476,16 @@
             "m16.role.defense"
           ],
           "represented": true
+        },
+        {
+          "id": "m16.per.vandermeer",
+          "name": "Naomi Vandermeer",
+          "role": "former HVB engineer (non-party fact witness)",
+          "interviewable_by": [
+            "m16.role.plaintiff",
+            "m16.role.defense"
+          ],
+          "represented": false
         }
       ],
       "packet_url": "../matters/m16-noncompete-ny/index.html",

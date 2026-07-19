@@ -1,6 +1,13 @@
 {
   "_comment": "Curated leak-safe topic labels for m13. Each value names the SUBJECT a student could have explored, never the fact's content (debrief-oracle rule). Covers every warned fact_ref across m13 personas.",
   "m13.fact.006": "his day before the crash",
+  "m13.fact.017": "what the impact looked like",
+  "m13.fact.024": "where the witness was positioned",
+  "m13.fact.025": "the witness's account of the signal",
+  "m13.fact.026": "how the witness got involved",
+  "m13.fact.028": "how she feels the crash reflects on her",
+  "m13.fact.036": "her emergency treatment",
+  "m13.fact.044": "her lost-earnings figure",
   "m13.fact.013": "her account of entering",
   "m13.fact.014": "his account of the turn",
   "m13.fact.015": "his comparative-fault theory",

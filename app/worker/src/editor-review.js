@@ -8,9 +8,16 @@
 // interpolated into HTML here. Practicum-Press styled (review.css asset).
 
 import { escapeJsonIsland, escapeHtml } from "./editor-map.js";
+import { attributionLabel } from "./editor-auth.js";
 
 export function renderReviewPage(items) {
-  const island = escapeJsonIsland({ items: items || [], generated_at: Date.now() });
+  // Stamp the human attribution label ("slot:roger" -> "RSH", "slot:john" ->
+  // "JOS") onto every row from its server-resolved `editor` identity. This is the
+  // SURFACE Damien actually reviews from — REVIEW_JS reads this embedded island
+  // (it never fetches /edit/v1/review), so attribution must ride the page, not
+  // only the JSON API. Additive: the raw slot identity is preserved.
+  const withAttribution = (items || []).map((it) => ({ ...it, attribution: attributionLabel(it.editor) }));
+  const island = escapeJsonIsland({ items: withAttribution, generated_at: Date.now() });
   const html =
     "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +

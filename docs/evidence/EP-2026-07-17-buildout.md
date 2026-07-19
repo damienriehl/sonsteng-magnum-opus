@@ -18,18 +18,18 @@
 | Per-matter self-gates (fleet) | 20/20 green, both lenient + strict |
 | Worker unit tests | 56/56 (incl. golden-file, DO logic vs real SQLite, key-logging source scan) |
 | Wrangler dry-run + live deploy | Clean — 114KB gzip; deployed `sonsteng-chat` |
-| Live API smoke | `/v1/session` mints ✓ · no key → `no_hosted_key` ✓ · fake BYOK → provider 401 surfaced as `validation_error` ✓ |
+| Live API smoke | `/v1/session` mints ✓ · no key → `no_hosted_key` ✓ · fake BYOK → provider 401 surfaced as `validation_error` ✓ · *(update 2026-07-18: session-mint is now Turnstile-gated per WP6 — an untokened `GET /v1/session` correctly returns **403 `turnstile_failed`**; the client passes a widget token or a `?bypass=` carve-out)* |
 | Site link/leak check | 30 pages, all internal links resolve, zero external requests, zero instructor content |
 | UI race harness (mock) | Double-submit blocked · retry same-turn_id · cap/turn banners · no_hosted_key auto-drawer — all pass |
 | DEV deploy | All routes 200 (pitch, platform, matters, skills, firm, chat, catalog) |
 
-## Screenshots (live DEV, 2026-07-17)
+## Screenshots (live DEV — platform shots 2026-07-17; chat + debrief refreshed 2026-07-18 WP9)
 
 | | |
 |---|---|
 | ![Platform home](EP-2026-07-17/ep-home.png) | ![Matter library](EP-2026-07-17/ep-matters.png) |
 | ![m03 packet](EP-2026-07-17/ep-packet.png) | ![Firm dashboard](EP-2026-07-17/ep-firm.png) |
-| ![Consultation room](EP-2026-07-17/ep-chat.png) | |
+| ![Live consultation room — note the managed Turnstile widget now parked bottom-right (live mode only; the keyless sample shows none)](EP-2026-07-17/ep-chat.png) | ![Keyless sample debrief — the "Askable, never asked: whether he had eaten" moment (WP9)](EP-2026-07-17/ep-sample-debrief.png) |
 
 ## UAT (2026-07-17 evening — three lanes, driven in real browsers against live DEV + Worker)
 

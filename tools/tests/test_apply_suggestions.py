@@ -429,7 +429,8 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertEqual(before, snapshot_data(self.root))  # canonical untouched
         self.assertEqual(self._porcelain(), "")
 
-    # 3) Formatted block -> needs_human (never applied).
+    # 3) Formatted block whose SPAN TEXT is edited away -> needs_human (WP7 keeps
+    #    the conservative fallback: the bold span 'bold emphasis' disappears).
     def test_formatted_block_needs_human(self):
         ref = "%s#p0" % M03_FMT
         self._add_edit("s1", ref, "This paragraph now says something else entirely.")
@@ -440,6 +441,42 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertEqual([r["id"] for r in res.needs_human], ["s1"])
         self.assertEqual([], res.applied)
         self.assertEqual(self.store.rows["s1"]["status"], "needs_human")
+        self.assertEqual(before, snapshot_data(self.root))
+
+    # 3b) WP7: formatted block edited AROUND an unchanged span -> auto-applies,
+    #     preserving the raw **markup** exactly, and merges to canonical.
+    def test_formatted_block_span_splice_applies(self):
+        ref = "%s#p0" % M03_FMT  # "...has **bold emphasis** that plain text cannot..."
+        # plain edit keeps the span text 'bold emphasis' verbatim, changes around it
+        self._add_edit(
+            "s1", ref,
+            "This paragraph has bold emphasis that plain text simply cannot round-trip.")
+        pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["s1"])
+        self.assertEqual(self.store.rows["s1"]["status"], "applied")
+        canonical = open(os.path.join(self.root, M03_FMT), encoding="utf-8").read()
+        # raw markup preserved EXACTLY, and the surrounding plain edit landed.
+        self.assertIn("**bold emphasis**", canonical)
+        self.assertIn("simply cannot round-trip", canonical)
+        self.assertEqual(self._porcelain(), "")
+
+    # 3c) WP7: a formatted-block edit that changes the SPAN's own text -> needs_human,
+    #     canonical untouched (never silently corrupts the markup).
+    def test_formatted_block_span_text_edit_rejected(self):
+        ref = "%s#p0" % M03_FMT
+        # 'bold emphasis' -> 'strong emphasis' edits the span interior
+        self._add_edit(
+            "s1", ref,
+            "This paragraph has strong emphasis that plain text cannot round-trip.")
+        before = snapshot_data(self.root)
+        pipe = FakePipeline(SPEC)
+        res = self._run("b1", pipe, deploy_plan_only=True)
+
+        self.assertEqual([r["id"] for r in res.needs_human], ["s1"])
+        self.assertEqual([], res.applied)
         self.assertEqual(before, snapshot_data(self.root))
 
     # 4) Drift: source changed after the suggestion was made -> drift, not patched.

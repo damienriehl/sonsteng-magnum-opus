@@ -38,7 +38,9 @@
     ],
     "revealed_if_asked": [
       { "fact_ref": "m12.fact.041", "text": "I've hired my own lawyer now, Ms. Achterberg, to deal with all of this. You really should be talking to her, not me." },
-      { "fact_ref": "m12.fact.006", "text": "I broke my wrist and my elbow in that fall at the market — surgery, months of therapy. It wasn't nothing." }
+      { "fact_ref": "m12.fact.006", "text": "I broke my wrist and my elbow in that fall at the market — surgery, months of therapy. It wasn't nothing." },
+      { "fact_ref": "m12.fact.023", "text": "I only found out at the end of November, when I called in to ask about a settlement. That's when she finally admitted the whole case had been thrown out." },
+      { "fact_ref": "m12.fact.030", "text": "I went to the lawyer board and filed a complaint. Somebody had to know how she handled me." }
     ],
     "rapport_gated": [],
     "concealed": [],

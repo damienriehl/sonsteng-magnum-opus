@@ -37,9 +37,17 @@
     ],
     "revealed_if_asked": [
       { "fact_ref": "m12.fact.014", "text": "We didn't hire a replacement paralegal for months. Delphine and I were both covering the docket ourselves that fall." },
-      { "fact_ref": "m12.fact.040", "text": "Delphine was stretched thin that autumn — distracted, in early and out late. I knew her father was very sick, though she didn't talk about it much." }
+      { "fact_ref": "m12.fact.005", "text": "Delphine knew the deadlines all lived in Marnie's own task list, not the shared calendar. She'd trusted that setup for years and it had never once bitten us — until it did." },
+      { "fact_ref": "m12.fact.038", "text": "After all this, she put in a real cloud docketing system with backup reminders that both of us see. Nothing's slipped since — she made sure of that." }
     ],
-    "rapport_gated": [],
+    "rapport_gated": [
+      {
+        "fact_ref": "m12.fact.040",
+        "text": "I don't like to say this, because she never would — but that autumn her father was dying, and she was carrying the whole practice short-staffed and running on empty. It's not an excuse for what happened, but it's the truth of where she was.",
+        "min_turns": 5,
+        "requires": ["acknowledged_emotion", "nonjudgmental_response"]
+      }
+    ],
     "concealed": [],
     "unknown": [
       { "fact_ref": "m12.fact.018", "text": "I couldn't tell you whether she read opposing counsel's September email or not — I never saw it and she never mentioned it to me." }

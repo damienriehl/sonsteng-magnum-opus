@@ -30,7 +30,7 @@
   "fee_type": "hourly",
   "skill_refs": ["SK-LP-02", "SK-LP-07", "SK-LP-10", "SK-LP-14", "SK-LP-16", "SK-LP-17"],
   "task_refs": ["TSK-001", "TSK-002", "TSK-010", "TSK-011", "TSK-022", "TSK-023", "TSK-024", "TSK-032", "TSK-050", "TSK-060"],
-  "personas": ["m16.per.iyer", "m16.per.steinhauer"],
+  "personas": ["m16.per.iyer", "m16.per.steinhauer", "m16.per.vandermeer"],
   "witnesses": [
     { "id": "m16.wit.frawley", "name": "Dominic Frawley" },
     { "id": "m16.wit.salcedo", "name": "Beatriz Salcedo" },

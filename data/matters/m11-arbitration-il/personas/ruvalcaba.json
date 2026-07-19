@@ -35,10 +35,17 @@
       { "fact_ref": "m11.fact.023", "text": "We were staying twenty, thirty, forty minutes past clock-out most nights that fall to get the trucks loaded, and nobody was paying us for it." }
     ],
     "revealed_if_asked": [
-      { "fact_ref": "m11.fact.024", "text": "I heard Pfeiffer tell Yusuf to keep the belt running after the shift was supposed to be done. More than once." },
-      { "fact_ref": "m11.fact.005", "text": "The system clocked us out on the dot, so all that extra time just vanished — it was off the books." }
+      { "fact_ref": "m11.fact.006", "text": "The system clocked us out on the dot at shift end, so all that extra loading time just vanished — it was off the books, never recorded." },
+      { "fact_ref": "m11.fact.005", "text": "All that fall, management was on us to hit the outbound numbers, and the only way to do it was to keep the crew working past when we'd clocked out." }
     ],
-    "rapport_gated": [],
+    "rapport_gated": [
+      {
+        "fact_ref": "m11.fact.024",
+        "text": "I'll tell you, but I've got to be careful — I still work there. I heard Pfeiffer himself tell Yusuf to keep the belt running after the shift was supposed to be done. More than once.",
+        "min_turns": 4,
+        "requires": ["confidentiality_reassurance"]
+      }
+    ],
     "concealed": [],
     "unknown": [
       { "fact_ref": "m11.fact.029", "text": "I wouldn't know what the company knew about any hotline call or when — that's over my head." }

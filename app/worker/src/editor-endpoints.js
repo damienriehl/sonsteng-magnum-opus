@@ -5,6 +5,7 @@
 
 import { json } from "./errors.js";
 import { csrfOk, editError } from "./editor-http.js";
+import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
 } from "./editor-map.js";
@@ -254,7 +255,11 @@ export async function pendingEndpoint(request, env, auth) {
 export async function reviewJsonEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin scope required.", 403);
   const items = await editorStub(env).listAll();
-  return json({ ok: true, items });
+  // Stamp a human attribution label onto each row from its server-resolved
+  // `editor` identity ("slot:john" -> "JOS", "slot:roger" -> "RSH") so the review
+  // surface distinguishes reviewers without exposing the slot plumbing.
+  const withAttribution = items.map((it) => ({ ...it, attribution: attributionLabel(it.editor) }));
+  return json({ ok: true, items: withAttribution });
 }
 
 // ---- POST /edit/v1/decide (admin) -------------------------------------------
