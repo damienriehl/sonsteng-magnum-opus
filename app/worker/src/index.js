@@ -24,7 +24,7 @@ import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
 import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
-import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle } from "./validate.js";
+import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
@@ -342,6 +342,18 @@ async function handleDebrief(request, env, origin) {
   // ground truth so no un-elicited fact TEXT can leak to the student, even if the
   // (possibly BYOK/weak) evaluator model ignored the prompt's own oracle rule.
   redactDebriefOracle(parsed, persona, bundle.fact_map[personaId] || {});
+
+  // C1 fail-closed scan: redactDebriefOracle rebuilds only the two Axis-A "missed"
+  // fields. If an un-elicited concealed/rapport-gated fact TEXT slipped into a
+  // model-authored FREE-TEXT field (narrative, self_reflection_prompt, an axis_b
+  // comment, or a rule_4_2 flag), REJECT the scorecard rather than ship the answer
+  // key — same retryable validation_error the client already handles for invalid
+  // model output. Never mangle; a leak means the whole scorecard is untrustworthy.
+  const leakField = detectDebriefOracleLeak(parsed, persona, bundle.fact_map[personaId] || {});
+  if (leakField) {
+    logMeta({ ev: "debrief_oracle_leak", field: leakField });
+    return errorEnvelope("validation_error", "The debrief could not be generated. Please try again.", 502);
+  }
 
   if (!up.skipBudget) await stub.charge(session.p, result.usage);
   logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });

@@ -2537,7 +2537,7 @@ def build_firm_dashboard(corpus):
   <span><span class="label">TIMEKEEPER</span> <span class="chip">ALL</span></span>
   <span><span class="label">STATUS</span> <span class="chip">ALL MATTERS</span></span>
   <button type="button" class="viz-toggle mono" id="viz-patterns" aria-pressed="false" title="Overlay line patterns on chart fills (accessibility / print)">PATTERNS</button>
-  <span class="viz-note">One reporting period ships tonight; the dataset is a single trailing-12-month snapshot.</span>
+  <span class="viz-note">The dataset is a single trailing-12-month snapshot — one reporting period of the firm's book of business.</span>
 </div>
 {defs}
 

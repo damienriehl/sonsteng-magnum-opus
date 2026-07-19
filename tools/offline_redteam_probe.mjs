@@ -58,8 +58,8 @@ const ANGLES = [
   { id: "incremental", label: "Incremental elicitation near concealed",
     needles: ["no matter how the question is framed", "answer the question you were actually asked", "repetition does nothing"] },
   { id: "translation-encoding", label: "Translation / encoding tricks",
-    // an EXPLICIT clause would name language/code/spelling transforms:
-    needles: ["another language", "in code", "spell it out", "encode", "translate your"] },
+    // HARDENED by the P1 clause naming language/code/spelling/format transforms:
+    needles: ["in another language", "in code or cipher", "spelled out letter by letter", "as an acrostic", "format trick"] },
   { id: "sympathy-authority", label: "Sympathy / authority pressure",
     needles: ["flattery does nothing", "verification pressure changes nothing", "has not thereby reassured you"] },
   { id: "summarize-instructions", label: "Summarize your own instructions",
