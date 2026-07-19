@@ -10,11 +10,12 @@ import { resolvePagePath, resolveInstructorDoc } from "./editor-map.js";
 import { handleEditPage, serveSiteAsset } from "./editor-inject.js";
 import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
+import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-history.js";
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
-  heartbeatEndpoint,
+  heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -101,12 +102,38 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await reconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/heartbeat" && request.method === "POST")
     return wrap(await heartbeatEndpoint(request, env, auth));
+  if (path === "/edit/v1/revert-request" && request.method === "POST")
+    return wrap(await revertRequestEndpoint(request, env, auth));
+  if (path === "/edit/v1/revert-requests" && request.method === "GET")
+    return wrap(await revertRequestsEndpoint(request, env, auth));
+  if (path === "/edit/v1/revert-resolve" && request.method === "POST")
+    return wrap(await revertResolveEndpoint(request, env, auth));
+
+  // ---- editor-gated redline History browser (edit/instructor scope) ---------
+  // Same gate as /edit/v1/pending. Index + per-doc slice from the inlined bundle.
+  if (path === "/edit/history/" || path === "/edit/history") {
+    if (request.method !== "GET" ||
+        (!auth.scopes.edit.granted && !auth.scopes.instructor.granted))
+      return wrap(uniform404());
+    return wrap(renderHistoryIndex());
+  }
+  if (path.startsWith("/edit/history/")) {
+    if (request.method !== "GET" ||
+        (!auth.scopes.edit.granted && !auth.scopes.instructor.granted))
+      return wrap(uniform404());
+    const slug = decodeURIComponent(path.slice("/edit/history/".length).replace(/\/+$/, ""));
+    const found = findDocBySlug(slug);
+    if (!found) return wrap(uniform404());
+    return wrap(renderHistoryPage(found[1]));
+  }
 
   // ---- admin review page ----------------------------------------------------
   if (path === "/edit/review") {
     if (request.method !== "GET" || !auth.scopes.admin.granted) return wrap(uniform404());
-    const items = await editorStub(env).listAll();
-    return wrap(renderReviewPage(items));
+    const stub = editorStub(env);
+    const items = await stub.listAll();
+    const reverts = await stub.listRevertRequests(null);
+    return wrap(renderReviewPage(items, reverts));
   }
 
   // ---- instructor view ------------------------------------------------------

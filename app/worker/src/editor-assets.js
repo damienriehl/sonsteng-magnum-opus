@@ -206,6 +206,19 @@ export const REVIEW_JS = `(() => {
 })();
 `;
 
+// Minimal History-browser stubs — used only when the app/history/ client bundle
+// is absent at build (unit tests). The real client (app/history/history.{js,css},
+// 253/77 lines) overrides these via CLIENT.HISTORY_JS/HISTORY_CSS. The stub still
+// reads the #history-data island and renders a plain-text timeline so the route
+// is honest even without the built asset.
+export const HISTORY_CSS = `#history-root{max-width:70ch;margin:1.5rem auto;padding:0 1.25rem}`;
+export const HISTORY_JS = `(() => {"use strict";
+  const el=document.getElementById("history-data");if(!el)return;
+  let d;try{d=JSON.parse(el.textContent)}catch{return}
+  const root=document.getElementById("history-root");if(!root)return;
+  root.textContent=(d&&d.revisions?d.revisions.length:0)+" revision(s) — history client asset not built.";
+})();`;
+
 // The real editor client, inlined at build by bundle-editor-data.mjs. When the
 // app/editor/ bundle is present these override the stubs above; when absent
 // (unit tests) the module is empty and the stubs are used.
@@ -217,6 +230,8 @@ export function serveAsset(name) {
     "editor.js": [CLIENT.EDITOR_JS || EDITOR_JS, "text/javascript; charset=utf-8"],
     "review.css": [REVIEW_CSS, "text/css; charset=utf-8"],
     "review.js": [REVIEW_JS, "text/javascript; charset=utf-8"],
+    "history.css": [CLIENT.HISTORY_CSS || HISTORY_CSS, "text/css; charset=utf-8"],
+    "history.js": [CLIENT.HISTORY_JS || HISTORY_JS, "text/javascript; charset=utf-8"],
   };
   const hit = map[name];
   if (!hit) return null;

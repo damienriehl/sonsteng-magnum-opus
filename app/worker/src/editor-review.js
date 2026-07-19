@@ -10,7 +10,29 @@
 import { escapeJsonIsland, escapeHtml } from "./editor-map.js";
 import { attributionLabel } from "./editor-auth.js";
 
-export function renderReviewPage(items) {
+// Server-rendered revert-request panel (History browser "Request revert"). Rows
+// are server constants (doc paths + hex shas + slot-derived attribution), each
+// escapeHtml'd defense-in-depth. Editors file 'requested'; admin files (and the
+// daemon resolves) 'approved'/'done'/'failed'. This makes reverts visible on the
+// review surface, per the revert-v1 contract.
+function renderRevertPanel(reverts) {
+  const rows = reverts || [];
+  if (!rows.length) return "";
+  const shortSha = (s) => (s && /^[0-9a-f]{7,}$/i.test(s) ? s.slice(0, 8) : String(s || ""));
+  const li = rows.map((r) => {
+    const who = attributionLabel(r.editor);
+    return "<li class=\"rv-revert-row\" data-status=\"" + escapeHtml(r.status) + "\">" +
+      "<span class=\"rv-revert-status\">" + escapeHtml(r.status) + "</span> " +
+      "<span class=\"rv-revert-doc\">" + escapeHtml(r.doc) + "</span> " +
+      "<span class=\"rv-revert-run\">" + escapeHtml(shortSha(r.run_first)) + "…" +
+      escapeHtml(shortSha(r.run_last)) + "</span> " +
+      "<span class=\"rv-revert-who\">" + escapeHtml(who) + "</span></li>";
+  }).join("");
+  return "<section class=\"rv-reverts\"><h2>Revert requests</h2>" +
+    "<ul class=\"rv-revert-list\">" + li + "</ul></section>";
+}
+
+export function renderReviewPage(items, reverts) {
   // Stamp the human attribution label ("slot:roger" -> "RSH", "slot:john" ->
   // "JOS") onto every row from its server-resolved `editor` identity. This is the
   // SURFACE Damien actually reviews from — REVIEW_JS reads this embedded island
@@ -29,6 +51,7 @@ export function renderReviewPage(items) {
     "<header class=\"rv-head\"><h1>Suggestion Review</h1>" +
     "<p class=\"rv-sub\">All outstanding suggestions, grouped by source. Review the whole sweep at once.</p></header>" +
     "<div id=\"rv-root\" aria-live=\"polite\">Loading…</div>" +
+    renderRevertPanel(reverts) +
     "</main>" +
     `<script type="application/json" id="review-data">${island}</script>` +
     "<script src=\"/edit/assets/review.js\" defer></script>" +

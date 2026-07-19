@@ -290,6 +290,79 @@ export async function heartbeatEndpoint(request, env, auth) {
   return json({ ok: true, received_at: result.received_at });
 }
 
+// ---- POST /edit/v1/revert-request (edit/instructor files; admin auto-approves)
+// The History browser "Request revert" button POSTs { doc, run:[first,last] }.
+// Editors (edit/instructor scope) FILE a request (status='requested'); an ADMIN
+// caller's request is 'approved' immediately (SL8: editors request, admin
+// executes). The home-box daemon consumes 'approved' rows on its next tick,
+// git-reverts the run range on canonical, rebuilds + deploys, and marks 'done'.
+// The request id is SERVER-generated (the client sends none). run shas are format-
+// validated here; the daemon's git revert is the authoritative existence check.
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+export async function revertRequestEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
+  if (!auth.editor ||
+      (!auth.scopes.edit.granted && !auth.scopes.instructor.granted && !auth.scopes.admin.granted))
+    return editError("forbidden", "No edit scope.", 403);
+
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const doc = typeof body.doc === "string" ? body.doc : null;
+  const run = Array.isArray(body.run) ? body.run : null;
+  if (!doc || doc.length > 512 || /[\0\r\n]/.test(doc))
+    return editError("validation_error", "A valid doc is required.", 400);
+  if (!run || run.length !== 2)
+    return editError("validation_error", "run must be [first_sha, last_sha].", 400);
+  const [first, last] = run;
+  if (typeof first !== "string" || typeof last !== "string" ||
+      !SHA_RE.test(first) || !SHA_RE.test(last))
+    return editError("validation_error", "run shas are invalid.", 400);
+
+  // Admin scope files an already-approved request (executes on the next tick);
+  // any other editor scope files a request that an admin must approve first.
+  const approved = auth.scopes.admin.granted === true;
+  const id = crypto.randomUUID();
+  const result = await editorStub(env).fileRevertRequest({
+    id, editor: auth.editor, doc, run_first: first, run_last: last, approved,
+  });
+  if (!result.ok) return editError(result.reason || "validation_error", "Could not file the revert request.", 400);
+  return json({ ok: true, id: result.request.id, status: result.request.status, replay: !!result.replay });
+}
+
+// ---- GET /edit/v1/revert-requests?status=approved (admin/service) -----------
+// The daemon polls this each tick for rows to execute (default status=approved).
+export async function revertRequestsEndpoint(request, env, auth) {
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status") || "approved";
+  const items = await editorStub(env).listRevertRequests(status);
+  return json({ ok: true, items });
+}
+
+// ---- POST /edit/v1/revert-resolve (admin/service) ---------------------------
+// The admin approve path (requested -> approved) and the daemon's terminal write
+// (approved -> done|failed). Body: { id, status, note? }.
+export async function revertResolveEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string" || typeof body.status !== "string")
+    return editError("validation_error", "id and status are required.", 400);
+  const note = typeof body.note === "string" ? body.note.slice(0, 2000) : null;
+  const result = await editorStub(env).resolveRevertRequest(body.id, body.status, note);
+  if (!result.ok) {
+    const map = {
+      not_found: [404, "Not found."],
+      already_terminal: [409, "That request is already resolved."],
+      validation_error: [400, "Invalid status."],
+    };
+    const [status, message] = map[result.reason] || [400, "Could not resolve the request."];
+    return editError(result.reason, message, status);
+  }
+  return json({ ok: true, id: result.id, status: result.status });
+}
+
 // ---- GET /edit/v1/review (admin; all pending grouped) -----------------------
 export async function reviewJsonEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin scope required.", 403);

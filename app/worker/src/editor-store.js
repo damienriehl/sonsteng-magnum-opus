@@ -38,4 +38,7 @@ export class EditorStore extends DurableObject {
   reconcile() { return this.core.reconcile(); }
   digest() { return this.core.digest(); }
   purge(days) { return this.core.purge(days); }
+  fileRevertRequest(input) { return this.core.fileRevertRequest(input); }
+  listRevertRequests(status) { return this.core.listRevertRequests(status); }
+  resolveRevertRequest(id, status, note) { return this.core.resolveRevertRequest(id, status, note); }
 }
