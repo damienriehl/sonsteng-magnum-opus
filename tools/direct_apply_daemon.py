@@ -239,6 +239,166 @@ def deploy_dev(branch, repo_root=REPO_ROOT, timeout=900):
 
 
 # --------------------------------------------------------------------------- #
+# History bundle regeneration — wired into the rebuild step so the redline
+# History browser tracks every applied revision. Regenerates build/history-
+# bundle.generated.json (build_history.py) and refreshes the Worker import tree
+# (bundle-editor-data.mjs). NON-GATING: a history failure never blocks the site
+# publish (history is a safety-net view, not the live site). The served History
+# browser refreshes on the next Worker deploy; the bundle is always kept fresh.
+# --------------------------------------------------------------------------- #
+def regen_history(repo_root=REPO_ROOT, timeout=600):
+    """Rebuild the history bundle + copy it into the Worker import tree. Returns
+    (ok, tail). Best-effort — the caller logs but does not gate on it."""
+    hp = subprocess.run(
+        [sys.executable, os.path.join(repo_root, "tools", "build_history.py")],
+        cwd=repo_root, check=False, shell=False,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    tail = (hp.stdout or "")[-1500:]
+    if hp.returncode != 0:
+        return False, tail
+    # Refresh the Worker import tree (client bundle regeneration flow) so the next
+    # worker deploy inlines the fresh history bundle. Missing node is tolerated.
+    bp = subprocess.run(
+        ["node", os.path.join(repo_root, "app", "worker", "scripts", "bundle-editor-data.mjs")],
+        cwd=repo_root, check=False, shell=False,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    return bp.returncode == 0, tail + (bp.stdout or "")[-500:]
+
+
+# --------------------------------------------------------------------------- #
+# Revert requests (History browser "Request revert", SL8). The daemon polls
+# approved requests, git-reverts the run range on the canonical branch under the
+# ENGINE'S apply flock (cooperating, never fighting the apply engine), rebuilds +
+# republishes, then marks the request done/failed. The revert is a clean-tree,
+# conflict-aware inverse commit: `git revert --no-commit <first>^..<last>` stages
+# the inverse; build_site + build_history regenerate the derived output; ONE
+# attributed commit lands. A git conflict (overlap since the run) ABORTS — never
+# a partial revert (the fence build's perform_revert invariant).
+# --------------------------------------------------------------------------- #
+APPLY_LOCK_PATH = os.path.join(LOCK_DIR, "apply.lock")
+
+
+@contextlib.contextmanager
+def apply_lock(lock_path=APPLY_LOCK_PATH):
+    """Cooperate with the apply engine's flock so a daemon revert never races an
+    in-flight apply. Blocking acquire (the daemon already serialises ticks)."""
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    fh = open(lock_path, "w")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        with contextlib.suppress(Exception):
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        fh.close()
+
+
+def _git(args, repo_root=REPO_ROOT, timeout=300):
+    proc = subprocess.run(["git", *args], cwd=repo_root, check=False, shell=False,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, timeout=timeout)
+    return proc.returncode, (proc.stdout or "")
+
+
+def fetch_revert_requests(api_base, token, timeout=30):
+    """GET {api_base}/revert-requests?status=approved (admin) -> list of rows.
+    Best-effort: a missing endpoint or unreachable worker degrades to [] (a revert
+    is never the reason a tick fails)."""
+    if not api_base:
+        return []
+    url = api_base.rstrip("/") + "/revert-requests?status=approved"
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Accept", "application/json")
+    req.add_header("X-Edit-Request", "1")
+    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
+        return []
+    return payload.get("items") or []
+
+
+def resolve_revert_request(api_base, token, request_id, status, note=None, timeout=15):
+    """POST {api_base}/revert-resolve (admin) { id, status, note? }. Best-effort."""
+    if not api_base:
+        return {"sent": False, "reason": "no_api_base"}
+    url = api_base.rstrip("/") + "/revert-resolve"
+    payload = {"id": request_id, "status": status}
+    if note:
+        payload["note"] = note
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("X-Edit-Request", "1")
+    req.add_header("Accept", "application/json")
+    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return {"sent": True, "status": resp.status}
+    except urllib.error.HTTPError as exc:
+        return {"sent": False, "reason": "http_%d" % exc.code}
+    except urllib.error.URLError as exc:
+        return {"sent": False, "reason": "unreachable:%s" % (exc.reason,)}
+
+
+def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None):
+    """Execute ONE approved revert request on the canonical branch (clean-tree,
+    conflict-aware). Returns (ok, detail). Holds the apply flock for the whole
+    inverse-commit so it never races an in-flight apply. On a git conflict it
+    aborts cleanly (never a partial revert) and returns (False, reason)."""
+    do_rebuild = do_rebuild or (lambda: rebuild(repo_root))
+    do_history = do_history or (lambda: regen_history(repo_root))
+    doc = (req or {}).get("doc") or ""
+    first = (req or {}).get("run_first") or ""
+    last = (req or {}).get("run_last") or ""
+    if not first or not last:
+        return False, "bad_run_range"
+
+    with apply_lock():
+        # Refuse on a dirty working tree (excludes untracked/gitignored build/).
+        rc, out = _git(["status", "--porcelain", "--untracked-files=no"], repo_root)
+        if rc != 0:
+            return False, "git_status_failed"
+        if out.strip():
+            return False, "tree_not_clean"
+
+        # Stage the inverse of the whole run range (first..last inclusive).
+        rc, rout = _git(["revert", "--no-commit", "%s^..%s" % (first, last)], repo_root)
+        if rc != 0:
+            # Overlap/conflict since the run -> abort, never partial.
+            _git(["revert", "--abort"], repo_root)
+            _git(["reset", "--hard", "HEAD"], repo_root)
+            _git(["checkout", "--", "."], repo_root)
+            return False, "revert_conflict"
+
+        # Regenerate derived output (site + history) from the reverted sources so
+        # the single commit is self-consistent.
+        rebuilt, _ = do_rebuild()
+        if not rebuilt:
+            _git(["revert", "--abort"], repo_root)
+            _git(["reset", "--hard", "HEAD"], repo_root)
+            return False, "rebuild_failed"
+        do_history()  # non-gating
+
+        short = "%s..%s" % (first[:8], last[:8])
+        msg = ("revert(history): %s run %s\n\n"
+               "Admin-executed revert requested via the History browser.\n"
+               "Editor: DVR\n" % (doc or "(doc)", short))
+        _git(["add", "-A"], repo_root)
+        rc, cout = _git(["commit", "-m", msg], repo_root)
+        if rc != 0:
+            _git(["reset", "--hard", "HEAD"], repo_root)
+            return False, "commit_failed"
+        rc, sha = _git(["rev-parse", "HEAD"], repo_root)
+        return True, sha.strip()
+
+
+# --------------------------------------------------------------------------- #
 # Heartbeat — best-effort; TOLERATE 404 until the worker lane adds the endpoint.
 # --------------------------------------------------------------------------- #
 def post_heartbeat(api_base, token, *, ok, applied, ts, timeout=15):
@@ -317,9 +477,14 @@ def dispatch_editorial(batch_id, *, repo_root=REPO_ROOT, timeout=600):
 def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         state_path=None, idle_minutes=DEFAULT_IDLE_MINUTES, now=None,
         fetch=None, apply_engine=None, do_rebuild=None, do_deploy=None,
-        heartbeat=None, notify=None, editorial=None, out=None):
+        heartbeat=None, notify=None, editorial=None, out=None,
+        do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
-    production wiring is supplied by main()."""
+    production wiring is supplied by main().
+
+    do_history / fetch_reverts / revert_exec / revert_resolve are OPT-IN: when
+    None the corresponding behavior is skipped (keeps the pure orchestration tests
+    hermetic). main() wires all four for production."""
     out = out or sys.stdout
     state_path = state_path or default_state_path()
     now = now or datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -337,6 +502,33 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
 
     steps = []
     state = load_state(state_path)
+
+    # ---- approved revert requests (History browser, SL8) — execute FIRST -----
+    # A quiet or busy tick both drain approved reverts. Each revert is an
+    # independent clean-tree inverse commit + republish; a failure NEVER blocks the
+    # accepted-suggestion flush below. Skipped entirely when unwired (tests).
+    if fetch_reverts is not None and not dry_run:
+        try:
+            reqs = fetch_reverts()
+        except Exception:  # best-effort: a revert fetch never fails the tick
+            reqs = []
+        for req in reqs or []:
+            rid = req.get("id")
+            ok, detail = revert_exec(req)
+            steps.append(("revert", {"id": rid, "ok": ok, "detail": detail}))
+            if ok:
+                dok, _ = do_deploy(branch)
+                if revert_resolve:
+                    revert_resolve(rid, "done" if dok else "failed")
+                heartbeat(dok, 0)
+                if not dok:
+                    notify([rid])
+            else:
+                if revert_resolve:
+                    revert_resolve(rid, "failed")
+                heartbeat(False, 0)
+                notify([rid])
+                print("[daemon] revert %s FAILED (%s)." % (rid, detail), file=out)
 
     rows = fetch()
     steps.append(("fetch_review", len(rows)))
@@ -397,6 +589,15 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         save_state(state_path, state)
         return DaemonResult(0, batch_id, "rebuild_failed", hb, False, steps)
 
+    # Regenerate the redline History bundle BEFORE deploy (non-gating — a history
+    # failure never blocks the authoritative site publish). Opt-in (tests skip it).
+    if do_history is not None:
+        try:
+            hok, _ = do_history()
+            steps.append(("history", hok))
+        except Exception:
+            steps.append(("history", False))
+
     ok, dtail = do_deploy(branch)
     steps.append(("deploy", ok))
     if not ok:
@@ -449,7 +650,14 @@ def main(argv=None):
         with lock_cm:
             result = run(api_base=api_base, token=token, branch=args.branch,
                          dry_run=args.dry_run, state_path=args.state_file,
-                         idle_minutes=idle)
+                         idle_minutes=idle,
+                         # History bundle regen in the rebuild step + approved-
+                         # revert execution (both DEV-only, never PROD).
+                         do_history=lambda: regen_history(),
+                         fetch_reverts=lambda: fetch_revert_requests(api_base, token),
+                         revert_exec=lambda req: execute_revert(req),
+                         revert_resolve=lambda rid, st: resolve_revert_request(
+                             api_base, token, rid, st))
     except DaemonError as exc:
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2
