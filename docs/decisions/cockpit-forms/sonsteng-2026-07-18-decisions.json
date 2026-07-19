@@ -1,0 +1,96 @@
+{
+  "id": "sonsteng-2026-07-18-decisions",
+  "title": "Sonsteng Magnum Opus — Outstanding Decisions (2026-07-18)",
+  "created": "2026-07-18",
+  "status": "answered",
+  "answered": "2026-07-18",
+  "answer_record": "sonsteng-magnum-opus/docs/decisions/2026-07-18-qa-answers.md",
+  "answer_summary": "q1 merge buildout YES (done); q2 merge editor YES (done); q3 PROD HOLD until after walkthrough; q4 BYOK-only forever (no hosted pool; Claude Max for agent-driven testing); q5 Damien test-drives editor then sends John's link; q6 walkthrough ~Wed 2026-07-23 (tentative); q7 BUILD ALL fast-follows this weekend. main = platform v0 + editor, DEV-deployed, PROD held.",
+  "severity": "input-welcome",
+  "summary_html": "<h3>Two ships are built and green — the only real gate is one API key</h3><p>The platform build-out and the editor experience are both <b>done, tested, and DEV-proven</b>. Nothing here is hard-blocked <b>except</b> that a single model API key is what unlocks the live demo (red-team gate, live client interview, optional hosted pool). Everything else in this form is a go/no-go or a scheduling call you can answer in one sitting.</p><ul><li><b>Ship &amp; merge:</b> two feature branches ready for main; PROD deploy is a hold-or-go call.</li><li><b>The API key:</b> the one blocker — which provider, and where you will store it.</li><li><b>John's editor:</b> when to hand John his magic link, and when to schedule the John &amp; Roger walkthrough.</li><li><b>Fast-follows:</b> multi-select which enhancement to build next (recommendation: none until after the walkthrough).</li></ul><p style=\"color:#a4700f\"><b>Recommended options are pre-selected.</b> PROD deploys and provider keys always come back to you regardless — this form is the durable record of the call.</p>",
+  "questions": [
+    {
+      "id": "q1-merge-buildout",
+      "group": "Ship & merge",
+      "topic": "Merge feat/curriculum-buildout → main?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>The curriculum build-out is the whole platform: data spine, 20 deep matters, the worker, the chat/critique UI, and the 30-page platform site.</p><ul><li><b>Scale shipped:</b> 10 JSON Schemas, 108 tasks / 232 subtasks, FOLIO crosswalk, 20 matters (407 files, ~2.6MB), the Ellingboe &amp; Ravndal firm dataset.</li><li><b>Gates green:</b> full-spine validator PASS (0 ERROR), 20/20 per-matter self-gates, worker 62/62 tests, live API smoke clean, site link/leak sweep clean.</li><li><b>Proven live:</b> all DEV routes 200; overnight keyless sample consultation plays end-to-end.</li></ul><p><b>Links:</b> <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/evidence/EP-2026-07-17-buildout.md'>EP-2026-07-17 buildout</a> · <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/plans/2026-07-17-001-feat-curriculum-buildout-plan.md'>plan</a> · <a href='https://sonsteng-dev.damienriehl.com/platform/'>DEV platform</a></p>",
+      "options": [
+        {"label": "Yes — merge to main", "detail": "40+ commits, all gates green, DEV-proven", "recommended": true},
+        {"label": "Hold — not yet (say why in notes)", "detail": ""}
+      ]
+    },
+    {
+      "id": "q2-merge-editor",
+      "group": "Ship & merge",
+      "topic": "Merge feat/editor-experience → main after #1?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>The editor experience layers John's Worker-injected <code>/edit</code> proxy editor on top of the platform — suggestions only, nothing goes live without your review.</p><ul><li><b>Tests green:</b> worker 119/119, apply-engine 14/14, editor-client 22/22; validator / leak-sweep green.</li><li><b>Live UAT:</b> real-browser run PASS — 64 editable blocks, 0 CSP errors, full A/B/C/D apply proof (deploy DEV then revert, canonical byte-identical).</li><li><b>Depends on #1:</b> merge this <em>after</em> curriculum-buildout so main stays linear.</li><li><b>Corpus clean:</b> no committed test content in <code>data/</code> or <code>site/platform/</code>.</li></ul><p><b>Links:</b> <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/evidence/EP-2026-07-18-editor.md'>EP-2026-07-18 editor</a> · <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/plans/2026-07-18-001-feat-editor-experience-plan.md'>plan</a></p>",
+      "options": [
+        {"label": "Yes — merge after #1", "detail": "119 / 14 / 22 tests + live UAT", "recommended": true},
+        {"label": "Hold — not yet (say why in notes)", "detail": ""}
+      ]
+    },
+    {
+      "id": "q3-prod-deploy",
+      "group": "Ship & merge",
+      "topic": "PROD deploy now, or hold until after the walkthrough?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>PROD (<a href='https://sonsteng.damienriehl.com'>sonsteng.damienriehl.com</a>) still serves only the original pitch. Everything demoed to John &amp; Roger runs on DEV today.</p><ul><li><b>Case to hold:</b> do the John &amp; Roger walkthrough on DEV first, then deploy once the naming/branding calls are settled.</li><li><b>Case to go now:</b> make the platform public immediately behind the pitch.</li><li><b>Always your call:</b> PROD deploys come back to you regardless — this is the intent-of-record.</li></ul>",
+      "options": [
+        {"label": "Hold until after the walkthrough", "detail": "Walkthrough first; PROD deploys always ask anyway", "recommended": true},
+        {"label": "Deploy platform to PROD now", "detail": "Make it public behind the pitch immediately"}
+      ]
+    },
+    {
+      "id": "q4-api-key",
+      "group": "The API key (the one blocker)",
+      "topic": "Provide a model API key — unlocks the demo",
+      "type": "both",
+      "allow_notes": true,
+      "context_html": "<p>This is the single real gate. One key unlocks three things, each one command: the live <b>red-team gate</b> (D3/D4 probes), the <b>live client interview</b> in the walkthrough, and — optionally — the <b>hosted demo pool</b> ($10/day cap already enforced server-side).</p><ul><li><b>Anthropic (recommended):</b> prompt-caching on the ≥4096-token persona prefix makes it ~$0.055/interview.</li><li><b>OpenAI / Google:</b> supported via the same provider-agnostic BYOK adapters; no caching economics.</li><li><b>BYOK-only forever:</b> no hosted pool — every user pastes their own key; the demo still runs, you just paste yours each session.</li><li><b>Note field:</b> tell me where you'll put it (e.g. <code>~/.secrets/…</code>) — keys are never stored or logged, BYOK is source-scan-tested.</li></ul><p><b>Links:</b> <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/demo-runbook-2026-07-18.md'>demo runbook (🔑 steps)</a> · <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/evidence/EP-2026-07-17-buildout.md'>deferred-gate notes</a></p>",
+      "options": [
+        {"label": "Anthropic key", "detail": "Prompt-caching ≈ $0.055/interview — best economics", "recommended": true},
+        {"label": "OpenAI key", "detail": "Supported adapter; no caching economics"},
+        {"label": "Google key", "detail": "Supported adapter; no caching economics"},
+        {"label": "BYOK-only forever (no hosted pool)", "detail": "Everyone pastes their own key; you paste yours each session"}
+      ]
+    },
+    {
+      "id": "q5-john-link",
+      "group": "John's editor",
+      "topic": "Send John his magic edit link now, or test-drive it yourself first?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>John's tokens are staged in <code>~/.secrets/sonsteng-editor-tokens</code> (never printed, never committed). Building his URL and sending it is a 2-minute step whenever you say go.</p><ul><li><b>Recommended:</b> you spend ~10 minutes in the editor yourself first, guided by the one-page John guide, then send — so you've seen exactly what he'll see.</li><li><b>Or send now:</b> the queue is expected empty; John starts suggesting immediately.</li><li><b>Either way safe:</b> everything John does is a suggestion — nothing goes live without your accept + the validator parity gate.</li></ul><p><b>Links:</b> <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/editor-guide-for-john.md'>editor guide for John</a> · <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/evidence/EP-2026-07-18-editor.md'>\"Handing John his link\"</a></p>",
+      "options": [
+        {"label": "I test-drive first, then send", "detail": "~10 min with the John guide, then hand him the link", "recommended": true},
+        {"label": "Send John his link now", "detail": "Queue is empty; he can start right away"}
+      ]
+    },
+    {
+      "id": "q6-schedule-walkthrough",
+      "group": "John's editor",
+      "topic": "Schedule the John & Roger walkthrough — target date/window?",
+      "type": "text",
+      "allow_notes": true,
+      "context_html": "<p>The runbook is ready: a ~20-minute walkthrough (10 beats, telling the trilogy story) plus discussion. It works keyless via the scripted sample, and lights up fully once the API key lands.</p><ul><li><b>What to give me:</b> a target date or window — I'll prep and confirm the 🔑 steps beforehand.</li><li><b>Closing asks queued:</b> the name, the institutional home, their roles, republishing the crown-jewel articles, whether Trialbook folds in.</li></ul><p><b>Link:</b> <a href='https://github.com/damienriehl/sonsteng-magnum-opus/blob/feat/editor-experience/docs/demo-runbook-2026-07-18.md'>demo runbook</a></p>",
+      "options": []
+    },
+    {
+      "id": "q7-fast-follows",
+      "group": "Fast-follows",
+      "topic": "Which fast-follow(s) to build next? (multi-select in the note)",
+      "type": "both",
+      "allow_notes": true,
+      "context_html": "<p>All optional, all deferred by design. Pick the radio for the overall posture, and <b>list any you want built</b> in the note (multi-select).</p><ul><li><b>PROD injector wiring:</b> point <code>EDIT_UPSTREAM</code> at Pages — lets John edit against PROD, not just DEV.</li><li><b>Roger as 2nd editor:</b> token model is ready; one more scope mapping.</li><li><b>Automated digest push:</b> ntfy/email when new suggestions land (the review page is the digest today).</li><li><b>SSE streaming for chat:</b> token-by-token interview responses.</li><li><b>Value-sync serializer:</b> formatting-preserving span-splice (v1 is exact-literal, structurally scoped).</li><li><b>Turnstile on session mint:</b> bot-gate the free session endpoint.</li><li><b>None for now:</b> hold all of these until after the walkthrough tells us what actually matters.</li></ul>",
+      "options": [
+        {"label": "None for now — revisit after the walkthrough", "detail": "Let the John & Roger meeting set the priorities", "recommended": true},
+        {"label": "Build the one(s) I name in the note", "detail": "List which from the bullets above"}
+      ]
+    }
+  ]
+}

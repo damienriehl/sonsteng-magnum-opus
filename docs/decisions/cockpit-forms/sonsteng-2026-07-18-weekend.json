@@ -1,0 +1,249 @@
+{
+  "id": "sonsteng-2026-07-18-weekend",
+  "title": "Sonsteng Magnum Opus — Weekend Fast-Follow Wave Decisions (2026-07-18)",
+  "created": "2026-07-18",
+  "status": "answered",
+  "severity": "input-welcome",
+  "artifact_url": "https://dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html",
+  "summary_html": "<p style=\"border:1px solid #4fc47f;border-radius:8px;padding:8px 12px\"><b>✅ ANSWERED &amp; APPLIED 2026-07-18 eve.</b> Merge to main done (97cbd5a, gates green), digest timer installed and proven, walkthrough confirmed Wed Jul 23. Next session: P1+C1 hardening + copy reword. Sunday-evening reminder stands for the John-link test-drive. Full record: <code>docs/decisions/2026-07-18-weekend-answers.md</code>. This form is now a closed record.</p><p style=\"border:1px solid #3fc1a8;border-radius:8px;padding:8px 12px\"><b>✓ Verified live 2026-07-18 ~21:00</b> — this form was regenerated after a dashboard sync accidentally deleted the original file (same URL, same substance), then every claim was re-verified against reality: DEV site serves the full WP10 content (new personas live), the DEV worker's latest deployment is 18:32 CT (after the final weekend merge), PROD site is byte-identical pitch at every path and the PROD worker has zero deployments (both intentionally held), the weekend branch is still unmerged (23 commits) and the digest timer is not installed — so ALL 10 decisions below remain live and none are stale.</p><h3>Weekend fast-follow wave COMPLETE — 10 decisions await</h3><p>All 10 work packages done by parallel Opus agents. <b>Every gate green</b> (worker 119→175, apply-engine 14→66, digest +22, editor-client 22→25, validator PASS 20/20, build check green). <b>DEV fully redeployed</b> (site + worker); rehearsal verdict READY for ~Wed. <b>PROD untouched and still held.</b> Integration branch <code>feat/weekend-fast-follows</code> pushed to origin; merge to main awaits decision 3.</p><p><b>WP10 final results (landed after the artifact shipped):</b> editor review found + fixed 2 real bugs — the RSH/JOS reviewer-attribution chip never actually rendered on the review page (now does, with a regression test) and the comment dialog was a keyboard trap (Escape/focus-return/focus-ring fixed). Matter polish deepened the 5 genuinely-thinnest matters (m11/m12/m13/m14/m16): 3 new interviewable personas elevated from existing witnesses, a real fact mis-anchor fixed in m11 — all validator-gated, no invention. <i>Three WP10 FYIs for your notes fields: (1) real-tier matters were inconsistently at 2 personas vs the Meridian 3-persona norm — I standardized m13/m14/m16 to 3; flag if you intended real-tier to run leaner. (2) Both DWI matters stay at 2 personas as an intentional shape norm — say the word if you want a neutral third later. (3) The banner's small EDITING badge is ~3.9:1 contrast (design-token owned; meaning carried redundantly in adjacent text) — note if you want strict AA there.</i></p><ul><li><b>Answer here:</b> <a href='https://dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html'>interactive decision artifact</a> — tappable picks (recommended pre-selected), notes, Copy-answers paste-back.</li><li><b>10 decisions:</b> walkthrough date · John's/Roger's links · merge weekend branch · PROD editor origin · streaming default · Turnstile posture · security hardening · Rule 4.2 demo beat · digest timer install · a copy fix.</li></ul><p style=\"color:#a4700f\"><b>Recommended options are pre-selected.</b> PROD deploy stays held regardless — this is the durable record of the call.</p>",
+  "asks": [
+    "1. Walkthrough date — REC: confirm Wed Jul 23 (runbook rehearsed READY; keyless demo carries it). Alt: different day / re-ask Monday.",
+    "2. John's magic link — REC: test-drive this weekend, remind Sunday eve (alt: send now / hold until after walkthrough). Multi-select: also prep Roger's link (token now live).",
+    "3. Merge feat/weekend-fast-follows → main — REC: merge now (all gates green, DEV runs it, PROD unaffected). Alt: hold on branch until after walkthrough.",
+    "4. PROD editor origin (EDIT_ORIGIN, WP1) — REC: keep workers.dev default (zero DNS/routes). Alt: custom subdomain / decide at PROD-enable.",
+    "5. Streaming default (WP4) — REC: keep OFF through walkthrough (validated vs mocked SSE only). Alt: flip ON on DEV now / flip if Wed feels slow.",
+    "6. Turnstile posture (WP6) — REC (multi): managed mode OK + PROD gated from day one OK. Alt: invisible-only / visible badge / PROD initially ungated.",
+    "7. Security hardening (WP8 offline red-team) — REC: do both next session (P1 anti-encoding persona clause + C1 fail-closed redaction of all scorecard fields). Alt: P1 only / C1 only / defer both (0 EXPOSED, modest risk).",
+    "8. Rule 4.2 demo beat (WP9) — REC: demo live Wednesday with a key. Alt: scripted ?sample replay / skip the beat.",
+    "9. Digest timer install (WP3) — REC: install now on home box (4x/day, dedupe-guarded). Alt: leave documented-only.",
+    "10. Small copy fix — REC: next session rewords firm-dashboard aside to neutral product copy. Alt: leave as-is."
+  ],
+  "questions": [
+    {
+      "id": "q1-walkthrough-date",
+      "group": "Walkthrough",
+      "topic": "Walkthrough date — confirm Wed Jul 23?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>q6 said “Maybe Wednesday” (2026-07-23). Runbook is rehearsed READY; the keyless demo carries it even with no API key. Full decision set lives in the <a href='https://dashboard.damienriehl.com/sonsteng-weekend-2026-07-18.html'>weekend artifact</a>.</p>",
+      "options": [
+        {
+          "label": "Confirm Wed Jul 23",
+          "detail": "Runbook rehearsed READY; keyless demo carries it",
+          "recommended": true
+        },
+        {
+          "label": "A different day (say which in notes)",
+          "detail": ""
+        },
+        {
+          "label": "Still unsure — re-ask Monday",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "q2-john-roger-links",
+      "group": "John's editor",
+      "topic": "John's magic link (+ Roger's, now live)",
+      "type": "both",
+      "allow_notes": true,
+      "context_html": "<p>q5: test-drive first, then send. Tokens staged in <code>~/.secrets/sonsteng-editor-tokens</code>. Roger's token is now live too — note if you also want his link prepped in the same step.</p>",
+      "options": [
+        {
+          "label": "I've test-driven — build + send John's link now",
+          "detail": "Hand him the link immediately"
+        },
+        {
+          "label": "I'll test-drive this weekend — remind me Sunday evening",
+          "detail": "~10 min in the editor first",
+          "recommended": true
+        },
+        {
+          "label": "Hold until after the walkthrough",
+          "detail": "Wait for the John & Roger meeting"
+        }
+      ]
+    },
+    {
+      "id": "q3-merge-weekend-branch",
+      "group": "Ship & merge",
+      "topic": "Merge feat/weekend-fast-follows → main?",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>11+ commits, every gate green, DEV already runs it. PROD is unaffected — deploy stays held either way.</p>",
+      "options": [
+        {
+          "label": "Merge to main now",
+          "detail": "Keeps main = deployed DEV",
+          "recommended": true
+        },
+        {
+          "label": "Hold on the branch until after the walkthrough",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "q4-prod-editor-origin",
+      "group": "PROD prep (WP1)",
+      "topic": "PROD editor origin (EDIT_ORIGIN)",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p><code>EDIT_ORIGIN</code> is the <code>/edit</code> CORS allowlist + the origin PROD magic links use. Committed default: <code>sonsteng-chat-production.damienriehl.workers.dev</code>.</p>",
+      "options": [
+        {
+          "label": "Keep the workers.dev default",
+          "detail": "Zero extra DNS/routes; links just work at enable",
+          "recommended": true
+        },
+        {
+          "label": "Custom subdomain (e.g. edit.sonsteng.damienriehl.com)",
+          "detail": "Prettier; needs a route+DNS first"
+        },
+        {
+          "label": "Decide at PROD-enable time",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "q5-streaming-default",
+      "group": "Chat (WP4)",
+      "topic": "Streaming default",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p><code>STREAMING</code> flag exists, OFF everywhere; validated vs mocked SSE only (BYOK = no live key to smoke).</p>",
+      "options": [
+        {
+          "label": "Keep OFF through the walkthrough",
+          "detail": "Typing indicator proven; flip later after live BYOK smoke",
+          "recommended": true
+        },
+        {
+          "label": "Flip ON on DEV now",
+          "detail": "You'll smoke it with your own key"
+        },
+        {
+          "label": "Flip ON only if Wednesday feels slow",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "q6-turnstile-posture",
+      "group": "Bot-gate (WP6)",
+      "topic": "Turnstile posture (multi-select)",
+      "type": "both",
+      "allow_notes": true,
+      "context_html": "<p>Managed mode chosen (invisible unless CF suspects a bot); one widget covers DEV + future PROD; <code>env.production</code> ships <code>TURNSTILE_ENABLED=true</code>. Confirm both, or note an alternative.</p>",
+      "options": [
+        {
+          "label": "Managed mode OK",
+          "detail": "Invisible unless CF suspects a bot",
+          "recommended": true
+        },
+        {
+          "label": "PROD gated from day one OK",
+          "detail": "env.production enforces at enable",
+          "recommended": true
+        },
+        {
+          "label": "Alternative (note which)",
+          "detail": "invisible-only / visible badge / PROD initially ungated"
+        }
+      ]
+    },
+    {
+      "id": "q7-security-hardening",
+      "group": "Security (WP8)",
+      "topic": "Security hardening from offline red-team",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>Two recs, neither applied: <b>P1</b> append-only anti-encoding/translation clause on the shared persona prompt (closes the only PARTIAL angle, cache-safe); <b>C1</b> fail-closed redaction scanning of ALL free-text scorecard fields (today only 2 are scrubbed). Offline probe found 0 EXPOSED.</p>",
+      "options": [
+        {
+          "label": "Do both next session",
+          "detail": "P1 + C1",
+          "recommended": true
+        },
+        {
+          "label": "P1 only",
+          "detail": ""
+        },
+        {
+          "label": "C1 only",
+          "detail": ""
+        },
+        {
+          "label": "Defer both",
+          "detail": "0 EXPOSED — risk is modest"
+        }
+      ]
+    },
+    {
+      "id": "q8-rule42-demo",
+      "group": "Walkthrough (WP9)",
+      "topic": "Rule 4.2 demo beat",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>The no-contact flag only fires after a live keyed turn — not keyless-demoable today.</p>",
+      "options": [
+        {
+          "label": "Demo it live Wednesday with a key",
+          "detail": "You or the audience paste one",
+          "recommended": true
+        },
+        {
+          "label": "Build a scripted ?sample replay",
+          "detail": "Small follow-up"
+        },
+        {
+          "label": "Skip the beat in the walkthrough",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "id": "q9-digest-timer",
+      "group": "Ops (WP3)",
+      "topic": "Digest timer install",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>Installer ready (<code>bash tools/install-digest-timer.sh</code>), 4×/day at 09/13/17/21 CT, dedupe-guarded. Reviewable set can also count drift / needs_human / accepted_blocked — easy to narrow later.</p>",
+      "options": [
+        {
+          "label": "Install now on the home box",
+          "detail": "4×/day, dedupe-guarded",
+          "recommended": true
+        },
+        {
+          "label": "Leave documented-only for now",
+          "detail": "Review page stays the digest"
+        }
+      ]
+    },
+    {
+      "id": "q10-copy-fix",
+      "group": "Copy",
+      "topic": "Small copy fix",
+      "type": "choice",
+      "allow_notes": true,
+      "context_html": "<p>Firm dashboard aside “One reporting period ships tonight…” reads like a build note in demo context.</p>",
+      "options": [
+        {
+          "label": "Next session rewords to neutral product copy",
+          "detail": "",
+          "recommended": true
+        },
+        {
+          "label": "Leave as-is",
+          "detail": ""
+        }
+      ]
+    }
+  ],
+  "answered": "2026-07-18",
+  "answer_record": "sonsteng-magnum-opus/docs/decisions/2026-07-18-weekend-answers.md",
+  "answer_summary": "q1 walkthrough CONFIRMED Wed Jul 23; q2 John-link: Damien test-drives weekend, remind Sunday eve; q3 MERGED to main 97cbd5a (gates 175+88 green); q4 EDIT_ORIGIN stays workers.dev; q5 streaming stays OFF; q6 Turnstile managed + PROD-gated confirmed; q7 P1+C1 next session; q8 Rule 4.2 demoed LIVE Wed w/ key; q9 digest timer INSTALLED + proof run green (installer space-in-path bug fixed); q10 copy reword next session."
+}
