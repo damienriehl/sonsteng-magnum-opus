@@ -34,8 +34,11 @@ website copy, and the private teaching notes and answer keys.
 - Your suggestions wait in a list for Damien.
 - Damien reads each one and either **accepts** it (it goes into the real materials) or sets it
   aside, and he can leave you a note about why.
-- Next time you open your link, each of your suggestions shows its status: **pending**,
-  **accepted**, or **set aside**. Nothing you write is ever lost.
+- Next time you open your link, your suggested wording is **already shown in the page**, right
+  where you wrote it — gently highlighted and labeled with its status (**pending**, **accepted**,
+  or **set aside**) and who suggested it. It looks just like it did the moment you saved. Click a
+  highlighted paragraph to keep refining it; anything Damien has set aside quietly returns to the
+  original wording. Nothing you write is ever lost.
 
 ## A few reassurances
 
