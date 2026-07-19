@@ -29,7 +29,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { redactDebriefOracle, validateDebriefScorecard } from "../src/validate.js";
+import { redactDebriefOracle, validateDebriefScorecard, detectDebriefOracleLeak } from "../src/validate.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundle = JSON.parse(
@@ -243,27 +243,90 @@ test("G2c legitimate pedagogy prose (no secret text) passes through unmangled", 
 });
 
 // =====================================================================
-// GROUP 3 — KNOWN GAP regression sentinel (see EP-2026-07-19).
-// The guard's scope is the two Axis-A missed fields ONLY. Secret TEXT smuggled
-// into narrative / self_reflection_prompt / axis_b comments / rule_4_2_flags is
-// NOT server-scrubbed; for those fields the evaluator PROMPT's own oracle rule is
-// the sole defense. This test PINS current behavior so a future hardening of the
-// guard (recommended in the evidence note) trips it and gets these fields added.
+// GROUP 3 — C1 fail-closed free-text scan (rec C1, APPLIED 2026-07-19).
+// redactDebriefOracle rebuilds only the two Axis-A "missed" fields. The model-
+// authored FREE-TEXT fields (narrative / self_reflection_prompt / axis_b comments
+// / rule_4_2_flags) are now guarded by detectDebriefOracleLeak: un-elicited
+// concealed/rapport-gated fact TEXT in any of them is DETECTED so the handler can
+// FAIL CLOSED (reject the scorecard) instead of shipping an answer key. These
+// tests assert leak-REJECTED (was: gap-pinned as surviving), plus the
+// false-positive carve-outs (clean prose + legitimately-elicited fact passes).
 // =====================================================================
 
-test("G3 free-text fields are NOT server-scrubbed (documented gap — do not 'fix' silently)", () => {
+test("G3a secret in narrative is detected (fail-closed, was a survived gap)", () => {
   const secret = CONCEALED_00[0];
   const sc = baseScorecard();
   sc.narrative = "The interviewer missed that " + secret;
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "narrative", "leak in narrative not detected");
+});
+
+test("G3b secret in self_reflection_prompt is detected", () => {
+  const secret = CONCEALED_00[0];
+  const sc = baseScorecard();
   sc.self_reflection_prompt = "Consider: " + secret;
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "self_reflection_prompt");
+});
+
+test("G3c secret in an axis_b comment is detected", () => {
+  const secret = CONCEALED_00[0];
+  const sc = baseScorecard();
   sc.axis_b.rapport_opening.comment = secret;
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "axis_b.rapport_opening.comment");
+});
+
+test("G3d secret in rule_4_2_flags is detected", () => {
+  const secret = CONCEALED_00[0];
+  const sc = baseScorecard();
   sc.axis_a.rule_4_2_flags = [secret];
   redactDebriefOracle(sc, p00, fm00);
-  // Current (gap) behavior: the secret SURVIVES in every free-text field.
-  assert.ok(leaks(sc.narrative, [secret]), "GAP CLOSED in narrative — update EP-2026-07-19 + remove sentinel");
-  assert.ok(leaks(sc.self_reflection_prompt, [secret]), "GAP CLOSED in self_reflection_prompt — update sentinel");
-  assert.ok(leaks(sc.axis_b.rapport_opening.comment, [secret]), "GAP CLOSED in axis_b comment — update sentinel");
-  assert.ok(sc.axis_a.rule_4_2_flags.some((f) => leaks(f, [secret])), "GAP CLOSED in rule_4_2_flags — update sentinel");
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "axis_a.rule_4_2_flags[0]");
+});
+
+test("G3e cosmetically-obfuscated secret (homoglyph + zero-width) in narrative is still detected", () => {
+  const secret = CONCEALED_00[0];
+  const obfusc = (t) => t.replace(/a/g, "а").replace(/e/g, "е").replace(/o/g, "о").split("").join("​");
+  const sc = baseScorecard();
+  sc.narrative = "note: " + obfusc(secret);
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "narrative", "obfuscated leak slipped past the fold");
+});
+
+test("G3f a clean, secret-free scorecard passes (no false-positive reject)", () => {
+  const sc = baseScorecard();
+  sc.narrative = "The student opened warmly and funneled well, but never asked about the client's work or income.";
+  sc.self_reflection_prompt = "What would a broader opening have surfaced about the client's situation?";
+  sc.axis_b.rapport_opening.comment = "Strong, unhurried opening built early trust.";
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), null, "clean scorecard wrongly flagged as a leak");
+});
+
+test("G3g a LEGITIMATELY-ELICITED fact quoted in the narrative is NOT flagged (elicited carve-out)", () => {
+  // The concealed fact was surfaced in the interview (in facts_elicited), so
+  // discussing it in the narrative is legitimate — the guard must not fail closed.
+  const concealedItem = (p00.disclosure.concealed || [])[0];
+  const sc = baseScorecard();
+  sc.axis_a.facts_elicited = [concealedItem.fact_ref];
+  sc.narrative = "The student did well to surface a sensitive point: " + concealedItem.text;
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), null, "elicited fact wrongly flagged — over-redaction");
+});
+
+test("G3h an un-elicited secret still trips even when a DIFFERENT secret was elicited", () => {
+  // Carve-out is per-fact: eliciting one concealed fact does not license leaking
+  // another un-elicited concealed/gated fact.
+  const concealed = p00.disclosure.concealed || [];
+  const gated = p00.disclosure.rapport_gated || [];
+  const elicitedItem = concealed[0];
+  const leakItem = (gated[0] || concealed[1]);
+  if (!leakItem) return; // matter without a second secret: nothing to assert
+  const sc = baseScorecard();
+  sc.axis_a.facts_elicited = [elicitedItem.fact_ref];
+  sc.narrative = "Good work overall. " + leakItem.text;
+  redactDebriefOracle(sc, p00, fm00);
+  assert.equal(detectDebriefOracleLeak(sc, p00, fm00), "narrative", "un-elicited secret leaked despite a different fact being elicited");
 });
 
 // =====================================================================

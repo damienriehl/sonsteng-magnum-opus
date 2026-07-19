@@ -149,6 +149,87 @@ export function redactDebriefOracle(o, persona, factMap) {
   return o;
 }
 
+// ---- C1 fail-closed leak scan (defense-in-depth over the free-text fields) ---
+// redactDebriefOracle owns only the two Axis-A "missed" fields (it rebuilds them
+// from ground truth). It does NOT touch the model-authored FREE-TEXT fields
+// (narrative, self_reflection_prompt, axis_b.*.comment, axis_a.rule_4_2_flags),
+// which rest solely on the evaluator prompt's own oracle rule. A jailbroken or
+// transcript-injected evaluator that pastes un-elicited concealed/rapport-gated
+// fact TEXT into those fields would turn the scorecard into an answer key.
+// detectDebriefOracleLeak scans exactly those fields and, on a hit, lets the
+// handler FAIL CLOSED (reject the scorecard with the same retryable
+// validation_error used for malformed model output) rather than ship the leak.
+//
+// Scope is deliberately narrow to avoid false positives:
+//  - Only CONCEALED + RAPPORT-GATED fact text is treated as answer-key material.
+//  - Facts the model reports as elicited (facts_elicited — the same allowlist
+//    redactDebriefOracle uses) are carved out: a legitimately surfaced fact may
+//    be discussed in the narrative without tripping the guard.
+//  - Matching is on NORMALIZED text (NFKC + Cyrillic-homoglyph fold + zero-width
+//    strip + whitespace collapse), mirroring the offline red-team's fold(), so
+//    cosmetic obfuscation (homoglyphs, spacing, fences) cannot slip a leak past.
+//  - A fragment must clear LEAK_MIN_FOLD folded chars to count, so short/common
+//    phrases in legitimate pedagogy prose can never trigger a false reject; secret
+//    fact TEXT is full descriptive sentences (folded ~60-180 chars here), so a run
+//    that long matching an un-elicited secret is a genuine leak, not overlap.
+const LEAK_HOMOGLYPH = {
+  "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+  "х": "x", "ѕ": "s", "і": "i", "ј": "j", "һ": "h",
+};
+function foldLeak(s) {
+  let out = String(s == null ? "" : s).normalize("NFKC").toLowerCase();
+  out = out.replace(/[аеорсхѕіјһ]/g, (c) => LEAK_HOMOGLYPH[c] || c);
+  return out.replace(/[​‌‍⁠﻿]/g, "").replace(/\s+/g, "");
+}
+const LEAK_MIN_FOLD = 24;
+
+// Return the offending field name (truthy) on a detected leak, or null if clean.
+export function detectDebriefOracleLeak(o, persona, factMap) {
+  if (!isObj(o) || !isObj(o.axis_a)) return null;
+  const disclosure = (persona && persona.disclosure) || {};
+  const a = o.axis_a;
+  const elicited = new Set(isArr(a.facts_elicited) ? a.facts_elicited.filter(isStr) : []);
+
+  // Build the set of un-elicited concealed/gated fact fragments to look for. Each
+  // secret contributes its whole folded text AND each of its folded sentences (so
+  // a partial paste of a multi-sentence secret is still caught), keeping only
+  // fragments long enough to be distinctive.
+  const needles = [];
+  for (const tier of ["concealed", "rapport_gated"]) {
+    for (const it of disclosure[tier] || []) {
+      if (!isObj(it) || !isStr(it.text)) continue;
+      if (isStr(it.fact_ref) && elicited.has(it.fact_ref)) continue; // legitimately elicited: carve out
+      for (const frag of [it.text, ...it.text.split(/[.?!—]+/)]) {
+        const f = foldLeak(frag);
+        if (f.length >= LEAK_MIN_FOLD) needles.push(f);
+      }
+    }
+  }
+  if (needles.length === 0) return null;
+
+  // The free-text fields the guard does NOT rebuild.
+  const fields = [];
+  if (isStr(o.narrative)) fields.push(["narrative", o.narrative]);
+  if (isStr(o.self_reflection_prompt)) fields.push(["self_reflection_prompt", o.self_reflection_prompt]);
+  const b = o.axis_b;
+  if (isObj(b)) {
+    for (const k of ["rapport_opening", "listening_t_funnel", "understanding_goals", "explanation_next_steps", "overall_confidence"]) {
+      if (isObj(b[k]) && isStr(b[k].comment)) fields.push(["axis_b." + k + ".comment", b[k].comment]);
+    }
+  }
+  if (isArr(a.rule_4_2_flags)) {
+    a.rule_4_2_flags.forEach((f, i) => { if (isStr(f)) fields.push(["axis_a.rule_4_2_flags[" + i + "]", f]); });
+  }
+
+  for (const [field, text] of fields) {
+    const h = foldLeak(text);
+    for (const n of needles) {
+      if (h.includes(n)) return field;
+    }
+  }
+  return null;
+}
+
 // Best-effort extraction of a single JSON object from model text (tolerates an
 // accidental code fence, though the prompts forbid one). Returns parsed or null.
 export function parseModelJson(text) {
