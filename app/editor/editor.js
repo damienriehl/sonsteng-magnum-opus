@@ -1088,6 +1088,14 @@
     msg.appendChild(bannerMsgEl);
     banner.appendChild(msg);
 
+    // History link — the editor-gated redline browser (index at /edit/history/).
+    // Small chrome addition per the history-browser contract; absolute path so it
+    // is independent of the wrapped page's <base>.
+    var histLink = el('a', 'editor-banner__history', 'History');
+    histLink.setAttribute('href', '/edit/history/');
+    histLink.setAttribute('title', 'Redline change history for every document');
+    banner.appendChild(histLink);
+
     var tg = el('div', 'segmented-toggle'); tg.setAttribute('role', 'group'); tg.setAttribute('aria-label', 'Type size');
     var bStd = el('button', null, 'STANDARD'); bStd.type = 'button'; bStd.setAttribute('aria-pressed', 'true');
     var bLg = el('button', null, 'LARGE TYPE'); bLg.type = 'button'; bLg.setAttribute('aria-pressed', 'false');
