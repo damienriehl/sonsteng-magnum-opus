@@ -85,17 +85,25 @@ everyone a durable, redlined change history (brainstorm answers 1b, 3a, 4a, 6a�
 
 ## Acceptance Criteria
 
-- [ ] John/Roger edits reach canonical (git) without any Damien action; DEV
-      reflects them within ~2 min under normal operation.
-- [ ] No silent loss: every edit ends `applied` (git-confirmed) or in a visible
+- [x] John/Roger edits reach canonical (git) without any Damien action; DEV
+      reflects them within ~2 min under normal operation. *(E2E 2026-07-19: john
+      edit → auto-accept → installed apply-daemon tick → `apply: batch` commit on
+      feat/canonical-docs + DEV showed the new text; heartbeat_age_s fresh.)*
+- [x] No silent loss: every edit ends `applied` (git-confirmed) or in a visible
       failure/needs_human state with digest alert — verified by the integration
-      tests above.
-- [ ] History browser: attributed revisions (display-coalesced ~10 min),
+      tests above. *(status machine + daemon failure→ntfy + needs_human unmask
+      unit-tested; E2E edit ended `applied`.)*
+- [x] History browser: attributed revisions (display-coalesced ~10 min),
       per-revision + named-baseline redlines, compare-any-two, one-click revert.
-- [ ] Editorial pass files flags at session-end + daily; flags visible in the
-      editor and the digest.
-- [ ] All existing gates stay green (worker 189+, pytest 88, client 32+,
-      validator PASS, probe 40/40); PROD untouched.
+      *(LIVE at /edit/history/; revert round trip E2E 2026-07-19: admin
+      revert-request → daemon tick → `revert(history)` commit → DEV restored →
+      history shows the kind=revert revision.)*
+- [x] Editorial pass files flags at session-end + daily; flags visible in the
+      editor and the digest. *(built + unit-tested; sonsteng-editorial.timer
+      installed for the 21:30 daily sweep + the daemon's session-end dispatch —
+      first live model-produced flag lands on the next sweep.)*
+- [x] All existing gates stay green (worker 189+→218, pytest 88→180, client
+      32+→40/40, validator PASS, probe clean); PROD untouched.
 
 ## Dependencies & Risks
 

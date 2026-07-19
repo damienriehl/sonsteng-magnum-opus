@@ -1,4 +1,4 @@
-STATE: working — Sunday hardening+overlay batch MERGED to main 2026-07-19 (hardening: P1 anti-encoding clause, C1 fail-closed debrief leak detection 40/40 HARDENED, firm-copy reword, pytest fixture; WYSIWYG pending-overlay hydration incl. cross-editor listForPage; gates: worker 189, pytest 88, editor-client 32/32, validate_spine PASS/0-ERROR, redteam 40/40); DEV redeployed (worker sonsteng-chat + Hetzner site), all smoke green; PROD held; next up: canonical-docs plan awaiting Damien's brainstorm answers (artifact canonical-docs-brainstorm-2026-07-19.html), then the fence build; REMIND Damien: John+Roger editor link test-drive
+STATE: working — CANONICAL DIRECT-APPLY + REDLINE HISTORY LIVE on DEV 2026-07-19 (3 lanes merged into feat/canonical-docs: worker auto-accept/supersede/needs_human/heartbeat, apply-daemon+editorial pass, redline History browser; wired History route /edit/history/<slug> + revert-v1 endpoints + daemon history-regen + approved-revert execution; E2E round trip PASSED — john edit → auto-accept → installed apply-daemon tick → applied + DEV live + history+heartbeat fresh; admin revert-request → tick → git revert → DEV restored + history shows the revert; content left as found; gates: worker 218, pytest 180, editor-client 40/40, validate_spine PASS, build_site --check green incl history-leak sweep, redteam clean; DEV worker sonsteng-chat + Hetzner site redeployed; apply-daemon REINSTALLED to run from the main checkout (required: the apply engine ff-merges into feat/canonical-docs, which lives here); apply.timer left ENABLED; PROD untouched; plan ACs all checked; next: John+Roger walkthrough (Wed Jul 23), first live editorial sweep 21:30, consider a dedicated daemon checkout later)
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
@@ -14,6 +14,62 @@ with a pasted key per decision 8).
 This repo self-documents (cockpit convention: RESUME.md + the STATE line at top). You have
 the project memory (`project_sonsteng_magnum_opus.md`) plus this doc — that is enough to
 continue losslessly with no conversation history.
+
+---
+
+## Addendum 2026-07-19 — Canonical Direct-Apply + Redline History LIVE on DEV
+
+The three direct-apply lanes are merged into `feat/canonical-docs` and wired end-to-end;
+the full round trip was verified live on DEV. Branch pushed; DEV worker + site redeployed.
+
+**What it means for John / Roger (DEV):**
+- **Edits go live automatically in ~2 min.** In `/edit`, a saved edit auto-accepts
+  (`DIRECT_APPLY=true`) and the home-box apply-daemon (systemd `sonsteng-apply.timer`,
+  every 2 min) flushes it to canonical git + rebuilds + redeploys DEV. No Damien approval
+  step anymore — history + revert are the safety net.
+- **Heartbeat banner (honesty).** The editing banner reads the daemon heartbeat:
+  fresh (<5 min) → "Your edits go live automatically (~2 min)"; stale/never (>10 min) →
+  "Auto-apply paused … your edits are safe and queued." Never a false "live" claim.
+- **needs_human unmask.** If an edit can't be applied cleanly it shows the edited text with
+  a warning frame + "Needs attention — not applied" pill (no silent loss).
+
+**Redline History browser** (editor-gated; edit/instructor scope):
+- **URL pattern:** `/edit/history/` (index of every canonical doc) and
+  `/edit/history/<doc-slug>` where the slug is the repo path with `/`→`__`
+  (e.g. `data/curriculum/m1.md` → `/edit/history/data__curriculum__m1.md`).
+  A **"History"** link sits in the editor banner chrome.
+- Attributed, display-coalesced (~10 min) revisions with per-revision + baseline redlines
+  and a capped compare picker (all pre-rendered; no network fetch in the client).
+- **One-click revert (SL8):** editors *request* (`POST /edit/v1/revert-request
+  {doc, run:[first,last]}` → status `requested`); an **admin** request is `approved`
+  immediately; the daemon executes approved requests each tick (clean-tree, conflict-aware
+  `git revert` of the run range → rebuild + redeploy → marks `done`/`failed`). Requests are
+  visible on `/edit/review` + in the digest.
+- **Leak-gated:** history output (redlines expose instructor-only material) lives ONLY under
+  `build/` and is served exclusively through the authed `/edit` proxy. `build_site.py
+  --check` now runs `assert_no_history_leak` — zero history artifacts in `site/platform/`.
+
+**Editorial pass schedule:** post-hoc quality review of applied edits — session-end
+(daemon dispatches after ≥30 min idle over an unreviewed batch) + daily `sonsteng-editorial.
+timer` at 21:30 America/Chicago. Files flags as block comments (`origin=ai_rewrite`) + a
+content-light ntfy digest. First live model-produced flag lands on the next 21:30 sweep.
+
+**Ops note — daemon home:** the apply-daemon was **reinstalled to run from this main checkout**
+(`~/Coding Projects/sonsteng-magnum-opus`) because the apply engine ff-merges into
+`feat/canonical-docs`, which is checked out here (a separate worktree can't hold the same
+branch, so the merge must run where it lives). Applies still use isolated temp worktrees.
+`sonsteng-apply.timer` is enabled and firing every 2 min. If interactive work here ever needs
+to avoid daemon commits, stop the timer (`systemctl --user stop sonsteng-apply.timer`) or move
+the daemon to a dedicated `feat/canonical-docs` checkout later.
+
+**Served-history freshness:** the History bundle is inlined into the Worker at deploy. The
+apply engine redeploys the Worker each apply (self-sufficient build command builds the bundle
+in its worktree, one revision behind the in-flight commit); the daemon keeps `build/`'s bundle
+fully fresh. A Worker redeploy from this checkout serves the latest — done this session.
+
+**Gates (this integration):** worker `node --test` **218**, pytest `tools/tests/` **180**,
+editor-client `verify-editor.js` **40/40**, `validate_spine.py` PASS, `build_site.py --check`
+green incl. the history-leak sweep, offline red-team probe clean. PROD untouched.
 
 ---
 

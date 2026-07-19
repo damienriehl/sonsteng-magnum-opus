@@ -3,6 +3,25 @@
 *Everything you change is a **suggestion**. Nothing goes live until Damien reviews it — so
 you can never break anything. Edit freely.*
 
+## New (2026-07-19): your edits now go live on their own — in about 2 minutes
+
+On the practice site, you no longer have to wait for Damien. When you **Save my change**,
+it publishes to the live practicum **automatically within ~2 minutes**. You still can't break
+anything — every version is kept, and any change can be undone with one click (below).
+
+- **The pills tell you where a change stands.** Right after you save, a small label shows
+  **"Going live…"**; once it's published it clears. If something couldn't be applied cleanly,
+  the paragraph shows your text with a warning outline and a **"Needs attention — not applied"**
+  pill, so nothing is ever silently lost.
+- **The green bar is honest about the service.** When auto-publishing is healthy it reads
+  *"Your edits go live automatically (~2 min)."* If the home service is momentarily paused it
+  says so — *"Auto-apply paused … your edits are safe and queued"* — and your work waits safely.
+- **History + one-click undo.** A **"History"** link in the top bar opens the change history for
+  every document: who changed what, a redline of each revision, and a **Request revert** button
+  to roll a change back. (Damien's link executes reverts immediately; yours files the request.)
+
+Comments still work exactly as before — they're notes for Damien, not live edits.
+
 ## Getting in
 
 Click your **personal edit link** (Damien will send it — save it as a bookmark). It opens the
