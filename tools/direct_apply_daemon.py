@@ -360,7 +360,15 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
         return False, "bad_run_range"
 
     with apply_lock():
-        # Refuse on a dirty working tree (excludes untracked/gitignored build/).
+        # Clear benign GENERATED-output churn first: the daemon's post-apply
+        # rebuild rewrites site/.build-stamp.json (git_base_sha = current HEAD),
+        # so site/ is routinely dirty vs the last commit. That output is fully
+        # regenerable (rebuild overwrites it below), never precious — restore it
+        # to HEAD so it doesn't block the revert. Best-effort (site/ may not exist
+        # in a bare test repo). SOURCE dirtiness is still caught by the check next.
+        _git(["checkout", "--", "site"], repo_root)
+        # Refuse on a dirty working tree in SOURCE (excludes untracked/gitignored
+        # build/). A real uncommitted edit to data/app/tools -> never revert over it.
         rc, out = _git(["status", "--porcelain", "--untracked-files=no"], repo_root)
         if rc != 0:
             return False, "git_status_failed"
