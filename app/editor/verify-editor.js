@@ -18,7 +18,11 @@ const { execFileSync } = require('child_process');
 const DIR = __dirname;                              // app/editor
 const REPO = path.resolve(DIR, '..', '..');         // repo root
 const OUT = process.env.HOME;
-const HARNESS = 'file://' + path.join(DIR, 'test-harness.html');
+// Default: load the harness straight off disk (file://). When the checkout lives
+// somewhere snap-confined Chromium cannot read (e.g. a ~/.cache worktree), set
+// HARNESS_URL to a localhost static-server URL for app/editor/test-harness.html
+// (the harness header sanctions this) — everything else is byte-identical.
+const HARNESS = process.env.HARNESS_URL || ('file://' + path.join(DIR, 'test-harness.html'));
 
 const results = [];
 function assert(rule, cond, detail) {
@@ -213,6 +217,75 @@ async function run() {
     const banner = await page.$eval('.editor-banner', el => el.textContent).catch(() => '');
     assert('B1 persistent "changes go to Damien" banner present',
       /changes go to Damien/i.test(banner || ''), 'banner="' + (banner || '').replace(/\s+/g, ' ').slice(0, 48) + '…"');
+
+    /* --- HY: pending overlay hydrates block text across reloads (WYSIWYG) ----
+       Feed the client server-style #edits-data items (the shape projectPendingItems
+       now emits) through renderPending — the exact entry boot + repoll use — and
+       assert hydration, attribution, the stale/declined/draft guards, and that a
+       re-edit FROM a hydrated block saves a valid supersede (canonical hash). */
+    const HYREF = await page.evaluate(() => window.SonstengEditor.block(4).ref);
+    const HYPAGE = await page.evaluate(() => window.SonstengEditor.page());
+    const HYTEXT = 'Devon Halvard is a delivery driver with no prior record.';
+
+    // 1) a pending EDIT paints its new_text into the block + shows attribution
+    await page.evaluate((ref, t) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'pending', kind: 'prose',
+        new_text: t, base_hash: 'hash-idx4-v1', map_version: 'harness-v1',
+        attribution: 'JOS', preview: t }
+    ]), HYREF, HYTEXT);
+    const hy1 = await page.evaluate(() => ({ text: window.SonstengEditor.blockText(4), b: window.SonstengEditor.block(4), st: window.SonstengEditor.statusText(4) }));
+    assert('HY1 pending suggestion hydrates the block text on (re)load (WYSIWYG)',
+      hy1.text === HYTEXT && hy1.b.hydrated === true, 'text="' + hy1.text.slice(0, 40) + '" hydrated=' + hy1.b.hydrated);
+    assert('HY2 hydrated block shows status pill + author attribution (JOS)',
+      /Pending review/.test(hy1.st) && /JOS/.test(hy1.st), 'pill="' + hy1.st + '"');
+    assert('HY3 hydration is display-only — canonical originalHash/originalText untouched',
+      hy1.b.originalHash === 'hash-idx4-v1' && /breath-test result/.test(hy1.b.originalText), 'hash=' + hy1.b.originalHash);
+
+    // 2) declined does NOT hydrate — the block reverts to the ORIGINAL text
+    await page.evaluate((ref) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'declined', kind: 'prose',
+        new_text: 'Should never appear.', base_hash: 'hash-idx4-v1', attribution: 'JOS' }
+    ]), HYREF);
+    const hy2 = await page.evaluate(() => ({ text: window.SonstengEditor.blockText(4), hydrated: window.SonstengEditor.block(4).hydrated }));
+    assert('HY4 declined does NOT hydrate; block reverts to its original text',
+      /breath-test result/.test(hy2.text) && hy2.hydrated === false, 'text="' + hy2.text.slice(0, 40) + '"');
+
+    // 3) a STALE suggestion (baseline hash moved) skips hydration -> pill-only
+    await page.evaluate((ref) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'pending', kind: 'prose',
+        new_text: 'Stale overlay must be skipped.', base_hash: 'HASH-MOVED', attribution: 'JOS', preview: 'stale' }
+    ]), HYREF);
+    const hy3 = await page.evaluate(() => ({ text: window.SonstengEditor.blockText(4), hydrated: window.SonstengEditor.block(4).hydrated, st: window.SonstengEditor.statusText(4) }));
+    assert('HY5 stale suggestion (hash moved) skips hydration; falls back to the pill',
+      /breath-test result/.test(hy3.text) && hy3.hydrated === false && /Pending review/.test(hy3.st),
+      'text="' + hy3.text.slice(0, 28) + '" pill="' + hy3.st + '"');
+
+    // 4) an unsent DRAFT beats hydration (draft = newer intent)
+    await page.evaluate((ref, pg) => {
+      var key = window.SonstengEditor.draftKeyFor(4);
+      sessionStorage.setItem(key, JSON.stringify({ page: pg, source_ref: ref, original_hash: 'hash-idx4-v1', new_text: 'my unsent draft', ts: Date.now() }));
+    }, HYREF, HYPAGE);
+    await page.evaluate((ref) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'pending', kind: 'prose',
+        new_text: 'Suggestion should be suppressed by the draft.', base_hash: 'hash-idx4-v1', attribution: 'JOS' }
+    ]), HYREF);
+    const hy4 = await page.evaluate(() => ({ text: window.SonstengEditor.blockText(4), hydrated: window.SonstengEditor.block(4).hydrated }));
+    assert('HY6 an unsent draft beats hydration (draft = newer intent)',
+      hy4.text.indexOf('Suggestion should be suppressed') === -1 && hy4.hydrated === false, 'text="' + hy4.text.slice(0, 40) + '"');
+    await page.evaluate(() => { sessionStorage.removeItem(window.SonstengEditor.draftKeyFor(4)); });
+
+    // 5) re-edit FROM a hydrated block saves a valid SUPERSEDE (canonical hash)
+    await page.evaluate((ref, t) => window.SonstengEditor.applyPending([
+      { block_index: 4, source_ref: ref, status: 'pending', kind: 'prose',
+        new_text: t, base_hash: 'hash-idx4-v1', attribution: 'JOS', preview: t }
+    ]), HYREF, 'A hydrated starting point for the re-edit.');
+    await page.evaluate(() => window.SonstengEditor.typeInto(4, 'A re-edit that starts from the hydrated suggestion text.'));
+    await page.evaluate(() => window.SonstengEditor.clickSave(4));
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
+    const last = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    assert('HY7 re-edit from a hydrated block saves a valid supersede (canonical original_hash sent, unpoisoned)',
+      last && last.source_ref === HYREF && last.original_hash === 'hash-idx4-v1' && /re-edit that starts/.test(last.new_text || ''),
+      'sent hash=' + (last && last.original_hash) + ' text="' + ((last && last.new_text) || '').slice(0, 30) + '"');
 
     await page.screenshot({ path: path.join(OUT, 'editor-desktop.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-desktop.png'));
