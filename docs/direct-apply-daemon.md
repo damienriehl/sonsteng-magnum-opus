@@ -24,6 +24,59 @@ Secrets live in the 0600 env file `~/.config/sonsteng-apply/env` (`EDIT_API_BASE
 `~/.secrets/sonsteng-editor-tokens`, `APPLY_DEPLOY_BRANCH`). The ntfy topic is read
 by path from `~/.config/claude-rc/ntfy-topic`. Nothing is inlined in git.
 
+## Deploy topology (since 2026-07-24)
+
+| | path | branch | who writes it |
+|---|---|---|---|
+| **Daemon checkout** | `~/.local/share/sonsteng-daemon/checkout` | `main` | the daemon only |
+| **Interactive checkout** | `~/Coding Projects/sonsteng-magnum-opus` | feature branches | you |
+
+The daemon runs **from its own git worktree**, not from an interactive checkout.
+`ExecStart` in both user units points at `<daemon checkout>/tools/…`, and
+`APPLY_DEPLOY_BRANCH=main` — `main` carries the direct-apply/History work as of the
+`merge: canonical direct-apply + redline History + docs` merge.
+
+**Why.** The apply engine (`assert_clean_tree`) and the History revert both refuse
+to run on a dirty tree. While the daemon lived in the interactive checkout, any
+session that parked an uncommitted edit — or merely ran `build_site.py` — silently
+blocked auto-apply. Separating the trees makes that impossible.
+
+**Why a worktree and not a clone.** A worktree shares the object store and refs
+with the interactive checkout, so an `apply:` or `revert(history):` commit the
+daemon makes is instantly visible to `git log` there and pushable from there — the
+exact behavior of the old shared-tree setup, minus the shared working tree. A clone
+would strand the daemon's commits behind a fetch and could diverge from `origin/main`.
+
+**Consequence — `main` is checked out in the daemon worktree**, so an interactive
+checkout can't check it out (git allows a branch in one worktree at a time). Merge
+into `main` from the daemon worktree, under the daemon flock so it can't race a tick:
+
+```bash
+D=~/.local/share/sonsteng-daemon/checkout
+flock "$D/.locks/daemon.lock" git -C "$D" merge --no-ff feat/your-branch
+git -C "$D" push origin main
+```
+
+Note the flock now lives at `<daemon checkout>/.locks/daemon.lock` — that is the file
+to take for anything that races the 2-min timer.
+
+Provisioning is idempotent and lives in the installer: `tools/install-apply-daemon.sh`
+creates the worktree if it is missing, builds the gitignored generated bundles
+(`app/worker/editor-data/`, `build/`) that a fresh worktree lacks, warns if the tree
+is on a branch other than `APPLY_DEPLOY_BRANCH`, and writes the units. Override the
+location with `SONSTENG_DAEMON_ROOT=…`.
+
+**Regenerable-site guard.** `build_site.py` stamps the current HEAD sha into
+`site/platform/data/.build-stamp.json` (traceability only — deliberately not part of
+the parity hash), so the tick's post-apply rebuild always leaves that one tracked
+file dirty. The daemon therefore calls `restore_regenerable_site()` (`git checkout --
+site`) both **before** invoking the engine and **after** the deploy; without it the
+tick after any successful apply would abort with "canonical tree is dirty" — i.e.
+auto-apply would stall on the second edit of a session. DEV is published from the
+**committed** tree (`git archive <branch>`), so restoring the working copy never
+changes what ships. Source dirtiness (`data/`, `app/`, `tools/`) is untouched and
+still stops the engine, which is the point.
+
 ## Daemon flow (`direct_apply_daemon.py`)
 
 Each tick, under a host-local **daemon flock** (`.locks/daemon.lock`, distinct
