@@ -62,6 +62,14 @@ pending real-world evidence.
 | Verdict | Items |
 |---|---|
 | **NOW / opportunistic** | #2 (send Roger's link with John's) · #10 (run `redteam.mjs` on walkthrough day if a key is pasted) |
-| **NEXT (own session)** | #8 (merge `feat/canonical-docs` → `main`) + #9 (dedicated daemon checkout) — do them together · #1 (PROD flip, on Damien's go) · #4 (streaming flip on DEV, after the walkthrough) |
+| **NEXT (own session)** | ~~#8 + #9~~ **DONE 2026-07-24 eve** (merge `7efff2e`, daemon worktree at `~/.local/share/sonsteng-daemon/checkout` on `main`, E2E re-proven) · #1 (PROD flip, on Damien's go) · #4 (streaming flip on DEV, after the walkthrough) |
 | **DROP / closed** | #3, #6 (shipped) · #5 (no evidence of need) · #11 (documented residual) · #12 (contingent) · #13 (John's call) |
 | **Done in this pass** | #7 (runbook corrected) |
+
+**Update 2026-07-24 (evening session):** items **#8 and #9 are closed** — see the RESUME
+addendum "main is canonical + the daemon has its own checkout". That session also found and
+fixed a latent stall (the post-apply rebuild left `.build-stamp.json` dirty, so the *second*
+edit of a session would have failed the engine's clean-tree gate) and surfaced a **new item
+#14: the DEV box is out of disk** (`/var/lib/containerd` 64 GB on the 75 GB root while the
+49 GB `/mnt/docker-data` volume idles at 2%). #14 is the top remaining walkthrough risk —
+cockpit ask `sonsteng-2026-07-24-devbox-disk`.
