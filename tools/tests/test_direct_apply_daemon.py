@@ -266,5 +266,59 @@ class TestDryRun(unittest.TestCase):
         self.assertFalse(os.path.exists(sp))  # no state mutation in dry-run
 
 
+class TestRegenerableSiteChurn(unittest.TestCase):
+    """The stamp-churn guard (2026-07-24).
+
+    `build_site.py` writes the CURRENT HEAD sha into
+    site/platform/data/.build-stamp.json, so the tick's post-apply rebuild — which
+    runs at the just-merged commit — always leaves that one tracked file dirty.
+    The apply engine's assert_clean_tree is strict, so without a restore the tick
+    AFTER any successful apply would refuse to run ("canonical tree is dirty").
+    """
+
+    def test_clean_site_runs_before_apply_and_after_deploy(self):
+        with tempfile.TemporaryDirectory() as d:
+            sp = os.path.join(d, "state.json")
+            rec = Recorder(rows=[row("aaaaaaaa")])
+
+            def clean_site():
+                rec.calls.append("clean_site")
+                return True
+
+            res = _run(rec, state_path=sp, clean_site=clean_site)
+        self.assertEqual(res.reason, "applied")
+        # Guard on BOTH sides: entering the apply (clears the previous tick's
+        # churn) and leaving the tick (clears this tick's own rebuild churn).
+        self.assertEqual(
+            rec.calls,
+            ["fetch", "clean_site", "apply", "rebuild",
+             "deploy:feat/canonical-docs", "clean_site", "heartbeat"])
+
+    def test_quiet_tick_never_touches_the_tree(self):
+        with tempfile.TemporaryDirectory() as d:
+            sp = os.path.join(d, "state.json")
+            rec = Recorder(rows=[row("bbbbbbbb", "pending")])
+            res = _run(rec, state_path=sp,
+                       clean_site=lambda: rec.calls.append("clean_site"))
+        self.assertEqual(res.reason, "no_accepted")
+        self.assertNotIn("clean_site", rec.calls)
+
+    def test_restore_only_touches_site(self):
+        """The restore is scoped to site/ — source dirt must still stop the engine."""
+        seen = {}
+
+        def fake_git(args, repo_root, timeout=300):
+            seen["args"] = list(args)
+            return 0, ""
+
+        real = dad._git
+        dad._git = fake_git
+        try:
+            self.assertTrue(dad.restore_regenerable_site("/tmp/whatever"))
+        finally:
+            dad._git = real
+        self.assertEqual(seen["args"], ["checkout", "--", "site"])
+
+
 if __name__ == "__main__":
     unittest.main()

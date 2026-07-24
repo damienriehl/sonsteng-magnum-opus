@@ -33,8 +33,10 @@ Damien accepts" framing. Present the new story, not the old one (details:
   applied"** with the edited text still visible (no silent loss).
 - **Editorial pass.** A post-hoc quality review (session-end + daily 21:30 CT) files flags as block
   comments — quality is guarded *after* publish, not before it.
-- **DEV only.** The daemon deploys `feat/canonical-docs` to the Hetzner DEV box and can never reach
-  PROD.
+- **DEV only.** The daemon deploys `main` to the Hetzner DEV box and can never reach PROD. (Since
+  2026-07-24 `main` carries the direct-apply/History work and the daemon runs from its own
+  checkout, `~/.local/share/sonsteng-daemon/checkout` — see
+  [`docs/direct-apply-daemon.md`](direct-apply-daemon.md) "Deploy topology".)
 
 ## Before the meeting (5 minutes)
 

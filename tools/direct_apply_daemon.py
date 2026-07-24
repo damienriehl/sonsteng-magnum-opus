@@ -22,7 +22,7 @@ EACH RUN (under its own daemon flock, cooperating with the engine's apply.lock):
      FIRST (crash recovery) before it claims — that is where crash-safety is
      inherited (see docs/direct-apply-daemon.md "Crash-safety").
   5. Rebuild (build_site.py) + deploy DEV (deploy/deploy-dev.sh <branch>, branch
-     passed explicitly, default feat/canonical-docs) — the authoritative publish
+     passed explicitly, default main) — the authoritative publish
      of the just-merged canonical branch. DEV ONLY, never PROD.
   6. POST {EDIT_API_BASE}/heartbeat (admin Bearer) {ok, applied:N, ts}. The
      endpoint is being added by the worker lane; the daemon sends best-effort and
@@ -70,7 +70,7 @@ ENV_DEPLOY_BRANCH = "APPLY_DEPLOY_BRANCH"  # canonical branch to publish; defaul
 ENV_STATE_FILE = "SONSTENG_APPLY_STATE"   # override the daemon state path
 ENV_IDLE_MIN = "APPLY_EDITORIAL_IDLE_MIN"  # session-end idle threshold (min); default 30
 
-DEFAULT_DEPLOY_BRANCH = "feat/canonical-docs"
+DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
 DEFAULT_IDLE_MINUTES = 30
 
 # The status the daemon flushes. Auto-accept (worker lane) lands rows here; the
@@ -346,6 +346,28 @@ def resolve_revert_request(api_base, token, request_id, status, note=None, timeo
         return {"sent": False, "reason": "unreachable:%s" % (exc.reason,)}
 
 
+def restore_regenerable_site(repo_root=REPO_ROOT):
+    """Restore tracked site/ output to HEAD. Returns True on success.
+
+    WHY (2026-07-24): `build_site.py` stamps the CURRENT HEAD into
+    `site/platform/data/.build-stamp.json` (`git_base_sha`, traceability only —
+    deliberately NOT part of the parity hash). The tick's post-apply rebuild
+    therefore runs at a commit newer than the one the engine stamped, and leaves
+    that one tracked file dirty. The apply engine's `assert_clean_tree` is strict,
+    so WITHOUT this the tick after any successful apply would fail with
+    "canonical tree is dirty" — auto-apply would stall on the SECOND edit of a
+    session (exactly the walkthrough failure mode). `execute_revert` already
+    carried this tolerance; the apply path now does too.
+
+    Safe by construction: site/ is generated output, fully reproducible from
+    data/ (the rebuild below rewrites it), and DEV is published with
+    `git archive <branch>` — the COMMITTED tree, never the working copy. Source
+    dirtiness (data/, app/, tools/) is untouched and still stops the engine.
+    """
+    rc, _ = _git(["checkout", "--", "site"], repo_root)
+    return rc == 0
+
+
 def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None):
     """Execute ONE approved revert request on the canonical branch (clean-tree,
     conflict-aware). Returns (ok, detail). Holds the apply flock for the whole
@@ -489,13 +511,14 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         state_path=None, idle_minutes=DEFAULT_IDLE_MINUTES, now=None,
         fetch=None, apply_engine=None, do_rebuild=None, do_deploy=None,
         heartbeat=None, notify=None, editorial=None, out=None,
-        do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None):
+        do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
+        clean_site=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
-    do_history / fetch_reverts / revert_exec / revert_resolve are OPT-IN: when
-    None the corresponding behavior is skipped (keeps the pure orchestration tests
-    hermetic). main() wires all four for production."""
+    do_history / fetch_reverts / revert_exec / revert_resolve / clean_site are
+    OPT-IN: when None the corresponding behavior is skipped (keeps the pure
+    orchestration tests hermetic). main() wires all five for production."""
     out = out or sys.stdout
     state_path = state_path or default_state_path()
     now = now or datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
@@ -573,6 +596,13 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
               % branch, file=out)
         return DaemonResult(len(accepted), batch_id, "dry_run", {}, False, steps)
 
+    # 0) Clear benign GENERATED-output churn (site/.build-stamp.json carries the
+    #    HEAD sha, so the last tick's rebuild left it dirty). The engine's
+    #    assert_clean_tree is strict and would otherwise refuse every apply after
+    #    the first. Source dirtiness is deliberately NOT cleared.
+    if clean_site is not None:
+        steps.append(("clean_site", bool(clean_site())))
+
     # 1) EXISTING apply engine — patch + validate + parity + finalize + merge.
     rc, tail = apply_engine(batch_id)
     steps.append(("apply_engine", rc))
@@ -621,6 +651,13 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         save_state(state_path, state)
         return DaemonResult(0, batch_id, "deploy_failed", hb, False, steps)
 
+    # 2b) Leave the canonical tree CLEAN: the rebuild above re-stamped
+    #     site/.build-stamp.json with the merged HEAD. DEV already has the
+    #     committed tree (git archive), so this only tidies the working copy —
+    #     but it is what keeps the NEXT tick's apply from refusing to run.
+    if clean_site is not None:
+        steps.append(("clean_site", bool(clean_site())))
+
     # 3) Heartbeat ok:true applied:N (best-effort; 404 tolerated).
     hb = heartbeat(True, len(accepted))
     steps.append(("heartbeat", {"ok": True, "applied": len(accepted)}))
@@ -647,7 +684,7 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true",
                     help="Plan only: fetch + count + report; no apply/rebuild/deploy/state write.")
     ap.add_argument("--branch", default=os.environ.get(ENV_DEPLOY_BRANCH, DEFAULT_DEPLOY_BRANCH),
-                    help="Canonical branch to publish to DEV (default feat/canonical-docs).")
+                    help="Canonical branch to publish to DEV (default main).")
     ap.add_argument("--state-file", default=None, help="Override the daemon state path.")
     ap.add_argument("--no-lock", action="store_true", help="(tests only) skip the daemon flock.")
     args = ap.parse_args(argv)
@@ -665,6 +702,7 @@ def main(argv=None):
                          # History bundle regen in the rebuild step + approved-
                          # revert execution (both DEV-only, never PROD).
                          do_history=lambda: regen_history(),
+                         clean_site=lambda: restore_regenerable_site(),
                          fetch_reverts=lambda: fetch_revert_requests(api_base, token),
                          revert_exec=lambda req: execute_revert(req),
                          revert_resolve=lambda rid, st: resolve_revert_request(
