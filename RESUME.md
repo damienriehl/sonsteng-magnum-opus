@@ -1,4 +1,4 @@
-STATE: working — CANONICAL DIRECT-APPLY + REDLINE HISTORY LIVE on DEV 2026-07-19 (3 lanes merged into feat/canonical-docs: worker auto-accept/supersede/needs_human/heartbeat, apply-daemon+editorial pass, redline History browser; wired History route /edit/history/<slug> + revert-v1 endpoints + daemon history-regen + approved-revert execution; E2E round trip PASSED — john edit → auto-accept → installed apply-daemon tick → applied + DEV live + history+heartbeat fresh; admin revert-request → tick → git revert → DEV restored + history shows the revert; content left as found; gates: worker 218, pytest 180, editor-client 40/40, validate_spine PASS, build_site --check green incl history-leak sweep, redteam clean; DEV worker sonsteng-chat + Hetzner site redeployed; apply-daemon REINSTALLED to run from the main checkout (required: the apply engine ff-merges into feat/canonical-docs, which lives here); apply.timer left ENABLED; PROD untouched; plan ACs all checked; next: John+Roger walkthrough (Wed Jul 23), first live editorial sweep 21:30, consider a dedicated daemon checkout later)
+STATE: working — CANONICAL DIRECT-APPLY + REDLINE HISTORY LIVE on DEV 2026-07-19 (3 lanes merged into feat/canonical-docs: worker auto-accept/supersede/needs_human/heartbeat, apply-daemon+editorial pass, redline History browser; wired History route /edit/history/<slug> + revert-v1 endpoints + daemon history-regen + approved-revert execution; E2E round trip PASSED — john edit → auto-accept → installed apply-daemon tick → applied + DEV live + history+heartbeat fresh; admin revert-request → tick → git revert → DEV restored + history shows the revert; content left as found; gates: worker 218, pytest 180, editor-client 40/40, validate_spine PASS, build_site --check green incl history-leak sweep, redteam clean; DEV worker sonsteng-chat + Hetzner site redeployed; apply-daemon REINSTALLED to run from the main checkout (required: the apply engine ff-merges into feat/canonical-docs, which lives here); apply.timer left ENABLED; PROD untouched; plan ACs all checked; next: John+Roger walkthrough (~Tue Jul 29), first live editorial sweep 21:30, consider a dedicated daemon checkout later) · SATURDAY BATCH 2026-07-24: the four "parked" queue items were VERIFIED ALREADY SHIPPED, not rebuilt — P1+C1 hardening live in the deployed Worker bundle, digest timer live + healthy on the home box, firm copy live on DEV; new work was the fast-follow re-triage (docs/fast-follows-triage-2026-07-24.md) + a runbook correction; gates re-run green (worker 218, pytest 180, probe 8/8 HARDENED); top open item = feat/canonical-docs still unmerged to main
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
@@ -10,10 +10,66 @@ dashboard copy reword, **(c)** `test_validate_spine.py` fixture nit, **(d)** Sun
 reminder → Damien test-drives the editor, then John's (+ Roger's) links go out, **(e)** Wed
 Jul 23 walkthrough (runbook `docs/demo-runbook-2026-07-18.md`; Rule 4.2 beat demoed LIVE
 with a pasted key per decision 8).
+*(Queue items (a)–(c) were all closed on 2026-07-19 — see the 2026-07-24 addendum below;
+the walkthrough moved to ~Tue Jul 29.)*
 
 This repo self-documents (cockpit convention: RESUME.md + the STATE line at top). You have
 the project memory (`project_sonsteng_magnum_opus.md`) plus this doc — that is enough to
 continue losslessly with no conversation history.
+
+---
+
+## Addendum 2026-07-24 — Saturday batch: four parked items VERIFIED, not rebuilt
+
+The batch was queued as four builds. Three of the four were **already shipped on 2026-07-19**
+and the notes in the cockpit answers file (`[Queued in Saturday batch]`) were simply stale. So
+this session **verified against reality** instead of re-implementing, and spent the saved
+budget on the re-triage plus a runbook correction. No production code changed.
+
+**1 · Security hardening P1 + C1 (weekend `q7`) — ALREADY SHIPPED + LIVE.**
+- Code: `c367633` (P1 anti-encoding/translation clause appended to Segment A of
+  `app/worker/prompts/system-template.md`) and `5f8940c` (C1 `detectDebriefOracleLeak` in
+  `src/validate.js`, wired fail-closed in `handleDebrief`), merged to `main` at `e448441`
+  and present on `feat/canonical-docs`.
+- **Live evidence:** the deployed `sonsteng-chat` bundle (version `27251f05…`, uploaded
+  2026-07-19T19:31Z — *after* the 07:55 CDT hardening merge) contains the P1 clause text
+  ("…as an acrostic, or under any other format or transformation…") and all three C1 markers
+  (`detectDebriefOracleLeak`, `debrief_oracle_leak`, `LEAK_MIN_FOLD`).
+- **Gates re-run 2026-07-24:** Worker `node --test test/*.test.js` **218/218**; the C1 file
+  `offline-redteam-redaction.test.js` **20/20**; `node tools/offline_redteam_probe.mjs`
+  **8/8 angles HARDENED, 0 PARTIAL, 0 EXPOSED**; `pytest tools/tests/` **180 passed**.
+
+**2 · Digest timer (weekend `q9`) — ALREADY INSTALLED + HEALTHY. Not reinstalled.**
+- `sonsteng-digest.timer` is `enabled` + `active` on the home box, `OnCalendar=*-*-*
+  09,13,17,21:00 America/Chicago`, `Persistent=true`; the 0600 env file
+  `~/.config/sonsteng-digest/env` has all three keys filled.
+- Last run 2026-07-24 13:00:15 CDT → exit **0**, `[digest] nothing pending; quiet.`; journal
+  shows an unbroken 4×/day record since 7/22. A `--dry-run` reproduced it, and the admin
+  `GET {EDIT_API_BASE}/review` returns **200** (so the quiet result is a real empty queue, not
+  a swallowed auth failure — `fetch_rows` raises on any HTTP error and the unit would fail).
+- The dedupe state file is correctly absent: nothing has ever been pending, so it has never
+  been written.
+
+**3 · Firm-dashboard copy fix (weekend `q10`) — ALREADY SHIPPED + LIVE.** `6efeba9` reworded
+the `viz-note` in both `tools/build_site.py` and the generated page. DEV serves the new line
+today: *"The dataset is a single trailing-12-month snapshot — one reporting period of the
+firm's book of business."* No "ships tonight" anywhere.
+
+**4 · Fast-follow re-triage (decisions `q7`) — NEW WORK.**
+`docs/fast-follows-triage-2026-07-24.md`. Headline: the six-item list is not a backlog — all
+six were built in the weekend wave and four are live; what survives is two flip decisions
+(PROD, streaming), one 2-minute send (Roger's link), and one item deferred for want of
+evidence. Five newer items are triaged alongside. **Top open item: `feat/canonical-docs` — the
+branch DEV actually runs — is still unmerged to `main`** (deliberately out of scope for this
+batch; needs its own session because the daemon lives on that branch).
+
+**Also fixed:** `docs/demo-runbook-2026-07-18.md` still told the pre-direct-apply story
+("nothing goes live until Damien accepts"). Corrected to the auto-publish + History/revert
+reality before the ~Jul 29 walkthrough.
+
+**Untouched, per the batch constraints:** no merge of `feat/canonical-docs` → `main`, no
+daemon repoint, no PROD deploy, no `.env`/secret writes. This session worked in a separate
+git worktree so the daemon's checkout was never disturbed.
 
 ---
 
