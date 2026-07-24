@@ -1,4 +1,4 @@
-STATE: working — CANONICAL DIRECT-APPLY + REDLINE HISTORY LIVE on DEV 2026-07-19 (3 lanes merged into feat/canonical-docs: worker auto-accept/supersede/needs_human/heartbeat, apply-daemon+editorial pass, redline History browser; wired History route /edit/history/<slug> + revert-v1 endpoints + daemon history-regen + approved-revert execution; E2E round trip PASSED — john edit → auto-accept → installed apply-daemon tick → applied + DEV live + history+heartbeat fresh; admin revert-request → tick → git revert → DEV restored + history shows the revert; content left as found; gates: worker 218, pytest 180, editor-client 40/40, validate_spine PASS, build_site --check green incl history-leak sweep, redteam clean; DEV worker sonsteng-chat + Hetzner site redeployed; apply-daemon REINSTALLED to run from the main checkout (required: the apply engine ff-merges into feat/canonical-docs, which lives here); apply.timer left ENABLED; PROD untouched; plan ACs all checked; next: John+Roger walkthrough (~Tue Jul 29), first live editorial sweep 21:30, consider a dedicated daemon checkout later) · SATURDAY BATCH 2026-07-24: the four "parked" queue items were VERIFIED ALREADY SHIPPED, not rebuilt — P1+C1 hardening live in the deployed Worker bundle, digest timer live + healthy on the home box, firm copy live on DEV; new work was the fast-follow re-triage (docs/fast-follows-triage-2026-07-24.md) + a runbook correction; gates re-run green (worker 218, pytest 180, probe 8/8 HARDENED); top open item = feat/canonical-docs still unmerged to main
+STATE: working — MAIN IS CANONICAL 2026-07-24 eve (triage #8+#9 closed: feat/canonical-docs merged to main at 7efff2e — main was a strict ancestor, trees identical after; gates on the merge result 218 worker / 183 pytest / probe 8-8 HARDENED / validate_spine PASS / build_site --check green / parity PASS; DAEMON MOVED to its own git worktree ~/.local/share/sonsteng-daemon/checkout on main (units ExecStart there, APPLY_DEPLOY_BRANCH=main, flock now at <daemon>/.locks/daemon.lock, installer provisions it idempotently) — interactive checkouts can no longer block auto-apply, and can no longer check out main (merge into main FROM the daemon worktree under the flock); FIXED a latent stall that would have hit on demo day — build_site re-stamps .build-stamp.json with HEAD, so the post-apply rebuild left the tree dirty and the SECOND edit of a session would have died on assert_clean_tree; daemon now restores regenerable site/ before apply + after deploy (3 new tests); E2E re-proven from the new checkout: john edit -> auto-accept -> tick applied+deployed in 52s (24d3c9f) -> admin revert-request -> tick reverted (0c45107), DEV restored, tree clean both times, history 200 w/ 5 revisions, queue 0, content left as found; main pushed 0c45107; PROD untouched + still pitch-only. ⚠ hetzner-dev hit 100% DISK mid-session (two applies failed on 'No space left on device' before it was relieved) — /var/lib/containerd is 64G on the 75G root while the 49G /mnt/docker-data volume is at 2%; freed ~19G with build-cache prune + journal vacuum + one superseded image, box ~93%; RECURS — cockpit ask sonsteng-2026-07-24-devbox-disk; next: John+Roger walkthrough ~Tue Jul 29)
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
@@ -16,6 +16,59 @@ the walkthrough moved to ~Tue Jul 29.)*
 This repo self-documents (cockpit convention: RESUME.md + the STATE line at top). You have
 the project memory (`project_sonsteng_magnum_opus.md`) plus this doc — that is enough to
 continue losslessly with no conversation history.
+
+---
+
+## Addendum 2026-07-24 (evening) — `main` is canonical + the daemon has its own checkout
+
+Triage items **#8 and #9** are closed. `main` now carries everything DEV runs, and the
+apply-daemon no longer shares a working tree with interactive sessions.
+
+**1 · `feat/canonical-docs` → `main` (item #8).** `main` was a strict ancestor (0 commits it
+had that the branch lacked, 32 the other way), so the merge was a clean `--no-ff` at
+`7efff2e`; the trees were byte-identical afterward. Gates re-run on the merge result **in the
+new daemon checkout**: worker `node --test test/*.test.js` **218/218**, `pytest tools/tests/`
+**180** (now 183), `node tools/offline_redteam_probe.mjs` **8/8 HARDENED / 0 PARTIAL / 0
+EXPOSED**, `validate_spine.py` **PASS** (0 ERROR, 7 WARN), `build_site.py --check` green incl.
+link check + instructor-leak + history-leak sweeps, `check_build_parity.py` **PASS**
+(`1ddab816d04a6d59`). `feat/canonical-docs` is kept for provenance.
+
+**2 · Dedicated daemon checkout (item #9).** The daemon runs from
+`~/.local/share/sonsteng-daemon/checkout` — a **git worktree** on `main`, touched by nothing
+else. Both user units' `ExecStart` point there and `APPLY_DEPLOY_BRANCH=main`.
+`tools/install-apply-daemon.sh` provisions it idempotently (creates the worktree, builds the
+gitignored bundles a fresh worktree lacks, warns on a branch mismatch);
+`SONSTENG_DAEMON_ROOT` overrides the path. Worktree, not clone, so the daemon's `apply:` /
+`revert(history):` commits stay visible + pushable from here. **Consequence: `main` is checked
+out there, so this checkout can't check it out** — merge into `main` from the daemon worktree
+under `flock <daemon>/.locks/daemon.lock` (the flock moved there too). Full rationale:
+`docs/direct-apply-daemon.md` "Deploy topology".
+
+**3 · Latent stall found + fixed (would have hit on demo day).** `build_site.py` stamps the
+current HEAD into `site/platform/data/.build-stamp.json`, so the tick's post-apply rebuild
+always left that one tracked file dirty — and the engine's `assert_clean_tree` is strict. The
+**second** edit of a session would have failed with "canonical tree is dirty" and flipped the
+banner to "Auto-apply paused". The daemon now restores the regenerable `site/` output before
+the apply and after the deploy (the tolerance `execute_revert` already carried). 3 new tests.
+
+**4 · E2E re-proven from the new checkout (content left as found).** john suggestion on
+`data/curriculum/m1.md#p5` → auto-`accepted` → daemon tick **applied 1, rebuilt, deployed
+main, heartbeat sent** in 52 s → commit `24d3c9f`, DEV served the new text, **tree clean after
+the apply** (the fix, observed). Admin `POST /edit/v1/revert-request` → auto-approved → next
+tick → `revert(history)` commit `0c45107`, DEV restored, tree clean. History browser
+`/edit/history/data__curriculum__m1.md` → **200**, 5 revisions for m1 incl. today's edit +
+revert. Review queue back to **0**. `main` pushed at `0c45107`.
+
+**5 · ⚠ DEV BOX DISK — the real walkthrough risk.** `hetzner-dev` hit **100% full**
+mid-session and the first two apply attempts failed at the deploy step with `No space left on
+device` (rows correctly parked `accepted_blocked`, nothing lost). Root cause is **not**
+sonsteng: `/var/lib/containerd` is **64 GB on the 75 GB root** while the 49 GB
+`/mnt/docker-data` volume (Docker's configured root) sits at **2%** — the data-root move was
+only half done — and another Coolify app was pulling a ~10 GB torch/CUDA image at the time.
+Freed this session **without touching anyone's data**: `docker builder prune -a` (9.7 GB
+regenerable build cache), `journalctl --vacuum-size=50M`, `apt-get clean`, plus **one**
+superseded, unused app image (`k4k4pd2…:1b37b0f8`, 8.9 GB, 2 weeks old, rebuildable). Box now
+~93% used. **This will recur** — see the cockpit ask `sonsteng-2026-07-24-devbox-disk`.
 
 ---
 
@@ -110,13 +163,10 @@ the full round trip was verified live on DEV. Branch pushed; DEV worker + site r
 timer` at 21:30 America/Chicago. Files flags as block comments (`origin=ai_rewrite`) + a
 content-light ntfy digest. First live model-produced flag lands on the next 21:30 sweep.
 
-**Ops note — daemon home:** the apply-daemon was **reinstalled to run from this main checkout**
-(`~/Coding Projects/sonsteng-magnum-opus`) because the apply engine ff-merges into
-`feat/canonical-docs`, which is checked out here (a separate worktree can't hold the same
-branch, so the merge must run where it lives). Applies still use isolated temp worktrees.
-`sonsteng-apply.timer` is enabled and firing every 2 min. If interactive work here ever needs
-to avoid daemon commits, stop the timer (`systemctl --user stop sonsteng-apply.timer`) or move
-the daemon to a dedicated `feat/canonical-docs` checkout later.
+**Ops note — daemon home:** ~~the apply-daemon was reinstalled to run from this main
+checkout~~ **SUPERSEDED 2026-07-24** — the daemon now runs from its own worktree,
+`~/.local/share/sonsteng-daemon/checkout` on `main`. See the 2026-07-24 addendum below and
+`docs/direct-apply-daemon.md` "Deploy topology".
 
 **Served-history freshness:** the History bundle is inlined into the Worker at deploy. The
 apply engine redeploys the Worker each apply (self-sufficient build command builds the bundle
