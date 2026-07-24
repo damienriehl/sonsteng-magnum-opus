@@ -99,7 +99,14 @@
     // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
     "EDIT_MAX_PENDING_PER_EDITOR": "200",
     "EDIT_MAX_DAILY_PER_EDITOR": "500",
-    "EDIT_MAX_BYTES": "16384"
+    "EDIT_MAX_BYTES": "16384",
+
+    // DIRECT_APPLY (canonical direct-apply mode): "true" makes a human EDIT
+    // suggestion auto-accept at suggest-time (the home-box apply daemon then
+    // claims + applies it) — comments and system origins are unaffected. "false"
+    // (or unset) = classic suggestion mode (Damien reviews each edit via decide).
+    // The client never clears optimistically; status always flows from the store.
+    "DIRECT_APPLY": "true"
   },
 
   "env": {
@@ -134,7 +141,8 @@
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
-        "EDIT_MAX_BYTES": "16384"
+        "EDIT_MAX_BYTES": "16384",
+        "DIRECT_APPLY": "true"
       }
     },
 
@@ -185,7 +193,8 @@
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
-        "EDIT_MAX_BYTES": "16384"
+        "EDIT_MAX_BYTES": "16384",
+        "DIRECT_APPLY": "true"
       }
     }
   }

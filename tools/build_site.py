@@ -3043,7 +3043,25 @@ def main(argv):
                 print("  LEAK: " + l)
         else:
             print("no instructor-side content in any generated page.")
-        if (errors or leaks) and strict:
+
+        # History-leak sweep — the editor-gated redline History output (redlines of
+        # canonical sources expose instructor-only material) must NEVER reach the
+        # public site build. build_history.assert_no_history_leak proves site/
+        # platform/ carries zero history artifacts + zero HISTORY_SENTINEL.
+        history_leaks = []
+        try:
+            from build_history import assert_no_history_leak
+            history_leaks = assert_no_history_leak()
+        except Exception as exc:  # a missing/broken checker must not silently pass
+            history_leaks = ["history-leak assertion unavailable: %s" % exc]
+        print("== history-leak sweep ==")
+        if history_leaks:
+            for l in history_leaks:
+                print("  LEAK: " + l)
+        else:
+            print("no history output under site/platform/.")
+
+        if (errors or leaks or history_leaks) and strict:
             return 1
         if over_ceiling:
             return 1

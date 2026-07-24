@@ -42,12 +42,30 @@ test("idempotent dedupe: replaying the same id never double-inserts", () => {
   const core = makeCore();
   const input = suggestInput({ id: "dup1", new_text: "first" });
   const a = core.suggest(input);
-  const b = core.suggest({ ...input, new_text: "second (ignored)" });
+  // A TRUE idempotent replay carries the SAME payload (network retry of the same
+  // request): return the stored row, never a second insert.
+  const b = core.suggest({ ...input });
   assert.equal(a.ok, true);
   assert.equal(b.ok, true);
   assert.equal(b.replay, true);
   assert.equal(b.suggestion.new_text, "first"); // stored row unchanged
   assert.equal(core.listAll().length, 1);
+});
+
+test("fingerprint guard: same id + DIFFERENT payload is NOT silently replayed", () => {
+  // The fence silent-loss fix: reusing an idempotency id with a NEW payload must
+  // be REJECTED (id_conflict), not swallowed as a replay — otherwise the newer
+  // edit vanishes. The client rotates its id per burst so this never fires in the
+  // happy path; this is the defense-in-depth backstop.
+  const core = makeCore();
+  const input = suggestInput({ id: "fp1", new_text: "first payload" });
+  const a = core.suggest(input);
+  const b = core.suggest({ ...input, new_text: "DIFFERENT payload, same id" });
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, false);
+  assert.equal(b.reason, "id_conflict");
+  assert.equal(core._get("fp1").new_text, "first payload"); // original untouched
+  assert.equal(core.listAll().length, 1); // no second insert
 });
 
 test("supersede: same editor re-edits same source_ref -> prior goes superseded", () => {
@@ -236,4 +254,90 @@ test("listForEditor hides superseded (drafts) but shows closure statuses", () =>
   const ids = items.map((i) => i.id);
   assert.ok(ids.includes("le2"));
   assert.ok(!ids.includes("le1")); // superseded hidden
+});
+
+/* ============================ DIRECT_APPLY (SL2) ============================ */
+
+test("DIRECT_APPLY: a human EDIT auto-accepts at suggest-time (server-written)", () => {
+  const core = makeCore();
+  const r = core.suggest(suggestInput({ id: "da1", new_text: "auto go" }), undefined, { directApply: true });
+  assert.equal(r.ok, true);
+  assert.equal(r.suggestion.status, STATUS.ACCEPTED); // straight to accepted, no decide()
+});
+
+test("DIRECT_APPLY off: a human EDIT stays pending (classic suggestion mode)", () => {
+  const core = makeCore();
+  const r = core.suggest(suggestInput({ id: "da2", new_text: "hold" })); // no opts
+  assert.equal(r.suggestion.status, STATUS.PENDING);
+  const r2 = core.suggest(suggestInput({ id: "da2b", new_text: "hold" }), undefined, { directApply: false });
+  assert.equal(r2.suggestion.status, STATUS.PENDING);
+});
+
+test("DIRECT_APPLY: a COMMENT never auto-accepts (stays pending for the decide gate)", () => {
+  const core = makeCore();
+  const r = core.suggest(
+    suggestInput({ id: "da3", kind: "comment", new_text: null, comment: "please review" }),
+    undefined, { directApply: true }
+  );
+  assert.equal(r.suggestion.status, STATUS.PENDING);
+});
+
+test("DIRECT_APPLY: a system origin (companion) never auto-accepts", () => {
+  const core = makeCore();
+  const r = core.suggest(
+    suggestInput({ id: "da4", origin: "companion", group_id: "g1", new_text: "sync" }),
+    undefined, { directApply: true }
+  );
+  assert.equal(r.suggestion.status, STATUS.PENDING);
+});
+
+test("DIRECT_APPLY: re-editing supersedes a prior ACCEPTED-but-unapplied row (no stale apply)", () => {
+  const core = makeCore();
+  const sref = "da#same";
+  const a = core.suggest(suggestInput({ id: "dae1", source_ref: sref, new_text: "v1" }), undefined, { directApply: true });
+  assert.equal(a.suggestion.status, STATUS.ACCEPTED);
+  const b = core.suggest(suggestInput({ id: "dae2", source_ref: sref, new_text: "v2" }), undefined, { directApply: true });
+  assert.equal(core._get("dae1").status, STATUS.SUPERSEDED); // prior accepted superseded
+  assert.equal(core._get("dae2").status, STATUS.ACCEPTED);   // newest is the live accepted
+  assert.equal(core._get("dae2").supersedes, "dae1");
+});
+
+test("DIRECT_APPLY: an IN_FLIGHT (claimed) row is NOT superseded by a new edit", () => {
+  const core = makeCore();
+  const sref = "da#claimed";
+  core.suggest(suggestInput({ id: "dai1", source_ref: sref, new_text: "v1" }), undefined, { directApply: true });
+  core.claimBatch("b-da", { ids: ["dai1"] }); // accepted -> in_flight (leased)
+  assert.equal(core._get("dai1").status, STATUS.IN_FLIGHT);
+  core.suggest(suggestInput({ id: "dai2", source_ref: sref, new_text: "v2" }), undefined, { directApply: true });
+  assert.equal(core._get("dai1").status, STATUS.IN_FLIGHT); // left alone (machine forbids supersede)
+  assert.equal(core._get("dai2").status, STATUS.ACCEPTED);
+});
+
+/* ============================ heartbeat (SL6) ============================== */
+
+test("heartbeat: record + get + age (age from the receive clock, not the daemon ts)", () => {
+  const clock = { v: 1_000_000_000_000 };
+  const core = makeCore(() => clock.v);
+  assert.equal(core.getHeartbeat(), null);   // none yet
+  assert.equal(core.heartbeatAgeS(), null);
+  core.recordHeartbeat({ ok: true, applied: 3, ts: 42 }); // absurd daemon ts ignored for age
+  const hb = core.getHeartbeat();
+  assert.equal(hb.ok, true);
+  assert.equal(hb.applied, 3);
+  assert.equal(hb.received_at, clock.v);
+  clock.v += 7 * 60 * 1000;                   // 7 minutes later
+  assert.equal(core.heartbeatAgeS(), 420);
+});
+
+test("heartbeat: a second record upserts the single beacon row (latest wins)", () => {
+  const clock = { v: 5000 };
+  const core = makeCore(() => clock.v);
+  core.recordHeartbeat({ ok: true, applied: 1 });
+  clock.v = 9000;
+  core.recordHeartbeat({ ok: false, applied: 9 });
+  const hb = core.getHeartbeat();
+  assert.equal(hb.ok, false);
+  assert.equal(hb.applied, 9);
+  assert.equal(hb.received_at, 9000);
+  assert.equal(core.heartbeatAgeS(), 0);
 });

@@ -49,6 +49,20 @@ test("comment items get NO new_text overlay field (they render as margin bubbles
   assert.equal(out[2].block_index, 7);
 });
 
+test("unmask (SL1): a needs_human EDIT projects its status + FULL new_text so the client can show the honest warning overlay", () => {
+  // The client paints the text but flags it "needs attention — not applied"; the
+  // projection must carry BOTH the needs_human status AND the new_text for that.
+  const out = projectPendingItems([
+    { block_anchor: "matters/m01/index.html:9", source_ref: "sref-nh", status: "needs_human",
+      kind: "prose", new_text: "An edit the apply engine could not land automatically.",
+      original_hash: "h-nh", map_version: "spine-1", editor: "slot:john" },
+  ]);
+  assert.equal(out[0].status, "needs_human");
+  assert.equal(out[0].new_text, "An edit the apply engine could not land automatically.");
+  assert.equal(out[0].base_hash, "h-nh");
+  assert.equal(out[0].attribution, "JOS");
+});
+
 test("block_index parses the trailing anchor segment; unknown editor falls back to the upper-cased slot", () => {
   const out = projectPendingItems([
     { block_anchor: "p:2", source_ref: "s", status: "pending", kind: "prose",

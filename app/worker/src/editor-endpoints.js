@@ -120,7 +120,7 @@ export async function suggestEndpoint(request, env, auth) {
     context: block.context || "",
     map_version: MAP_VERSION,
     group_id: null,
-  }, ceilings);
+  }, ceilings, { directApply: env.DIRECT_APPLY === "true" });
 
   if (!result.ok) {
     const map = {
@@ -128,6 +128,9 @@ export async function suggestEndpoint(request, env, auth) {
       pending_ceiling: [429, "You have a lot of changes waiting for review already."],
       global_ceiling: [429, "The review queue is full right now. Please try later."],
       daily_cap: [429, "You've hit today's change limit. Thank you — pick back up tomorrow."],
+      // id_conflict: the client reused an idempotency id with a NEW payload — it
+      // must rotate the id and resend (never silently swallowed → no lost edit).
+      id_conflict: [409, "That change needs a fresh send — please try again."],
       validation_error: [400, "That change could not be saved."],
     };
     const [status, message] = map[result.reason] || [400, "That change could not be saved."];
@@ -251,11 +254,113 @@ export async function pendingEndpoint(request, env, auth) {
   // so a co-editor's in-flight work paints too. The scope gate above (edit OR
   // instructor) already fenced this call. A page-less call keeps the caller's own
   // items — there is no page to scope a cross-editor read to.
+  const stub = editorStub(env);
   const rows = page
-    ? await editorStub(env).listForPage(page)
-    : await editorStub(env).listForEditor(auth.editor, null);
-  // Project to the client's #edits-data item shape (block_index/preview/note).
-  return json({ ok: true, items: projectPendingItems(rows) });
+    ? await stub.listForPage(page)
+    : await stub.listForEditor(auth.editor, null);
+  // Project to the client's #edits-data item shape (block_index/preview/note),
+  // plus the SL6 liveness signals the client banner reads: heartbeat_age_s (null
+  // if the daemon has never checked in) and direct_apply (auto-apply mode on/off).
+  const heartbeat_age_s = await stub.heartbeatAgeS();
+  return json({
+    ok: true,
+    items: projectPendingItems(rows),
+    heartbeat_age_s,
+    direct_apply: env.DIRECT_APPLY === "true",
+  });
+}
+
+// ---- POST /edit/v1/heartbeat (admin/service scope) --------------------------
+// The home-box apply DAEMON beacons here after each run so the editor banner can
+// honestly report whether auto-apply is live (SL6). Body: { ok, applied, ts }.
+// Admin scope ONLY (reached via the Bearer service token) + the CSRF custom
+// header — identical posture to /claim and /finalize. Age is measured from the
+// worker's receive clock, so a skewed daemon clock cannot fake freshness.
+export async function heartbeatEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const beat = {
+    ok: body.ok === true || body.ok === 1,
+    applied: Number.isFinite(body.applied) ? body.applied : 0,
+    ts: Number.isFinite(body.ts) ? body.ts : Date.now(),
+  };
+  const result = await editorStub(env).recordHeartbeat(beat);
+  return json({ ok: true, received_at: result.received_at });
+}
+
+// ---- POST /edit/v1/revert-request (edit/instructor files; admin auto-approves)
+// The History browser "Request revert" button POSTs { doc, run:[first,last] }.
+// Editors (edit/instructor scope) FILE a request (status='requested'); an ADMIN
+// caller's request is 'approved' immediately (SL8: editors request, admin
+// executes). The home-box daemon consumes 'approved' rows on its next tick,
+// git-reverts the run range on canonical, rebuilds + deploys, and marks 'done'.
+// The request id is SERVER-generated (the client sends none). run shas are format-
+// validated here; the daemon's git revert is the authoritative existence check.
+const SHA_RE = /^[0-9a-f]{7,40}$/i;
+
+export async function revertRequestEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
+  if (!auth.editor ||
+      (!auth.scopes.edit.granted && !auth.scopes.instructor.granted && !auth.scopes.admin.granted))
+    return editError("forbidden", "No edit scope.", 403);
+
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const doc = typeof body.doc === "string" ? body.doc : null;
+  const run = Array.isArray(body.run) ? body.run : null;
+  if (!doc || doc.length > 512 || /[\0\r\n]/.test(doc))
+    return editError("validation_error", "A valid doc is required.", 400);
+  if (!run || run.length !== 2)
+    return editError("validation_error", "run must be [first_sha, last_sha].", 400);
+  const [first, last] = run;
+  if (typeof first !== "string" || typeof last !== "string" ||
+      !SHA_RE.test(first) || !SHA_RE.test(last))
+    return editError("validation_error", "run shas are invalid.", 400);
+
+  // Admin scope files an already-approved request (executes on the next tick);
+  // any other editor scope files a request that an admin must approve first.
+  const approved = auth.scopes.admin.granted === true;
+  const id = crypto.randomUUID();
+  const result = await editorStub(env).fileRevertRequest({
+    id, editor: auth.editor, doc, run_first: first, run_last: last, approved,
+  });
+  if (!result.ok) return editError(result.reason || "validation_error", "Could not file the revert request.", 400);
+  return json({ ok: true, id: result.request.id, status: result.request.status, replay: !!result.replay });
+}
+
+// ---- GET /edit/v1/revert-requests?status=approved (admin/service) -----------
+// The daemon polls this each tick for rows to execute (default status=approved).
+export async function revertRequestsEndpoint(request, env, auth) {
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status") || "approved";
+  const items = await editorStub(env).listRevertRequests(status);
+  return json({ ok: true, items });
+}
+
+// ---- POST /edit/v1/revert-resolve (admin/service) ---------------------------
+// The admin approve path (requested -> approved) and the daemon's terminal write
+// (approved -> done|failed). Body: { id, status, note? }.
+export async function revertResolveEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string" || typeof body.status !== "string")
+    return editError("validation_error", "id and status are required.", 400);
+  const note = typeof body.note === "string" ? body.note.slice(0, 2000) : null;
+  const result = await editorStub(env).resolveRevertRequest(body.id, body.status, note);
+  if (!result.ok) {
+    const map = {
+      not_found: [404, "Not found."],
+      already_terminal: [409, "That request is already resolved."],
+      validation_error: [400, "Invalid status."],
+    };
+    const [status, message] = map[result.reason] || [400, "Could not resolve the request."];
+    return editError(result.reason, message, status);
+  }
+  return json({ ok: true, id: result.id, status: result.status });
 }
 
 // ---- GET /edit/v1/review (admin; all pending grouped) -----------------------

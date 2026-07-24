@@ -14,6 +14,28 @@ Nothing here alters the keyless demo path, but know it before you present:
 - **Digest push (WP3).** When pending editor suggestions accumulate, a batched **ntfy** notification fires (topic `damien-homebox-736591e7`). The `/edit/review` page stays the canonical digest; push is strictly additive.
 - **PROD injector wiring (WP1).** `EDIT_UPSTREAM`/`EDIT_ORIGIN` are now env-scoped; PROD enable is one documented command in `docs/prod-enable.md`. Still **not run**.
 
+### ⚠ Added 2026-07-19 — canonical **direct-apply** + **redline history** (changes the editor story)
+
+This landed *after* the runbook was written and it **replaces** the old "nothing goes live until
+Damien accepts" framing. Present the new story, not the old one (details:
+[`docs/direct-apply-daemon.md`](direct-apply-daemon.md), [`docs/history-browser.md`](history-browser.md)):
+
+- **Edits publish themselves in ~2 minutes.** `DIRECT_APPLY=true`: a saved edit auto-accepts, the
+  home-box apply daemon (`sonsteng-apply.timer`, every 2 min) patches canonical git, re-runs the
+  validator + parity gates, rebuilds and redeploys **DEV**. There is no Damien approval step.
+- **Safety net moved from *approval* to *history + revert*.** A **History** link in the editing
+  banner opens `/edit/history/<doc-slug>` — attributed, coalesced revisions with per-revision and
+  baseline redlines, plus one-click revert (editors *request*; admin approval executes on the next
+  daemon tick).
+- **The banner is honest about the service.** Fresh heartbeat → *"Your edits go live automatically
+  (~2 min)"*; stale → *"Auto-apply paused … your edits are safe and queued."* It never claims live
+  when the home box is down. An edit that can't apply cleanly surfaces as **"Needs attention — not
+  applied"** with the edited text still visible (no silent loss).
+- **Editorial pass.** A post-hoc quality review (session-end + daily 21:30 CT) files flags as block
+  comments — quality is guarded *after* publish, not before it.
+- **DEV only.** The daemon deploys `feat/canonical-docs` to the Hetzner DEV box and can never reach
+  PROD.
+
 ## Before the meeting (5 minutes)
 
 1. 🔑 **Paste your key (when it arrives):** on any chat page → **ADD YOUR KEY** → provider + key. Or enable the house pool: `cd app/worker && npx wrangler@4 secret put ANTHROPIC_API_KEY` (the $10/day cap is already enforced; the $3 demo reserve rides the bypass token at `~/.secrets/sonsteng-demo-bypass` — append `?bypass=<token>` to the chat URL).
@@ -41,14 +63,16 @@ Nothing here alters the keyless demo path, but know it before you present:
 This is a walkthrough *for the two editors*, so close by showing the surface they'll actually use. It is DEV-only and needs no API key.
 
 - **Their edit link.** John (and Roger) each get one bookmarkable link that opens the real practicum site wrapped in an editor: `https://sonsteng-chat.damienriehl.workers.dev/edit/<page-path>/?t=<their-token>` — e.g. `…/edit/matters/m03-tort-meridian/?t=…` (the page-path is the site path **without** the `/platform/` prefix; both `…/` and `…/index.html` resolve). Tokens live only in `~/.secrets/sonsteng-editor-tokens` — resolve the URL, send the finished link, never the token in the clear.
-- **What they see.** A green **"You're editing — changes go to Damien for review"** bar across the top, and **EDIT** / **COMMENT** affordances on every block (this m03 packet exposes dozens). Every change is a *suggestion* — nothing goes live until Damien accepts and the validator re-passes. (Plain-language one-pager: [`docs/editor-guide-for-john.md`](editor-guide-for-john.md).)
-- **Where suggestions land.** Damien's canonical review page: `https://sonsteng-chat.damienriehl.workers.dev/edit/review?t=<admin-token>` — grouped by source, word-level diffs, one-click accept. John's suggestions are labeled **JOS**, Roger's **RSH**. Queue is expected **empty** until they start.
+- **What they see.** A green editing bar across the top and **EDIT** / **COMMENT** affordances on every block (this m03 packet exposes dozens). **Since 2026-07-19 the bar reads *"Your edits go live automatically (~2 min)"* whenever the apply service is healthy** — a saved edit auto-accepts, the validator + parity gates re-run, and the change publishes to DEV on its own. (Plain-language one-pager: [`docs/editor-guide-for-john.md`](editor-guide-for-john.md).) *Demo tip: make one small edit at the start of this section and come back to it — it will be live on the page before you finish talking.*
+- **The safety net is history, not approval.** The **History** link in the bar opens the attributed redline history for that document, with baseline + per-revision diffs and one-click revert. Show it — it is the answer to "what if I break something?"
+- **Where suggestions and comments land.** Damien's canonical review page: `https://sonsteng-chat.damienriehl.workers.dev/edit/review?t=<admin-token>` — grouped by source, word-level diffs, plus revert requests and editorial-pass flags. John's edits are labeled **JOS**, Roger's **RSH**. Queue is expected **empty** until they start (direct-apply drains it automatically; comments still wait for Damien).
 
 ## If something goes wrong
 
 - **Chat errors out** → the sample replay (step 3's URL) always works; it's scripted, labeled as such, needs no key/session/Turnstile, and shows the identical experience.
 - **Wifi/NAT weirdness, or a "Verify you are human" box appears** → the bypass token both exempts you from IP limits **and** skips the Turnstile gate; append `?bypass=…` to the chat URL (token at `~/.secrets/sonsteng-demo-bypass`). The `?sample=1` replay never triggers Turnstile at all.
 - **A page looks off on the conference screen** → LARGE TYPE toggle; everything reflows.
+- **The editing bar says "Auto-apply paused"** → the home box's `sonsteng-apply.timer` isn't checking in. Edits are still saved and queued, so say exactly that; don't promise ~2 min. Recover with `systemctl --user start sonsteng-apply.timer` on the home box after the meeting.
 - **"Is this real law?"** → Meridian tier: internally consistent invented canon, on purpose. Real tier: facts-only by design — *students find the law*; instructor keys cite the authorities, flagged for your verification.
 
 ## The asks to close on (from the standing open questions)

@@ -127,15 +127,21 @@
              : P.get('scenario') === 'oversize' ? 'validation_error'
              : P.get('scenario') === 'fail_once' ? 'network' : null,
     forcePersist: (P.get('scenario') === 'stale_page' || P.get('scenario') === 'map_stale'),   // stale_page isn't "recover on resend"
+    directApply: false,       // DIRECT_APPLY mode (auto-accept + auto-apply)
+    hbAge: null,              // heartbeat_age_s reported to the client
+    fpById: {},               // id -> payload fingerprint (silent-loss guard mirror)
     server: { suggestions: {}, calls: 0, ids: [], last: null }
   };
+  function fpOf(body) { return (body.source_ref || '') + '|' + (body.new_text == null ? '' : body.new_text) + '|' + (body.comment == null ? '' : body.comment); }
   window.__MOCK_CTRL__ = {
     forceOnce: function (code) { ctrl.forceNext = code; ctrl.forcePersist = false; log('ARM once: ' + code); },
     forcePersistent: function (code) { ctrl.forceNext = code; ctrl.forcePersist = true; log('ARM persistent: ' + code); },
     setSlow: function (ms) { ctrl.slowMs = ms | 0; log('slow=' + ctrl.slowMs + 'ms'); },
+    setDirectApply: function (on) { ctrl.directApply = !!on; log('directApply=' + ctrl.directApply); },
+    setHeartbeatAge: function (s) { ctrl.hbAge = (s == null ? null : (s | 0)); log('hbAge=' + ctrl.hbAge); },
     server: function () { return { calls: ctrl.server.calls, count: Object.keys(ctrl.server.suggestions).length, ids: ctrl.server.ids.slice() }; },
     last: function () { return ctrl.server.last; },   // last /suggest body (for hash bookkeeping asserts)
-    clear: function () { ctrl.server = { suggestions: {}, calls: 0, ids: [], last: null }; }
+    clear: function () { ctrl.server = { suggestions: {}, calls: 0, ids: [], last: null }; ctrl.fpById = {}; }
   };
 
   var CODE_STATUS = { no_edit_auth: 401, rate_limited: 429, validation_error: 413, stale_page: 409, network: 0 };
@@ -161,9 +167,9 @@
         var items = DEMO_PENDING.slice();
         Object.keys(ctrl.server.suggestions).forEach(function (id) {
           var s = ctrl.server.suggestions[id];
-          items.push({ block_index: s.block_index, source_ref: s.source_ref, status: 'pending', kind: s.kind, preview: (s.new_text || s.comment || '').slice(0, 80) });
+          items.push({ block_index: s.block_index, source_ref: s.source_ref, status: s.status, kind: s.kind, preview: (s.new_text || s.comment || '').slice(0, 80) });
         });
-        return { ok: true, status: 200, data: { items: items } };
+        return { ok: true, status: 200, data: { items: items, heartbeat_age_s: ctrl.hbAge, direct_apply: ctrl.directApply } };
       }
 
       if (path.indexOf('/suggest') === 0) {
@@ -184,13 +190,23 @@
         var mapBlock = (window.__HARNESS_MAP__ || []).filter(function (b) { return b.source_ref === body.source_ref; })[0];
         var derivedIndex = mapBlock ? mapBlock.index : null;
         var existed = !!ctrl.server.suggestions[body.id];
+        // fingerprint guard (mirror of the store): same id + DIFFERENT payload =>
+        // id_conflict (never a silent replay); same id + same payload => dedup.
+        var fp = fpOf(body);
+        if (existed && ctrl.fpById[body.id] != null && ctrl.fpById[body.id] !== fp) {
+          log('   id_conflict id=' + String(body.id).slice(0, 8));
+          return { ok: false, status: 409, data: { error: { code: 'id_conflict' } } };
+        }
+        ctrl.fpById[body.id] = fp;
+        // DIRECT_APPLY: a human EDIT auto-accepts; comments stay pending.
+        var status = (ctrl.directApply && derivedKind !== 'comment') ? 'accepted' : 'pending';
         ctrl.server.suggestions[body.id] = {
           id: body.id, kind: derivedKind, block_index: derivedIndex,
-          source_ref: body.source_ref, new_text: body.new_text, comment: body.comment, status: 'pending'
+          source_ref: body.source_ref, new_text: body.new_text, comment: body.comment, status: status
         };
         if (!existed) ctrl.server.ids.push(body.id);
-        log('   accept id=' + String(body.id).slice(0, 8) + (existed ? ' (dedup)' : ' (new)') + ' total=' + Object.keys(ctrl.server.suggestions).length);
-        return { ok: true, status: 200, data: { status: 'pending' } };
+        log('   accept id=' + String(body.id).slice(0, 8) + (existed ? ' (dedup)' : ' (new)') + ' status=' + status + ' total=' + Object.keys(ctrl.server.suggestions).length);
+        return { ok: true, status: 200, data: { status: status } };
       }
 
       return { ok: false, status: 404, data: { error: { code: 'validation_error', message: 'unknown path' } } };

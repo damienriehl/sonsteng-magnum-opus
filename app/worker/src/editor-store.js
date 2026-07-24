@@ -23,7 +23,10 @@ export class EditorStore extends DurableObject {
     });
   }
 
-  suggest(input, ceilings) { return this.core.suggest(input, ceilings); }
+  suggest(input, ceilings, opts) { return this.core.suggest(input, ceilings, opts); }
+  recordHeartbeat(beat) { return this.core.recordHeartbeat(beat); }
+  getHeartbeat() { return this.core.getHeartbeat(); }
+  heartbeatAgeS() { return this.core.heartbeatAgeS(); }
   listForEditor(editor, page) { return this.core.listForEditor(editor, page); }
   listForPage(page) { return this.core.listForPage(page); }
   listAll() { return this.core.listAll(); }
@@ -35,4 +38,7 @@ export class EditorStore extends DurableObject {
   reconcile() { return this.core.reconcile(); }
   digest() { return this.core.digest(); }
   purge(days) { return this.core.purge(days); }
+  fileRevertRequest(input) { return this.core.fileRevertRequest(input); }
+  listRevertRequests(status) { return this.core.listRevertRequests(status); }
+  resolveRevertRequest(id, status, note) { return this.core.resolveRevertRequest(id, status, note); }
 }
