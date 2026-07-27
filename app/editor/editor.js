@@ -370,6 +370,64 @@
     return b;
   }
 
+  /* ---------- rail placement: MEASURED, never assumed ----------------------
+     The rail belongs beside its passage, out of the reading column. The first
+     two attempts decided that with a media query — "wider than 1100px, therefore
+     there is a gutter" — which is not the same question. A page whose content
+     column runs nearly to the window edge is wide AND has no gutter, and the
+     controls landed on top of the words (Damien caught it twice: once over a
+     section heading, once mid-sentence with the status pill trailing behind).
+
+     So measure the actual free space to the right of THIS block, and only move
+     out there if the rail genuinely fits. The move is a transform, not a margin:
+     transforms do not participate in layout, so the rail can be zero-height (no
+     vertical cost) and positioned relative to itself — no dependence on which
+     ancestor happens to be positioned, which is what made the margin approach
+     fragile in a flex container.
+
+     Anything that can change the geometry re-runs this: resize, large type,
+     fonts finishing, the comment panel pushing the page over, and every pending
+     re-render (a status pill changes the rail's width). */
+  var RAIL_GAP = 14;          // breathing space between passage and controls
+  var railLayoutQueued = false;
+
+  function layoutRails() {
+    railLayoutQueued = false;
+    var docW = document.documentElement.clientWidth;
+    Object.keys(sessions).forEach(function (ref) {
+      var s = sessions[ref];
+      var t = s._tools;
+      if (!t || !s.el || !s.el.isConnected) return;
+      // Measure in FLOW state, otherwise we would be measuring our own transform.
+      t.classList.remove('eb-tools--gutter');
+      t.style.transform = '';
+      var blockRect = s.el.getBoundingClientRect();
+      // The rail is a block-level flex container, so its OWN width is the whole
+      // reading column — measuring that asked "do the controls fit beside the
+      // text, given they are as wide as the text?", which is never true. What
+      // matters is how much room the CONTENTS need: from the first control's
+      // left edge to the last one's right.
+      var kids = t.children;
+      if (!kids.length || !blockRect.width) return;
+      var firstRect = kids[0].getBoundingClientRect();
+      var lastRect = kids[kids.length - 1].getBoundingClientRect();
+      var railW = Math.max(lastRect.right - firstRect.left, 0);
+      if (!railW) return;
+      var room = docW - blockRect.right - RAIL_GAP;
+      if (room < railW) return;                  // no gutter here — stay in flow
+      var dx = (blockRect.right + RAIL_GAP) - firstRect.left;
+      var dy = blockRect.top - firstRect.top;    // align to the passage's first line
+      t.classList.add('eb-tools--gutter');
+      t.style.transform = 'translate(' + Math.round(dx) + 'px,' + Math.round(dy) + 'px)';
+    });
+  }
+
+  function scheduleRailLayout() {
+    if (railLayoutQueued) return;
+    railLayoutQueued = true;
+    (window.requestAnimationFrame || setTimeout)(layoutRails, 0);
+  }
+
   function toolsEl(s) {
     if (s._tools) return s._tools;
     var t = el('div', 'eb-tools');
@@ -416,10 +474,12 @@
     (s._tools || toolsEl(s)).appendChild(p);
     s._status = p; return p;
   }
-  function setLocalStatus(s, msg, cls) {
+  function setLocalStatus(s, msg, cls, longMsg) {
     var p = statusPill(s);
     p.textContent = msg || '';
     p.className = 'eb-status' + (cls ? ' eb-status--' + cls : '');
+    if (longMsg) p.setAttribute('title', longMsg); else p.removeAttribute('title');
+    scheduleRailLayout();          // the pill just changed the rail's width
   }
 
   /* ---------- re-auth affordance (401, never a raw 4xx) -------------------- */
@@ -993,6 +1053,7 @@
     if (s.el) s.el.classList.add('eb--commenting');
     bubble.classList.add('show');
     document.documentElement.classList.add('has-comment-panel');
+    scheduleRailLayout();          // the panel just narrowed the page
     floatBtn.classList.remove('show');
     setTimeout(function () { try { bText.focus(); } catch (e) {} }, 0);
     log('BUBBLE open id=' + s.pendingComment.id.slice(0, 8) + ' anchor="' + text.slice(0, 30) + '"');
@@ -1002,6 +1063,7 @@
   function closeBubble() {
     bubble.classList.remove('show');
     document.documentElement.classList.remove('has-comment-panel');
+    scheduleRailLayout();
     if (activeCommentSession) {
       activeCommentSession.pendingComment = null;
       if (activeCommentSession.el) activeCommentSession.el.classList.remove('eb--commenting');
@@ -1057,13 +1119,26 @@
   // for store-confirmed states: `applied` (git-confirmed live) and — softened —
   // `accepted`/`in_flight` which say "Going live…" (in the pipeline, not yet live).
   // `needs_human` is UNMASKED: an explicit "needs attention — not applied" warning.
+  // Short by design. These ride in the rail beside the passage, and the rail can
+  // only sit OUT of the reading column if it FITS there — "Live on the site ✓ ·
+  // JOS" is wide enough that it forced the controls back over the text on most
+  // blocks. The long form survives as the pill's tooltip, so nothing is lost.
   var STATUS_LABELS = {
-    pending: 'Pending review',
+    pending: 'Pending',
     accepted: 'Going live…', in_flight: 'Going live…',
-    accepted_blocked: 'Accepted — needs a fix',
-    declined: 'Set aside by Damien', drift: 'Needs another look',
-    needs_human: 'Needs attention — not applied',
-    applied: 'Live on the site ✓', superseded: 'Replaced by a newer edit'
+    accepted_blocked: 'Needs a fix',
+    declined: 'Set aside', drift: 'Needs a look',
+    needs_human: 'Not applied',
+    applied: 'Live ✓', superseded: 'Replaced'
+  };
+  var STATUS_LONG = {
+    pending: 'Waiting for Damien to look at it',
+    accepted: 'Going live — publishing now', in_flight: 'Going live — publishing now',
+    accepted_blocked: 'Accepted, but it could not be applied cleanly',
+    declined: 'Set aside by Damien — the original wording is back',
+    drift: 'The underlying text moved; this needs another look',
+    needs_human: 'Needs attention — shown here, but NOT applied to the site',
+    applied: 'Live on the site', superseded: 'Replaced by a newer edit'
   };
   var STATUS_TONE = {
     pending: 'pending', accepted: 'live', in_flight: 'live', applied: 'ok',
@@ -1172,6 +1247,7 @@
       var s = byIndex[item.block_index];
       if (!s) return;
       var label = STATUS_LABELS[item.status] || item.status || 'Sent';
+      var labelLong = STATUS_LONG[item.status] || '';
       var tone = STATUS_TONE[item.status] || 'pending';
       if (item.kind === 'comment') {
         var b = el('div', 'eb-comment-bubble eb-comment-bubble--' + tone);
@@ -1195,8 +1271,8 @@
         if (canHydrate(s, item)) {
           paintHydration(s, item, label, tone);
         } else {
-          setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
-          if (item.preview) statusPill(s).setAttribute('title', item.preview);
+          setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone,
+                         labelLong + (item.preview ? ' — “' + item.preview + '”' : ''));
         }
         if (item.note) { showNote(s, 'Damien: ' + item.note); }
       }
@@ -1375,6 +1451,17 @@
     buildBanner();
     buildBar();
     buildCommentUI();
+    scheduleRailLayout();
+    window.addEventListener('resize', scheduleRailLayout);
+    // Everything that lands AFTER first paint changes the measurements: web
+    // fonts swapping in, images settling, late stylesheets. Measuring once on
+    // build left some blocks parked in flow with a 400px gutter going unused —
+    // harmless but arbitrary, and arbitrary is what makes a layout feel broken.
+    window.addEventListener('load', scheduleRailLayout);
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+      document.fonts.ready.then(scheduleRailLayout).catch(function () {});
+    }
+    setTimeout(scheduleRailLayout, 400);
     installRepoll();
 
     // initial inline status from the island, then a live re-poll
