@@ -10,7 +10,7 @@
 // setAttribute/remove interface.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AssetLinkRewriter, ScriptStripper, SITE_ASSET_UPSTREAM } from "../src/editor-inject.js";
+import { AssetLinkRewriter, LinkRewriter, ScriptStripper, SITE_ASSET_UPSTREAM } from "../src/editor-inject.js";
 import { EDIT_CSP } from "../src/editor-http.js";
 
 // Minimal stand-in for HTMLRewriter's Element.
@@ -105,4 +105,79 @@ test("relaxed CSP keeps scripts strict but allows inline style + data: fonts/img
   assert.match(EDIT_CSP, /frame-ancestors 'none'/);
   assert.match(EDIT_CSP, /object-src 'none'/);
   assert.match(EDIT_CSP, /connect-src 'self'/);
+});
+
+// ---- LinkRewriter: /edit only hosts what the allowlist can serve -------------
+// The injector rewrites the wrapped page's same-origin links into /edit space.
+// Doing that unconditionally is how the site's own navigation ended up pointing
+// at 404s: only pages present in the editor map resolve, so a link to a page the
+// map does not carry (the chat surfaces, a data file, a bare directory) has to
+// keep its real URL and open on the public site instead of a dead /edit path.
+
+const UPSTREAM_PAGE = new URL(
+  "https://sonsteng-dev.damienriehl.com/platform/matters/m03-tort-meridian/index.html",
+);
+
+test("LinkRewriter pulls allowlisted pages into /edit space, hash preserved", () => {
+  const r = new LinkRewriter(UPSTREAM_PAGE);
+
+  // A sibling matter — in the map, so it stays inside the editor.
+  const sibling = stubEl({ href: "../m01-arbitration-meridian/index.html" });
+  r.element(sibling);
+  assert.equal(sibling.getAttribute("href"), "/edit/matters/m01-arbitration-meridian/index.html");
+
+  // The matter library index — zero editable blocks, but registered, so it is
+  // navigable. This is the regression the map fix closes.
+  const library = stubEl({ href: "../index.html" });
+  r.element(library);
+  assert.equal(library.getAttribute("href"), "/edit/matters/index.html");
+
+  // Platform home, addressed absolutely.
+  const home = stubEl({ href: "/platform/index.html" });
+  r.element(home);
+  assert.equal(home.getAttribute("href"), "/edit/index.html");
+
+  // A deep link's fragment survives the rewrite.
+  const skill = stubEl({ href: "../../skills/index.html#SK-LP-01" });
+  r.element(skill);
+  assert.equal(skill.getAttribute("href"), "/edit/skills/index.html#SK-LP-01");
+});
+
+test("LinkRewriter leaves non-hostable same-origin links on the real site", () => {
+  const r = new LinkRewriter(UPSTREAM_PAGE);
+
+  // The client-interview simulator IS its script, and the injector strips page
+  // scripts — so it is deliberately out of the map and must not be pulled in.
+  const chat = stubEl({ href: "../../chat/index.html" });
+  r.element(chat);
+  assert.equal(
+    chat.getAttribute("href"),
+    "https://sonsteng-dev.damienriehl.com/platform/chat/index.html",
+    "chat must open on the real site, not a dead /edit path",
+  );
+
+  // A data file is not a page at all.
+  const data = stubEl({ href: "../../data/index.json" });
+  r.element(data);
+  assert.equal(data.getAttribute("href"), "https://sonsteng-dev.damienriehl.com/platform/data/index.json");
+});
+
+test("LinkRewriter leaves external, anchor and scheme links alone", () => {
+  const r = new LinkRewriter(UPSTREAM_PAGE);
+
+  const ext = stubEl({ href: "https://www.openresourcetool.info/" });
+  r.element(ext);
+  assert.equal(ext.getAttribute("href"), "https://www.openresourcetool.info/");
+
+  const anchor = stubEl({ href: "#main" });
+  r.element(anchor);
+  assert.equal(anchor.getAttribute("href"), "#main");
+
+  const mail = stubEl({ href: "mailto:someone@example.org" });
+  r.element(mail);
+  assert.equal(mail.getAttribute("href"), "mailto:someone@example.org");
+
+  const noHref = stubEl({});
+  r.element(noHref);
+  assert.equal(noHref.getAttribute("href"), null);
 });

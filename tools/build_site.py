@@ -2760,17 +2760,34 @@ def _extract_page_blocks(html_text):
     return entries, ("data-ebsrc=" in html_text)
 
 
+# Pages the /edit proxy must NOT host. The injector strips a wrapped page's own
+# scripts (strict CSP, script-src 'self'), so any page whose FUNCTION lives in its
+# own JS would render inert inside /edit. The chat surfaces are exactly that — the
+# client-interview simulator and the memo critique are their scripts. They stay
+# out of the map, and the injector's LinkRewriter sends links to them at the real
+# site instead of a dead /edit path (see editor-inject.js).
+EDITOR_MAP_EXCLUDE_PREFIXES = ("assets/", "chat/")
+
+
 def build_editor_map(spine_build_id):
     """POST-BUILD pass: for every written page, extract editable blocks in the
     walker's document order, then STRIP the data-ebsrc annotations so the public
     HTML carries nothing. Writes build/editor-map.generated.json (NOT into the
-    public site). Returns (pages_dict, total_block_count)."""
+    public site). Returns (pages_dict, total_block_count).
+
+    EVERY hostable page is registered, including pages with ZERO editable blocks
+    (the platform home, the matter library, the skills browser, the firm
+    dashboard). The map is two things at once: the editable-block allowlist AND
+    the page allowlist the /edit proxy resolves paths against. Registering only
+    pages that happen to carry editable prose left the site's own navigation
+    pointing at 404s — the injector rewrites every same-origin link into /edit
+    space, so a reviewer who clicked "Matter Library" from a packet hit a dead
+    end. An entry with an empty block list is a page that is readable, navigable
+    and commentable in the editor, with nothing on it to edit."""
     pages = {}
     total = 0
     for page in sorted(glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True)):
         rel = os.path.relpath(page, OUT).replace(os.sep, "/")
-        if rel.startswith("assets/"):
-            continue
         with open(page, "r", encoding="utf-8") as fh:
             content = fh.read()
         entries, annotated = _extract_page_blocks(content)
@@ -2779,9 +2796,10 @@ def build_editor_map(spine_build_id):
             cleaned = _EBSRC_ATTR_RE.sub("", content)
             with open(page, "w", encoding="utf-8") as fh:
                 fh.write(cleaned)
-        if entries:
-            pages[rel] = entries
-            total += len(entries)
+        if rel.startswith(EDITOR_MAP_EXCLUDE_PREFIXES):
+            continue
+        pages[rel] = entries
+        total += len(entries)
 
     os.makedirs(BUILD_DIR, exist_ok=True)
     bundle = {
