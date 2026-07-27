@@ -27,6 +27,19 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } },
 
+  // ---- Access door custom domain (plan U1) ---------------------------------
+  // `custom_domain: true` makes Cloudflare provision the DNS record and the
+  // certificate for this hostname on the next deploy of the DEFAULT env. The
+  // workers.dev origin keeps serving unchanged — this route is ADDITIVE, which
+  // is what lets both doors stay open through KD1's staged retirement.
+  //
+  // ⚠ `routes` is an INHERITABLE key, and env.production declares its own empty
+  // list precisely so this one cannot follow `--env production` and try to bind
+  // the DEV hostname to sonsteng-chat-production. Do not remove that empty list.
+  "routes": [
+    { "pattern": "edit.sonsteng.damienriehl.com", "custom_domain": true }
+  ],
+
   // The generator-emitted editor map + server-only instructor bundle are copied
   // into src's import tree (editor-data/) before wrangler bundles. Regenerate the
   // sources first: `python3 tools/build_site.py --check && python3 tools/build_instructor_bundle.py`.
@@ -88,14 +101,46 @@
     // EDIT_UPSTREAM: the DEV static origin the proxy-injector fetches (prefix +
     // trailing slash). Every allowlisted page key resolves under it.
     "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
-    // EDIT_ORIGIN: the worker's OWN edit origin — the SOLE /edit CORS allowlist.
-    "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
+    // EDIT_ORIGIN: the worker's OWN edit origins — the SOLE /edit allowlist, and
+    // a COMMA-SEPARATED LIST, not a single value (plan KTD6). It is enforced
+    // twice in editor-http.js: editCorsHeaders withholds CORS from a non-matching
+    // Origin, and csrfOk REJECTS any request whose Origin is not on the list. One
+    // env now serves two browser origins — the Access hostname and the workers.dev
+    // fallback the ?t= bookmarks still use — so a single value cannot cover both:
+    // swapping it would leave every existing bookmark loading pages normally while
+    // every save returned 403 csrf_failed. Drop the workers.dev entry only when
+    // the last ?t= token retires (plan KD1).
+    "EDIT_ORIGIN": "https://edit.sonsteng.damienriehl.com,https://sonsteng-chat.damienriehl.workers.dev",
+
+    // ---- Cloudflare Access door (plan KTD8) --------------------------------
+    // The three verification inputs, declared as config and NEVER derived from
+    // the token. EDIT_ACCESS_TEAM_DOMAIN in particular must come from here and
+    // never from the assertion's own `iss`, or an attacker-supplied token would
+    // nominate its own signing keys. access-jwt.js returns null when ANY of the
+    // three is empty, so an env without them fails CLOSED — which is exactly how
+    // env.production stays safe under R7 while carrying none of them.
+    //
+    // EDIT_ACCESS_AUD is intentionally EMPTY until the Access application exists:
+    // it is that application's AUD tag, captured in U2 (credentialed account
+    // work). While it is empty the Access door is inert and only the ?t= door
+    // works — which is the correct, safe intermediate state.
+    "EDIT_ACCESS_AUD": "",
+    "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
+    "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
+
     // Scope grants per token slot (independent per-scope version for rotation).
     // The opaque token values are SECRETS: EDIT_TOKEN_JOHN, EDIT_TOKEN_ROGER,
     // EDIT_TOKEN_ADMIN (set with `wrangler secret put`, never here). admin is
     // reachable ONLY via the admin token — never from edit/instructor tokens.
     // john -> "JOS", roger -> "RSH" attribution labels (see editor-auth.js).
-    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+    //
+    // `damienadmin` is the ONE slot carrying edit+instructor+admin together, and
+    // it deliberately has NO EDIT_TOKEN_DAMIENADMIN secret — it is reachable only
+    // through Access. That is what lets one Access identity hold admin scope AND
+    // DR attribution without widening the token path: the invariant in
+    // editor-auth.js ("admin is NEVER reachable from an edit/instructor token,
+    // separate secret, separate record") stays literally true for ?t= tokens.
+    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1},\"admin\":{\"admin\":1}}",
     // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
     "EDIT_MAX_PENDING_PER_EDITOR": "200",
     "EDIT_MAX_DAILY_PER_EDITOR": "500",
@@ -137,8 +182,14 @@
         "TURNSTILE_ENABLED": "true",
         "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
         "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
-        "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
-        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        // Mirrors the top-level list (KTD6). vars are NON-INHERITABLE, so this
+        // block must repeat every value — setting only the top-level one would
+        // leave `--env dev` serving the old single origin.
+        "EDIT_ORIGIN": "https://edit.sonsteng.damienriehl.com,https://sonsteng-chat.damienriehl.workers.dev",
+        "EDIT_ACCESS_AUD": "",
+        "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
+        "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1},\"admin\":{\"admin\":1}}",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",
@@ -161,6 +212,15 @@
     // MUST equal the browser origin the editor is actually served from.
     "production": {
       "name": "sonsteng-chat-production",
+      // ⚠ DELIBERATELY EMPTY — do not delete. `routes` is inheritable, so without
+      // this the top-level Access-door custom domain (edit.sonsteng.damienriehl
+      // .com) would follow `wrangler deploy --env production` and try to bind the
+      // DEV hostname to this PROD worker — failing the deploy, or stealing the
+      // hostname from DEV. R7 ("PROD is untouched") is true of the file text
+      // without this line and FALSE of the effective config. Verify with
+      // `npx wrangler@4 deploy --env production --dry-run`, which must report no
+      // route for the Access hostname.
+      "routes": [],
       "durable_objects": {
         "bindings": [
           { "name": "BUDGET", "class_name": "BudgetCounter" },

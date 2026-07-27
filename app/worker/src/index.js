@@ -26,7 +26,7 @@ import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
-import { editorFetch } from "./editor.js";
+import { editorFetch, accessDoorwayRedirect } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
@@ -420,6 +420,13 @@ export default {
     // allowlist (the worker's edit origin only), CSRF guard, and strict security
     // headers. It never touches the chat/BYOK path below. Delegated before the
     // chat CORS handling so /edit responses carry the edit headers, not chat CORS.
+    // ---- Access door: the bare hostname is a doorway (plan KTD7) ------------
+    // Placed before the /edit delegation so it cannot shadow any real path. The
+    // decision itself lives in editor.js so it is testable — this module imports
+    // cloudflare:workers and cannot be loaded by the test runner.
+    const doorway = accessDoorwayRedirect(env, url);
+    if (doorway) return doorway;
+
     if (url.pathname === "/edit" || url.pathname.startsWith("/edit/")) {
       try {
         return await editorFetch(request, env, ctx);

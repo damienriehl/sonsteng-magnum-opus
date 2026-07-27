@@ -101,3 +101,86 @@ production worker.
   its own full copy — a PROD change can never leak into DEV's config.
 - PROD is a **separate worker name** with its own Durable Object namespace, so the
   DEV editor store and PROD editor store never share state.
+
+---
+
+# Access door runbook (`edit.sonsteng.damienriehl.com`)
+
+*Added 2026-07-27 with the Cloudflare Access door. Plan:
+`docs/plans/2026-07-27-001-feat-cloudflare-access-door-plan.md`.*
+
+## Topology
+
+| Thing | Value |
+|---|---|
+| Editor hostname | `edit.sonsteng.damienriehl.com` (Worker custom domain, DEV/default env) |
+| Access team | `young-unit-68fd.cloudflareaccess.com` |
+| Access application | self-hosted, one policy, one-time PIN, 30-day session |
+| AUD tag | **set at U2** — paste into `EDIT_ACCESS_AUD` in `wrangler.jsonc` (top-level **and** `env.dev`) |
+| Admin page | `edit.sonsteng.damienriehl.com/edit/admin` (`admin` scope) |
+| Bare hostname | 302s into `/edit/`; the landing is scope-aware |
+| Fallback door | `?t=` links on `sonsteng-chat.damienriehl.workers.dev`, still live |
+
+**Both doors are open on purpose.** `EDIT_ORIGIN` is a comma-separated list carrying
+*both* origins. It is the sole `/edit` allowlist and is enforced twice — `editCorsHeaders`
+and `csrfOk` — so dropping the `workers.dev` entry while any `?t=` token is still issued
+makes every save from those bookmarks return `403 csrf_failed` while pages keep loading
+normally. Drop it only in the same deploy that removes the last token secret.
+
+## Enabling it (the two credentialed steps)
+
+1. **Attach the hostname.** The `routes` block is already in `wrangler.jsonc`; a default-env
+   deploy provisions DNS + certificate:
+
+       cd app/worker
+       npx wrangler@4 deploy --env production --dry-run   # MUST show no route for the Access host
+       npx wrangler@4 deploy                              # default env == DEV
+
+2. **Create the Access application** on team `young-unit-68fd` — self-hosted, hostname above,
+   policy allowing the three addresses, one-time PIN included, session 30 days. Capture the
+   **AUD tag**, put it in `EDIT_ACCESS_AUD` in both var blocks, and redeploy.
+
+   ⚠ **Do NOT use the one-click "Access for Workers" flow.** It covers `workers.dev` and
+   Preview URLs only — using it would put a login screen in front of the *fallback* door and
+   leave the custom domain ungated, which is the exact inverse of the intent.
+
+3. **Map the addresses to slots:**
+
+       npx wrangler@4 secret put EDIT_ACCESS_EMAILS
+       # {"john@…":"john","roger@…":"roger","damien@…":"damienadmin"}
+
+   Lowercase keys. `damienadmin` is the Access-only slot carrying edit+instructor+admin with
+   **no** `EDIT_TOKEN_DAMIENADMIN` secret — that is what lets one identity hold admin scope and
+   DR attribution without making admin reachable from any `?t=` token.
+
+**Until `EDIT_ACCESS_AUD` is set the Access door is inert** — `access-jwt.js` returns null when
+any of the three `EDIT_ACCESS_*` vars is empty, so the only working door is `?t=`. That is the
+correct, safe intermediate state, and it is also why PROD (which carries none of these vars)
+cannot take the Access branch at all.
+
+## Revoking someone — order matters
+
+**Remove them from `EDIT_ACCESS_EMAILS` FIRST, then from the Access policy.**
+
+    npx wrangler@4 secret put EDIT_ACCESS_EMAILS   # re-put without that address
+    npx wrangler@4 deploy
+
+Access re-evaluates its policy at **session establishment**, and the session is 30 days — so
+editing the policy alone leaves an already-signed-in browser working for up to a month. The
+secret is consulted on **every request** (the Access path mints no cookie), which is what makes
+it the instant lever. Do the policy edit second, to stop new sign-ins.
+
+To revoke a `?t=` token instead, rotate its scope version in `EDIT_TOKEN_SCOPES` — that
+invalidates every cookie already minted under the old version.
+
+## Retiring the tokens (per person)
+
+Once *that person* has completed one Access sign-in **and** saved one edit through the new door:
+
+    npx wrangler@4 secret delete EDIT_TOKEN_JOHN     # …or ROGER
+    # keep EDIT_TOKEN_ADMIN as Damien's break-glass
+
+Then, when the last one is gone: drop the `workers.dev` entry from `EDIT_ORIGIN` in both var
+blocks, and delete the "your old personal link still works" line from
+`docs/editor-guide-for-john.md` — otherwise the one document John keeps points at a door that
+no longer exists.

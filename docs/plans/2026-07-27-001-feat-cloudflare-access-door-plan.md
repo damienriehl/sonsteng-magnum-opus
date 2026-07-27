@@ -651,3 +651,79 @@ AUD tag, team domain, hostname, policy and the revocation order are recorded in 
   (three env blocks, `EDIT_ORIGIN` as sole CORS allowlist).
 - Origin decisions: cockpit ask `sonsteng-2026-07-27-access-door` (q1 answered; q2/q3 answered
   in-session and recorded as KD1–KD4).
+
+---
+
+## Implementation record — 2026-07-27
+
+**Built: U3, U4, U5, U6, U7 and U1's config.** Not built: the two credentialed
+account steps (see below). All eight preflight gates pass, including the headful
+editor client (43/43) and the a11y audit at 0 FAIL. Worker suite **306 tests**
+(was 224); python **193**.
+
+### As-built notes where the code differs from, or sharpens, the plan
+
+- **`EDIT_ORIGIN` is parsed to a `Set`** in `editor-http.js` (`editOrigin` now
+  returns the set; `matchEditOrigin` is its `matchOrigin` counterpart). The CSRF
+  guard was the real hazard, not CORS: `csrfOk` rejects any request whose
+  `Origin` is not on the list, and all eleven mutation endpoints call it. The new
+  tests were mutation-checked — reverting `csrfOk` to the old single-value
+  compare fails two of them, so the suite genuinely catches KTD6 rather than
+  going green either way.
+- **The admin page is `/edit/admin`; the bare host 302s to `/edit/`** (KTD5,
+  KTD7). `/edit/` resolves to no page key of its own, so the landing is a new
+  scope-aware branch: `admin` → `/edit/admin`, `edit`/`instructor` →
+  `/edit/index.html`, nothing → uniform 404. The doorway decision lives in
+  `editor.js` as the exported `accessDoorwayRedirect`, **not** inline in
+  `index.js`, because `index.js` imports `cloudflare:workers` and therefore
+  cannot be loaded by `node --test` — anything left inline there is untestable by
+  construction.
+- **Editorial-flags "last seen" is a cookie** (`edit_seen`, `Path=/edit/admin`,
+  HttpOnly), not store state. `EditorStore` has no generic key/value surface and
+  its Durable Object migrations are append-only, so persisting a per-editor
+  bookmark server-side would mean a schema migration — the riskiest change
+  available — to remember a timestamp. The tradeoff is that "since you last
+  looked" means *on this device*; a first visit on a new device shows an empty
+  list, which is also exactly the first-visit behaviour R5 specifies.
+- **`damienadmin` carries the `DR` attribution label**, deliberately sharing it
+  with `damien`: same human, different door, and R3 requires an edit to read as
+  DR either way.
+- **The Access branch runs LAST** in `resolveAuth` — after the cookie *and*
+  after the apply daemon's Bearer check — so neither pre-existing door can be
+  shadowed. A test asserts the daemon's path resolves exactly as before.
+
+### Two fixes outside the plan's scope, found while building
+
+- **`access-jwt.js` was outside the never-log-the-credential source scan.** That
+  scan globs `/editor|text-norm/`, so the newest auth path was the only one it
+  could not see — and the Access assertion is a bearer credential exactly like a
+  `?t=` token. Glob widened.
+- **`tools/digest_push.py` builds the ntfy click-through as
+  `EDIT_ORIGIN + "/edit/review"`.** With a comma-separated value that silently
+  yields a URL that 404s — the nudge still fires and still looks right, and the
+  tap lands nowhere. It reads a *process* env var rather than the Worker's, so
+  nothing is broken today, but the names are identical and copying one into the
+  other is the obvious mistake. Hardened to take the first entry, +4 tests.
+
+### What is deliberately NOT done — U1's deploy and U2
+
+Both are credentialed account work on Damien's Cloudflare account, and U2's
+policy needs John's and Roger's personal addresses, which A3 keeps out of this
+repo on purpose. The config is staged and inert:
+
+- `wrangler.jsonc` carries the `custom_domain` route and `"routes": []` on
+  `env.production`. **Verified empirically:** the Access hostname appears 0 times
+  in `wrangler deploy --env production --dry-run` and twice in the DEV dry-run,
+  so the inheritance hazard KTD8/U1 names is actually blocked.
+- **`EDIT_ACCESS_AUD` is intentionally empty**, so `access-jwt.js` fails closed
+  and the Access door is inert. Only the `?t=` door works until it is filled.
+  That is the correct intermediate state — nothing is half-live.
+- Remaining steps, in order, are in the new Access-door runbook appended to
+  `docs/prod-enable.md`: deploy → create the Access application → capture the AUD
+  tag → `wrangler secret put EDIT_ACCESS_EMAILS` → redeploy.
+
+### Still unverifiable until the hostname exists
+
+The live checks in the Verification Contract that require a real sign-in, and
+preflight's `rail placement` gate, which needs `TARGET_URL` set to an `/edit` URL
+with `?t=` and is skipped in every run above.

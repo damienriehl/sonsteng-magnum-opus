@@ -231,3 +231,45 @@ class TestHelpers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewUrlFromListOrigin(unittest.TestCase):
+    """EDIT_ORIGIN became a comma-separated list with the Access door (KTD6).
+
+    Concatenating the whole list onto "/edit/review" would have produced a
+    click-through URL that silently 404s -- the ntfy nudge would still fire and
+    still look fine, and the tap would land nowhere.
+    """
+
+    def _url_with(self, origin):
+        backup = os.environ.get(dp.ENV_EDIT_ORIGIN), os.environ.get(dp.ENV_REVIEW_URL)
+        try:
+            os.environ.pop(dp.ENV_REVIEW_URL, None)
+            os.environ[dp.ENV_EDIT_ORIGIN] = origin
+            return dp.review_url_from_env()
+        finally:
+            os.environ.pop(dp.ENV_EDIT_ORIGIN, None)
+            os.environ.pop(dp.ENV_REVIEW_URL, None)
+            if backup[0] is not None:
+                os.environ[dp.ENV_EDIT_ORIGIN] = backup[0]
+            if backup[1] is not None:
+                os.environ[dp.ENV_REVIEW_URL] = backup[1]
+
+    def test_single_origin_unchanged(self):
+        self.assertEqual(
+            self._url_with("https://w.example"), "https://w.example/edit/review"
+        )
+
+    def test_list_takes_the_first_entry_only(self):
+        url = self._url_with("https://a.example,https://b.example")
+        self.assertEqual(url, "https://a.example/edit/review")
+        self.assertNotIn(",", url)
+
+    def test_list_with_whitespace(self):
+        self.assertEqual(
+            self._url_with("  https://a.example , https://b.example "),
+            "https://a.example/edit/review",
+        )
+
+    def test_empty_first_entry_falls_back_to_default(self):
+        self.assertEqual(self._url_with(" , "), dp.DEFAULT_REVIEW_URL)
