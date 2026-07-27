@@ -1,4 +1,83 @@
-STATE: working — MAIN IS CANONICAL 2026-07-24 eve (triage #8+#9 closed: feat/canonical-docs merged to main at 7efff2e — main was a strict ancestor, trees identical after; gates on the merge result 218 worker / 183 pytest / probe 8-8 HARDENED / validate_spine PASS / build_site --check green / parity PASS; DAEMON MOVED to its own git worktree ~/.local/share/sonsteng-daemon/checkout on main (units ExecStart there, APPLY_DEPLOY_BRANCH=main, flock now at <daemon>/.locks/daemon.lock, installer provisions it idempotently) — interactive checkouts can no longer block auto-apply, and can no longer check out main (merge into main FROM the daemon worktree under the flock); FIXED a latent stall that would have hit on demo day — build_site re-stamps .build-stamp.json with HEAD, so the post-apply rebuild left the tree dirty and the SECOND edit of a session would have died on assert_clean_tree; daemon now restores regenerable site/ before apply + after deploy (3 new tests); E2E re-proven from the new checkout: john edit -> auto-accept -> tick applied+deployed in 52s (24d3c9f) -> admin revert-request -> tick reverted (0c45107), DEV restored, tree clean both times, history 200 w/ 5 revisions, queue 0, content left as found; main pushed 0c45107; PROD untouched + still pitch-only. ⚠ hetzner-dev hit 100% DISK mid-session (two applies failed on 'No space left on device' before it was relieved) — /var/lib/containerd is 64G on the 75G root while the 49G /mnt/docker-data volume is at 2%; freed ~19G with build-cache prune + journal vacuum + one superseded image, box ~93%; RECURS — cockpit ask sonsteng-2026-07-24-devbox-disk; next: John+Roger walkthrough ~Tue Jul 29)
+STATE: working — 2026-07-27 (Mon): reviewer platform verified ready and heavily revised from Damien's live review. WALKTHROUGH MOVED to week of Aug 3. Editor: /edit nav reachability fixed (7 pages were 404s incl. the Matter Library landing page), 1,739 of 3,474 blocks were wrongly comment-only and are now editable, affordances rebuilt as an overlay icon rail with the edit view reserving its own margin, declined edits no longer tattoo a paragraph, Save/Cancel replaced by Done/Undo to match auto-save, friendly locked-out page. A11Y: new tools/a11y_audit.js found 484 failures -> 0 (token-level fixes; the STANDARD/LARGE TYPE toggle was 1.06:1). Skill/task codes replaced by names. Damien has his own DR editor token. DISK EMERGENCY OVER — dev-twin relocated containerd, root 99% -> 12%; the 50->100GB volume resize Damien authorised is what made that possible; alarm now watches / and /mnt/docker-data. OPEN: Cloudflare-Access door (ask sonsteng-2026-07-27-access-door), image-retention permission (sonsteng-2026-07-27-image-retention), phone-width rail assertion unresolved, a11y audit not yet wired to a gate. Gates on main: worker 224, pytest 189, editor client 43/43 headful, a11y 0 FAIL, validate PASS, parity PASS.)
+
+
+---
+
+## Addendum 2026-07-27 (Monday) — reviewer readiness, an accessibility sweep, and what other sessions need
+
+A long session driven by Damien reviewing the editor live. **The walkthrough moved to the
+week of Aug 3**, which is why the Cloudflare-Access door is now worth doing before John and
+Roger ever see a token URL.
+
+### Handoff — things another session must not re-derive or re-break
+
+1. **The editor client is BUNDLED into the Worker.** Editing `app/editor/editor.js` or
+   `editor.css` changes nothing until `node app/worker/scripts/bundle-editor-data.mjs` runs
+   and the Worker is deployed. It fails silently — the old bundle keeps serving and you will
+   debug a fix that was never deployed. Cost me two false diagnoses today.
+2. **`main` is canonical and is checked out in the daemon worktree**
+   (`~/.local/share/sonsteng-daemon/checkout`). Merge into `main` FROM there, under
+   `flock <daemon>/.locks/daemon.lock`. This checkout cannot check out `main`.
+3. **The disk alarm on hetzner-dev already exists — do not build a second one.**
+   `/usr/local/bin/disk-alarm.sh` + `disk-alarm.{service,timer}` (15 min), config
+   `/etc/disk-alarm.env` (0600 root), per-mount state in `/var/lib/disk-alarm/`. It is a
+   **systemd timer, not a cron entry** — a coding-projects session looked for an exporter,
+   an agent and a disk cron, found none, and concluded the box was unmonitored. It watches
+   **both `/` and `/mnt/docker-data`** since the containerd relocation. Happy for dev-twin to
+   adopt it as box-level infrastructure; it needs no sonsteng context to run.
+4. **`/mnt/docker-data` is the disk that matters now** — 70% (65G of 99G), 16.15GB
+   reclaimable. The standing-prune decision is open on `sonsteng-2026-07-27-image-retention`;
+   please don't ask Damien the same question from another repo.
+5. **Visual QA is unblocked for every project.** Chromium needs Xwayland here, and Xwayland is
+   auth-gated by a mutter cookie whose filename regenerates on every login — `DISPLAY` alone
+   was never enough, which is why screenshot verification had been broken for weeks. The
+   chrome-devtools MCP now launches via `~/.claude/hooks/chrome-devtools-launch.sh`, which
+   resolves the newest cookie at start. For scripts:
+   `DISPLAY=:0 XAUTHORITY=$(ls -t /run/user/1000/.mutter-Xwaylandauth.* | head -1)`.
+
+### What shipped
+
+- **`/edit` navigation was broken.** The map registered only pages carrying editable text
+  while the injector rewrote every link into `/edit` space, so platform home, the matter
+  library, skills, the firm dashboard and the third-party page were 404s, and the
+  client-interview links were rewritten to dead paths with their query strings stripped. Every
+  hostable page is registered now; the chat surfaces are deliberately excluded (the injector
+  strips page scripts, so the simulator would be inert) and unhostable links keep their real
+  URL. `604f3cb`.
+- **Half the blocks were not editable.** The client refused every `json_scalar` and every
+  inline-formatted paragraph — 1,739 of 3,474 — though the Worker rejects only
+  `comment_only` and the engine handles both (WP5 scalar splice, WP7 span-splice with a
+  `needs_human` fallback). `e792476`.
+- **Affordances redesigned** to icons with revealed labels, then rebuilt three times over
+  placement. Final: gutter rails live in an **overlay layer** in document coordinates, aligned
+  to one column edge, and **the edit view reserves its own margin** (`body` padding-right
+  ≥900px) because the practicum's fluid layout leaves no gutter at 1280px. Regression test
+  `app/editor/verify-rail-placement.js` checks every rail against all page text at ten widths.
+  `3a45f45`.
+- **Accessibility sweep.** New `tools/a11y_audit.js` (contrast, control contrast, accessible
+  names, target size, alt, heading order, landmarks, lang) found **484 failures**; now 0.
+  Root causes were token-level — `--ink-faint` at 3.43:1 and `--brass` at 3.09:1 colouring
+  ~11.5px type sitewide. The inherited palette is marked "do not alter" and was not altered;
+  three **text-safe variants** were added for the cases where a token colours words. The
+  `STANDARD / LARGE TYPE` toggle was at **1.06:1**. `98e1657`.
+- **Skill and task codes now say what they mean** — chips carry the names, the code moves to
+  the tooltip. `skill_label()` trims survey boilerplate ("Ability to diagnose and plan
+  solutions…") for display only.
+- **Damien has his own editor identity** (`EDIT_TOKEN_DAMIEN`, label **DR**) so his test edits
+  are not stamped JOS. Ops note: `cat file | wrangler secret put` stores the trailing newline
+  and the token then never matches — pipe with `printf '%s'`.
+- **The locked-out page explains itself.** The `?t=` token is consumed on arrival and stripped
+  from the address bar, so a bookmark taken *after* landing works only until the cookie
+  lapses — then a blank "Not found." Damien hit exactly that. The page now says how to get
+  back in, with the body still byte-identical for every reason so it remains no oracle.
+
+### Open, honestly
+
+- **Phone-width rail placement.** `verify-rail-placement.js` reports 44 rail-over-list-item
+  intersections at ≤768px. A direct probe at 768px could not reproduce it. Desktop is clean
+  geometrically and by eye. Not claimed as fixed.
+- **The a11y audit is not wired into any gate** — it needs a browser, so it cannot sit inside
+  the pure-Python `build_site --check`. An unwired audit is how a 1.06:1 toggle shipped.
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
