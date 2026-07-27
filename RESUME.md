@@ -71,13 +71,26 @@ Roger ever see a token URL.
   lapses — then a blank "Not found." Damien hit exactly that. The page now says how to get
   back in, with the body still byte-identical for every reason so it remains no oracle.
 
+### One command runs every gate
+
+`bash tools/preflight.sh` — validate_spine, build_site --check, parity, pytest, worker tests,
+the offline red-team probe, the headful editor client (43 assertions) and the accessibility
+audit, with a pass/fail summary and exit 0 only if everything that ran passed. `--no-browser`
+skips the two that need Chromium; `TARGET_URL=<an /edit URL with ?t=>` adds the live rail-placement
+check. It resolves the Xwayland auth cookie itself.
+
+Written because the a11y audit had been left unwired, which is the same mistake one level up
+from the bug it was written to catch: a check nobody runs is a check that does not exist.
+
 ### Open, honestly
 
 - **Phone-width rail placement.** `verify-rail-placement.js` reports 44 rail-over-list-item
   intersections at ≤768px. A direct probe at 768px could not reproduce it. Desktop is clean
   geometrically and by eye. Not claimed as fixed.
-- **The a11y audit is not wired into any gate** — it needs a browser, so it cannot sit inside
-  the pure-Python `build_site --check`. An unwired audit is how a 1.06:1 toggle shipped.
+- ~~**The a11y audit is not wired into any gate**~~ — CLOSED the same day: `tools/preflight.sh`
+  runs it alongside every other gate. It still cannot live inside the pure-Python
+  `build_site --check` (it needs a browser), so preflight is what a session runs before
+  shipping or handing off.
 
 # Sonsteng Magnum Opus — Weekend Resume (2026-07-18)
 
