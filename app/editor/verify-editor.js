@@ -100,11 +100,9 @@ async function run() {
     // Comment affordance's tooltip, and the comment panel once opened. The
     // CONTRACT being pinned is that the reason is never lost, only relocated.
     const tip3 = await page.evaluate(() => {
-      // The rail precedes its block; walk back past anything the overlay may
-      // have inserted (margin comment bubbles) to find it.
-      const blk = document.querySelector('.eb[data-eb-index="3"]');
-      let tools = blk && blk.previousElementSibling;
-      while (tools && !tools.classList.contains('eb-tools')) tools = tools.previousElementSibling;
+      // A rail may live beside its block OR in the overlay layer, so it is found
+      // by identity rather than by position.
+      const tools = document.querySelector('.eb-tools[data-eb-for="3"]');
       const btn = tools && tools.querySelector('.eb-act--comment');
       return btn && btn.getAttribute('title');
     });
@@ -351,11 +349,9 @@ async function run() {
     // glyphs sit at high opacity. A hover-only rail would simply not exist on
     // John's iPad. This asserts the touch branch of the affordance CSS.
     const railM = await page.evaluate(() => {
-      // The rail precedes its block; walk back past anything the overlay may
-      // have inserted (margin comment bubbles) to find it.
-      const blk = document.querySelector('.eb[data-eb-index="3"]');
-      let tools = blk && blk.previousElementSibling;
-      while (tools && !tools.classList.contains('eb-tools')) tools = tools.previousElementSibling;
+      // A rail may live beside its block OR in the overlay layer, so it is found
+      // by identity rather than by position.
+      const tools = document.querySelector('.eb-tools[data-eb-for="3"]');
       const btn = tools && tools.querySelector('.eb-act--comment');
       if (!btn) return null;
       const cs = getComputedStyle(btn);
