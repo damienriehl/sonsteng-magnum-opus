@@ -17,7 +17,7 @@
 //   * Response carries the strict CSP + no-store + Vary:Cookie + Referrer-Policy
 //     (added by withEditHeaders in editor.js).
 
-import { buildUpstreamUrl, escapeJsonIsland, pageBlockDescriptors, projectPendingItems, MAP_VERSION } from "./editor-map.js";
+import { buildUpstreamUrl, escapeJsonIsland, pageBlockDescriptors, projectPendingItems, resolvePagePath, MAP_VERSION } from "./editor-map.js";
 
 // The shared site assets the wrapped student pages reference. Each maps its
 // served basename (/edit/site-assets/<name>) to its EDIT_UPSTREAM-relative path.
@@ -94,7 +94,14 @@ function friendly(status, message) {
 }
 
 // HTMLRewriter handler that rewrites same-origin <a href> into /edit space.
-class LinkRewriter {
+//
+// A link is only pulled into /edit if the editor can actually host it — i.e. the
+// path resolves against the map allowlist. Anything else (the chat surfaces, a
+// data file, a directory with no page) keeps its real absolute URL and opens on
+// the public site. Rewriting unconditionally is what put "Matter Library" and
+// "Platform home" on dead /edit paths: the allowlist is the authority on what
+// /edit can serve, so the rewriter has to ask it rather than assume.
+export class LinkRewriter {
   constructor(upstreamBase) {
     this.base = upstreamBase; // URL of the upstream page (for resolving relative hrefs)
     this.basePath = upstreamBase.pathname.replace(/[^/]*$/, ""); // upstream dir
@@ -122,6 +129,12 @@ class LinkRewriter {
     const prefix = new URL(this.base).pathname.split("/").slice(0, 2).join("/") + "/"; // "/platform/"
     if (rel.startsWith(prefix)) rel = rel.slice(prefix.length);
     else if (rel.startsWith("/")) rel = rel.slice(1);
+    // Only pages the allowlist can serve move into /edit; everything else keeps
+    // its real URL so the reader lands on a working page instead of a 404.
+    if (!resolvePagePath(rel)) {
+      el.setAttribute("href", abs.toString());
+      return;
+    }
     el.setAttribute("href", "/edit/" + rel + (abs.hash || ""));
   }
 }
