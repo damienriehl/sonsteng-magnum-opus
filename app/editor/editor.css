@@ -21,6 +21,18 @@
 html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
 @media (max-width: 640px) { html.has-editor-banner body { padding-top: 4.6rem; } }
 
+/* THE EDITING VIEW RESERVES ITS OWN MARGIN.
+   The controls belong beside the passage, but the practicum's own layout is
+   fluid — at 1280px the reading column grows to fill the window and there is no
+   gutter to sit in, so the rails stepped offstage on the most common laptop
+   width and a reviewer saw no icons at all. Rather than fight the page's
+   geometry (three attempts, three collisions), the editing view simply makes
+   room: the page is inset while you are editing, and the space belongs to the
+   controls. This affects ONLY the /edit view — the published site is untouched. */
+@media (min-width: 900px) {
+  html.has-editor-banner body { padding-right: 7.5rem; }
+}
+
 /* ---------------------------------------------------------------------------
    Editable / commentable block affordances
    --------------------------------------------------------------------------- */
@@ -80,7 +92,7 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   align-items: center;
   justify-content: flex-end;         /* right-aligned when it stays in the column */
   flex-wrap: wrap;
-  margin: -.1rem 0 .2rem 0;
+  margin: .15rem 0 .35rem 0;   /* in flow: clear of the passage, never grazing it */
   position: relative;
   z-index: 2;
   pointer-events: none;              /* the empty run of the rail must not eat clicks */
@@ -95,13 +107,34 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
    height:0 removes the vertical cost; the transform (set inline, in px, from the
    measured rects) does the moving and never participates in layout, so nothing
    depends on which ancestor is positioned. */
+/* The layer the gutter rails live in: document-positioned, zero-size, outside
+   the page's flow entirely so nothing it contains can disturb or collide with
+   the generated markup. */
+.eb-rail-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 0; height: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+.eb-rail-layer .eb-tools { pointer-events: none; }
+.eb-rail-layer .eb-act,
+.eb-rail-layer .eb-status { pointer-events: auto; }
+
+/* No room beside the column: the controls step off rather than crowd the text.
+   visibility (not display) keeps them measurable for the next layout pass. */
+.eb-tools--offstage {
+  visibility: hidden;
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
 .eb-tools--gutter {
-  height: 0;
   margin: 0;
-  overflow: visible;
   justify-content: flex-start;
   white-space: nowrap;
   flex-wrap: nowrap;
+  max-width: none;
 }
 /* Flow mode (no room beside the passage) keeps the controls compact and to the
    RIGHT of the column, which is where Damien asked for them — they simply cannot

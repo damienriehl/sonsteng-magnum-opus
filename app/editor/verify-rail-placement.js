@@ -32,22 +32,41 @@ const WIDTHS = [1600, 1400, 1236, 1180, 1100, 1024, 900, 768, 480, 390];
     await page.setViewport({ width: w, height: 1000 });
     await page.goto(HARNESS, { waitUntil: 'load' });
     await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 1, { timeout: 20000 });
-    await sleep(500);
+    // Placement re-runs as late assets land (fonts swapping in change every
+    // measurement), so settle before measuring — 500ms caught a mid-state and
+    // reported a clean layout as broken.
+    await sleep(1800);
     const res = await page.evaluate(() => {
+      // Check each rail against EVERY piece of text on the page, not just its own
+      // block. The first version of this test only compared a rail with the block
+      // it belonged to, which is exactly the overlap that cannot happen — and it
+      // passed clean while the icons were visibly sitting on the lede and on a
+      // neighbouring heading. A control may not land on ANY text.
+      const texts = [];
+      document.querySelectorAll('main *').forEach((el) => {
+        if (el.closest('.eb-tools')) return;                 // the rails themselves
+        let own = '';
+        for (const n of el.childNodes) if (n.nodeType === 3) own += n.nodeValue;
+        if (!own.trim()) return;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) texts.push({ r, tag: el.tagName, t: own.trim().slice(0, 28) });
+      });
       const out = [];
       document.querySelectorAll('.eb-tools').forEach((t) => {
-        let blk = t.nextElementSibling;
-        while (blk && !blk.classList.contains('eb')) blk = blk.nextElementSibling;
-        if (!blk) return;
-        const a = t.getBoundingClientRect(), b = blk.getBoundingClientRect();
-        // Any horizontal AND vertical intersection with the passage box is an overlap.
-        const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-        const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-        const overlaps = overlapX > 1 && overlapY > 1;
+        const a = t.getBoundingClientRect();
+        if (!a.width || !a.height) return;
+        let hit = null;
+        for (const x of texts) {
+          const ox = Math.min(a.right, x.r.right) - Math.max(a.left, x.r.left);
+          const oy = Math.min(a.bottom, x.r.bottom) - Math.max(a.top, x.r.top);
+          if (ox > 1 && oy > 1) { hit = x; break; }
+        }
         out.push({
           gutter: t.classList.contains('eb-tools--gutter'),
-          overlaps,
-          railLeft: Math.round(a.left), blockRight: Math.round(b.right),
+          overlaps: !!hit,
+          hitText: hit ? (hit.tag + ' “' + hit.t + '”') : '',
           offRight: Math.round(a.right) > document.documentElement.clientWidth,
         });
       });
@@ -57,6 +76,7 @@ const WIDTHS = [1600, 1400, 1236, 1180, 1100, 1024, 900, 768, 480, 390];
     const off = res.filter((r) => r.offRight);
     const g = res.filter((r) => r.gutter).length;
     if (over.length || off.length) bad++;
+    if (over.length) console.log('        e.g. rail over ' + over[0].hitText);
     console.log(`${String(w).padStart(5)}px  rails=${res.length}  gutter=${g}  flow=${res.length - g}  ` +
       `OVERLAP=${over.length}  OFFSCREEN=${off.length}  ${over.length || off.length ? '<-- BAD' : 'ok'}`);
   }

@@ -388,38 +388,97 @@
      Anything that can change the geometry re-runs this: resize, large type,
      fonts finishing, the comment panel pushing the page over, and every pending
      re-render (a status pill changes the rail's width). */
-  var RAIL_GAP = 14;          // breathing space between passage and controls
+  var RAIL_GAP = 16;          // breathing space between the column and the controls
   var railLayoutQueued = false;
+  var railLayer = null;
+
+  /* Why an overlay layer, after three attempts at doing this in flow.
+     Each earlier version injected the rail into the page's own layout and then
+     tried to nudge it clear with margins or a transform. Every one of them found
+     a new collision the last had not: inside a flex heading the rail collapsed to
+     content width and sat on the words; aligned to a block's own right edge it
+     landed on the lede printed beside a short caption; in flow before a block it
+     dropped into the chips row and covered "MERIDIAN".
+
+     The page's markup is generated and varied, and the rail is not part of it.
+     So it stops pretending to be: on any layout with a real gutter the rails live
+     in one absolutely-positioned layer in DOCUMENT coordinates, outside the flow
+     entirely. Nothing to collide with, no containing-block guesswork, no vertical
+     cost, and every control lines up on one column edge. Where there is no gutter
+     (phones, narrow windows) they return to the flow AFTER their block, which is
+     the one arrangement that has never overlapped anything. */
+  function ensureRailLayer() {
+    if (railLayer && railLayer.isConnected) return railLayer;
+    railLayer = el('div', 'eb-rail-layer');
+    railLayer.setAttribute('aria-hidden', 'false');
+    document.body.appendChild(railLayer);
+    return railLayer;
+  }
+
+  function railContentWidth(t) {
+    var kids = t.children;
+    if (!kids.length) return 0;
+    var first = kids[0].getBoundingClientRect();
+    var last = kids[kids.length - 1].getBoundingClientRect();
+    return Math.max(last.right - first.left, 0);
+  }
+
+  // No room beside the column (a phone, a narrow window). The controls do NOT
+  // disappear — on touch there is no hover to reveal them and a control nobody
+  // can find is a control nobody uses, which is the whole reason they are drawn
+  // at rest. They return to the flow immediately AFTER their block: the original
+  // arrangement, and the only one that has never collided with anything. It
+  // costs a row, which on a phone is the right trade.
+  function railToFlow(s, t) {
+    t.classList.remove('eb-tools--gutter', 'eb-tools--offstage');
+    t.style.position = ''; t.style.left = ''; t.style.top = '';
+    if (s.el.nextElementSibling !== t) insertAfter(t, s.el);
+  }
 
   function layoutRails() {
     railLayoutQueued = false;
+    var refs = Object.keys(sessions);
+    if (!refs.length) return;
     var docW = document.documentElement.clientWidth;
-    Object.keys(sessions).forEach(function (ref) {
+    var layer = ensureRailLayer();
+
+    // ONE column edge for the page, taken from the widest block. A per-block edge
+    // puts controls just past a short caption — which is where the lede beside it
+    // is already printed.
+    var columnRight = 0;
+    refs.forEach(function (ref) {
+      var s = sessions[ref];
+      if (!s.el || !s.el.isConnected) return;
+      var r = s.el.getBoundingClientRect();
+      if (r.width > 0 && r.right > columnRight) columnRight = r.right;
+    });
+    if (!columnRight) return;
+
+    var room = docW - columnRight - RAIL_GAP;
+    var sx = window.scrollX || window.pageXOffset || 0;
+    var sy = window.scrollY || window.pageYOffset || 0;
+    var placed = 0;
+
+    refs.forEach(function (ref) {
       var s = sessions[ref];
       var t = s._tools;
       if (!t || !s.el || !s.el.isConnected) return;
-      // Measure in FLOW state, otherwise we would be measuring our own transform.
-      t.classList.remove('eb-tools--gutter');
-      t.style.transform = '';
-      var blockRect = s.el.getBoundingClientRect();
-      // The rail is a block-level flex container, so its OWN width is the whole
-      // reading column — measuring that asked "do the controls fit beside the
-      // text, given they are as wide as the text?", which is never true. What
-      // matters is how much room the CONTENTS need: from the first control's
-      // left edge to the last one's right.
-      var kids = t.children;
-      if (!kids.length || !blockRect.width) return;
-      var firstRect = kids[0].getBoundingClientRect();
-      var lastRect = kids[kids.length - 1].getBoundingClientRect();
-      var railW = Math.max(lastRect.right - firstRect.left, 0);
-      if (!railW) return;
-      var room = docW - blockRect.right - RAIL_GAP;
-      if (room < railW) return;                  // no gutter here — stay in flow
-      var dx = (blockRect.right + RAIL_GAP) - firstRect.left;
-      var dy = blockRect.top - firstRect.top;    // align to the passage's first line
+      t.classList.remove('eb-tools--offstage');      // measurable before deciding
+      var b = s.el.getBoundingClientRect();
+      var w = railContentWidth(t);
+      // PER RAIL: deciding once from the widest rail sent all 182 controls
+      // offstage on a layout with a 400px gutter, because one status pill was long.
+      if (!b.width || !w || w > room) { railToFlow(s, t); return; }
+      // Gutter rails live in the overlay layer — never in the page's flow, so
+      // they cannot disturb or collide with the generated markup.
+      if (t.parentNode !== layer) layer.appendChild(t);
       t.classList.add('eb-tools--gutter');
-      t.style.transform = 'translate(' + Math.round(dx) + 'px,' + Math.round(dy) + 'px)';
+      t.style.position = 'absolute';
+      t.style.left = Math.round(columnRight + RAIL_GAP + sx) + 'px';
+      t.style.top = Math.round(b.top + sy) + 'px';   // the passage's first line
+      placed++;
     });
+    document.documentElement.classList.toggle('eb-rails-offstage', placed === 0);
   }
 
   function scheduleRailLayout() {
@@ -449,6 +508,7 @@
     // paragraph — in a numbered activity list they scattered down the margin with
     // no visible relationship to the items they belonged to. Paragraph TOPS are
     // evenly spaced; bottoms are not.
+    t.setAttribute('data-eb-for', String(s.index));
     s.el.parentNode.insertBefore(t, s.el);
     // Approaching the passage raises its controls (the CSS sibling selector can
     // no longer reach forward, and this is deterministic across browsers).
