@@ -72,30 +72,44 @@ async function run() {
     assert('N  normalize() mirrors tools/text_norm.py byte-for-byte',
       normMatch, normMatch ? (samples.length + ' samples identical') : ('js=' + JSON.stringify(jsNorm) + ' py=' + JSON.stringify(pyNorm)));
 
-    /* --- C: comment-only enforced on json_scalar (2) + formatted (3) ------ */
+    /* --- C: WHAT IS EDITABLE (revised 2026-07-27) -------------------------
+       These three assertions used to pin the OPPOSITE contract: json_scalar and
+       inline-formatted blocks were comment-only in the client. That was stricter
+       than anything behind it — the Worker rejects only kind 'comment_only', and
+       the apply engine handles both (WP5 surgical scalar splice, WP7 span-splice
+       with a needs_human fallback). On a real matter packet it hid the pencil on
+       1,739 of 3,474 blocks, including every numbered activity, because each one
+       opens with a bolded lead-in. Damien found it by asking why half the
+       paragraphs could not be edited. */
     const b2 = await page.evaluate(() => window.SonstengEditor.block(2));
     const b3 = await page.evaluate(() => window.SonstengEditor.block(3));
-    assert('C1 json_scalar block is comment-only (not editable)',
-      b2 && b2.commentOnly === true && b2.editable === false, 'kind=' + (b2 && b2.kind) + ' editable=' + (b2 && b2.editable));
-    assert('C2 has_inline_formatting block is comment-only (not editable)',
-      b3 && b3.commentOnly === true && b3.editable === false, 'kind=' + (b3 && b3.kind) + ' editable=' + (b3 && b3.editable));
-    // typing into a comment-only block must not enter an edit session
-    await page.evaluate(() => window.SonstengEditor.typeInto(2, 'attempted illegal edit'));
-    const b2after = await page.evaluate(() => window.SonstengEditor.block(2));
-    assert('C3 comment-only block rejects in-place edit (state stays IDLE, not dirty)',
-      b2after.state === 'IDLE' && b2after.dirty === false, 'state=' + b2after.state + ' dirty=' + b2after.dirty);
+    assert('C1 json_scalar block IS editable (WP5 surgical scalar splice)',
+      b2 && b2.editable === true && b2.commentOnly === false, 'kind=' + (b2 && b2.kind) + ' editable=' + (b2 && b2.editable));
+    assert('C2 inline-formatted block IS editable (WP7 span-splice, needs_human on ambiguity)',
+      b3 && b3.editable === true && b3.commentOnly === false, 'kind=' + (b3 && b3.kind) + ' editable=' + (b3 && b3.editable));
+    // A formatted block must enter a real edit session and carry a suggestion id.
+    await page.evaluate(() => window.SonstengEditor.typeInto(3, 'A formatted line, now genuinely editable.'));
+    const b3after = await page.evaluate(() => window.SonstengEditor.block(3));
+    assert('C3 editing a formatted block enters EDIT and mints an id (no silent refusal)',
+      b3after.state === 'EDITING' && b3after.dirty === true && !!b3after.suggestionId,
+      'state=' + b3after.state + ' dirty=' + b3after.dirty);
+    await page.evaluate(() => window.SonstengEditor.clickCancel(3));
     // C4 (revised 2026-07-27): the explanation used to stand permanently under
     // every formatted block — the same sentence repeated dozens of times down a
     // matter packet. It now travels with the control that can act on it: the
     // Comment affordance's tooltip, and the comment panel once opened. The
     // CONTRACT being pinned is that the reason is never lost, only relocated.
     const tip3 = await page.evaluate(() => {
-      const tools = document.querySelector('.eb[data-eb-index="3"] + .eb-tools');
+      // The rail precedes its block; walk back past anything the overlay may
+      // have inserted (margin comment bubbles) to find it.
+      const blk = document.querySelector('.eb[data-eb-index="3"]');
+      let tools = blk && blk.previousElementSibling;
+      while (tools && !tools.classList.contains('eb-tools')) tools = tools.previousElementSibling;
       const btn = tools && tools.querySelector('.eb-act--comment');
       return btn && btn.getAttribute('title');
     });
-    assert('C4a formatted block: the Comment control explains why it is comment-only',
-      /number or specially formatted/.test(tip3 || ''), tip3 ? ('“' + tip3.slice(0, 60) + '…”') : 'no tooltip');
+    assert('C4a an editable block offers BOTH controls, each with a plain-word label',
+      /leave a note for Damien/.test(tip3 || ''), tip3 ? ('“' + tip3.slice(0, 60) + '…”') : 'no tooltip');
     const noNote3 = await page.evaluate(() => window.SonstengEditor.noteText(3));
     assert('C4b the standing beige explainer is gone from the block itself',
       !noNote3 || !/Damien will apply the wording/.test(noNote3), 'note=' + JSON.stringify(noNote3));
@@ -104,8 +118,10 @@ async function run() {
       const w = document.querySelector('.comment-bubble__why');
       return { text: w && w.textContent, shown: !!(w && w.classList.contains('show')) };
     });
-    assert('C4c opening the comment panel states the reason where it is needed',
-      why3.shown && /number or specially-formatted/.test(why3.text || ''), 'shown=' + why3.shown);
+    // Block 3 is editable now, so the panel must NOT claim it cannot be edited —
+    // the explanation is reserved for genuinely comment-only blocks.
+    assert('C4c the comment panel does not claim an editable block is un-editable',
+      why3.shown === false && !why3.text, 'shown=' + why3.shown + ' text=' + JSON.stringify(why3.text));
     await page.evaluate(() => window.SonstengEditor.closeBubble && window.SonstengEditor.closeBubble());
     await page.evaluate(() => {
       const c = document.querySelector('.comment-bubble__close');
@@ -195,7 +211,7 @@ async function run() {
     await sleep(150);
     const margins = await page.evaluate(() => window.SonstengEditor.marginBubbles());
     assert('M1 Word-style margin bubbles render pending/accepted/declined comments',
-      margins.length >= 2 && margins.join(' ').indexOf('Not used') !== -1, 'bubbles=' + margins.length);
+      margins.length >= 2 && margins.join(' ').indexOf('Set aside') !== -1, 'bubbles=' + margins.length);
 
     /* --- AX: comment dialog a11y — role/aria-modal, Escape-close + focus
        return, keyboard-operable Cancel (WP10 a11y sweep, design §9) ---------- */
@@ -335,7 +351,11 @@ async function run() {
     // glyphs sit at high opacity. A hover-only rail would simply not exist on
     // John's iPad. This asserts the touch branch of the affordance CSS.
     const railM = await page.evaluate(() => {
-      const tools = document.querySelector('.eb[data-eb-index="3"] + .eb-tools');
+      // The rail precedes its block; walk back past anything the overlay may
+      // have inserted (margin comment bubbles) to find it.
+      const blk = document.querySelector('.eb[data-eb-index="3"]');
+      let tools = blk && blk.previousElementSibling;
+      while (tools && !tools.classList.contains('eb-tools')) tools = tools.previousElementSibling;
       const btn = tools && tools.querySelector('.eb-act--comment');
       if (!btn) return null;
       const cs = getComputedStyle(btn);
@@ -355,7 +375,7 @@ async function run() {
       railM ? ('opacity=' + railM.opacity + ' label="' + railM.label + '" labelVisible=' + railM.labelVisible) : 'no rail');
     assert('MOB3 icon affordance keeps a 44x44 touch target (WCAG 2.5.5) and an accessible name',
       railM && railM.h >= 44 && railM.w >= 44 && /Comment/.test(railM.ariaLabel || '')
-        && /number or specially formatted/.test(railM.title || ''),
+        && /leave a note for Damien/.test(railM.title || ''),
       railM ? (railM.w + 'x' + railM.h + ' aria="' + railM.ariaLabel + '"') : 'no rail');
     await page.screenshot({ path: path.join(OUT, 'editor-mobile.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-mobile.png'));

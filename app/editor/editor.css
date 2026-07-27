@@ -94,9 +94,9 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
    lands on the last line whatever the block's height. */
 @media (min-width: 1100px) {
   .eb-tools {
-    margin-top: -2.85rem;
+    margin-top: .1rem;
     margin-right: -5.25rem;
-    margin-bottom: .1rem;
+    margin-bottom: -2.85rem;   /* pulled back over the block it precedes */
   }
 }
 /* Narrow viewports have no gutter to move into, and overlapping the text would
@@ -140,7 +140,7 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
 
 /* Approaching the paragraph OR the control raises both. `:focus-within` on the
    rail covers the keyboard path, which hover alone would strand. */
-.eb:hover + .eb-tools .eb-act,
+.eb-tools--near .eb-act,
 .eb-tools:hover .eb-act,
 .eb-tools:focus-within .eb-act { opacity: 1; }
 

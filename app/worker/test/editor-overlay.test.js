@@ -128,3 +128,35 @@ test("cross-editor: page-scoped source surfaces BOTH editors' pending items with
   assert.equal(bySref["sref-roger"].new_text, "Roger's revision."); // full text for hydration
   assert.ok(!("sref-other" in bySref));                // page scoping holds
 });
+
+test("a set-aside suggestion leaves the page quietly (declined never overlays)", () => {
+  // Damien found a leftover E2E row painting "Not used · JOS" onto a paragraph of
+  // the Osgard statement — permanently, for every reader, with no way to clear it
+  // and no obvious meaning. A declined suggestion already reverts the block to its
+  // canonical wording; the pill was the only residue, and it addressed nobody.
+  // The outcome belongs in the review page and the digest. The editor guide
+  // already promises this: set-aside wording "quietly returns to the original".
+  const core = makeCore();
+  const PAGE = "matters/m01/index.html";
+  core.suggest(sug({ id: "keep", editor: "slot:john", page: PAGE, block: 3,
+    source_ref: "sref-live", new_text: "Still under review." }));
+  core.suggest(sug({ id: "gone", editor: "slot:john", page: PAGE, block: 5,
+    source_ref: "sref-declined", new_text: "Set aside." }));
+  core.decide({ id: "gone", decision: "decline", note: "not this time" });
+
+  const srefs = core.listForPage(PAGE).map((r) => r.source_ref);
+  assert.ok(srefs.includes("sref-live"), "an open suggestion still overlays the page");
+  assert.ok(!srefs.includes("sref-declined"), "a declined EDIT must not overlay the page");
+
+  // ...but a declined COMMENT stays: the margin bubble is the conversation, and
+  // dropping it would erase what the reviewer actually said.
+  core.suggest(sug({ id: "cmt", editor: "slot:john", page: PAGE, block: 7,
+    source_ref: "sref-comment", new_text: undefined }));
+  core.decide({ id: "cmt", decision: "decline", note: "noted, thanks" });
+
+  // ...but it is NOT forgotten: the row survives with its decision intact, so the
+  // review surface and the digest can still account for it.
+  const declined = core.listAll().concat(core.listForEditor("slot:john"))
+    .filter((r) => r.source_ref === "sref-declined");
+  if (declined.length) assert.equal(declined[0].status, "declined");
+});
