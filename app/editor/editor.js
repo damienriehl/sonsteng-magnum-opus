@@ -310,21 +310,81 @@
         Each editable/commentable block is wrapped in a light DOM: the block
         keeps its element; we append sibling nodes for tools + status.
      ============================================================================ */
+  /* ---------- icon affordances (pencil / speech bubble) --------------------
+     Replaces the pair of full-width uppercase word-buttons that dominated every
+     paragraph. Three rules govern this, and the first two are why the icons are
+     NOT hover-only:
+
+       1. TOUCH HAS NO HOVER. The guide tells John an iPad works, and on a tablet
+          a hover-revealed control simply does not exist. Reveal-on-hover would
+          silently remove editing for whichever device he happens to pick up.
+       2. DISCOVERABILITY. A first-time reader does not sweep the pointer over
+          paragraphs hunting for controls. The affordance has to be visible while
+          the page is at rest for anyone to learn it is there.
+       3. QUIET, THEN LOUD. What was actually wrong was WEIGHT, not presence. So
+          the icons sit at rest in a muted ink, and come up to full contrast (with
+          a visible word label) as soon as the pointer or keyboard reaches the
+          paragraph. Present always; assertive only when relevant.
+
+     Hit areas stay at 44x44 CSS px (WCAG 2.5.5) even though the glyph is 20px —
+     the visual weight drops, the target does not. The original design deliberately
+     oversized these for an older reader and that judgment still holds. */
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function iconSvg(paths) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '20'); svg.setAttribute('height', '20');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.75');
+    svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    paths.forEach(function (d) {
+      var p = document.createElementNS(SVG_NS, 'path'); p.setAttribute('d', d); svg.appendChild(p);
+    });
+    return svg;
+  }
+  var ICON_PENCIL = ['M12 20h9', 'M16.4 3.6a2.12 2.12 0 0 1 3 3L7.5 18.5 3.5 19.5l1-4Z'];
+  var ICON_COMMENT = ['M20.5 11.4a7.9 7.9 0 0 1-.85 3.6 8 8 0 0 1-7.15 4.4 7.9 7.9 0 0 1-3.6-.85L3.5 20.5l2.35-5.4A7.9 7.9 0 0 1 5 11.5a8 8 0 0 1 4.4-7.15 7.9 7.9 0 0 1 3.6-.85h.5a7.98 7.98 0 0 1 7.5 7.5v.4Z'];
+
+  function actButton(s, kind, label, paths, hint, onActivate) {
+    var b = el('button', 'eb-act eb-act--' + kind); b.type = 'button';
+    b.setAttribute('aria-label', label);
+    if (hint) b.setAttribute('title', label + ' — ' + hint);
+    b.appendChild(iconSvg(paths));
+    // The word label rides along, revealed on hover/focus. Screen readers get it
+    // from aria-label, so the visible copy is marked hidden to avoid a double read.
+    var tip = el('span', 'eb-act__label', label); tip.setAttribute('aria-hidden', 'true');
+    b.appendChild(tip);
+    // mousedown+preventDefault preserves the caret/selection contract the rest of
+    // the client relies on; the detail===0 click is the keyboard path.
+    b.addEventListener('mousedown', function (e) { e.preventDefault(); onActivate(); });
+    b.addEventListener('click', function (e) { if (e.detail === 0) onActivate(); });
+    // Point at what you are about to act on: hovering or tabbing to the control
+    // lights up its paragraph, so there is never doubt which one it belongs to.
+    var mark = function () { s.el.classList.add('eb--target'); };
+    var unmark = function () { s.el.classList.remove('eb--target'); };
+    b.addEventListener('mouseenter', mark);
+    b.addEventListener('focus', mark);
+    b.addEventListener('mouseleave', unmark);
+    b.addEventListener('blur', unmark);
+    return b;
+  }
+
   function toolsEl(s) {
     if (s._tools) return s._tools;
     var t = el('div', 'eb-tools');
     if (s.editable) {
-      var edit = el('button', 'eb-affordance', 'Edit'); edit.type = 'button';
-      edit.setAttribute('aria-label', 'Edit this paragraph');
-      edit.addEventListener('mousedown', function (e) { e.preventDefault(); makeEditable(s, true); });
-      edit.addEventListener('click', function (e) { if (e.detail === 0) makeEditable(s, true); });
-      t.appendChild(edit);
+      t.appendChild(actButton(s, 'edit', 'Edit', ICON_PENCIL,
+        'change the wording here', function () { makeEditable(s, true); }));
     }
-    var cmt = el('button', 'eb-affordance', 'Comment'); cmt.type = 'button';
-    cmt.setAttribute('aria-label', 'Comment on this paragraph');
-    cmt.addEventListener('mousedown', function (e) { e.preventDefault(); openBubbleWhole(s); });
-    cmt.addEventListener('click', function (e) { if (e.detail === 0) openBubbleWhole(s); });
-    t.appendChild(cmt);
+    // Comment-only blocks (numbers, formatted lines) used to carry a standing
+    // beige explainer under every one of them. The explanation now travels with
+    // the control that can act on it, and appears in the comment panel itself.
+    var why = s.commentOnly && (s.kind === 'json_scalar' || s.hasFormatting)
+      ? 'this line is a number or specially formatted, so Damien applies the wording'
+      : 'leave a note for Damien';
+    t.appendChild(actButton(s, 'comment', 'Comment', ICON_COMMENT, why,
+      function () { openBubbleWhole(s); }));
     insertAfter(t, s.el);
     s._tools = t;
     return t;
@@ -378,10 +438,11 @@
 
     toolsEl(s);
 
-    // json_scalar + inline-formatted blocks: comment-only in v1, with the note.
-    if (s.commentOnly && (s.kind === 'json_scalar' || s.hasFormatting)) {
-      showNote(s, 'This is a number or specially-formatted line. Leave a comment and Damien will apply the wording here.');
-    }
+    // json_scalar + inline-formatted blocks stay comment-only in v1. The standing
+    // explainer under every such block was pure noise on a page with dozens of
+    // them — the same sentence, over and over, addressed to nobody in particular.
+    // It now surfaces where it is actually needed: on the Comment control's
+    // tooltip, and at the top of the comment panel once you open it.
 
     if (!s.editable) return;   // comment-only blocks need no edit wiring
 
@@ -721,23 +782,35 @@
         PROSE-scoped clamp to the START block), onSelectionActivity, the float
         button bound on mousedown+preventDefault reading the STORED `captured`.
      ============================================================================ */
-  var floatBtn, bubble, bAnchor, bQuote, bText, bSend, bCancel;
+  var floatBtn, bubble, bAnchor, bQuote, bText, bSend, bCancel, bClose, bWhy;
   function buildCommentUI() {
     floatBtn = el('button', 'float-comment', 'Comment'); floatBtn.type = 'button';
     floatBtn.setAttribute('aria-label', 'Comment on the selected text');
     document.body.appendChild(floatBtn);
 
-    bubble = el('div', 'comment-bubble'); bubble.setAttribute('role', 'dialog'); bubble.setAttribute('aria-modal', 'true'); bubble.setAttribute('aria-label', 'Leave a comment');
+    // A side panel rather than a bubble floating over the passage: the note you
+    // are writing and the sentence you are writing about stay visible together,
+    // and the panel never covers the text it is asking you to judge.
+    bubble = el('div', 'comment-bubble comment-bubble--panel'); bubble.setAttribute('role', 'dialog'); bubble.setAttribute('aria-modal', 'true'); bubble.setAttribute('aria-label', 'Leave a comment');
+    bClose = el('button', 'comment-bubble__close'); bClose.type = 'button';
+    bClose.setAttribute('aria-label', 'Close');
+    bClose.appendChild(iconSvg(['M6 6l12 12', 'M18 6L6 18']));
     bAnchor = el('div', 'comment-bubble__anchor', 'On —');
     bQuote = el('p', 'comment-bubble__quote');
+    bWhy = el('p', 'comment-bubble__why');
     var lab = el('label', 'comment-bubble__label', 'Your note for Damien'); lab.setAttribute('for', 'eb-comment-text');
     bText = el('textarea'); bText.id = 'eb-comment-text';
     bText.setAttribute('placeholder', 'What should Damien know about this passage?');
     bSend = el('button', 'btn', 'Send comment'); bSend.type = 'button';
     bCancel = el('button', 'btn btn--ghost', 'Cancel'); bCancel.type = 'button';
     var row = el('div', 'comment-bubble__row'); row.appendChild(bSend); row.appendChild(bCancel);
-    bubble.appendChild(bAnchor); bubble.appendChild(bQuote); bubble.appendChild(lab); bubble.appendChild(bText); bubble.appendChild(row);
+    bubble.appendChild(bClose);
+    bubble.appendChild(bAnchor); bubble.appendChild(bQuote); bubble.appendChild(bWhy);
+    bubble.appendChild(lab); bubble.appendChild(bText); bubble.appendChild(row);
     document.body.appendChild(bubble);
+
+    bClose.addEventListener('mousedown', function (e) { e.preventDefault(); closeBubble(); });
+    bClose.addEventListener('click', function (e) { if (e.detail === 0) closeBubble(); });
 
     floatBtn.addEventListener('mousedown', function (e) {
       e.preventDefault();                             // C2: keep the selection from collapsing
@@ -850,13 +923,35 @@
     bubbleReturnFocus = (document.activeElement && document.activeElement !== document.body) ? document.activeElement : null;
     s.pendingComment = { id: uuid(), anchor_text: text };
     activeCommentSession = s;
-    bAnchor.textContent = 'On — ' + (s.context || s.ref);
+    // Never show a reviewer the internal source_ref. When the generator gave the
+    // block a human context ("matter caption", "section title") use it; otherwise
+    // say something a person would say. Damien still sees the exact ref on the
+    // review page — it is his routing key, not John's reading material.
+    bAnchor.textContent = 'On — ' + (s.context || 'this passage');
     bQuote.textContent = '“' + text + '”';
+    // The comment-only explanation lives here now, said once, at the moment it
+    // is relevant — instead of standing under every formatted block all day.
+    if (s.commentOnly && (s.kind === 'json_scalar' || s.hasFormatting)) {
+      bWhy.textContent = 'This is a number or specially-formatted line, so it is not edited directly — say what it should read and Damien applies the wording.';
+      bWhy.classList.add('show');
+    } else {
+      bWhy.textContent = '';
+      bWhy.classList.remove('show');
+    }
     bText.value = '';
     bSend.disabled = false;
-    bubble.style.top = (window.scrollY + rect.bottom + 10) + 'px';
-    bubble.style.left = (window.scrollX + Math.max(4, rect.left)) + 'px';
+    // The panel is docked, not anchored: no positioning math, nothing covering
+    // the passage. `rect` is kept in the signature for the selection path's
+    // callers and for the scroll-into-view below.
+    if (rect && typeof rect.top === 'number') {
+      var offscreen = rect.top < 80 || rect.bottom > (window.innerHeight - 40);
+      if (offscreen && s.el && s.el.scrollIntoView) {
+        try { s.el.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (e) {}
+      }
+    }
+    if (s.el) s.el.classList.add('eb--commenting');
     bubble.classList.add('show');
+    document.documentElement.classList.add('has-comment-panel');
     floatBtn.classList.remove('show');
     setTimeout(function () { try { bText.focus(); } catch (e) {} }, 0);
     log('BUBBLE open id=' + s.pendingComment.id.slice(0, 8) + ' anchor="' + text.slice(0, 30) + '"');
@@ -865,7 +960,11 @@
   var bubbleReturnFocus = null;
   function closeBubble() {
     bubble.classList.remove('show');
-    if (activeCommentSession) activeCommentSession.pendingComment = null;
+    document.documentElement.classList.remove('has-comment-panel');
+    if (activeCommentSession) {
+      activeCommentSession.pendingComment = null;
+      if (activeCommentSession.el) activeCommentSession.el.classList.remove('eb--commenting');
+    }
     activeCommentSession = null;
     try { window.getSelection().removeAllRanges(); } catch (e) {}
     // Return focus to the trigger so keyboard users are not dropped at <body>.
@@ -1282,6 +1381,7 @@
     dragSelectAcross: function (i1, a, i2, b) { selectAcross(i1, a, i2, b); document.dispatchEvent(new Event('mouseup')); return new Promise(function (r) { setTimeout(r, 140); }); },
     clickFloat: function () { floatBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); },
     clickBlockComment: function (index) { var s = byIndex[index]; if (s) openBubbleWhole(s); },
+    closeBubble: function () { closeBubble(); },
     sendBubble: function (note) { bText.value = note || ''; sendComment(); },
     repoll: repollPending,
     log: function () { return LOG.slice(); }

@@ -84,9 +84,33 @@ async function run() {
     const b2after = await page.evaluate(() => window.SonstengEditor.block(2));
     assert('C3 comment-only block rejects in-place edit (state stays IDLE, not dirty)',
       b2after.state === 'IDLE' && b2after.dirty === false, 'state=' + b2after.state + ' dirty=' + b2after.dirty);
-    const note3 = await page.evaluate(() => window.SonstengEditor.noteText(3));
-    assert('C4 formatted block shows the "Damien will apply the wording" note',
-      /Damien will apply the wording/.test(note3 || ''), note3 ? ('“' + note3.slice(0, 48) + '…”') : 'no note');
+    // C4 (revised 2026-07-27): the explanation used to stand permanently under
+    // every formatted block — the same sentence repeated dozens of times down a
+    // matter packet. It now travels with the control that can act on it: the
+    // Comment affordance's tooltip, and the comment panel once opened. The
+    // CONTRACT being pinned is that the reason is never lost, only relocated.
+    const tip3 = await page.evaluate(() => {
+      const tools = document.querySelector('.eb[data-eb-index="3"] + .eb-tools');
+      const btn = tools && tools.querySelector('.eb-act--comment');
+      return btn && btn.getAttribute('title');
+    });
+    assert('C4a formatted block: the Comment control explains why it is comment-only',
+      /number or specially formatted/.test(tip3 || ''), tip3 ? ('“' + tip3.slice(0, 60) + '…”') : 'no tooltip');
+    const noNote3 = await page.evaluate(() => window.SonstengEditor.noteText(3));
+    assert('C4b the standing beige explainer is gone from the block itself',
+      !noNote3 || !/Damien will apply the wording/.test(noNote3), 'note=' + JSON.stringify(noNote3));
+    await page.evaluate(() => window.SonstengEditor.clickBlockComment(3));
+    const why3 = await page.evaluate(() => {
+      const w = document.querySelector('.comment-bubble__why');
+      return { text: w && w.textContent, shown: !!(w && w.classList.contains('show')) };
+    });
+    assert('C4c opening the comment panel states the reason where it is needed',
+      why3.shown && /number or specially-formatted/.test(why3.text || ''), 'shown=' + why3.shown);
+    await page.evaluate(() => window.SonstengEditor.closeBubble && window.SonstengEditor.closeBubble());
+    await page.evaluate(() => {
+      const c = document.querySelector('.comment-bubble__close');
+      c && c.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true, cancelable: true }));
+    });
 
     /* --- E: edit -> autocorrect preview -> Send -> Sent ✓ -> inline status - */
     const EDIT1 = 'You are an attorney for Devon Halvard, arrested after a late-night stop on an icy road.';
@@ -306,9 +330,33 @@ async function run() {
     const s1m = await page.evaluate(() => window.SonstengEditor.block(1));
     assert('MOB1 edit + Save works on 390x844 (save bar shown; committed)',
       barVis === true && s1m.dirty === false && s1m.suggestionId === null, 'bar=' + barVis + ' dirty=' + s1m.dirty);
-    const note3m = await page.evaluate(() => window.SonstengEditor.noteText(3));
-    assert('MOB2 comment-only note still shown on formatted block (mobile)',
-      /Damien will apply the wording/.test(note3m || ''), 'note ok');
+    // MOB2 (revised 2026-07-27): on touch there is no hover, so the icon rail
+    // must read as interactive at rest — the word labels stay expanded and the
+    // glyphs sit at high opacity. A hover-only rail would simply not exist on
+    // John's iPad. This asserts the touch branch of the affordance CSS.
+    const railM = await page.evaluate(() => {
+      const tools = document.querySelector('.eb[data-eb-index="3"] + .eb-tools');
+      const btn = tools && tools.querySelector('.eb-act--comment');
+      if (!btn) return null;
+      const cs = getComputedStyle(btn);
+      const box = btn.getBoundingClientRect();
+      const lab = btn.querySelector('.eb-act__label');
+      return {
+        opacity: parseFloat(cs.opacity),
+        h: Math.round(box.height), w: Math.round(box.width),
+        label: lab && lab.textContent,
+        labelVisible: lab ? parseFloat(getComputedStyle(lab).opacity) > 0 : false,
+        title: btn.getAttribute('title'),
+        ariaLabel: btn.getAttribute('aria-label'),
+      };
+    });
+    assert('MOB2 icon rail is visible at rest on touch (never hover-only) with its word label',
+      railM && railM.opacity >= 0.5 && railM.labelVisible && /Comment/.test(railM.label || ''),
+      railM ? ('opacity=' + railM.opacity + ' label="' + railM.label + '" labelVisible=' + railM.labelVisible) : 'no rail');
+    assert('MOB3 icon affordance keeps a 44x44 touch target (WCAG 2.5.5) and an accessible name',
+      railM && railM.h >= 44 && railM.w >= 44 && /Comment/.test(railM.ariaLabel || '')
+        && /number or specially formatted/.test(railM.title || ''),
+      railM ? (railM.w + 'x' + railM.h + ' aria="' + railM.ariaLabel + '"') : 'no rail');
     await page.screenshot({ path: path.join(OUT, 'editor-mobile.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-mobile.png'));
     await page.close();
