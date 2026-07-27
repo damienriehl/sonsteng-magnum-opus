@@ -65,16 +65,27 @@ ever see a token URL — they would only ever learn the good door.
 - **R6.** The uniform-404 no-oracle property survives: an unknown path, a known path without
   scope, and a hostile path remain byte-identical responses.
 - **R7.** PROD (`sonsteng.damienriehl.com`) is untouched and stays pitch-only.
+- **R8.** The admin page offers a **student view** — a one-click way to see the practicum exactly
+  as a student sees it, with no editing chrome and no instructor material. *(Damien, 2026-07-27:
+  "So long as we also have a 'student view' to test things.")*
 
 ### Key Decisions
 
-- **KD1. All three people get Access; the token links stay as a fallback.**
-  *(session-settled: user-directed — chosen over "Damien only, others keep bookmarks" and
-  "everyone on Access, tokens retired": Damien asked whether all three could have Access with
-  bookmarks retained as fallbacks, which is exactly the both-doors option.)*
-  Governs R1, R3, R4.
-  **Carried caveat:** retaining the links retains the forwarded-link risk. Any token rotates in
-  seconds, and retirement becomes a cheap decision once John has signed in through Access once.
+- **KD1. All three get Access; the token links stay as a fallback *through first proof*, then
+  retire.** *(session-settled: user-directed, refined 2026-07-27 — chosen over "Damien only,
+  others keep bookmarks" and over retiring the tokens on day one.)* Governs R1, R3, R4.
+
+  Damien's follow-up — *"Cloudflare Access (no token) might be the most elegant method, right?"* —
+  is correct, and the plan agrees with it. Access-only is the better end state: one door, nothing
+  secret in any URL, central revocation, and no forwarded-link risk. Keeping both doors is not a
+  compromise on that; it is **staging**, because Access is unproven in John's hands until John
+  himself has actually signed in once. Retiring a working door before the replacement has carried
+  a real user is how you discover the replacement's flaw at the worst moment.
+
+  **Retirement trigger (concrete, not "later"):** once John has completed one Access sign-in and
+  saved one edit through the new door, the token links come out — remove the `EDIT_TOKEN_*`
+  secrets for john/roger, leave Damien's as a break-glass. One deploy. Tracked as the first item
+  in Deferred to Follow-Up Work, not as an open-ended intention.
 - **KD2. Hostname is `edit.sonsteng.damienriehl.com`.**
   *(session-settled: user-directed — chosen over `sonsteng-admin.…` and `admin.sonsteng.…`:
   it names the thing the reviewers do, and the admin page is simply its front page.)*
@@ -92,7 +103,9 @@ verification in the Worker, email→slot mapping, the admin landing page, and th
 John what to do.
 
 **Deferred to follow-up work:**
-- Retiring the `?t=` tokens (a decision, once Access is proven in John's hands).
+- **Retire the `?t=` tokens** once John has signed in through Access and saved one edit (KD1's
+  named trigger). Remove the `EDIT_TOKEN_*` secrets for john/roger, keep Damien's as break-glass.
+  One deploy. This is a scheduled step, not an open-ended intention.
 - Applying the same door to PROD, which stays pitch-only until Damien flips it.
 - Service-token access for the apply daemon — it authenticates with its own admin token today
   and is unaffected.
@@ -110,8 +123,13 @@ slot model, and any change to how edits are applied, reverted or attributed.
   custom domain can be attached without a zone transfer. *(Verify in U1 before proceeding.)*
 - **A2.** Damien's Access team `young-unit-68fd` can host a second application; the Cockpit's
   existing app is not disturbed.
-- **A3.** John's and Roger's email addresses are known to Damien at build time. The policy needs
-  them; nothing else does.
+- **A3.** John's and Roger's addresses were supplied on 2026-07-27 and are **deliberately not
+  recorded in this repo.** This repository is private today but the README pitches it to
+  open-source adopters, so it is headed public — and git history is permanent. A collaborator's
+  personal address committed now would ship with the first public release. The two addresses live
+  in the private cockpit (`briefs/qa/sonsteng-2026-07-27-access-door-answers.json`) and are typed
+  straight into the Access policy at U2. Nothing in the codebase needs them: `EDIT_ACCESS_EMAILS`
+  maps addresses to slots and is itself config, so it is set as a **secret**, not a var.
 
 ### Key Technical Decisions
 
@@ -250,9 +268,11 @@ needs to know Access exists.
 - **Files:** `app/worker/src/editor-auth.js`, `app/worker/wrangler.jsonc`,
   `app/worker/test/editor-auth.test.js`
 - **Approach:**
-  1. New var `EDIT_ACCESS_EMAILS` — JSON mapping lowercased email → slot name. It is *not* a
-     secret (addresses, not credentials) so it lives in `wrangler.jsonc` beside
-     `EDIT_TOKEN_SCOPES`, and the same slot names feed the existing scope config.
+  1. New **secret** `EDIT_ACCESS_EMAILS` — JSON mapping lowercased email → slot name, set with
+     `wrangler secret put`, never in `wrangler.jsonc`. These are not credentials, but they are
+     collaborators' personal addresses in a repo headed for public release (A3), and a secret is
+     the mechanism this project already has for "must not be committed". Slot names are the same
+     ones `EDIT_TOKEN_SCOPES` already grants scopes to.
   2. In `resolveAuth`, after the cookie check fails, try Access: gate on the request host
      matching the configured Access hostname (KTD3), verify, map, and return the slot's scopes
      from the existing `EDIT_TOKEN_SCOPES` record.
@@ -292,19 +312,28 @@ needs to know Access exists.
 
 - **Goal:** one tokenless page that opens on the review queue, revert requests, history and
   editorial flags.
-- **Requirements:** R5
+- **Requirements:** R5, R8
 - **Dependencies:** U4
 - **Files:** `app/worker/src/editor-admin.js` (new), `app/worker/src/editor.js`,
   `app/worker/test/editor-admin.test.js` (new)
-- **Approach:** a route (e.g. the host root or `/edit/admin`) requiring `admin` scope, composing
-  the existing `renderReviewPage`, revert-request listing and `renderHistoryIndex` output rather
-  than inventing new views. Links out to each surface. Under-scoped requests take the uniform 404.
+- **Approach:** the **host root** requiring `admin` scope (Damien's choice — typing the bare
+  address lands on the dashboard), composing the existing `renderReviewPage`, revert-request
+  listing and `renderHistoryIndex` output rather than inventing new views. Links out to each
+  surface. Under-scoped requests take the uniform 404.
+  - **Student view (R8):** a prominent link to the public practicum
+    (`sonsteng-dev.damienriehl.com/platform/`). This needs no new rendering work — that site
+    already *is* the student view: a different origin, unauthenticated, with the editing layer
+    absent and instructor material (facts, notes, answer keys) reachable only through `/edit`.
+    The value is having it one click away rather than remembered, so Damien can check what a
+    change actually looks like to a student.
 - **Test scenarios:**
   - With admin scope, the page renders and links to review, history and revert requests.
   - With `edit` scope only (John), the page is the uniform 404 — identical bytes to an unknown path.
   - With no identity, the uniform 404.
   - An empty queue renders as an honest empty state, not an error.
   - No token value appears anywhere in the rendered HTML.
+  - The student-view link opens the public site, and that page carries no editing chrome and no
+    instructor content (verifies the view is genuinely a student's, not a stripped admin one).
 - **Verification:** the page is reachable by Damien through Access with no URL secret; John cannot
   reach it and cannot tell it exists.
 
