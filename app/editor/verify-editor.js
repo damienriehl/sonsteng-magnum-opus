@@ -147,8 +147,8 @@ async function run() {
       s1.suggestionId === null && s1.dirty === false && srvE.count === 1, 'count=' + srvE.count + ' id=' + s1.suggestionId);
     await sleep(150);   // let the post-send re-poll land
     const st1 = await page.evaluate(() => window.SonstengEditor.statusText(1));
-    assert('E4 inline status renders after send (Sent ✓ / synced Pending review)',
-      /Sent ✓|Pending review/.test(st1 || ''), 'status="' + st1 + '"');
+    assert('E4 inline status renders after send (Sent ✓ / synced Pending)',
+      /Sent ✓|Pending/.test(st1 || ''), 'status="' + st1 + '"');
 
     /* --- D: triple-Save dedupe (slow net) => ONE logical suggestion -------- */
     await page.evaluate(() => window.__MOCK_CTRL__.setSlow(500));
@@ -277,7 +277,7 @@ async function run() {
     assert('HY1 pending suggestion hydrates the block text on (re)load (WYSIWYG)',
       hy1.text === HYTEXT && hy1.b.hydrated === true, 'text="' + hy1.text.slice(0, 40) + '" hydrated=' + hy1.b.hydrated);
     assert('HY2 hydrated block shows status pill + author attribution (JOS)',
-      /Pending review/.test(hy1.st) && /JOS/.test(hy1.st), 'pill="' + hy1.st + '"');
+      /Pending/.test(hy1.st) && /JOS/.test(hy1.st), 'pill="' + hy1.st + '"');
     assert('HY3 hydration is display-only — canonical originalHash/originalText untouched',
       hy1.b.originalHash === 'hash-idx4-v1' && /breath-test result/.test(hy1.b.originalText), 'hash=' + hy1.b.originalHash);
 
@@ -297,7 +297,7 @@ async function run() {
     ]), HYREF);
     const hy3 = await page.evaluate(() => ({ text: window.SonstengEditor.blockText(4), hydrated: window.SonstengEditor.block(4).hydrated, st: window.SonstengEditor.statusText(4) }));
     assert('HY5 stale suggestion (hash moved) skips hydration; falls back to the pill',
-      /breath-test result/.test(hy3.text) && hy3.hydrated === false && /Pending review/.test(hy3.st),
+      /breath-test result/.test(hy3.text) && hy3.hydrated === false && /Pending/.test(hy3.st),
       'text="' + hy3.text.slice(0, 28) + '" pill="' + hy3.st + '"');
 
     // 4) an unsent DRAFT beats hydration (draft = newer intent)
@@ -436,7 +436,7 @@ async function run() {
       st: window.SonstengEditor.statusText(4)
     }));
     assert('UN1 needs_human unmasks: edited text shown WITH a warning frame + "not applied" pill',
-      /could not land automatically/.test(un.text) && un.warn === true && /Needs attention/.test(un.st),
+      /could not land automatically/.test(un.text) && un.warn === true && /Not applied/.test(un.st),
       'warn=' + un.warn + ' pill="' + un.st + '"');
 
     /* --- HB1/HB2/HB3 heartbeat banner states (DIRECT_APPLY on) ------------- */

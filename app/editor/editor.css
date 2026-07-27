@@ -78,29 +78,34 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   display: flex;
   gap: .1rem;
   align-items: center;
-  justify-content: flex-end;         /* beside the passage, not stacked beneath it */
+  justify-content: flex-end;         /* right-aligned when it stays in the column */
   flex-wrap: wrap;
-  margin: -.1rem 0 .35rem 0;
+  margin: -.1rem 0 .2rem 0;
   position: relative;
   z-index: 2;
   pointer-events: none;              /* the empty run of the rail must not eat clicks */
 }
 .eb-act, .eb-status { pointer-events: auto; }
 
-/* Wide enough for a real gutter: the rail rides UP onto the passage's last line
-   and sits OUT in the margin beside it. Net vertical cost of the controls ~0 —
-   which was the complaint: two 44px rows under every block on a page with 150
-   of them pushed the exercise text apart. The pull-up is one rail-height, so it
-   lands on the last line whatever the block's height. */
-@media (min-width: 1100px) {
-  .eb-tools {
-    margin-top: .1rem;
-    margin-right: -5.25rem;
-    margin-bottom: -2.85rem;   /* pulled back over the block it precedes */
-  }
+/* GUTTER MODE — applied by layoutRails() in editor.js ONLY after measuring that
+   the controls actually fit beside this block. It was a media query twice, and
+   twice it put the icons on top of the text: "the window is wide" and "there is
+   room next to this paragraph" are different questions, and only the second one
+   matters. A page whose column runs to the window edge is wide and has no room.
+   height:0 removes the vertical cost; the transform (set inline, in px, from the
+   measured rects) does the moving and never participates in layout, so nothing
+   depends on which ancestor is positioned. */
+.eb-tools--gutter {
+  height: 0;
+  margin: 0;
+  overflow: visible;
+  justify-content: flex-start;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
-/* Narrow viewports have no gutter to move into, and overlapping the text would
-   be worse than the space it saves — so below 1100px the rail stays in flow. */
+/* Flow mode (no room beside the passage) keeps the controls compact and to the
+   RIGHT of the column, which is where Damien asked for them — they simply cannot
+   leave the column when there is nowhere to go. */
 .eb-act {
   display: inline-flex;
   align-items: center;
