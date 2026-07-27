@@ -3,9 +3,14 @@
    Injected only by the Worker's /edit/<path> proxy on top of the real page's
    theme.css. Composes theme tokens (--paper, --ink, --brass, --claret, --green,
    --sp-*, --radius, --font-*). Design-direction §5/§6/§9:
-     high-contrast · word-labeled affordances (no bare icons) · ≥48px targets ·
-     ≥16px inputs · comment bubbles with NO animation · persistent banner ·
+     high-contrast · ≥44px targets · ≥16px inputs · persistent banner ·
      keyboard-tracking save bar · minimal motion (prefers-reduced-motion honored).
+   REVISED 2026-07-27 — the original rule read "word-labeled affordances (no bare
+   icons), ≥48px targets". On a matter packet carrying 150+ blocks that produced a
+   wall of uppercase buttons heavier than the teaching material it framed. The rule
+   now: ICON + revealed word label — never a bare icon, never hover-only; targets
+   stay ≥44px (WCAG 2.5.5) and the resting glyph stays ≥3:1 (WCAG 1.4.11). The
+   label was never the problem; the WEIGHT was.
    Falls back gracefully if theme.css is absent (local hex mirrors below).
    ============================================================================ */
 
@@ -56,29 +61,106 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   box-shadow: inset 0 0 0 1px rgba(124, 30, 43, .35);
 }
 
-/* per-block tool row (word-labeled buttons: "Edit", "Comment") */
+/* ---------------------------------------------------------------------------
+   Per-block action rail — icon affordances (pencil = edit, bubble = comment)
+   ---------------------------------------------------------------------------
+   These were two full-width uppercase word-buttons plus, on formatted blocks, a
+   standing beige explainer. On a matter packet carrying 150+ blocks that read as
+   a wall of chrome with the actual teaching material squeezed between it.
+
+   The weight comes off; the target does not. Glyphs are 20px inside a 44x44 hit
+   area (WCAG 2.5.5), and the word label is still THERE — revealed on hover or
+   keyboard focus rather than shouted at rest. Deliberately NOT hover-only:
+   see the rationale block in editor.js (touch has no hover; a control nobody
+   can find is a control nobody uses).
+   --------------------------------------------------------------------------- */
 .eb-tools {
   display: flex;
-  gap: .5rem;
+  gap: .1rem;
   align-items: center;
   flex-wrap: wrap;
-  margin: .35rem 0 .75rem;
+  margin: -.1rem 0 .35rem -.55rem;   /* hugs its paragraph, indents into the gutter */
 }
-.eb-affordance {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: .8rem;                 /* ≥ readable; label, not icon */
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  min-height: 48px;                 /* WCAG 2.5.5 touch target */
-  padding: 0 1rem;
+.eb-act {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-height: 44px;                 /* WCAG 2.5.5 target size, glyph stays 20px */
+  min-width: 44px;
+  padding: 0 .55rem;
   cursor: pointer;
-  color: var(--claret, #7c1e2b);
+  /* At rest: quiet, but never below the 3:1 non-text contrast floor (WCAG
+     1.4.11) — at rest the glyph is the ONLY thing telling you the control is
+     there, so it has to clear the bar on its own. Measured against --paper
+     (#f4efe4): ink-faint at .55 opacity is 1.85:1 (fails), ink-soft at .7 is
+     3.51:1 (passes). Quiet is a matter of restraint, not of fading out. */
+  color: var(--ink-soft, #544d43);
   background: transparent;
-  border: 1px solid var(--line, rgba(29, 26, 22, .16));
+  border: 1px solid transparent;
   border-radius: var(--radius, 3px);
+  opacity: .7;
+  transition: opacity 120ms var(--ease, ease), color 120ms var(--ease, ease),
+              background 120ms var(--ease, ease), border-color 120ms var(--ease, ease);
 }
-.eb-affordance:hover { background: var(--brass-wash, rgba(169, 130, 47, .1)); border-color: var(--brass, #a9822f); }
-.eb-affordance:focus-visible { outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px; }
+.eb-act svg { flex: 0 0 auto; }
+
+/* The label is collapsed, not absent — it expands on hover/focus. max-width
+   (not display:none) so it can animate and so nothing reflows the paragraph. */
+.eb-act__label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 140ms var(--ease, ease), opacity 140ms var(--ease, ease);
+}
+
+/* Approaching the paragraph OR the control raises both. `:focus-within` on the
+   rail covers the keyboard path, which hover alone would strand. */
+.eb:hover + .eb-tools .eb-act,
+.eb-tools:hover .eb-act,
+.eb-tools:focus-within .eb-act { opacity: 1; }
+
+.eb-act:hover,
+.eb-act:focus-visible {
+  color: var(--claret, #7c1e2b);
+  background: var(--brass-wash, rgba(169, 130, 47, .1));
+  border-color: var(--brass, #a9822f);
+  opacity: 1;
+}
+.eb-act:hover .eb-act__label,
+.eb-act:focus-visible .eb-act__label { max-width: 7rem; opacity: 1; }
+.eb-act:focus-visible { outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px; }
+
+/* Touch: hover states never fire, so the rail must read as interactive at rest.
+   Higher opacity and the label always showing — a tablet reader gets the same
+   information a pointer user earns by hovering. */
+@media (hover: none) {
+  .eb-act { opacity: .85; }                 /* 5.02:1 — comfortably clear */
+  .eb-act__label { max-width: 7rem; opacity: 1; }
+}
+
+/* Large-type mode is an accessibility surface: nothing about it should be quiet. */
+html.type-lg .eb-act { opacity: 1; }
+html.type-lg .eb-act__label { max-width: 7rem; opacity: 1; font-size: .8rem; }
+
+/* Reaching a control lights up the paragraph it will act on. */
+.eb--target {
+  background: var(--brass-wash, rgba(169, 130, 47, .12));
+  border-left-color: var(--brass, #a9822f);
+}
+/* The passage a comment is being written about stays marked while the panel is open. */
+.eb--commenting {
+  background: var(--claret-wash, rgba(124, 30, 43, .07));
+  border-left-color: var(--claret, #7c1e2b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eb-act, .eb-act__label { transition: none; }
+}
 
 /* inline status pill (word-labeled) */
 .eb-status {
@@ -300,6 +382,79 @@ html.type-lg .editor-bar__preview-text { font-size: 1.3rem; }
   box-shadow: 0 14px 40px -16px rgba(40, 20, 10, .5);
 }
 .comment-bubble.show { display: block; }
+
+/* --- docked side panel ------------------------------------------------------
+   The bubble used to float over the passage — which meant the sentence you were
+   commenting on was frequently the thing you could no longer see. Docked to the
+   right edge, the note and the text it judges stay side by side. Below 700px
+   there is no room beside the column, so it becomes a bottom sheet. */
+.comment-bubble--panel {
+  position: fixed;
+  top: 3.6rem;                       /* clears the editing banner */
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: min(24rem, 92vw);
+  border-radius: 0;
+  border-left: 3px solid var(--claret, #7c1e2b);
+  border-right: 0;
+  padding: 1.1rem 1.35rem 1.35rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: -18px 0 44px -24px rgba(40, 20, 10, .55);
+}
+.comment-bubble--panel.show { display: flex; flex-direction: column; }
+/* The page makes room rather than being covered: a "side panel" that sits on top
+   of the sentence you are commenting on defeats its own purpose. */
+@media (min-width: 701px) {
+  html.has-comment-panel body {
+    padding-right: min(24rem, 92vw);
+    transition: padding-right 160ms var(--ease, ease);
+  }
+}
+/* Long anchors (a generator context string) wrap instead of running off the edge. */
+.comment-bubble__anchor { overflow-wrap: anywhere; padding-right: 2.75rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .comment-bubble--panel.show { animation: eb-panel-in 160ms var(--ease, ease); }
+  @keyframes eb-panel-in { from { transform: translateX(14px); opacity: .4; } to { transform: none; opacity: 1; } }
+}
+@media (max-width: 700px) {
+  .comment-bubble--panel {
+    top: auto; left: 0; right: 0; width: auto;
+    max-height: 72vh;
+    border-left: 0;
+    border-top: 3px solid var(--claret, #7c1e2b);
+    box-shadow: 0 -18px 44px -24px rgba(40, 20, 10, .55);
+  }
+}
+.comment-bubble__close {
+  position: absolute;
+  top: .5rem; right: .5rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;           /* WCAG 2.5.5 */
+  padding: 0;
+  color: var(--ink-faint, #8a7f6d);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius, 3px);
+  cursor: pointer;
+}
+.comment-bubble__close:hover { color: var(--claret, #7c1e2b); border-color: var(--line, rgba(29, 26, 22, .16)); }
+.comment-bubble__close:focus-visible { outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px; }
+
+/* Why this passage can't be edited directly — said once, when it matters. */
+.comment-bubble__why {
+  display: none;
+  font-size: .88rem;
+  line-height: 1.5;
+  color: var(--ink-soft, #544d43);
+  background: var(--brass-wash, rgba(169, 130, 47, .12));
+  border-left: 3px solid var(--brass, #a9822f);
+  padding: .55em .8em;
+  margin: 0 0 .8rem;
+  border-radius: var(--radius, 3px);
+}
+.comment-bubble__why.show { display: block; }
 .comment-bubble__anchor {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: .68rem;
@@ -397,4 +552,8 @@ html.type-lg .comment-bubble textarea { font-size: 1.25rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .eb, .btn, .editor-bar .btn { transition: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.has-comment-panel body { transition: none; }
 }
