@@ -95,7 +95,7 @@
     // EDIT_TOKEN_ADMIN (set with `wrangler secret put`, never here). admin is
     // reachable ONLY via the admin token — never from edit/instructor tokens.
     // john -> "JOS", roger -> "RSH" attribution labels (see editor-auth.js).
-    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
     // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
     "EDIT_MAX_PENDING_PER_EDITOR": "200",
     "EDIT_MAX_DAILY_PER_EDITOR": "500",
@@ -138,7 +138,7 @@
         "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
         "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
         "EDIT_ORIGIN": "https://sonsteng-chat.damienriehl.workers.dev",
-        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",
@@ -190,7 +190,7 @@
         "EDIT_UPSTREAM": "https://sonsteng.damienriehl.com/platform/",
         // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).
         "EDIT_ORIGIN": "https://sonsteng-chat-production.damienriehl.workers.dev",
-        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",
