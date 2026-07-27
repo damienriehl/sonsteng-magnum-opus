@@ -1,9 +1,9 @@
 # Editing the Practicum — a one-page guide for Prof. Sonsteng
 
-*Everything you change is a **suggestion**. Nothing goes live until Damien reviews it — so
-you can never break anything. Edit freely.*
+*Your edits publish themselves — usually within two minutes — and **every version is kept**,
+so any change can be undone with one click. You can never break anything. Edit freely.*
 
-## New (2026-07-19): your edits now go live on their own — in about 2 minutes
+## Your edits go live on their own — in about 2 minutes
 
 On the practice site, you no longer have to wait for Damien. When you **Save my change**,
 it publishes to the live practicum **automatically within ~2 minutes**. You still can't break
@@ -20,14 +20,14 @@ anything — every version is kept, and any change can be undone with one click 
   every document: who changed what, a redline of each revision, and a **Request revert** button
   to roll a change back. (Damien's link executes reverts immediately; yours files the request.)
 
-Comments still work exactly as before — they're notes for Damien, not live edits.
+Comments are the exception — they're notes for Damien, not live edits.
 
 ## Getting in
 
 Click your **personal edit link** (Damien will send it — save it as a bookmark). It opens the
 real practicum website, but now you can change it. A green bar across the top reads
-**"You're editing — your changes go to Damien for review."** If you ever don't see that bar,
-you're on the normal site; click your bookmark again.
+**"You're editing — your edits go live automatically (~2 min)."** If you ever don't see that
+bar, you're on the normal site; click your bookmark again.
 
 Use **Chrome or Edge on your Windows PC** (an iPad works too). Tap **Large Type** in the top bar
 any time to make everything bigger.
@@ -36,8 +36,8 @@ any time to make everything bigger.
 
 **1. Fix the words (edit in place).**
 Click any paragraph. It becomes editable, like a Word document. Change a word, add a sentence,
-delete one. When you're happy, click **Save my change**. You'll see **Sent ✓**. That's it —
-the suggestion is with Damien.
+delete one. When you're happy, click **Save my change**. You'll see **Sent ✓**, then
+**"Going live…"** — and about two minutes later your wording *is* the website.
 
 **2. Leave a note (comment).**
 Select some text with your mouse (drag across it), and a small **Comment** button appears. Click
@@ -50,19 +50,18 @@ website copy, and the private teaching notes and answer keys.
 
 ## What happens next
 
-- Your suggestions wait in a list for Damien.
-- Damien reads each one and either **accepts** it (it goes into the real materials) or sets it
-  aside, and he can leave you a note about why.
-- Next time you open your link, your suggested wording is **already shown in the page**, right
-  where you wrote it — gently highlighted and labeled with its status (**pending**, **accepted**,
-  or **set aside**) and who suggested it. It looks just like it did the moment you saved. Click a
-  highlighted paragraph to keep refining it; anything Damien has set aside quietly returns to the
-  original wording. Nothing you write is ever lost.
+- **Your edit publishes itself.** The system double-checks it, rebuilds the site, and puts it
+  live — no waiting on Damien. He sees every change, and Roger sees it too.
+- **Your wording is right there when you come back.** Open your link again and the page shows
+  what you wrote, exactly as you left it. Click the paragraph to keep refining it.
+- **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not
+  applied"** pill so Damien can finish it by hand. Nothing you write is ever lost.
+- **Comments are different** — they're notes for Damien, not live edits, and they wait for him.
 
 ## A few reassurances
 
-- **You cannot break the website.** Every change is a suggestion; the real site only updates
-  after Damien accepts and the system double-checks everything.
+- **You cannot break the website.** Every version is kept, every change is one click from being
+  undone, and the system re-checks the whole site before anything publishes.
 - **Take your time.** If you start editing a paragraph and walk away, your work is saved on your
   computer — come back and it's still there.
 - **If your link ever stops working,** you'll see a plain message telling you to text Damien for
