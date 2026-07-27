@@ -380,12 +380,22 @@
     // Comment-only blocks (numbers, formatted lines) used to carry a standing
     // beige explainer under every one of them. The explanation now travels with
     // the control that can act on it, and appears in the comment panel itself.
-    var why = s.commentOnly && (s.kind === 'json_scalar' || s.hasFormatting)
-      ? 'this line is a number or specially formatted, so Damien applies the wording'
+    var why = s.commentOnly
+      ? 'this line is not edited directly — say what it should read and Damien applies it'
       : 'leave a note for Damien';
     t.appendChild(actButton(s, 'comment', 'Comment', ICON_COMMENT, why,
       function () { openBubbleWhole(s); }));
-    insertAfter(t, s.el);
+    // The rail is inserted BEFORE its block and pulled back down over it, so it
+    // aligns to the block's FIRST line. Sitting after the block aligned it to the
+    // LAST line, which meant the controls landed at a different offset for every
+    // paragraph — in a numbered activity list they scattered down the margin with
+    // no visible relationship to the items they belonged to. Paragraph TOPS are
+    // evenly spaced; bottoms are not.
+    s.el.parentNode.insertBefore(t, s.el);
+    // Approaching the passage raises its controls (the CSS sibling selector can
+    // no longer reach forward, and this is deterministic across browsers).
+    s.el.addEventListener('mouseenter', function () { t.classList.add('eb-tools--near'); });
+    s.el.addEventListener('mouseleave', function () { t.classList.remove('eb-tools--near'); });
     s._tools = t;
     return t;
   }
@@ -394,7 +404,7 @@
   function noteEl(s) {
     if (s._note) return s._note;
     var n = el('div', 'eb-note'); n.setAttribute('role', 'status');
-    insertAfter(n, s._tools || s.el);
+    insertAfter(n, s.el);
     s._note = n; return n;
   }
   function showNote(s, msg) { var n = noteEl(s); n.textContent = msg; n.classList.add('show'); }
@@ -421,7 +431,7 @@
     btn.addEventListener('mousedown', function (e) { e.preventDefault(); hideReauth(s); sendSuggestion(s); });
     btn.addEventListener('click', function (e) { if (e.detail === 0) { hideReauth(s); sendSuggestion(s); } });
     box.appendChild(p); box.appendChild(btn);
-    insertAfter(box, s._note || s._tools || s.el);
+    insertAfter(box, s._note || s.el);
     s._reauth = box; return box;
   }
   function showReauth(s) { reauthEl(s).classList.add('show'); }
@@ -702,8 +712,15 @@
     bar.hidden = true;
 
     var main = el('div', 'editor-bar__main');
-    barSave = el('button', 'btn', 'Save my change'); barSave.type = 'button';
-    barCancel = el('button', 'btn btn--ghost', 'Cancel'); barCancel.type = 'button';
+    // "Save my change" / "Cancel" described a world that no longer exists. Typing
+    // auto-saves after ~2.5s and the daemon publishes within ~2 min, so by the
+    // time anyone reached for Save the change was already sent — the button was
+    // asking for a decision that had been made for them, and Damien rightly
+    // asked what it was for. What a reviewer actually needs here is (a) to know
+    // it is handled, and (b) a way OUT of a change they regret.
+    barSave = el('button', 'btn', 'Done'); barSave.type = 'button';
+    barSave.setAttribute('aria-label', 'Done editing this paragraph');
+    barCancel = el('button', 'btn btn--ghost', 'Undo my change'); barCancel.type = 'button';
     barStatusEl = el('span', 'editor-bar__status'); barStatusEl.setAttribute('aria-live', 'polite');
     main.appendChild(barSave); main.appendChild(barCancel); main.appendChild(barStatusEl);
     bar.appendChild(main);
@@ -722,9 +739,10 @@
 
     document.body.appendChild(bar);
 
-    // Save -> open the autocorrect preview (no await; pure UI).
-    barSave.addEventListener('mousedown', function (e) { e.preventDefault(); openPreview(); });
-    barSave.addEventListener('click', function (e) { if (e.detail === 0) openPreview(); });
+    // Done -> flush whatever is unsent immediately and step out of the block.
+    // Never a gate: the edit is already on its way, so this only removes the wait.
+    barSave.addEventListener('mousedown', function (e) { e.preventDefault(); finishEditing(); });
+    barSave.addEventListener('click', function (e) { if (e.detail === 0) finishEditing(); });
     // Confirm -> the guarded network send. mousedown+preventDefault keeps caret;
     // e.detail===0 lets keyboard users through the click path.
     barConfirm.addEventListener('mousedown', function (e) { e.preventDefault(); confirmSend(); });
@@ -762,7 +780,12 @@
     positionBar();
   }
   function hideBar() { if (bar) { bar.hidden = true; hidePreview(); } }
-  function syncBar(s) { if (bar && !bar.hidden && active() === s) setBarStatus(s.dirty ? 'Your change is ready to send.' : 'No change yet.'); }
+  function syncBar(s) {
+    if (!bar || bar.hidden || active() !== s) return;
+    setBarStatus(s.dirty
+      ? 'Saving automatically — your change goes live on its own.'
+      : 'Click into the paragraph and edit the wording.');
+  }
   function setBarStatus(msg) { if (barStatusEl) barStatusEl.textContent = msg || ''; }
   function barDisable(on) { if (barSave) barSave.disabled = !!on; if (barConfirm) barConfirm.disabled = !!on; }
 
@@ -772,6 +795,24 @@
     barPreviewText.textContent = s.snapshot;          // textContent only
     barPreview.hidden = false;
     setBarStatus('Check the wording, then send.');
+  }
+
+  // "Done": send anything still pending, then release the block. The reviewer is
+  // telling us they have finished this paragraph, not asking permission. It never
+  // reverts and never discards — the only destructive control here is Undo.
+  function finishEditing() {
+    var s = active(); if (!s) return;
+    if (s.dirty) {
+      clearTimers(s);            // do not let the debounce fire a second send
+      sendSuggestion(s);
+    } else {
+      setLocalStatus(s, '', null);
+    }
+    try { s.el.blur(); } catch (e) {}
+    s.el.classList.remove('editing');
+    s.el.removeAttribute('contenteditable');
+    hidePreview(); hideBar();
+    log('DONE ref=' + s.ref + ' dirty=' + s.dirty);
   }
   function hidePreview() { if (barPreview) barPreview.hidden = true; }
   function confirmSend() { var s = active(); if (s) sendSuggestion(s); }
@@ -931,8 +972,8 @@
     bQuote.textContent = '“' + text + '”';
     // The comment-only explanation lives here now, said once, at the moment it
     // is relevant — instead of standing under every formatted block all day.
-    if (s.commentOnly && (s.kind === 'json_scalar' || s.hasFormatting)) {
-      bWhy.textContent = 'This is a number or specially-formatted line, so it is not edited directly — say what it should read and Damien applies the wording.';
+    if (s.commentOnly) {
+      bWhy.textContent = 'This line is not edited directly — say what it should read and Damien applies the wording.';
       bWhy.classList.add('show');
     } else {
       bWhy.textContent = '';
@@ -1020,7 +1061,7 @@
     pending: 'Pending review',
     accepted: 'Going live…', in_flight: 'Going live…',
     accepted_blocked: 'Accepted — needs a fix',
-    declined: 'Not used', drift: 'Needs another look',
+    declined: 'Set aside by Damien', drift: 'Needs another look',
     needs_human: 'Needs attention — not applied',
     applied: 'Live on the site ✓', superseded: 'Replaced by a newer edit'
   };
@@ -1141,7 +1182,10 @@
         b.appendChild(head);
         if (item.preview) b.appendChild(el('p', 'eb-comment-bubble__body', item.preview));
         if (item.note) b.appendChild(el('p', 'eb-comment-bubble__note', 'Damien: ' + item.note));
-        insertAfter(b, s._tools || s.el);
+        // AFTER the passage, never between the rail and its block: the rail is
+        // pulled back over the element that follows it, so anything slipped in
+        // between drags the controls away from the paragraph they belong to.
+        insertAfter(b, s._note || s.el);
         s.el.classList.add('eb--has-margin');
         marginBubbles.push(b);
       } else {
@@ -1303,8 +1347,26 @@
     MAP.forEach(function (desc) {
       var elx = cands[desc.index];
       if (!elx) { missing.push(desc.index); return; }
-      var commentOnly = desc.kind === 'json_scalar' || desc.kind === 'comment_only' || !!desc.has_inline_formatting;
-      var editable = desc.kind === 'prose' && !desc.has_inline_formatting;
+      // WHAT IS EDITABLE — the client used to be stricter than everything behind
+      // it, and nobody noticed until Damien asked why half the paragraphs on a
+      // page had no pencil.
+      //
+      // It refused any json_scalar (captions, section titles, figures) and any
+      // prose carrying inline formatting — which is most of a numbered activity
+      // list, because each item opens with a bolded lead-in. But the Worker
+      // rejects only kind === 'comment_only' (editor-endpoints.js), and the apply
+      // engine handles BOTH of the kinds the client was hiding: json_scalar goes
+      // parse -> surgical splice with a re-parse gate (WP5), and formatted prose
+      // goes through span_splice, which preserves every span's raw markup and
+      // declines to needs_human on any ambiguity rather than corrupting it (WP7).
+      //
+      // needs_human is not a failure mode to hide from — it is unmasked in the
+      // page with a warning frame and a 'not applied' pill, so the worst case is
+      // visible and recoverable. Hiding the pencil, by contrast, silently told a
+      // reviewer the sentence could not be changed at all. Only genuinely
+      // comment-only blocks stay comment-only now.
+      var commentOnly = desc.kind === 'comment_only';
+      var editable = !commentOnly;
       var s = makeSession(desc, elx, editable, commentOnly);
       wireBlock(s);
     });
