@@ -78,9 +78,29 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   display: flex;
   gap: .1rem;
   align-items: center;
+  justify-content: flex-end;         /* beside the passage, not stacked beneath it */
   flex-wrap: wrap;
-  margin: -.1rem 0 .35rem -.55rem;   /* hugs its paragraph, indents into the gutter */
+  margin: -.1rem 0 .35rem 0;
+  position: relative;
+  z-index: 2;
+  pointer-events: none;              /* the empty run of the rail must not eat clicks */
 }
+.eb-act, .eb-status { pointer-events: auto; }
+
+/* Wide enough for a real gutter: the rail rides UP onto the passage's last line
+   and sits OUT in the margin beside it. Net vertical cost of the controls ~0 —
+   which was the complaint: two 44px rows under every block on a page with 150
+   of them pushed the exercise text apart. The pull-up is one rail-height, so it
+   lands on the last line whatever the block's height. */
+@media (min-width: 1100px) {
+  .eb-tools {
+    margin-top: -2.85rem;
+    margin-right: -5.25rem;
+    margin-bottom: .1rem;
+  }
+}
+/* Narrow viewports have no gutter to move into, and overlapping the text would
+   be worse than the space it saves — so below 1100px the rail stays in flow. */
 .eb-act {
   display: inline-flex;
   align-items: center;
@@ -89,16 +109,16 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   min-width: 44px;
   padding: 0 .55rem;
   cursor: pointer;
-  /* At rest: quiet, but never below the 3:1 non-text contrast floor (WCAG
-     1.4.11) — at rest the glyph is the ONLY thing telling you the control is
-     there, so it has to clear the bar on its own. Measured against --paper
-     (#f4efe4): ink-faint at .55 opacity is 1.85:1 (fails), ink-soft at .7 is
-     3.51:1 (passes). Quiet is a matter of restraint, not of fading out. */
-  color: var(--ink-soft, #544d43);
+  /* At rest: a NEUTRAL grey, not the page's warm ink — the warm tone read as
+     part of the writing. Grey recedes; the exercise text stays the darkest thing
+     on the page. But never below the 3:1 non-text contrast floor (WCAG 1.4.11),
+     because at rest the glyph is the only thing announcing the control exists.
+     Measured on --paper (#f4efe4): #6b6a68 at .8 opacity = 3.22:1. */
+  color: var(--eb-act-rest, #6b6a68);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius, 3px);
-  opacity: .7;
+  opacity: .8;
   transition: opacity 120ms var(--ease, ease), color 120ms var(--ease, ease),
               background 120ms var(--ease, ease), border-color 120ms var(--ease, ease);
 }
@@ -139,7 +159,7 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
    Higher opacity and the label always showing — a tablet reader gets the same
    information a pointer user earns by hovering. */
 @media (hover: none) {
-  .eb-act { opacity: .85; }                 /* 5.02:1 — comfortably clear */
+  .eb-act { opacity: 1; }                   /* 4.71:1 — no hover to earn it back */
   .eb-act__label { max-width: 7rem; opacity: 1; }
 }
 
@@ -255,7 +275,18 @@ html.type-lg .eb-note { font-size: .95rem; }
 }
 .editor-banner__history:hover { background: rgba(255, 255, 255, .14); }
 .editor-banner__history:focus-visible { outline: 2px solid var(--paper, #f4efe4); outline-offset: 2px; }
-.editor-banner .segmented-toggle { display: inline-flex; border: 1px solid rgba(255, 255, 255, .3); border-radius: var(--radius, 3px); overflow: hidden; }
+/* The toggle re-uses the PAGE's .segmented-toggle class, which theme.css gives a
+   cream background. On the dark banner that left the unpressed label as cream on
+   cream — 1.06:1, effectively invisible, and the single worst contrast failure in
+   the editor. The container is forced transparent so the green shows through and
+   the label reads at 8.99:1. */
+.editor-banner .segmented-toggle {
+  display: inline-flex;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .45);
+  border-radius: var(--radius, 3px);
+  overflow: hidden;
+}
 .editor-banner .segmented-toggle button {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: .72rem;
@@ -268,7 +299,11 @@ html.type-lg .eb-note { font-size: .95rem; }
   min-height: 48px;
   cursor: pointer;
 }
+/* Pressed: near-black on brass = 4.89:1. Unpressed inherits the banner's cream
+   on green = 8.99:1. Both clear 4.5:1 for the small uppercase label. */
 .editor-banner .segmented-toggle button[aria-pressed="true"] { background: var(--brass, #a9822f); color: var(--ink, #1d1a16); }
+.editor-banner .segmented-toggle button[aria-pressed="false"] { color: var(--ink-invert, #f4efe4); }
+.editor-banner .segmented-toggle button[aria-pressed="false"]:hover { background: rgba(255, 255, 255, .14); }
 /* Visible focus ring on the type-size toggle (design-direction §9 — a ring on
    EVERYTHING interactive). Inset so it reads against the green banner. */
 .editor-banner .segmented-toggle button:focus-visible { outline: 2px solid var(--paper, #f4efe4); outline-offset: -3px; }
