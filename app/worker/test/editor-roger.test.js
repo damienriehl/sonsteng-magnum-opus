@@ -146,3 +146,19 @@ test("the rendered review PAGE island carries attribution (RSH/JOS), and REVIEW_
   // REVIEW_JS must actually render the attribution field (not only it.editor).
   assert.ok(/attribution/.test(REVIEW_JS), "REVIEW_JS references the attribution field");
 });
+
+// ---- Damien's own editor identity (added 2026-07-27) ------------------------
+// He asked to test-drive the editor before John's and Roger's links go out. Doing
+// that on John's token would stamp JOS on his trial edits and leave them in the
+// attributed history John later reads. A third edit+instructor slot keeps the
+// trial honest — and proves the scope model is genuinely n-editor, not two
+// hard-coded people.
+test("attributionLabel maps the damien slot to DR, alongside JOS and RSH", () => {
+  assert.equal(attributionLabel("slot:damien"), "DR");
+  assert.equal(attributionLabel("damien"), "DR");
+  assert.equal(attributionLabel("slot:john"), "JOS");
+  assert.equal(attributionLabel("slot:roger"), "RSH");
+  // An unconfigured slot still degrades to something readable, never blank.
+  assert.equal(attributionLabel("slot:someone"), "SOMEONE");
+  assert.equal(attributionLabel(""), "");
+});
