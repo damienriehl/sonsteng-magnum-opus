@@ -46,6 +46,17 @@
   --tier-concealed:#544d43; --tier-unknown:#8a7f6d; --flag-ethics:#7c1e2b;
   --meter-track:rgba(29,26,22,.10);
   --ok:#2c4636; --warn:#a9822f; --stop:#7c1e2b; --ink-invert:#f4efe4;
+  /* palette — TEXT-SAFE variants (added 2026-07-27, accessibility sweep).
+     The inherited palette above is not altered: --ink-faint and --brass keep
+     their exact values for rules, washes, borders and chart fills, where the
+     3:1 non-text floor applies. But this house style sets a great deal of SMALL
+     type in them — eyebrows, dockets, chip labels, skill codes at ~11.5px — and
+     there they measured 3.43:1 and 3.09:1 against the paper, under the 4.5:1
+     WCAG 1.4.3 requires for body-size text. These are the same hues carried to
+     a legible depth, used ONLY where the token colours actual words. */
+  --ink-faint-text:#6a6151;   /* 5.30:1 on paper, 4.98 on paper-2, 4.58 on paper-3 */
+  --brass-text:#7a5c1c;       /* 5.43:1 on paper, 5.10 on paper-2 */
+  --brass-lite-text:#d3ae5c;  /* 4.90:1 on the green banner */
 
   /* spacing + shape */
   --space:1rem; --sp-2:.5rem; --sp-3:.75rem; --sp-6:1.5rem; --sp-8:2rem; --sp-12:3rem; --sp-16:4rem;
@@ -203,7 +214,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   width:var(--rule-bold);height:12px;background:var(--claret);
 }
 .running-head .rh-spacer{flex:1}
-.running-head .rh-right{color:var(--ink-faint)}
+.running-head .rh-right{color:var(--ink-faint-text)}
 
 /* ---------- 8. Primitive — .card / .doc-card ---------- */
 .card{
@@ -234,7 +245,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   font-family:var(--font-mono);
   font-size:var(--fs-mono-xs);
   text-transform:uppercase;letter-spacing:.08em;
-  color:var(--ink-faint);margin-bottom:var(--sp-2);
+  color:var(--ink-faint-text);margin-bottom:var(--sp-2);
 }
 
 /* ---------- 9. Primitive — .chip (+ variants) ---------- */
@@ -248,6 +259,9 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   font-variant-numeric:tabular-nums;
   color:var(--ink);
   background:var(--paper);
+  /* 24px floor so a chip is a real target (WCAG 2.5.8) — they are links into the
+     skills browser, not decoration. */
+  min-height:24px;
   border:var(--rule) solid var(--line);
   border-left:var(--rule-bold) solid var(--ink-faint);
   border-radius:var(--radius);              /* never pill */
@@ -255,16 +269,18 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   white-space:nowrap;
 }
 .chip::before{content:attr(data-dot);}       /* optional glyph/label prefix */
-.chip--folio{border-left-color:var(--ink-faint);color:var(--ink-soft);background:var(--paper-3)}
+.chip--folio{border-left-color:var(--ink-faint-text);color:var(--ink-soft);background:var(--paper-3)}
 .chip--tier-volunteered{border-left-color:var(--tier-volunteered);color:var(--green)}
 .chip--tier-revealed{border-left-color:var(--tier-revealed);color:var(--ink)}   /* brass = decorative border; text stays ink */
 .chip--tier-rapport{border-left-color:var(--tier-rapport);color:var(--claret)}
 .chip--tier-concealed{border-left-color:var(--tier-concealed);color:var(--ink-soft)}
-.chip--tier-unknown{border-left-color:var(--tier-unknown);color:var(--ink-faint)}
+.chip--tier-unknown{border-left-color:var(--tier-unknown);color:var(--ink-faint-text)}
 .chip--state{border-left-color:var(--green);color:var(--green);background:var(--green-wash)}
-.chip--meridian{border-left-color:var(--brass);color:var(--ink);background:var(--brass-wash)}
-.chip--meridian::before{content:"⌘";color:var(--brass);margin-right:.15em}
-.chip--coming-soon{border-left-color:var(--ink-faint);color:var(--ink-faint);background:var(--paper-3);font-style:normal;opacity:.85}
+.chip--meridian{border-left-color:var(--brass-text);color:var(--ink);background:var(--brass-wash)}
+.chip--meridian::before{content:"⌘";color:var(--brass-text);margin-right:.15em}
+.chip--coming-soon{border-left-color:var(--ink-faint-text);color:var(--ink-soft);background:var(--paper-3);font-style:normal}
+/* No opacity here: it was .85, which diluted the label to 3.49:1 on paper-3.
+   'Muted' is expressed with the colour, not by fading legible text out. */
 
 /* ---------- 10. Primitive — .meter (disclosure / rubric) ---------- */
 .meter{
@@ -338,8 +354,13 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   display:flex;flex-direction:column;gap:var(--sp-2);
 }
 .toc-rail a{
-  color:var(--ink-faint);
-  padding:.2em 0 .2em var(--sp-2);
+  color:var(--ink-faint-text);
+  /* 24px floor: these are the packet's navigation, and at .2em padding they
+     measured 23.6px tall — under WCAG 2.5.8 by a third of a pixel. */
+  display:flex;
+  align-items:center;
+  min-height:24px;
+  padding:.3em 0 .3em var(--sp-2);
   margin-left:calc(-1 * var(--sp-3) - var(--rule));
   border-left:var(--rule-bold) solid transparent;
   font-variant-numeric:tabular-nums;
@@ -361,7 +382,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 }
 .kpi-tile__label{
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
-  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint-text);
   margin:0 0 var(--sp-2);
 }
 .kpi-tile__value{
@@ -392,7 +413,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 .ledger caption{
   text-align:left;
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
-  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint-text);
   padding-bottom:var(--sp-2);
 }
 .ledger th,.ledger td{
@@ -462,20 +483,22 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   font-family:var(--font-display);
   font-weight:900;letter-spacing:-.01em;
   font-size:var(--fs-md);color:var(--ink);
+  /* The home link on every page: 44px tall (WCAG 2.5.5). */
+  display:inline-flex;align-items:center;min-height:44px;
 }
 .masthead__docket{
   margin-left:auto;
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
   text-transform:uppercase;letter-spacing:.08em;
-  color:var(--ink-faint);font-variant-numeric:tabular-nums;
+  color:var(--ink-faint-text);font-variant-numeric:tabular-nums;
 }
 .breadcrumb{
   max-width:var(--maxw);margin:0 auto;
   padding:var(--sp-3) var(--gutter);
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
-  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint-text);
 }
-.breadcrumb a{color:var(--brass)}
+.breadcrumb a{color:var(--brass-text)}
 .breadcrumb .sep{color:var(--line);margin:0 .5em}
 
 .site-footer{                    /* forest-green cloth binding */
@@ -492,7 +515,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   font-size:var(--fs-sm);
 }
 .site-footer a{color:var(--ink-invert);text-decoration:underline;text-underline-offset:3px}
-.site-footer .mono{color:var(--brass-lite)}
+.site-footer .mono{color:var(--brass-lite-text)}
 
 /* layout helper */
 .wrap{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}

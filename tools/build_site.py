@@ -78,6 +78,63 @@ def up_prefix(relpath):
     depth = relpath.count("/")
     return "../" * depth
 
+
+# The survey's own phrasing prefixes five of the 31 skills with boilerplate
+# ("Ability to diagnose and plan solutions for legal problems"). It is faithful
+# to the source and useless as a chip label, so it is trimmed for DISPLAY only —
+# the official name is preserved verbatim in the taxonomy, in the skills browser
+# and in the chip's tooltip. This is a trim, never a rewrite.
+_SKILL_LABEL_BOILERPLATE = re.compile(
+    r"^(?:Ability to|Ability in|Knowledge of|Skill in|Skills in)\s+", re.IGNORECASE)
+
+
+def skill_label(name):
+    """Human chip text for a skill name: 'Ability in legal analysis and
+    reasoning' -> 'Legal analysis and reasoning'. Unprefixed names pass through
+    untouched (26 of the 31 already read as plain English)."""
+    s = _SKILL_LABEL_BOILERPLATE.sub("", (name or "").strip())
+    if not s:
+        return ""
+    return s[0].upper() + s[1:]
+
+
+# Populated once from the corpus (build_all) so ANY render site can name a skill
+# without threading the taxonomy through its call chain.
+SKILLS_BY_ID = {}
+
+
+TASKS_BY_ID = {}
+
+
+def task_chip_html(tid):
+    """Same reasoning as skill_chip: 'TSK-022' tells a student nothing, while
+    'Conduct a client intake interview' is the whole point. The code stays in the
+    tooltip because it is the spine's join key and Damien reads it."""
+    t = TASKS_BY_ID.get(tid) or {}
+    name = t.get("name", "")
+    tip = "{n} · {i}".format(n=name, i=tid) if name else tid
+    return '<span class="chip" title="{tip}">{label}</span>'.format(
+        tip=esc(tip), label=esc(name or tid))
+
+
+def skill_chip_html(sid, up):
+    """Module-level convenience over skill_chip() using the loaded taxonomy."""
+    return skill_chip(sid, SKILLS_BY_ID, up)
+
+
+def skill_chip(sid, skills_by_id, up):
+    """A skill chip that says what the skill IS. The code (SK-LP-01) is a spine
+    identifier — meaningful to the data, inscrutable to a student reading an
+    exercise — so it moves into the tooltip alongside the official name and the
+    chip carries the words. The href still targets the code's anchor."""
+    sk = skills_by_id.get(sid) or {}
+    name = sk.get("name", "")
+    label = skill_label(name) or sid
+    tip = "{n} · {i}".format(n=name, i=sid) if name else sid
+    return ('<a class="chip chip--skill" href="{up}skills/index.html#{sid}" '
+            'title="{tip}">{label}</a>').format(
+                up=up, sid=esc(sid), tip=esc(tip), label=esc(label))
+
 def money(n, cents=False):
     try:
         n = float(n)
@@ -365,7 +422,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     crumb_html = []
     for idx, (label, href) in enumerate(crumbs):
         if idx:
-            crumb_html.append('<span class="sep">/</span>')
+            crumb_html.append('<span class="sep" aria-hidden="true">/</span>')
         if href:
             crumb_html.append('<a href="{h}">{l}</a>'.format(h=esc(href), l=esc(label)))
         else:
@@ -605,8 +662,27 @@ def viz_mark(parts, hits, x, y, w, h, fill, value, label, color,
         parts.append('<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" '
                      'fill="url(#{p})" class="viz-pat" pointer-events="none"/>'.format(
             x=round(x, 1), y=round(y, 1), w=round(w, 1), h=round(h, 1), rx=rx, p=pat))
+    # WCAG 2.5.8 target size and chart marks.
+    #
+    # Every mark here is padded toward a 24px target in USER units, but an SVG
+    # with a viewBox scales: 26 user units render as ~19 CSS px once a 640-wide
+    # chart is laid out in a ~490px card, and a stacked segment's width is the
+    # datum itself — widening it would overlap its neighbour and misstate the
+    # value. Chasing the pixel would mean distorting the chart.
+    #
+    # It does not have to be chased. Every chart on this dashboard is emitted
+    # together with `_table(...)` — the same figures as a real, full-size,
+    # keyboard-reachable HTML table on the same page. That is 2.5.8's
+    # "Equivalent" exception, met by construction rather than by argument. The
+    # marks are a convenience layer over data that is already fully available,
+    # so they are DECLARED as exceptions and the audit counts them as such —
+    # visible and reasoned, never silently skipped.
+    essential = ' data-a11y="equivalent-table"'
     if hit is not None:
         hx, hy, hw, hh = hit
+        if hh < 24.0:
+            hy = hy - (24.0 - hh) / 2.0
+            hh = 24.0
     elif seg:
         hh = max(h, 24.0); hy = y - (hh - h) / 2; hx = x; hw = w
     else:
@@ -614,9 +690,9 @@ def viz_mark(parts, hits, x, y, w, h, fill, value, label, color,
     aria = value + ("  " + label if label else "")
     hits.append('<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="transparent" '
                 'class="viz-mark" tabindex="0" role="img" data-v="{v}" data-l="{l}" '
-                'data-c="{c}" aria-label="{a}"/>'.format(
+                'data-c="{c}" aria-label="{a}"{e}/>'.format(
         x=round(hx, 1), y=round(hy, 1), w=round(max(hw, 0), 1), h=round(hh, 1),
-        v=esc(value), l=esc(label), c=color, a=esc(aria)))
+        v=esc(value), l=esc(label), c=color, a=esc(aria), e=essential))
 
 # 8 diagonal line-textures (45deg / 135deg, four densities each). Assigned per
 # chart: categorical charts use distinct angle+density per slot; the ordinal
@@ -638,7 +714,7 @@ def chart_card(cid, title, caption, svg, table_html, story=""):
     return """
 <section class="viz-card" aria-labelledby="{cid}-t">
   <div class="viz-card__head">
-    <h3 id="{cid}-t" class="viz-card__title">{title}</h3>
+    <h2 id="{cid}-t" class="viz-card__title">{title}</h2>
     <button type="button" class="viz-toggle mono" data-target="{cid}-tbl" aria-expanded="false">TABLE</button>
   </div>
   <p class="viz-card__caption">{caption}</p>
@@ -698,9 +774,12 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 
 .masthead__inner{gap:var(--sp-3)}
 .type-toggle{margin-left:var(--sp-6);appearance:none;cursor:pointer;background:transparent;
+  /* The large-type control is the page's own accessibility affordance — it has
+     no business being the smallest target on the masthead. 44px (WCAG 2.5.5). */
+  display:inline-flex;align-items:center;min-height:44px;
   border:var(--rule) solid var(--line);border-radius:var(--radius);
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
-  letter-spacing:.08em;color:var(--ink-soft);padding:.4em .7em;min-height:2.2em}
+  letter-spacing:.08em;color:var(--ink-soft);padding:.4em .7em}
 .type-toggle[aria-pressed="true"]{box-shadow:inset 0 0 0 var(--rule) var(--brass);color:var(--ink)}
 
 /* ---- generic layout ---- */
@@ -710,11 +789,11 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .grid--3{grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
 .grid--2{grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
 .eyebrow{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
-  letter-spacing:.14em;color:var(--brass);margin:0 0 var(--sp-2)}
+  letter-spacing:.14em;color:var(--brass-text);margin:0 0 var(--sp-2)}
 .chips{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .card h3{margin-bottom:var(--sp-2)}
 .card__meta{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
-  letter-spacing:.08em;color:var(--ink-faint)}
+  letter-spacing:.08em;color:var(--ink-faint-text)}
 .arrow-link{font-family:var(--font-mono);font-size:var(--fs-sm);letter-spacing:.04em;color:var(--claret)}
 .arrow-link::after{content:" →"}
 
@@ -724,14 +803,14 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .volumes{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
 .volume{position:relative;overflow:hidden}
 .volume__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);line-height:1;
-  color:var(--brass);letter-spacing:-.02em}
+  color:var(--brass-text);letter-spacing:-.02em}
 .volume--claret .volume__num{color:var(--claret)}
 .volume--green .volume__num{color:var(--green)}
 .entry-cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
 
 /* ---- module pages ---- */
 .module-numeral{font-family:var(--font-display);font-weight:900;
-  font-size:clamp(5rem,10vw,9rem);line-height:.85;letter-spacing:-.04em;color:var(--brass);opacity:.9}
+  font-size:clamp(5rem,10vw,9rem);line-height:.85;letter-spacing:-.04em;color:var(--brass-text);opacity:.9}
 .module--claret .module-numeral{color:var(--claret)}
 .module--green .module-numeral{color:var(--green)}
 
@@ -755,7 +834,7 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .index-row{display:flex;gap:var(--sp-6);align-items:baseline;justify-content:space-between;
   padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
 .index-row__main{flex:1}
-.index-row__code{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint);
+.index-row__code{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint-text);
   letter-spacing:.08em;text-transform:uppercase}
 
 /* ---- skills browser ---- */
@@ -763,11 +842,11 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .skill-card summary{cursor:pointer;list-style:none;display:flex;gap:var(--sp-3);align-items:baseline;
   flex-wrap:wrap}
 .skill-card summary::-webkit-details-marker{display:none}
-.skill-card summary::before{content:"▸";color:var(--brass);font-family:var(--font-mono);
+.skill-card summary::before{content:"▸";color:var(--brass-text);font-family:var(--font-mono);
   transition:transform var(--dur) var(--ease);display:inline-block}
 .skill-card[open] summary::before{transform:rotate(90deg)}
 .skill-card__name{font-family:var(--font-display);font-size:var(--fs-md);font-weight:600;flex:1;min-width:12rem}
-.skill-id{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint);letter-spacing:.08em}
+.skill-id{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint-text);letter-spacing:.08em}
 .task-block{margin:var(--sp-3) 0 var(--sp-3) var(--sp-6);padding-left:var(--sp-3);
   border-left:var(--rule) solid var(--line)}
 .task-name{font-weight:600}
@@ -775,13 +854,13 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .ext-header{border-left:var(--rule-bold) solid var(--claret);padding-left:var(--sp-3);
   margin:var(--sp-12) 0 var(--sp-6);background:var(--claret-wash)}
 .chip--conf-exact{border-left-color:var(--green);color:var(--green)}
-.chip--conf-near{border-left-color:var(--brass);color:var(--ink)}
-.chip--conf-parent{border-left-color:var(--ink-faint);color:var(--ink-faint)}
+.chip--conf-near{border-left-color:var(--brass-text);color:var(--ink)}
+.chip--conf-parent{border-left-color:var(--ink-faint-text);color:var(--ink-faint-text)}
 .chip--noeq{border-left-color:var(--claret);color:var(--claret)}
-.chip--skill{border-left-color:var(--brass);color:var(--ink);cursor:pointer}
+.chip--skill{border-left-color:var(--brass-text);color:var(--ink);cursor:pointer}
 .chip--matter{border-left-color:var(--claret);color:var(--claret)}
 .bloom{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
-  letter-spacing:.08em;color:var(--ink-faint)}
+  letter-spacing:.08em;color:var(--ink-faint-text)}
 
 /* ---- matter library ---- */
 .lib-toolbar{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;
@@ -800,12 +879,12 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 @media(min-width:60rem){.packet-layout{grid-template-columns:12rem minmax(0,1fr)}}
 .packet-body{max-width:var(--maxw-read);min-width:0}
 .part{margin:var(--sp-12) 0;scroll-margin-top:5rem}
-.part__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);color:var(--brass);
+.part__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);color:var(--brass-text);
   line-height:1;letter-spacing:-.02em}
 .part__head{display:flex;gap:var(--sp-3);align-items:baseline;margin-bottom:var(--sp-3)}
 .doc-card{margin:var(--sp-6) 0}
 .doc-card h3,.doc-card h4,.doc-card h5{font-family:var(--font-display)}
-.instructor-note{color:var(--ink-faint);font-style:italic;border-left:var(--rule) solid var(--line);
+.instructor-note{color:var(--ink-faint-text);font-style:italic;border-left:var(--rule) solid var(--line);
   padding-left:var(--sp-3);margin:var(--sp-6) 0}
 .cta-row{display:flex;flex-wrap:wrap;gap:var(--sp-3);margin:var(--sp-3) 0}
 .btn{display:inline-flex;align-items:center;gap:.4em;font-family:var(--font-mono);
@@ -830,7 +909,7 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
 .viz-filter{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;margin:var(--sp-6) 0;
   padding:var(--sp-3) 0;border-top:var(--rule) solid var(--line);border-bottom:var(--rule) solid var(--line)}
 .viz-filter .label{margin-right:var(--sp-2)}
-.viz-note{font-size:var(--fs-sm);color:var(--ink-faint);font-style:italic}
+.viz-note{font-size:var(--fs-sm);color:var(--ink-faint-text);font-style:italic}
 .viz-grid{display:grid;gap:var(--sp-6);grid-template-columns:1fr}
 @media(min-width:52rem){.viz-grid--2{grid-template-columns:1fr 1fr}}
 .viz-card{background:var(--paper-2);border:var(--rule) solid var(--line);border-radius:var(--radius-card);
@@ -839,8 +918,9 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
 .viz-card__title{font-size:var(--fs-md);margin:0}
 .viz-card__caption{font-size:var(--fs-sm);color:var(--ink-soft);margin:.2rem 0 var(--sp-3)}
 .viz-toggle{appearance:none;cursor:pointer;background:transparent;border:var(--rule) solid var(--line);
+  display:inline-flex;align-items:center;min-height:44px;
   border-radius:var(--radius);font-family:var(--font-mono);font-size:var(--fs-mono-xs);
-  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);padding:.35em .6em;min-height:2em}
+  text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);padding:.35em .6em}
 .viz-toggle[aria-expanded="true"]{box-shadow:inset 0 0 0 var(--rule) var(--brass);color:var(--ink)}
 .viz-chart{margin-top:var(--sp-2)}
 .viz-table{margin-top:var(--sp-3)}
@@ -861,6 +941,7 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
 .kpi-tile__chip.is-warn{border-left-color:var(--warn);color:var(--warn)}
 .downloads{display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-6)}
 .dl-chip{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
+  display:inline-flex;align-items:center;min-height:44px;
   letter-spacing:.08em;padding:.5em .8em;border:var(--rule) solid var(--brass);border-radius:var(--radius);
   color:var(--ink);background:var(--brass-wash)}
 
@@ -1752,9 +1833,9 @@ def build_rubric_section(m, rel):
         return ""
     rows = []
     for c in ru.get("criteria", []):
-        skill_chip = ('<a class="chip chip--skill" href="{up}skills/index.html#{sid}">{sid}</a>'.format(
-            up=up_prefix(rel), sid=esc(c.get("skill_id", "")))) if c.get("skill_id") else ""
-        task_chip = ('<span class="chip">{t}</span>'.format(t=esc(c["task_id"]))) if c.get("task_id") else ""
+        skill_chip = (skill_chip_html(c.get("skill_id", ""), up_prefix(rel))
+                      if c.get("skill_id") else "")
+        task_chip = task_chip_html(c["task_id"]) if c.get("task_id") else ""
         subrows = "".join(
             '<tr><td style="padding-left:2rem">— {n}</td><td>{d}</td><td></td>'
             '<td class="num">{w}</td></tr>'.format(
@@ -1937,10 +2018,8 @@ def build_one_packet(corpus, m, man):
 
     # --- skills chips (bidirectional with skills browser)
     skills_by_id = {s["id"]: s for s in corpus["skills"]["skills"]}
-    skill_chips = " ".join(
-        '<a class="chip chip--skill" href="{up}skills/index.html#{sid}" title="{name}">{sid}</a>'.format(
-            up=up, sid=esc(sid), name=esc(skills_by_id.get(sid, {}).get("name", "")))
-        for sid in (m.get("skill_refs") or []))
+    skill_chips = " ".join(skill_chip(sid, skills_by_id, up)
+                           for sid in (m.get("skill_refs") or []))
 
     # --- caption header
     jname = juris.get("name", m.get("jurisdiction", ""))
@@ -2992,6 +3071,9 @@ def main(argv):
     EDMAP.enabled = True                         # record editable blocks while rendering
 
     corpus = load_corpus()
+    # Make the skills taxonomy addressable by id for every chip renderer.
+    SKILLS_BY_ID.update({sk["id"]: sk for sk in corpus["skills"]["skills"]})
+    TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})
     clean_output()
     write_platform_assets()
     copy_chat_app()
