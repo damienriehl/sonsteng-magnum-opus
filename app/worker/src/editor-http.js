@@ -91,9 +91,47 @@ export function editError(code, message, status) {
 
 // Uniform 404 for unknown proxy paths, missing instructor docs, AND insufficient
 // scope — IDENTICAL body + status for all three so nothing is an oracle.
+//
+// The body is uniform, NOT silent. It used to be the two words "Not found.",
+// which is the correct answer to a probe and the wrong answer to Prof. Sonsteng:
+// the ?t= token is stripped from the address bar once the session cookie is set,
+// so anyone who bookmarks the page AFTER arriving has bookmarked a URL that works
+// only until the cookie lapses — and then meets a blank white "Not found." with
+// nothing to do about it. (Damien hit exactly this on 2026-07-27.)
+//
+// The page below is byte-identical for a valid path, an invalid path, a hostile
+// path and an under-scoped request, so it reveals nothing an attacker can use —
+// it just tells the person who is *supposed* to be here how to get back in.
+const NOT_FOUND_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reopen your editing link</title>
+<style>
+ :root{color-scheme:light}
+ body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+   background:#f4efe4;color:#1d1a16;
+   font:17px/1.6 "Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+   padding:2rem}
+ main{max-width:34rem}
+ h1{font-size:1.5rem;font-weight:600;margin:0 0 .6em;letter-spacing:-.01em}
+ p{margin:0 0 1em;color:#544d43}
+ .rule{height:3px;width:3.5rem;background:#7c1e2b;margin:0 0 1.4rem}
+ .hint{font-size:.95rem;color:#8a7f6d;border-left:3px solid #a9822f;
+   background:rgba(169,130,47,.1);padding:.7em .9em;border-radius:3px}
+</style></head><body><main>
+<div class="rule"></div>
+<h1>Please reopen your editing link</h1>
+<p>This page is part of the practicum editor, and it only opens through the
+personal link Damien sent you. Open that link again — from your text message,
+your email, or your saved bookmark — and you will land right back here, able to
+edit.</p>
+<p class="hint">If you bookmarked this page after it was already open, the
+bookmark is missing the part of the address that signs you in. Use Damien's
+original link instead, and bookmark that one. Nothing you wrote has been lost.</p>
+</main></body></html>`;
+
 export function uniform404() {
-  return new Response("Not found.", {
+  return new Response(NOT_FOUND_HTML, {
     status: 404,
-    headers: { "content-type": "text/plain; charset=utf-8" },
+    headers: { "content-type": "text/html; charset=utf-8" },
   });
 }
