@@ -1989,7 +1989,8 @@ def build_one_packet(corpus, m, man):
     # --- TOC + parts
     # The Facts page link rides the TOC as a bare <a> (NO walker-candidate
     # children), so it adds zero candidates and shifts no indices (U5/OQ4).
-    toc_items, parts_html = ['<a href="facts/" class="toc-facts">FACTS · THE SCENARIO’S SOURCE VALUES</a>'], []
+    toc_items, parts_html = ['<a href="facts/" class="toc-facts">FACTS · THE SCENARIO’S SOURCE VALUES</a>',
+                             '<a href="law/" class="toc-law">LAW · THE GOVERNING LAW</a>'], []
     case_file_cards = []
     for idx, key in enumerate(SECTION_ORDER, start=1):
         sec = sections.get(key)
@@ -3062,9 +3063,19 @@ def build_facts_pages(corpus):
         editable_paths = []
         for relpath, path, value in rows:
             sval = str(value)
-            eb = _eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
-                                 "fact: " + _fact_label(path))
-            if relpath == matter_rel:
+            # STRINGS ONLY. The editor's json_scalar write path stores whatever
+            # the editor typed as a string; a schema-typed number (rate,
+            # retainer_amount, contingency_pct, flat_fee) would then fail
+            # validate_spine and take its WHOLE apply batch down with it —
+            # including other people's edits riding along. Offering a control
+            # that can never apply is worse than not offering it, so numeric
+            # facts render read-only until the write path coerces types.
+            # (U5b's Law page already had this guard; the Facts page did not.)
+            editable = isinstance(value, str)
+            eb = (_eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
+                                  "fact: " + _fact_label(path))
+                  if editable else "")
+            if editable and relpath == matter_rel:
                 editable_paths.append(path)
             derived, restated = fact_usage(mdir, relpath, path, sval)
             uses = []
@@ -3105,6 +3116,124 @@ def build_facts_pages(corpus):
             rel, "Facts — " + m.get("caption", slug),
             "MATTER · FACTS", [("Matter Library", "../../index.html"),
                                (m.get("caption", slug), "../index.html")], body))
+
+
+# --------------------------------------------------------------------------- #
+# U5b — the per-matter Law page (R11)
+# --------------------------------------------------------------------------- #
+# The editability boundary is MECHANICAL, decided by source path alone:
+# data/jurisdictions/meridian.json is the fictional canon and registers as
+# editable json_scalar blocks; anything under data/jurisdictions/real/ renders
+# WITHOUT data-ebsrc and never enters the map — the Worker then refuses any
+# forged ref by allowlist absence (no oracle, same posture as everything else).
+LAW_EDITABLE_PREFIX = "data/jurisdictions/meridian.json"
+LAW_REAL_PREFIX = "data/jurisdictions/real/"
+
+# Identifier / join-key fields are structure, never content (R2).
+LAW_DENY_KEYS = ("schema_version", "@id", "id", "type", "code", "tier")
+
+
+def _law_rows(node, prefix=""):
+    """Depth-first [(json_path, value)] over a jurisdiction file's scalar
+    leaves, in file order. Deny-listed identifier keys are skipped entirely.
+    STRING leaves are the editable candidates; numeric leaves still render,
+    but only ever read-only (their raw JSON value is not its rendered text,
+    so they can never satisfy the value-only hash contract)."""
+    rows = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in LAW_DENY_KEYS:
+                continue
+            rows.extend(_law_rows(v, "%s.%s" % (prefix, k) if prefix else k))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            rows.extend(_law_rows(v, "%s.%d" % (prefix, i)))
+    elif isinstance(node, str):
+        rows.append((prefix, node))
+    elif isinstance(node, (int, float)) and not isinstance(node, bool):
+        rows.append((prefix, node))
+    return rows
+
+
+def _law_label(path):
+    """Human label from a dotted path, keeping the nesting readable:
+    'court_structure.trial_courts.name' -> 'Court structure · Trial courts · Name'."""
+    parts = []
+    for seg in path.split("."):
+        if seg.isdigit():
+            parts.append("#%d" % (int(seg) + 1))
+        else:
+            parts.append(seg.replace("_", " ").strip().capitalize())
+    return " · ".join(parts)
+
+
+def _law_source_for(m):
+    """(abspath, repo-relpath) of the jurisdiction file governing a matter.
+    Resolution mirrors load_jurisdictions(): the meridian tier reads the
+    fictional canon; every other tier reads its real-state file."""
+    if m.get("tier") == "meridian":
+        jpath = os.path.join(DATA, "jurisdictions", "meridian.json")
+    else:
+        code = (m.get("jurisdiction") or "").lower()
+        jpath = os.path.join(DATA, "jurisdictions", "real", code + ".json")
+    return jpath, data_relpath(jpath)
+
+
+def build_law_pages(corpus):
+    """One Law page per matter (U5b/R11): the matter's governing law rendered
+    with the Facts-panel idiom. Meridian (fictional) law registers each string
+    leaf as an editable json_scalar block; real-jurisdiction law renders the
+    same rows read-only — no data-ebsrc anywhere on the page — under a plainly
+    visible 'actual law' marking."""
+    for m in corpus["matters"]:
+        slug = m["_slug"]
+        jpath, relpath = _law_source_for(m)
+        if not os.path.isfile(jpath):
+            continue
+        juris = load_json(jpath)
+        editable = relpath == LAW_EDITABLE_PREFIX and not relpath.startswith(LAW_REAL_PREFIX)
+        jname = juris.get("short_name") or juris.get("name") or m.get("jurisdiction", "")
+        cards = []
+        for path, value in _law_rows(juris):
+            sval = str(value)
+            eb = ""
+            if editable and isinstance(value, str):
+                eb = _eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
+                                     "law: " + _law_label(path))
+            cards.append("""
+  <div class="fact-row">
+    <div class="fact-label">{label}</div>
+    <p class="fact-value"{eb}>{v}</p>
+  </div>""".format(label=esc(_law_label(path)), eb=eb, v=esc(sval)))
+        if editable:
+            banner = ('<div class="law-banner law-banner--fictional">Fictional '
+                      '{j} law — part of the practicum canon, editable here.</div>'
+                      ).format(j=esc(jname))
+            lede = ("Meridian is the practicum&rsquo;s fictional jurisdiction. "
+                    "Every value below is canon an editor may tweak; the pages "
+                    "generated from it follow on the next publish.")
+        else:
+            banner = ('<div class="law-banner law-banner--actual">Actual '
+                      '{j} law — not editable here.</div>').format(j=esc(jname))
+            lede = ("This matter sits in a real jurisdiction. Its law is "
+                    "rendered for reference only and is never editable — "
+                    "editors may edit only the Facts.")
+        rel = os.path.join("matters", slug, "law", "index.html")
+        body = """
+<section class="reveal">
+  <p class="eyebrow">THE GOVERNING LAW</p>
+  <h1>Law — {caption}</h1>
+  {banner}
+  <p class="lede">{lede}</p>
+</section>
+<section class="facts-panel">{cards}
+</section>
+""".format(caption=esc(m.get("caption", slug)), banner=banner, lede=lede,
+           cards="".join(cards))
+        write_file(rel, page_shell(
+            rel, "Law — " + m.get("caption", slug),
+            "MATTER · LAW", [("Matter Library", "../../index.html"),
+                             (m.get("caption", slug), "../index.html")], body))
 
 
 def compute_scope_index(corpus):
@@ -3392,6 +3521,7 @@ def main(argv):
     build_matter_library(corpus)
     packet_sizes = build_packet_pages(corpus)
     build_facts_pages(corpus)
+    build_law_pages(corpus)
     build_firm_dashboard(corpus)
     build_third_party()
     catalog = build_data_catalog(corpus)

@@ -700,3 +700,48 @@ html.type-lg .eb-confirm__yes, html.type-lg .eb-confirm__no { font-size: 1.05rem
    a hovered label's growth clips at the clamp (full words stay in the tooltip
    and accessible name). Flow rails are unclamped. */
 .eb-tools--gutter { overflow: hidden; flex-wrap: nowrap; }
+
+/* ---------- U8: the scoped-change dialog + banner verb --------------------- */
+.editor-banner__bigger {
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: .85rem;
+  padding: .35rem .8rem;
+  border-radius: 5px;
+  border: 1.5px solid #fff;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  margin-left: .6rem;
+}
+.editor-banner__bigger:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.eb-scoped {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(29, 26, 22, .45);
+}
+.eb-scoped__inner {
+  background: var(--paper-raise, #fbf9f4);
+  border: 1.5px solid var(--eb-line, #c9c4bb);
+  border-top: 4px solid var(--claret, #7c1e2b);
+  border-radius: 8px;
+  padding: 1.2rem 1.4rem;
+  max-width: 34rem; width: calc(100% - 2rem);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+.eb-scoped__title { margin: 0 0 .4rem; font-size: 1.25rem; }
+.eb-scoped__lede { margin: 0 0 .9rem; color: var(--ink-soft, #544d43); font-size: .95rem; line-height: 1.5; }
+.eb-scoped__label { display: block; font-size: .9rem; margin: 0 0 .7rem; color: var(--ink, #2b2925); }
+.eb-scoped__scope, .eb-scoped__text, .eb-addfact__name {
+  display: block; width: 100%; box-sizing: border-box; margin-top: .3rem;
+  font-family: var(--font-body, Georgia, serif); font-size: 1rem;
+  padding: .45rem .6rem; border: 1.5px solid var(--eb-line, #c9c4bb);
+  border-radius: 4px; background: #fff; color: var(--ink, #2b2925);
+}
+.eb-addfact__name { font-family: var(--font-mono, ui-monospace, monospace); margin-bottom: .5rem; }
+.eb-scoped__status { min-height: 1.2em; font-size: .92rem; color: var(--claret, #7c1e2b); margin: .2rem 0 .6rem; }
+.eb-scoped__row { display: flex; gap: .6rem; }
+.eb-scoped__send { background: var(--claret, #7c1e2b); color: #fff; border: 1.5px solid var(--claret, #7c1e2b); padding: .45rem .9rem; border-radius: 5px; font-size: .95rem; cursor: pointer; }
+.eb-scoped__cancel { background: transparent; color: var(--claret, #7c1e2b); border: 1.5px solid var(--claret, #7c1e2b); padding: .45rem .9rem; border-radius: 5px; font-size: .95rem; cursor: pointer; }
+.eb-scoped__send:disabled { opacity: .55; cursor: default; }
+.eb-scoped__send:focus-visible, .eb-scoped__cancel:focus-visible { outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px; }
+html.type-lg .eb-scoped__lede, html.type-lg .eb-scoped__label { font-size: 1.05rem; }
