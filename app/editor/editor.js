@@ -345,6 +345,120 @@
   }
   var ICON_PENCIL = ['M12 20h9', 'M16.4 3.6a2.12 2.12 0 0 1 3 3L7.5 18.5 3.5 19.5l1-4Z'];
   var ICON_COMMENT = ['M20.5 11.4a7.9 7.9 0 0 1-.85 3.6 8 8 0 0 1-7.15 4.4 7.9 7.9 0 0 1-3.6-.85L3.5 20.5l2.35-5.4A7.9 7.9 0 0 1 5 11.5a8 8 0 0 1 4.4-7.15 7.9 7.9 0 0 1 3.6-.85h.5a7.98 7.98 0 0 1 7.5 7.5v.4Z'];
+  var ICON_PLUS = ['M12 5v14', 'M5 12h14'];
+  var ICON_TRASH = ['M4 7h16', 'M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2', 'M6.5 7l.8 12a1 1 0 0 0 1 .9h7.4a1 1 0 0 0 1-.9l.8-12', 'M10 11v6', 'M14 11v6'];
+  var ICON_UP = ['M12 19V5', 'M6 11l6-6 6 6'];
+  var ICON_DOWN = ['M12 5v14', 'M6 13l6 6 6-6'];
+
+  /* ---------- structural operations (U4) -----------------------------------
+     Add / remove / move whole paragraphs. Each is a suggestion of a structural
+     KIND through the same /suggest endpoint — and structural changes always
+     WAIT for Damien (they never take the instant path), so every affordance
+     says so plainly. Identity: refs carry durable block IDs, so a move never
+     renumbers anything. */
+  function structBaseOf(ref) { return (ref || '').replace(/(\.|#)b[0-9a-f]{8}$/, ''); }
+  function sameFilePeers(s) {
+    var base = structBaseOf(s.ref);
+    return MAP.filter(function (b) {
+      return b.kind === 'prose' && structBaseOf(b.source_ref) === base;
+    }).sort(function (a, b) { return a.index - b.index; });
+  }
+  var STRUCT_LABELS = {
+    insert_after: 'New paragraph', delete: 'Removal', split: 'Split',
+    merge: 'Merge', move: 'Move'
+  };
+
+  function sendStructural(s, op, fields, onDone) {
+    var body = { id: uuid(), source_ref: s.ref, op: op, original_hash: s.originalHash };
+    if (fields) for (var k in fields) body[k] = fields[k];
+    log('STRUCT ' + op + ' ref=' + s.ref);
+    api('/suggest', { body: body }).then(function (out) {
+      if (out.ok) {
+        setLocalStatus(s, (STRUCT_LABELS[op] || 'Change') + ' — waiting for review', 'pending',
+          'Structural changes always go to Damien first; the page updates once he approves.');
+        if (onDone) onDone(true);
+        repollPending();
+      } else {
+        var data = out.data || {};
+        var code = (data.error && data.error.code) || data.code || 'network';
+        if (code === 'no_edit_auth') {
+          setLocalStatus(s, 'Your link needs a refresh', 'err'); showReauth(s);
+        } else if (code === 'stale_page') {
+          showNote(s, 'This page just updated — please reload and try again. Nothing was lost.');
+        } else {
+          showNote(s, 'That didn\u2019t send. Please try again in a moment.');
+        }
+        if (onDone) onDone(false);
+        log('STRUCT error op=' + op + ' code=' + code);
+      }
+    });
+  }
+
+  /* Inline composer for “add a paragraph” — a plain box right where the new
+     paragraph will appear, with one honest button. */
+  function openComposer(s) {
+    if (s._composer && s._composer.isConnected) {
+      s._composer.querySelector('textarea').focus();
+      return;
+    }
+    var c = el('div', 'eb-composer');
+    var lab = el('div', 'eb-composer__label', 'New paragraph — it will appear after this one, once Damien approves it.');
+    var ta = document.createElement('textarea');
+    ta.className = 'eb-composer__text';
+    ta.setAttribute('aria-label', 'Text of the new paragraph');
+    ta.rows = 3;
+    var row = el('div', 'eb-composer__row');
+    var send = el('button', 'eb-composer__send', 'Send to Damien'); send.type = 'button';
+    var cancel = el('button', 'eb-composer__cancel', 'Cancel'); cancel.type = 'button';
+    row.appendChild(send); row.appendChild(cancel);
+    c.appendChild(lab); c.appendChild(ta); c.appendChild(row);
+    insertAfter(c, s._note || s.el);
+    s._composer = c;
+    var close = function () { if (c.parentNode) c.parentNode.removeChild(c); s._composer = null; };
+    cancel.addEventListener('click', close);
+    send.addEventListener('click', function () {
+      var text = (ta.value || '').replace(/\s*\n+\s*/g, ' ').trim();
+      if (!text) { ta.focus(); return; }
+      send.disabled = true; cancel.disabled = true;
+      sendStructural(s, 'insert_after', { new_text: text }, function (ok) {
+        if (ok) close(); else { send.disabled = false; cancel.disabled = false; }
+      });
+    });
+    setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
+  }
+
+  /* Two-step inline confirm for “remove this paragraph” — destructive actions
+     are plainly reversible and never one accidental tap (R9). */
+  function openDeleteConfirm(s) {
+    if (s._confirm && s._confirm.isConnected) return;
+    var c = el('div', 'eb-confirm');
+    c.appendChild(el('span', 'eb-confirm__msg',
+      'Remove this paragraph? Damien reviews it first, and it can always be restored.'));
+    var yes = el('button', 'eb-confirm__yes', 'Yes, ask to remove it'); yes.type = 'button';
+    var no = el('button', 'eb-confirm__no', 'Keep it'); no.type = 'button';
+    c.appendChild(yes); c.appendChild(no);
+    insertAfter(c, s._note || s.el);
+    s._confirm = c;
+    var close = function () { if (c.parentNode) c.parentNode.removeChild(c); s._confirm = null; };
+    no.addEventListener('click', close);
+    yes.addEventListener('click', function () {
+      yes.disabled = true; no.disabled = true;
+      sendStructural(s, 'delete', null, function () { close(); });
+    });
+    no.focus();
+  }
+
+  function requestMove(s, dir) {
+    var peers = sameFilePeers(s);
+    var i = -1;
+    for (var k = 0; k < peers.length; k++) if (peers[k].source_ref === s.ref) { i = k; break; }
+    if (i < 0) return;
+    var dest = null;
+    if (dir > 0 && i + 1 < peers.length) dest = peers[i + 1].source_ref;
+    if (dir < 0 && i >= 2) dest = peers[i - 2].source_ref;
+    if (!dest) return;
+    sendStructural(s, 'move', { op_arg: dest }, null);
+  }
 
   function actButton(s, kind, label, paths, hint, onActivate) {
     var b = el('button', 'eb-act eb-act--' + kind); b.type = 'button';
@@ -431,7 +545,7 @@
   // costs a row, which on a phone is the right trade.
   function railToFlow(s, t) {
     t.classList.remove('eb-tools--gutter', 'eb-tools--offstage');
-    t.style.position = ''; t.style.left = ''; t.style.top = '';
+    t.style.position = ''; t.style.left = ''; t.style.top = ''; t.style.maxWidth = '';
     if (s.el.nextElementSibling !== t) insertAfter(t, s.el);
   }
 
@@ -476,6 +590,18 @@
       t.style.position = 'absolute';
       t.style.left = Math.round(columnRight + RAIL_GAP + sx) + 'px';
       t.style.top = Math.round(b.top + sy) + 'px';   // the passage's first line
+      // CLAMP to the measured room: a hovered word-label grows its button, and
+      // with six verbs on a rail that growth can run past the viewport edge
+      // (caught at 900px — by the tester's own resting cursor). The gutter rail
+      // may never paint wider than the gutter; a label that cannot fit clips
+      // (its full words remain in the title + aria-label).
+      t.style.maxWidth = Math.floor(room) + 'px';
+      // TRUST THE PAINT, not the arithmetic: measure the rail where it now
+      // actually sits. Rounding + scrollbar width can put a rail that "fit" a
+      // few pixels past the edge — if any part is past the viewport, it
+      // returns to the flow.
+      var rr = t.getBoundingClientRect();
+      if (Math.round(rr.right) > docW) { railToFlow(s, t); return; }
       placed++;
     });
     document.documentElement.classList.toggle('eb-rails-offstage', placed === 0);
@@ -502,6 +628,30 @@
       : 'leave a note for Damien';
     t.appendChild(actButton(s, 'comment', 'Comment', ICON_COMMENT, why,
       function () { openBubbleWhole(s); }));
+    // Structural verbs (U4): whole-paragraph add / remove / move, prose only.
+    // Every one goes to Damien for review — the affordances say so themselves.
+    if (s.editable && s.kind === 'prose') {
+      t.appendChild(actButton(s, 'add', 'Add paragraph', ICON_PLUS,
+        'write a new paragraph after this one (Damien approves it first)',
+        function () { openComposer(s); }));
+      t.appendChild(actButton(s, 'remove', 'Remove', ICON_TRASH,
+        'ask to remove this paragraph (Damien approves; always restorable)',
+        function () { openDeleteConfirm(s); }));
+      var peers = sameFilePeers(s), pi = -1;
+      for (var pk = 0; pk < peers.length; pk++) {
+        if (peers[pk].source_ref === s.ref) { pi = pk; break; }
+      }
+      if (pi >= 2) {
+        t.appendChild(actButton(s, 'up', 'Move up', ICON_UP,
+          'move this paragraph one place earlier (Damien approves it first)',
+          function () { requestMove(s, -1); }));
+      }
+      if (pi >= 0 && pi + 1 < peers.length) {
+        t.appendChild(actButton(s, 'down', 'Move down', ICON_DOWN,
+          'move this paragraph one place later (Damien approves it first)',
+          function () { requestMove(s, 1); }));
+      }
+    }
     // The rail is inserted BEFORE its block and pulled back down over it, so it
     // aligns to the block's FIRST line. Sitting after the block aligned it to the
     // LAST line, which meant the controls landed at a different offset for every
@@ -1254,6 +1404,10 @@
   function canHydrate(s, item) {
     if (!s) return false;
     if (item.kind === 'comment') return false;
+    // Structural kinds (insert_after/delete/split/merge/move) address the block
+    // as an ANCHOR — painting their payload into it would corrupt the display.
+    // They surface as a status pill on the anchor instead.
+    if (item.kind && item.kind !== 'prose' && item.kind !== 'json_scalar') return false;
     if (!HYDRATE_STATUSES[item.status]) return false;
     if (typeof item.new_text !== 'string' || item.new_text === '') return false;
     if (s.state !== ST.IDLE) return false;
@@ -1307,6 +1461,12 @@
       var s = byIndex[item.block_index];
       if (!s) return;
       var label = STATUS_LABELS[item.status] || item.status || 'Sent';
+      if (STRUCT_LABELS[item.kind]) {
+        // Structural changes always wait for Damien — say so in full words
+        // while they are pending; terser status words after a decision.
+        label = STRUCT_LABELS[item.kind] + ' \u2014 ' +
+          (item.status === 'pending' ? 'waiting for review' : label.toLowerCase());
+      }
       var labelLong = STATUS_LONG[item.status] || '';
       var tone = STATUS_TONE[item.status] || 'pending';
       if (item.kind === 'comment') {

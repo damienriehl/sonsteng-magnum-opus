@@ -630,3 +630,73 @@ html.type-lg .comment-bubble textarea { font-size: 1.25rem; }
 @media (prefers-reduced-motion: reduce) {
   html.has-comment-panel body { transition: none; }
 }
+
+/* ---------- structural operations (U4): composer + delete confirm ---------- */
+/* Both appear directly under the paragraph they act on, in the reading column —
+   where the change will actually happen — with plain-language buttons. */
+.eb-composer, .eb-confirm {
+  margin: .5rem 0 .75rem;
+  padding: .75rem .9rem;
+  border: 1.5px solid var(--eb-line, #c9c4bb);
+  border-left: 4px solid var(--claret, #7c1e2b);
+  border-radius: 6px;
+  background: var(--paper-raise, #fbf9f4);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+.eb-composer__label, .eb-confirm__msg {
+  display: block;
+  font-size: .92rem;
+  line-height: 1.45;
+  color: var(--ink-soft, #544d43);
+  margin: 0 0 .5rem;
+}
+.eb-composer__text {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-body, Georgia, serif);
+  font-size: 1rem;
+  line-height: 1.5;
+  padding: .5rem .6rem;
+  border: 1.5px solid var(--eb-line, #c9c4bb);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink, #2b2925);
+  resize: vertical;
+}
+.eb-composer__row { margin-top: .55rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+.eb-composer__send, .eb-composer__cancel,
+.eb-confirm__yes, .eb-confirm__no {
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: .92rem;
+  padding: .45rem .9rem;
+  border-radius: 5px;
+  border: 1.5px solid var(--claret, #7c1e2b);
+  cursor: pointer;
+}
+.eb-composer__send, .eb-confirm__yes {
+  background: var(--claret, #7c1e2b);
+  color: #fff;
+}
+.eb-composer__cancel, .eb-confirm__no {
+  background: transparent;
+  color: var(--claret, #7c1e2b);
+}
+.eb-composer__send:focus-visible, .eb-composer__cancel:focus-visible,
+.eb-confirm__yes:focus-visible, .eb-confirm__no:focus-visible {
+  outline: 2px solid var(--claret, #7c1e2b);
+  outline-offset: 2px;
+}
+.eb-composer__send:disabled, .eb-confirm__yes:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.eb-confirm__yes, .eb-confirm__no { margin-right: .4rem; }
+html.type-lg .eb-composer__label, html.type-lg .eb-confirm__msg { font-size: 1.05rem; }
+html.type-lg .eb-composer__text { font-size: 1.15rem; }
+html.type-lg .eb-composer__send, html.type-lg .eb-composer__cancel,
+html.type-lg .eb-confirm__yes, html.type-lg .eb-confirm__no { font-size: 1.05rem; }
+
+/* Gutter rails may never paint wider than the gutter they were measured into —
+   a hovered label's growth clips at the clamp (full words stay in the tooltip
+   and accessible name). Flow rails are unclamped. */
+.eb-tools--gutter { overflow: hidden; flex-wrap: nowrap; }
