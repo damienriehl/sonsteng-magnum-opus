@@ -2,6 +2,19 @@
 
 *Produced 2026-07-18 by the plan-deepening pass (data-integrity review, adopted with the security review's allowlist invariant). The engineer codes directly from this. P0 = corruption-prevention; nothing ships without it.*
 
+> **AMENDED 2026-07-28 — `source_ref` is no longer positional.** This document
+> describes the ordinal grammar (`file.md#p2`), which was replaced by durable
+> block IDs: `file.md#b<hex8>` for markdown prose,
+> `file.json#<json.path>.b<hex8>` for prose inside a JSON string; JSON scalars
+> (`file.json#caption`) are unchanged and were already durable. The `b<hex8>`
+> is read from a `{#b:xxxxxxxx}` marker stamped in the source file, which the
+> renderer strips and which may never reach a reader. The map's `index` is now
+> a **placement hint, not identity**. Everything else here — the two prime
+> invariants, the DDL, the status machine, the apply transaction — still
+> holds, and `kind` has gained `insert_after | delete | split | merge | move |
+> json_add`. See `docs/handoffs/2026-07-28-word-like-editing-handoff.md` and
+> `docs/solutions/editor/2026-07-28-durable-block-identity.md`.
+
 ## The two prime invariants
 
 1. **The map is the universal allowlist (security):** every client-influenced reference — the `/edit/<path>` proxy path, every `source_ref`, every `json_path` — validates against the generator-emitted `editor-map.generated.json` server-side at BOTH suggest-time and apply-time. Unknown → uniform 404/validation_error. No client value ever reaches a filesystem path, shell, or JSON write unchecked; `json_scalar` writes go parse→set-at-path→serialize, never text splice; searches are `shell=False` fixed-string.
