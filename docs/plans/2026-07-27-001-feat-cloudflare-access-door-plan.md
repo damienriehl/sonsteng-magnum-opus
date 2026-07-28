@@ -603,6 +603,25 @@ AUD tag, team domain, hostname, policy and the revocation order are recorded in 
   browser-origin change cannot break the every-2-minute apply loop or the 4×/day digest. Their
   admin-scope token path is the one U4 leaves byte-for-byte unchanged, and U4's Access branch is
   inserted after the Bearer check specifically so that stays true.
+
+  ⚠ **That argument is correct but incomplete, and the gap only became visible once the door was
+  live (2026-07-27).** It reasons about the Worker's own checks. **Cloudflare Access gates the
+  hostname at the edge, before the Worker sees anything** — so a Bearer service token is not
+  enough on the Access hostname. Measured, not assumed:
+
+  | | `workers.dev` | `edit.sonsteng…` |
+  |---|---|---|
+  | `GET /edit/v1/review` + Bearer | **200**, JSON | **302** to the Access login |
+
+  Both machine clients are configured against the ungated origin
+  (`EDIT_API_BASE=https://sonsteng-chat.damienriehl.workers.dev/edit/v1` in
+  `~/.config/sonsteng-apply/env` and `~/.config/sonsteng-digest/env`), so nothing is broken — the
+  apply daemon completed a run 90 seconds after the door went live. But this makes the ungated
+  origin **load-bearing infrastructure, not just John's fallback**: KD1 retires the `?t=` *tokens*,
+  and must never be read as licence to gate or remove the `workers.dev` origin. Doing that would
+  silently stop the every-2-minute apply loop and the digest. If that origin ever has to go, the
+  daemon needs a Cloudflare Access **service token** first — and note U3 returns null for a
+  service-token assertion (it carries `common_name`, no `email`), so that is a code change too.
 - **The history browser, review page and instructor docs** are reached through the same
   `resolveAuth` result, so they gain the Access door for free and need no per-surface work.
 - **PROD is untouched.** No route, var or secret in `env.production` changes; it continues to

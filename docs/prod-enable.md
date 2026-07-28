@@ -223,6 +223,21 @@ it the instant lever. Do the policy edit second, to stop new sign-ins.
 To revoke a `?t=` token instead, rotate its scope version in `EDIT_TOKEN_SCOPES` — that
 invalidates every cookie already minted under the old version.
 
+## ⚠ The workers.dev origin is load-bearing for the machine clients
+
+Access gates `edit.sonsteng.damienriehl.com` **at the edge**, so a Bearer service token is not
+enough there — `GET /edit/v1/review` with the admin token returns **200** on `workers.dev` and
+**302** to the Access login on the Access hostname. The apply daemon and the digest are both
+configured against the ungated origin:
+
+    ~/.config/sonsteng-apply/env    EDIT_API_BASE=https://sonsteng-chat.damienriehl.workers.dev/edit/v1
+    ~/.config/sonsteng-digest/env   EDIT_API_BASE=… (same)   EDIT_REVIEW_URL=…/edit/review
+
+**Retiring the `?t=` tokens does not mean retiring that origin.** Gating or removing it stops the
+every-2-minute apply loop and the 4×/day digest. If it ever must go, the daemon needs an Access
+service token first — and `access-jwt.js` deliberately returns null for a service-token assertion
+(`common_name`, no `email`), so that is a code change, not just config.
+
 ## Retiring the tokens (per person)
 
 Once *that person* has completed one Access sign-in **and** saved one edit through the new door:
