@@ -94,9 +94,41 @@ FACTS_BUSINESS_SECTIONS = ("intake", "conflicts_check", "engagement")
 
 # Mechanical "shapes" for the fallback check — dates and money ONLY.
 SHAPE_RES = {
-    "date": re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),
+    # Dates appear in TWO forms and both must be seen. The facts carry ISO
+    # ("2025-02-13"); the prose almost always restates them the way a lawyer
+    # writes them ("February 13, 2025" — 359 blocks in the corpus). An
+    # ISO-only pattern made this checker structurally incapable of a true
+    # flag: an adversarial pass perturbed all 80 participating facts and got
+    # ZERO flags. Matching both forms is what makes the check real.
+    "date": re.compile(
+        r"\b\d{4}-\d{2}-\d{2}\b"
+        r"|\b(?:January|February|March|April|May|June|July|August|September|"
+        r"October|November|December)\s+\d{1,2},\s+\d{4}\b"),
     "money": re.compile(r"\$\d[\d,]*(?:\.\d{2})?"),
 }
+
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December")
+
+
+def date_forms(value):
+    """Every written form one date fact can take in the prose. An ISO fact
+    value yields itself plus the long form; anything else yields itself."""
+    forms = {str(value)}
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(value).strip())
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= mo <= 12:
+            forms.add("%s %d, %d" % (_MONTHS[mo - 1], d, y))
+    return forms
+
+
+def literal_matches_fact(literal, fact_value, shape):
+    """Does a literal found in prose denote this fact's value? Dates compare
+    across written forms; everything else is exact."""
+    if shape == "date":
+        return literal in date_forms(fact_value)
+    return literal == str(fact_value)
 
 
 def _fact_label(path):
@@ -169,11 +201,28 @@ def _read_json_file(path):
         return None
 
 
+def _rev_exists(repo_root, rev, timeout=30):
+    """Does this revision resolve? Used to fail loudly on a typo'd --since."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", repo_root, "rev-parse", "--verify", "--quiet",
+             "%s^{commit}" % rev],
+            check=False, shell=False, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0
+
+
 def _git_show_json(repo_root, rev, relpath, timeout=60):
-    proc = subprocess.run(
-        ["git", "-C", repo_root, "show", "%s:%s" % (rev, relpath)],
-        check=False, shell=False, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, text=True, timeout=timeout)
+    try:
+        proc = subprocess.run(
+            ["git", "-C", repo_root, "show", "%s:%s" % (rev, relpath)],
+            check=False, shell=False, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        # Never crash the run: the module's contract is degrade-and-report.
+        return None
     if proc.returncode != 0:
         return None
     try:
@@ -274,7 +323,17 @@ def value_shape(sval):
 def fallback_mismatch_flags(fact_rows, blocks):
     """No-history mode: dates + money only, unambiguous correspondence only
     (exact rules in the module docstring). Conservative: zero false flags on an
-    untouched matter beats coverage."""
+    untouched matter beats coverage.
+
+    KNOW ITS CEILING — measured, not assumed. Correspondence here rests on the
+    fact's LABEL words appearing in the same paragraph as the literal, and
+    real prose does not write that way: it says "On February 13, 2025, I met
+    with the client", never "intake date". Perturbing every participating fact
+    in the live corpus yields ZERO flags. So this mode is a floor, not a
+    check: it exists to be silent-and-safe when no history is available, and
+    run() says so out loud rather than printing a clean report that reads like
+    an all-clear. The mode with real catch power is --since, which compares
+    the OLD literal against the prose and needs no label correspondence."""
     shaped = []
     for relpath, path, value in fact_rows:
         sval = str(value)
@@ -301,8 +360,8 @@ def fallback_mismatch_flags(fact_rows, blocks):
             if len(matching) != 1:
                 continue  # no labelled fact here, or more than one -> ambiguous
             f = matching[0]
-            if lit == f["value"]:
-                continue  # prose agrees with the current fact
+            if literal_matches_fact(lit, f["value"], shape):
+                continue  # prose agrees with the current fact (any written form)
             msg = ('%sthis paragraph says "%s" where the Fact \'%s\' says '
                    '"%s". %s'
                    % (FACT_PREFIX, lit, f["label"], f["value"], REPAIR_ROUTES))
@@ -372,7 +431,11 @@ def model_contradiction_flags(slug, fact_rows, blocks, cli_runner=None):
         message = "%s%s %s" % (GUESS_PREFIX, msg.rstrip(), REPAIR_ROUTES)
         flags.append({"source_ref": f["source_ref"],
                       "fact_path": "model:contradiction",
-                      "old_literal": msg[:120],
+                      # NOT the model's wording: an id derived from
+                    # nondeterministic prose mints a fresh id every rerun and
+                    # duplicate AI-guess comments pile up on the same block.
+                    # One AI-guess slot per block instead.
+                    "old_literal": "",
                       "severity": "contradiction",
                       "message": message})
     return flags, None
@@ -425,6 +488,21 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
     facts_loader = facts_loader or (lambda slug: load_fact_rows(repo_root, slug))
     flag_filer = flag_filer or (lambda payload: ep.file_flag(api_base, token, payload))
     base = base_rev(since)
+    # A --since that cannot be honoured must fail LOUDLY. Falling through to
+    # the (much weaker) no-history mode printed a clean report for a typo'd
+    # base — the worst failure this tool can have, because "clean" is exactly
+    # what it says when everything is fine. Only checked when the real git
+    # loader will run (an injected loader owns its own revisions).
+    if since and old_facts_loader is None:
+        if not base:
+            print("[consistency] --since %r has no base revision — refusing to "
+                  "run (a bad selector must never look like a clean corpus)."
+                  % since, file=out)
+            return ConsistencyResult([], [], [], 0, "bad_since", [])
+        if not _rev_exists(repo_root, base):
+            print("[consistency] --since base %r does not resolve — refusing "
+                  "to run." % base, file=out)
+            return ConsistencyResult([], [], [], 0, "bad_since", [])
     old_facts_loader = old_facts_loader or (
         lambda slug: load_fact_rows_at(repo_root, slug, base))
 
@@ -434,6 +512,13 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
         print("[consistency] editor map unavailable (%s) — nothing checked." % exc,
               file=out)
         return ConsistencyResult([], [], [], 0, "", [])
+
+    if not since:
+        print("[consistency] NO --since: running the limited no-history check. "
+              "It can only see a date/money literal in a paragraph that also "
+              "names the fact's label, which real prose rarely does — treat a "
+              "clean result here as 'not checked', NOT as 'consistent'. Pass "
+              "--since <rev> for the real check.", file=out)
 
     slugs = [matter] if matter else sorted(
         {(b.get("source_ref") or "").split("/")[2]

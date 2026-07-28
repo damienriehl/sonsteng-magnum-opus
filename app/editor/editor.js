@@ -504,9 +504,26 @@
     scopedDlg = d;
     var reqId = uuid();
     var confirmed = false;
-    var close = function () { if (d.parentNode) d.parentNode.removeChild(d); scopedDlg = null; };
-    cancel.addEventListener('click', close);
-    d.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    // A confirmation is for the radius the editor was SHOWN. Change the scope
+    // or the wording and that number is stale — carrying confirmed:true across
+    // the edit would file a course-wide change on a module-sized "yes".
+    var resetConfirmation = function () {
+      if (!confirmed) return;
+      confirmed = false;
+      reqId = uuid();
+      send.textContent = 'Send to Damien';
+      status.textContent = '';
+    };
+    var closeTimer = null;
+    var close = function () {
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+      if (d.parentNode) d.parentNode.removeChild(d);
+      if (scopedDlg === d) scopedDlg = null;   // a stale timer must not blind the guard
+    };
+    cancel.addEventListener('click', function () { if (!send.disabled) close(); });
+    d.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !send.disabled) close();
+    });
     send.addEventListener('click', function () {
       var text = (ta.value || '').trim();
       if (!text) { ta.focus(); return; }
@@ -522,7 +539,7 @@
         if (out.ok) {
           status.textContent = 'Sent. Damien will review the drafted change before anything on the site changes.';
           send.textContent = 'Sent \u2713';
-          setTimeout(close, 3500);
+          closeTimer = setTimeout(close, 3500);
           return;
         }
         var data = out.data || {};
@@ -542,6 +559,8 @@
         log('SCOPED error code=' + code);
       });
     });
+    sel.addEventListener('change', resetConfirmation);
+    ta.addEventListener('input', resetConfirmation);
     setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
   }
 
@@ -569,6 +588,11 @@
     var row = el('div', 'eb-composer__row');
     var send = el('button', 'eb-composer__send', 'Add this fact'); send.type = 'button';
     var status = el('span', 'eb-scoped__status', '');
+    // ONE id per fact being composed, rotated only after it lands. Minting a
+    // fresh uuid per click makes a retry-after-failure file a SECOND fact
+    // instead of replaying the first — the idempotency discipline the rest of
+    // this client already keeps (see sendSuggestion's post-success rotation).
+    var factId = uuid();
     row.appendChild(send); row.appendChild(status);
     box.appendChild(name); box.appendChild(ta); box.appendChild(row);
     main.appendChild(box);
@@ -578,13 +602,14 @@
       if (!key) { name.focus(); return; }
       if (!text) { ta.focus(); return; }
       send.disabled = true;
-      api('/suggest', { body: { id: uuid(), op: 'json_add', matter: slug,
+      api('/suggest', { body: { id: factId, op: 'json_add', matter: slug,
                                 fact_key: key, new_text: text } }).then(function (out) {
         if (out.ok) {
           status.textContent = 'Added \u2014 waiting for review.';
           name.value = ''; ta.value = ''; send.disabled = false;
+          factId = uuid();          // landed: the next fact is a new intent
         } else {
-          send.disabled = false;
+          send.disabled = false;    // same id: a retry REPLAYS, never duplicates
           status.textContent = 'That didn\u2019t save \u2014 check the short name and try again.';
         }
       });

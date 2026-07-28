@@ -3063,9 +3063,19 @@ def build_facts_pages(corpus):
         editable_paths = []
         for relpath, path, value in rows:
             sval = str(value)
-            eb = _eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
-                                 "fact: " + _fact_label(path))
-            if relpath == matter_rel:
+            # STRINGS ONLY. The editor's json_scalar write path stores whatever
+            # the editor typed as a string; a schema-typed number (rate,
+            # retainer_amount, contingency_pct, flat_fee) would then fail
+            # validate_spine and take its WHOLE apply batch down with it —
+            # including other people's edits riding along. Offering a control
+            # that can never apply is worse than not offering it, so numeric
+            # facts render read-only until the write path coerces types.
+            # (U5b's Law page already had this guard; the Facts page did not.)
+            editable = isinstance(value, str)
+            eb = (_eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
+                                  "fact: " + _fact_label(path))
+                  if editable else "")
+            if editable and relpath == matter_rel:
                 editable_paths.append(path)
             derived, restated = fact_usage(mdir, relpath, path, sval)
             uses = []

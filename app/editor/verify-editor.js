@@ -424,20 +424,53 @@ async function run() {
       const l = window.__MOCK_CTRL__.last();
       return l && l.level === 'course';
     }, { timeout: 4000 });
+    const scFirstId = await page.evaluate(() => window.__MOCK_CTRL__.last().id);
     const scStatus = await page.$eval('.eb-scoped__status', el => el.textContent);
     assert('SC2 over-wide scope asks for plain-words confirmation with the radius',
       /3692 paragraphs/.test(scStatus) && /20 matter/.test(scStatus),
       '"' + scStatus.slice(0, 70) + '"');
+
+    /* SC3: changing the scope after a ceiling prompt REVOKES the confirmation —
+       a module-sized "yes" must never file a course-wide change. Tested before
+       any successful send, because a sent dialog self-closes on a timer. */
+    await page.evaluate(() => {
+      const sel = document.querySelector('.eb-scoped__scope');
+      sel.value = '0';
+      sel.dispatchEvent(new Event('change'));
+    });
+    const scRevoked = await page.evaluate(() => ({
+      label: document.querySelector('.eb-scoped__send').textContent,
+      status: document.querySelector('.eb-scoped__status').textContent,
+    }));
+    assert('SC3 changing scope after the ceiling prompt revokes the confirmation',
+      /Send to Damien/.test(scRevoked.label) && scRevoked.status === '',
+      'label="' + scRevoked.label + '"');
+
+    /* SC4: back to the wide scope -> a FRESH 409 under a rotated id (the
+       revoked confirmation did not carry over). */
+    await page.evaluate(() => {
+      const sel = document.querySelector('.eb-scoped__scope');
+      sel.value = String(sel.options.length - 1);
+      sel.dispatchEvent(new Event('change'));
+    });
     await page.click('.eb-scoped__send');
-    await page.waitForFunction(() => {
-      const l = window.__MOCK_CTRL__.last();
-      return l && l.confirmed === true;
-    }, { timeout: 4000 });
+    await sleep(600);
+    const scSecondId = await page.evaluate(() => window.__MOCK_CTRL__.last().id);
+    assert('SC4 the post-revocation send carries a fresh id, unconfirmed',
+      scSecondId !== scFirstId, 'first=' + String(scFirstId).slice(0, 8) +
+      ' second=' + String(scSecondId).slice(0, 8));
+
+    /* SC5: the confirmed resend reuses THAT id — compare the ids for real; a
+       "typeof id === string" assertion let a fresh-uuid-per-click regression
+       pass green (it shipped in the sibling add-fact composer). */
+    await page.click('.eb-scoped__send');
+    await sleep(600);
     const scLast = await page.evaluate(() => window.__MOCK_CTRL__.last());
-    assert('SC3 confirmed resend files the request with the SAME id (idempotent)',
-      scLast.confirmed === true && scLast.level === 'course' &&
-      typeof scLast.id === 'string' && scLast.instruction === 'Modernize the tone throughout.',
-      'id=' + String(scLast.id).slice(0, 8));
+    assert('SC5 confirmed resend files with the SAME id (idempotent)',
+      scLast.confirmed === true && scLast.id === scSecondId &&
+      scLast.instruction === 'Modernize the tone throughout.',
+      'resend=' + String(scLast.id).slice(0, 8) + ' confirmed=' + scLast.confirmed);
+
     await page.evaluate(() => {
       const d = document.querySelector('.eb-scoped');
       if (d) d.parentNode.removeChild(d);

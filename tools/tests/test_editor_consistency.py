@@ -316,3 +316,43 @@ class TestGitFactDiff(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestCatchPowerCanary(unittest.TestCase):
+    """The check that would have caught the shipped-inert checker: perturb a
+    fact that IS restated in prose and assert the --since path flags it.
+    An adversarial review measured the no-history fallback at a 0% catch rate
+    over the whole corpus; these pin the real mode's power and the loud
+    limitation notice on the weak one."""
+
+    def _blocks(self, *texts):
+        return [{"source_ref": "data/matters/m03-tort-meridian/case-file/a.md#b0000000%d" % i,
+                 "kind": "prose", "original_text": t} for i, t in enumerate(texts)]
+
+    def test_since_path_flags_a_restated_iso_date(self):
+        old_rows = [("data/matters/m03-tort-meridian/matter.json", "open_date", "2025-02-13")]
+        new_rows = [("data/matters/m03-tort-meridian/matter.json", "open_date", "2025-03-01")]
+        blocks = self._blocks("The file was opened on 2025-02-13 and calendared.")
+        flags = ec.stale_value_flags(ec.diff_fact_rows(old_rows, new_rows), blocks)
+        self.assertEqual(len(flags), 1)
+        self.assertTrue(flags[0]["message"].startswith(ec.FACT_PREFIX))
+
+    def test_long_form_dates_are_recognized_as_the_same_date(self):
+        # the corpus writes dates as prose; an ISO-only matcher was blind to it
+        self.assertIn("February 13, 2025", ec.date_forms("2025-02-13"))
+        self.assertTrue(ec.literal_matches_fact("February 13, 2025", "2025-02-13", "date"))
+        self.assertFalse(ec.literal_matches_fact("February 14, 2025", "2025-02-13", "date"))
+
+    def test_no_since_run_states_its_limitation_out_loud(self):
+        import io
+        buf = io.StringIO()
+        ec.run(map_loader=lambda: {"pages": {}}, dry_run=True, no_model=True, out=buf)
+        self.assertIn("NOT as 'consistent'", buf.getvalue())
+
+    def test_unresolvable_since_refuses_instead_of_reporting_clean(self):
+        import io
+        buf = io.StringIO()
+        res = ec.run(map_loader=lambda: {"pages": {}}, since="no-such-rev-xyz..HEAD",
+                     dry_run=True, no_model=True, out=buf)
+        self.assertEqual(res.model_degraded, "bad_since")
+        self.assertIn("refusing to run", buf.getvalue())
