@@ -121,6 +121,22 @@ does not move.** That is U1, and everything else depends on it.
   must be as obvious as typing in one, and destructive actions must be plainly reversible on screen.
 - **R10. Scope, attribution and the Access door are untouched.** This changes *what* can be edited
   and *how*, never *who* may edit.
+- **R11. A per-matter Law page — editable ONLY for fictional Meridian law.** *(session-settled:
+  user-directed, 2026-07-28 — "for fictional Meridian Laws, also a 'per-matter Law' page. So the
+  Editor User can tweak the law. Of course, for ACTUAL laws (e.g., New York, California), the
+  system should NOT permit editing of the laws; the Editor User can only edit the Facts.")*
+  The boundary is already encoded in the data: `data/jurisdictions/meridian.json` is the fictional
+  jurisdiction; everything under `data/jurisdictions/real/` is a real one. The rule is mechanical —
+  editable iff the matter's jurisdiction resolves under `meridian` — never a per-field judgment.
+  Real-jurisdiction law renders on the Law page read-only, visibly marked as actual law.
+- **R12. An Inconsistency checker between Narrative and Facts.** *(session-settled: user-directed,
+  2026-07-28 — "Where the edited Narrative are either (1) inconsistent with the Facts or (2)
+  contradict the Facts — the system should flag that as an error, allowing the Editor to change
+  either the Facts or the Narrative to make them aligned.")* The checker flags, the human chooses
+  the direction of repair — it never auto-corrects either side. Stage 1.5's restated-mention search
+  is this checker's precursor: propagation prevents inconsistencies at fact-edit time; the checker
+  catches the ones introduced from the prose side, and runs after prose edits and on demand from
+  the facts panel.
 
 ### Key Decisions
 
@@ -315,6 +331,47 @@ and letting an editor change how the site is generated rather than what it says.
     positives — matching is value+context, and the review screen makes over-matching cheap to reject.
 - **Verification:** on a real matter, the counts match a hand audit; one fact edit round-trips
   through Stage 1 → 1.5 on DEV.
+
+### U5b. The per-matter Law page (R11)
+
+- **Goal:** each matter has a Law page; Meridian law is editable there, real law never is.
+- **Requirements:** R11
+- **Dependencies:** U3, U5 (shares the panel idiom)
+- **Files:** `tools/build_site.py`, `app/worker/src/editor-endpoints.js`
+- **Approach:** render the matter's governing law from its jurisdiction files with the same
+  panel idiom as the facts page. Editability is decided by path: refs under
+  `data/jurisdictions/meridian.json` register as editable blocks; refs under
+  `data/jurisdictions/real/` are rendered WITHOUT `data-ebsrc` and the server also refuses them by
+  allowlist (the map simply never contains them — the same no-oracle posture as everything else).
+  Mark real law visibly: "actual N.Y. law — not editable."
+- **Test scenarios:**
+  - A Meridian-law block accepts a suggestion; a real-law ref is absent from the map and a forged
+    suggest against it returns `validation_error`.
+  - The Law page for a real-jurisdiction matter renders read-only with the marking.
+  - No real-law path ever appears in `editor-map.generated.json` (assert in the map tests).
+- **Verification:** round-trip edit on a Meridian rule; hand-check one real-jurisdiction matter.
+
+### U10. The Inconsistency checker (R12)
+
+- **Goal:** narrative that no longer matches the facts is flagged, with repair in either direction.
+- **Requirements:** R12
+- **Dependencies:** U5 (facts model), U7 (drafting pipeline for repairs)
+- **Files:** `tools/editor_consistency.py` (new), `app/worker/src/editor-endpoints.js`,
+  `app/editor/editor.js`
+- **Approach:** for each fact, compare its value against the prose that mentions it (the restated
+  index from Stage 1.5 is the seed). Two classes: **stale value** (prose states the old/different
+  literal — deterministic) and **contradiction** (prose asserts something the facts rule out —
+  model-assisted, reported with lower confidence and marked as such). Each flag offers two repairs:
+  change the Fact (Stage 1 edit + its propagation) or change the Narrative (a drafted prose edit).
+  The checker never auto-applies either.
+- **Test scenarios:**
+  - Editing prose to contradict a fact date produces a flag naming both sides.
+  - Fixing it by either route clears the flag; the other route is offered, not forced.
+  - A matter with no inconsistencies reports an honest clean state.
+  - Model-assisted contradiction flags are visibly distinguished from deterministic stale-value
+    flags (an 83-year-old must never mistake a guess for a fact).
+- **Verification:** seeded inconsistencies on a test matter are all caught; zero false flags on an
+  untouched matter's audit sample.
 
 ### U6. The scope ladder and deterministic enumeration
 
