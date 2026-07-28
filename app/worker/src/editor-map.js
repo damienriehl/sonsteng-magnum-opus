@@ -16,6 +16,10 @@ import { attributionLabel } from "./editor-auth.js";
 // spine_build_id pins map<->page compatibility. The injector stamps it into the
 // page so a mismatched (stale) client reload is caught gracefully.
 export const MAP_VERSION = EDITOR_MAP.spine_build_id || "";
+// U5: the per-matter facts index (file + editable paths + addable slots) the
+// json_add validation reads. Build-time truth from compute_scope_index's
+// sibling FACTS_INDEX in build_site.py.
+export const EDITOR_MAP_FACTS = EDITOR_MAP.facts || {};
 export const INSTRUCTOR_VERSION = INSTRUCTOR_BUNDLE.spine_build_id || "";
 
 // ---- Page-path allowlist (proxy SSRF guard) ---------------------------------

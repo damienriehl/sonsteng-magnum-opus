@@ -1987,7 +1987,9 @@ def build_one_packet(corpus, m, man):
     juris = corpus["juris"].get(m.get("jurisdiction") if m.get("tier") == "meridian" else (m.get("jurisdiction") or "").upper(), {})
 
     # --- TOC + parts
-    toc_items, parts_html = [], []
+    # The Facts page link rides the TOC as a bare <a> (NO walker-candidate
+    # children), so it adds zero candidates and shifts no indices (U5/OQ4).
+    toc_items, parts_html = ['<a href="facts/" class="toc-facts">FACTS · THE SCENARIO’S SOURCE VALUES</a>'], []
     case_file_cards = []
     for idx, key in enumerate(SECTION_ORDER, start=1):
         sec = sections.get(key)
@@ -2955,6 +2957,156 @@ def _extract_page_blocks(html_text):
 EDITOR_MAP_EXCLUDE_PREFIXES = ("assets/", "chat/")
 
 
+# --------------------------------------------------------------------------- #
+# U5 — the per-matter Facts page (Stage 1 of the editing flow).
+# Damien (2026-07-28): facts live on a DEDICATED page per matter, generated
+# from the matter's JSON + schemas (KTD7), never hand-curated. A fact value is
+# one json_scalar block whose candidate element renders EXACTLY the value —
+# labels, counts and chrome live in non-candidate elements. IDs, join keys and
+# schema enums stay read-only. custom_facts (an optional schema slot) is where
+# json_add lands editor-added facts.
+# --------------------------------------------------------------------------- #
+# Keys that are identity/join/enum material — never facts, never editable.
+FACTS_DENY = {"id", "@id", "@context", "schema_version", "slug", "shape",
+              "tier", "jurisdiction", "client_id", "matter_id", "fee_type",
+              "letter_md"}
+
+# Which (file, dotted-prefix) sources feed the facts panel per matter.
+FACTS_BUSINESS_SECTIONS = ("intake", "conflicts_check", "engagement")
+
+FACTS_INDEX = {}   # slug -> {file, editable: [...], addable: {...}} (map bundle)
+
+
+def _fact_label(path):
+    """Human label from a dotted path: 'intake.client_name' -> 'Client name'."""
+    leaf = path.split(".")[-1]
+    return leaf.replace("_", " ").strip().capitalize()
+
+
+def fact_usage(matter_dir, relpath, json_path, value, map_bundle=None):
+    """(derived, restated) counts for one fact value within its matter.
+
+    derived  = places the FIELD renders (map blocks whose source_ref is
+               <relpath>#<json_path>) — they follow a rebuild automatically;
+    restated = literal occurrences of the value in the matter's OTHER sources
+               (md files + other json strings) — each needs its own edit when
+               the fact changes. Honest by construction: a literal search,
+               reported as "mentions found", never "all mentions"."""
+    derived = 0
+    if map_bundle:
+        ref = "%s#%s" % (relpath, json_path)
+        for blocks in (map_bundle.get("pages") or {}).values():
+            derived += sum(1 for b in blocks if b.get("source_ref") == ref)
+    restated = 0
+    needle = str(value or "").strip()
+    if len(needle) >= 4:  # short strings would flood with false positives
+        for dirpath, _dn, files in os.walk(matter_dir):
+            for fn in files:
+                if not (fn.endswith(".md") or fn.endswith(".json")):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, ROOT).replace(os.sep, "/")
+                try:
+                    with open(fp, "r", encoding="utf-8") as fh:
+                        raw = fh.read()
+                except OSError:
+                    continue
+                n = raw.count(needle)
+                if rel == relpath and n:
+                    n -= 1  # the defining occurrence is not a restatement
+                restated += max(n, 0)
+    return derived, restated
+
+
+def _fact_rows(m):
+    """[(relpath, json_path, value)] for one matter — matter.json scalars off
+    the deny list, custom_facts entries, and the business.json narrative
+    sections' scalar leaves."""
+    rows = []
+    mdir = m["_dir"]
+    matter_rel = data_relpath(mdir, "matter.json")
+    for k, v in m.items():
+        if k.startswith("_") or k in FACTS_DENY or isinstance(v, (dict, list)):
+            continue
+        if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+            rows.append((matter_rel, k, v))
+    for k in sorted((m.get("custom_facts") or {})):
+        rows.append((matter_rel, "custom_facts.%s" % k, m["custom_facts"][k]))
+    bpath = os.path.join(mdir, "business", "business.json")
+    if os.path.isfile(bpath):
+        b = load_json(bpath)
+        brel = data_relpath(mdir, "business", "business.json")
+        for section in FACTS_BUSINESS_SECTIONS:
+            sec = b.get(section)
+            if not isinstance(sec, dict):
+                continue
+            for k, v in sec.items():
+                if k in FACTS_DENY or isinstance(v, (dict, list)):
+                    continue
+                if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+                    rows.append((brel, "%s.%s" % (section, k), v))
+    return rows
+
+
+def build_facts_pages(corpus):
+    """One Facts page per matter (Stage 1): label, editable value, where-used
+    counts. Registers each value as a json_scalar block and records the
+    per-matter facts index (FACTS_INDEX) the Worker validates json_add against."""
+    FACTS_INDEX.clear()
+    for m in corpus["matters"]:
+        slug = m["_slug"]
+        mdir = m["_dir"]
+        matter_rel = data_relpath(mdir, "matter.json")
+        rows = _fact_rows(m)
+        cards = []
+        editable_paths = []
+        for relpath, path, value in rows:
+            sval = str(value)
+            eb = _eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
+                                 "fact: " + _fact_label(path))
+            if relpath == matter_rel:
+                editable_paths.append(path)
+            derived, restated = fact_usage(mdir, relpath, path, sval)
+            uses = []
+            if derived:
+                uses.append("rendered in %d place%s (follows automatically)"
+                            % (derived, "s" if derived != 1 else ""))
+            if restated:
+                uses.append("restated in %d passage%s (each needs its own edit)"
+                            % (restated, "s" if restated != 1 else ""))
+            usage = " · ".join(uses) if uses else "not yet mentioned in the prose"
+            cards.append("""
+  <div class="fact-row">
+    <div class="fact-label">{label} <span class="fact-uses">{usage}</span></div>
+    <p class="fact-value"{eb}>{v}</p>
+  </div>""".format(label=esc(_fact_label(path)), usage=esc(usage),
+                   eb=eb, v=esc(sval)))
+        FACTS_INDEX[slug] = {
+            "file": matter_rel,
+            "editable": sorted(editable_paths),
+            "addable": {"custom_facts": "string"},
+        }
+        rel = os.path.join("matters", slug, "facts", "index.html")
+        body = """
+<section class="reveal">
+  <p class="eyebrow">THE FACTS OF THE SCENARIO</p>
+  <h1>Facts — {caption}</h1>
+  <p class="lede">Every labelled fact below is the single source the pages are
+  generated from. Change a value here and everything <em>rendered from it</em>
+  follows on the next publish; passages that <em>restate</em> it in prose are
+  found and drafted for review, never changed silently.</p>
+</section>
+<section class="facts-panel">{cards}
+</section>
+<div class="lede" style="margin-top:var(--space)">Adding a fact records it here first
+— it appears in the prose only through drafted mentions you approve.</div>
+""".format(caption=esc(m.get("caption", slug)), cards="".join(cards))
+        write_file(rel, page_shell(
+            rel, "Facts — " + m.get("caption", slug),
+            "MATTER · FACTS", [("Matter Library", "../../index.html"),
+                               (m.get("caption", slug), "../index.html")], body))
+
+
 def compute_scope_index(corpus):
     """U6: the deterministic scope-ladder index (part -> matter -> module ->
     course), embedded in the editor map so a scoped change's blast radius is
@@ -3051,6 +3203,7 @@ def build_editor_map(spine_build_id, scope_index=None):
                           "normalize spec is frozen in tools/text_norm.py."),
         "counts": {},
         "scopes": scope_index or {},
+        "facts": dict(FACTS_INDEX),
         "pages": pages,
     }
     for rel, entries in pages.items():
@@ -3238,6 +3391,7 @@ def main(argv):
     build_skills(corpus)
     build_matter_library(corpus)
     packet_sizes = build_packet_pages(corpus)
+    build_facts_pages(corpus)
     build_firm_dashboard(corpus)
     build_third_party()
     catalog = build_data_catalog(corpus)

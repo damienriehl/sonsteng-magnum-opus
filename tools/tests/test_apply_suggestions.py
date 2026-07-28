@@ -824,3 +824,108 @@ class StructuralApplyTest(unittest.TestCase):
         res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
         self.assertEqual([p.suggestion_id for p in res.applied], ["i1"])
         self.assertEqual(res.companions, [])
+
+
+# --------------------------------------------------------------------------- #
+# U5 — json_add (new facts) + Stage 1.5 fact syndication
+# --------------------------------------------------------------------------- #
+class FactsApplyTest(unittest.TestCase):
+    def setUp(self):
+        self.root = make_repo()
+        self.store = InMemoryEditorStore()
+        self.client = FakeClient(self.store)
+        self.index = resolve_index(self.root, SPEC)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _run(self, batch_id, pipeline, deploy_plan_only=False):
+        return ap.run_apply(self.client, pipeline, batch_id,
+                            worktree_parent=None, deploy_plan_only=deploy_plan_only,
+                            branch="test", canonical_root=self.root, logger=lambda *a: None)
+
+    def test_json_add_creates_a_new_fact_key(self):
+        ref = "%s#custom_facts.deadline-note" % M03_EX
+        self.store.add(id="fa1", source_ref=ref, kind="json_add",
+                       json_path="custom_facts.deadline-note",
+                       new_text="The demand letter response is due within 21 days.",
+                       original_hash=None, original_text=None, status="accepted")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["fa1"])
+        obj = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        self.assertEqual(obj["custom_facts"]["deadline-note"],
+                         "The demand letter response is due within 21 days.")
+
+    def test_json_add_never_overwrites_an_existing_key(self):
+        # seed the key, commit, then try to add it again
+        p = os.path.join(self.root, M03_EX)
+        obj = json.loads(open(p, encoding="utf-8").read())
+        obj["custom_facts"] = {"deadline-note": "Already here."}
+        _write(self.root, M03_EX, json.dumps(obj, indent=2) + "\n")
+        _git(["commit", "-aqm", "seed"], self.root)
+        ref = "%s#custom_facts.deadline-note" % M03_EX
+        self.store.add(id="fa2", source_ref=ref, kind="json_add",
+                       json_path="custom_facts.deadline-note",
+                       new_text="A silent overwrite attempt.",
+                       original_hash=None, original_text=None, status="accepted")
+        before = snapshot_data(self.root)
+        res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
+        self.assertEqual([r["id"] for r in res.needs_human], ["fa2"])
+        self.assertEqual(before, snapshot_data(self.root))
+
+    def test_json_add_rejects_forged_paths(self):
+        ref = "%s#caption" % M03_EX
+        self.store.add(id="fa3", source_ref=ref, kind="json_add",
+                       json_path="caption", new_text="hijack",
+                       original_hash=None, original_text=None, status="accepted")
+        res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
+        self.assertEqual([r["id"] for r in res.needs_human], ["fa3"])
+
+    def test_fact_edit_syndicates_restated_prose_as_one_group(self):
+        # caption is restated verbatim in a case-file paragraph
+        cur = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
+        _write(self.root, M03_MD, cur +
+               "\nThe caption Osgard v. Meridian Freight (Tort) appears on every filing.\n")
+        import stamp_block_ids as sb2
+        existing = set()
+        sb2.stamp_file(os.path.join(self.root, M03_MD), [], existing)
+        _git(["commit", "-aqm", "restate caption"], self.root)
+        self.index = resolve_index(self.root, SPEC)
+
+        ref = "%s#caption" % M03_EX
+        blk = self.index[ref]
+        self.store.add(id="fs1", source_ref=ref, kind="json_scalar",
+                       json_path="caption",
+                       new_text="Osgard v. Meridian Freight Lines (Tort)",
+                       original_hash=blk["original_hash"],
+                       original_text=blk["original_text"], status="accepted")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        # ONE companion for the restated paragraph, in ONE group, never applied
+        self.assertEqual(len(res.companions), 1)
+        comp = res.companions[0]
+        self.assertIn("Meridian Freight Lines", comp["new_text"])
+        self.assertTrue(comp["group_id"].startswith("vs-"))
+        self.assertEqual(self.store.rows[comp["id"]]["status"], "pending")
+
+    def test_short_fact_values_never_flood_companions(self):
+        ref = "%s#caption" % M03_EX
+        blk = self.index[ref]
+        # simulate a short old value by adding a row whose original is 3 chars
+        self.store.add(id="fs2", source_ref=ref, kind="json_scalar",
+                       json_path="caption", new_text="Ozzy",
+                       original_hash=blk["original_hash"],
+                       original_text=blk["original_text"], status="accepted")
+        # the REAL original is long, so syndication may propose; now verify the
+        # guard directly instead: a 3-char literal yields no proposals
+        payloads = ap.propose_value_sync(
+            self.root, [ap.Patch(
+                suggestion_id="x", group_id="g", source_ref=ref,
+                relpath=M03_EX, kind="json_scalar", json_path="caption",
+                original_text="Oz.", new_text="Ozzy")],
+            self.index, self.client, "bX")
+        self.assertEqual(payloads, [])
+
+

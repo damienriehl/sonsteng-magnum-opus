@@ -389,11 +389,19 @@ def json_get(obj, dotted):
     return cur
 
 
-def json_set(obj, dotted, value):
+def json_set(obj, dotted, value, create=False):
+    """Set a dotted path. With create=True, missing DICT intermediates are
+    created (the json_add path — U5); without it a missing key still raises,
+    so a typo'd path can never silently mint structure."""
     keys = dotted.split(".")
     cur = obj
     for key in keys[:-1]:
-        cur = cur[int(key)] if isinstance(cur, list) else cur[key]
+        if isinstance(cur, list):
+            cur = cur[int(key)]
+        else:
+            if create and key not in cur:
+                cur[key] = {}
+            cur = cur[key]
     last = keys[-1]
     if isinstance(cur, list):
         cur[int(last)] = value
@@ -766,7 +774,27 @@ def apply_file_patches(worktree, relpath, patches):
         return body_values[path]
 
     edits = []  # [(json_path, new_value)] for scalars, in patch order
+    add_paths = []  # json_add paths (allowed to CREATE keys — U5)
     for p in text_patches:
+        if p.kind == "json_add":
+            # U5: create-only — an existing key routes to needs_human (a new
+            # fact never silently overwrites one that already exists).
+            parts = p.json_path.split(".")
+            parent = obj
+            exists = True
+            for key in parts:
+                if isinstance(parent, dict) and key in parent:
+                    parent = parent[key]
+                else:
+                    exists = False
+                    break
+            if exists:
+                results[p.suggestion_id] = OUT_NEEDS_HUMAN
+                continue
+            edits.append((p.json_path, p.new_text))
+            add_paths.append(p.json_path)
+            results[p.suggestion_id] = True
+            continue
         if p.kind == "json_scalar":
             edits.append((p.json_path, p.new_text))
             results[p.suggestion_id] = True
@@ -798,23 +826,33 @@ def apply_file_patches(worktree, relpath, patches):
         if value != json_get(obj, path):
             edits.append((path, value))
 
+    if add_paths:
+        new_raw = write_json_edits(raw, edits, create_paths=add_paths)
+        with open(abspath, "w", encoding="utf-8") as fh:
+            fh.write(new_raw)
+        return results
+
     new_raw = write_json_edits(raw, edits)
     with open(abspath, "w", encoding="utf-8") as fh:
         fh.write(new_raw)
     return results
 
 
-def write_json_edits(raw, edits):
+def write_json_edits(raw, edits, create_paths=()):
     """Produce the new text for a .json file with `edits` = [(json_path, value)]
     applied. Prefers the formatting-preserving surgical splice; on SurgicalError
     falls back to the v1 whole-file parse->set->serialize. Both yield the same
-    logical object (the surgical path proves it via a re-parse equality gate)."""
+    logical object (the surgical path proves it via a re-parse equality gate).
+    `create_paths` (U5 json_add) names paths allowed to CREATE keys — those
+    force the fallback path, since a splice cannot add structure."""
     try:
+        if create_paths:
+            raise json_surgical.SurgicalError("json_add present — whole-file write")
         return json_surgical.splice_scalars(raw, edits)
     except json_surgical.SurgicalError:
         obj = json.loads(raw)
         for path, value in edits:
-            json_set(obj, path, value)
+            json_set(obj, path, value, create=path in set(create_paths))
         return dump_json_like(obj, raw)
 
 
@@ -891,10 +929,39 @@ def propose_value_sync(worktree, applied_patches, source_index, client, batch_id
     for patch in applied_patches:
         if patch.op is not None:
             continue  # structural ops never syndicate value companions (U4)
-        if patch.kind == "json_scalar":
-            continue  # json_scalar syndicates via regenerate — not a companion case
         matter = matter_of(patch.source_ref)
         if not matter:
+            continue
+        if patch.kind == "json_scalar":
+            # U5 Stage 1.5 (KTD6): a FACT edit's derived render sites follow
+            # the rebuild automatically — but prose that RESTATES the old value
+            # does not, and silently leaving it is how a scenario contradicts
+            # itself. Syndicate the WHOLE old value as one literal (>=4 chars
+            # guards short-string floods) so the restated set becomes ONE
+            # reviewable companion group: one review, one approval, one undo.
+            old_tok = (patch.original_text or "").strip()
+            new_tok = (patch.new_text or "").strip()
+            if len(old_tok) >= 4 and new_tok and old_tok != new_tok:
+                group_id = "vs-%s-%s" % (batch_id, _slug(old_tok))
+                for target_ref, occ in _find_anchored_occurrences(
+                        worktree, matter, old_tok, new_tok, "fact",
+                        source_index, exclude=patch.source_ref):
+                    payload = {
+                        "id": _companion_id(old_tok, target_ref),
+                        "origin": "companion",
+                        "kind": occ["kind"],
+                        "source_ref": target_ref,
+                        "json_path": occ.get("json_path"),
+                        "new_text": occ["proposed_text"],
+                        "original_hash": occ.get("original_hash"),
+                        "comment": "Fact changed: %r is now %r (from %s)"
+                                   % (old_tok, new_tok, patch.source_ref),
+                        "group_id": group_id,
+                        "status": "pending",
+                        "map_version": None,
+                    }
+                    client.propose_companion(payload)
+                    proposed.append(payload)
             continue
         changed_new = changed_value_tokens(patch.original_text, patch.new_text)
         if not changed_new:
@@ -1259,6 +1326,29 @@ def _gate_group(members, source_index, worktree):
     patches = []
     for r in members:
         source_ref = r["source_ref"]
+        # json_add (U5) FIRST: a NEW fact has no map block yet, so the
+        # unknown-ref drift gate below must not see it. Shape-validate here;
+        # the patcher's own gate refuses an already-present key.
+        if r.get("kind") == "json_add":
+            jp = r.get("json_path") or ""
+            if not re.fullmatch(r"custom_facts\.[a-z0-9][a-z0-9_-]{0,39}", jp):
+                return OUT_NEEDS_HUMAN, []
+            if source_ref.split("#", 1)[1:] != [jp]:
+                return OUT_NEEDS_HUMAN, []
+            if not (r.get("new_text") or "").strip():
+                return OUT_NEEDS_HUMAN, []
+            patches.append(Patch(
+                suggestion_id=r["id"],
+                group_id=r.get("group_id") or ("solo:" + r["id"]),
+                source_ref=source_ref,
+                relpath=source_ref.split("#", 1)[0],
+                kind="json_add",
+                json_path=jp,
+                original_text="",
+                new_text=r.get("new_text") or "",
+                created_at=r.get("created_at") or 0,
+            ))
+            continue
         block = source_index.get(source_ref)
         # Allowlist re-validation (defense in depth) — unknown ref => drift (re-review).
         if block is None:
