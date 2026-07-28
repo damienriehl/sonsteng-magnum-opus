@@ -127,6 +127,22 @@ and `csrfOk` — so dropping the `workers.dev` entry while any `?t=` token is st
 makes every save from those bookmarks return `403 csrf_failed` while pages keep loading
 normally. Drop it only in the same deploy that removes the last token secret.
 
+## ⚠ workers_dev must stay true (incident, 2026-07-27)
+
+`wrangler.jsonc` declares `"workers_dev": true` at the top level. **Do not remove it.**
+Wrangler defaults it to *false* the moment any `routes` key exists, and says so only in an
+advisory warning during deploy. Adding the Access-door route therefore silently unbound
+`sonsteng-chat.damienriehl.workers.dev` — the fallback door — which served a bare Cloudflare
+`error code: 1042` until it was caught by probing the live host. `env.production` declares
+`routes: []`, which is enough to trip the same default there.
+
+After any deploy that touches routing, **read the trigger list wrangler prints**. It must name
+both:
+
+    Deployed sonsteng-chat triggers
+      https://sonsteng-chat.damienriehl.workers.dev
+      edit.sonsteng.damienriehl.com (custom domain)
+
 ## Enabling it (the two credentialed steps)
 
 1. **Attach the hostname.** The `routes` block is already in `wrangler.jsonc`; a default-env
@@ -136,7 +152,11 @@ normally. Drop it only in the same deploy that removes the last token secret.
        npx wrangler@4 deploy --env production --dry-run   # MUST show no route for the Access host
        npx wrangler@4 deploy                              # default env == DEV
 
-2. **Create the Access application** on team `young-unit-68fd` — self-hosted, hostname above,
+2. **Create the Access application** on team `young-unit-68fd`
+   — ⚠ **you need John's and Roger's literal email addresses for this, and they are not in this
+   repo or in the cockpit.** A3 originally claimed they were in
+   `briefs/qa/sonsteng-2026-07-27-access-door-answers.json`; that file contains no addresses, and
+   neither does the rest of `briefs/`. This is the one thing blocking the door — — self-hosted, hostname above,
    policy allowing the three addresses, one-time PIN included, session 30 days. Capture the
    **AUD tag**, put it in `EDIT_ACCESS_AUD` in both var blocks, and redeploy.
 

@@ -154,10 +154,17 @@ slot model, and any change to how edits are applied, reverted or attributed.
 - **A3.** John's and Roger's addresses were supplied on 2026-07-27 and are **deliberately not
   recorded in this repo.** This repository is private today but the README pitches it to
   open-source adopters, so it is headed public — and git history is permanent. A collaborator's
-  personal address committed now would ship with the first public release. The two addresses live
-  in the private cockpit (`briefs/qa/sonsteng-2026-07-27-access-door-answers.json`) and are typed
-  straight into the Access policy at U2. Nothing in the codebase needs them: `EDIT_ACCESS_EMAILS`
+  personal address committed now would ship with the first public release. Nothing in the codebase needs them: `EDIT_ACCESS_EMAILS`
   maps addresses to slots and is itself config, so it is set as a **secret**, not a var.
+
+  ⚠ **CORRECTION, 2026-07-27 (found during implementation).** A3 originally asserted the two
+  addresses "live in the private cockpit
+  (`briefs/qa/sonsteng-2026-07-27-access-door-answers.json`)". **They do not.** That file contains
+  no email addresses at all, and a sweep of the whole `briefs/` tree turns up no
+  sonsteng-associated pair. The addresses exist only wherever Damien holds them. This is the sole
+  blocker on U2: an Access policy and an `EDIT_ACCESS_EMAILS` map both need the literal strings,
+  and guessing one is not a recoverable error — a wrong address locks John out, or admits someone
+  else. Everything else in the plan is built and deployed.
 
 ### Key Technical Decisions
 
@@ -727,3 +734,50 @@ repo on purpose. The config is staged and inert:
 The live checks in the Verification Contract that require a real sign-in, and
 preflight's `rail placement` gate, which needs `TARGET_URL` set to an `/edit` URL
 with `?t=` and is skipped in every run above.
+
+---
+
+## Deployment record — 2026-07-27, and one incident
+
+**U1 is DONE and live.** `edit.sonsteng.damienriehl.com` resolves, serves the Worker, and:
+
+- the bare hostname 302s to `/edit/` (KTD7, verified live);
+- the `workers.dev` root does **not** redirect (the doorway is host-bound, verified live);
+- `/edit/admin`, `/edit/no-such-thing` and `/edit/index.html` all return **the same SHA-256** —
+  R6's no-oracle property holds on the live host, not just in tests;
+- PROD still serves the pitch `<title>` at `/` **and** at `/platform/`, while the DEV origin
+  serves "Platform Home — Sonsteng Practicum". R7 holds live.
+
+### ⚠ The incident: U1's own route unbound the fallback door
+
+The first deploy printed an advisory warning and a trigger list containing **only** the custom
+domain. `sonsteng-chat.damienriehl.workers.dev` — John's and Roger's door — began serving a bare
+Cloudflare `error code: 1042`.
+
+**Cause:** wrangler defaults `workers_dev` to **false** the moment any `routes` key is present.
+U1 added one. Nothing in the plan, the review, or the test suite could see this: it is a property
+of the deploy tool's defaults, not of the code, and the only signal was a warning in deploy output
+that reads like boilerplate.
+
+**Fix:** `"workers_dev": true` declared explicitly at the top level (inheritable, so `env.dev` and
+`env.production` are covered — `env.production`'s `routes: []` is enough to trip the same
+default). Redeployed; the trigger list now names both, and the live host serves
+`/edit/assets/editor.css` 200, the uniform 404 on `/edit/index.html`, and the chat router on
+`/v1/session`.
+
+**Guard:** four config-invariant tests now assert `workers_dev === true`,
+`env.production.routes === []`, that PROD carries no `EDIT_ACCESS_*` var and no `damienadmin`
+slot, and that both browser origins are on the DEV allowlist. They would have caught it.
+
+**The lesson worth keeping:** this plan's central risk was named as "CORS misconfiguration —
+pages load, saves die silently." The thing that actually broke the fallback door was neither CORS
+nor code; it was a deploy-tool default that a config key silently flipped. A gate that only tests
+the artifact cannot see a change in how the artifact is *published* — which is why the fix ships
+with assertions about the config file itself.
+
+### U2 is blocked, and not on effort
+
+The Access application cannot be created without John's and Roger's literal email addresses, and
+A3's claim about where they live is wrong (see the correction in A3). Everything downstream of
+having them is already staged: `EDIT_ACCESS_AUD` is empty so the verifier fails closed, the
+`damienadmin` slot exists, and the runbook's remaining steps are three commands.
