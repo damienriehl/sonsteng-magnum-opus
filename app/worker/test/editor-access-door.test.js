@@ -390,3 +390,62 @@ test("the admin page's flags exclude the viewer's own edits", async () => {
   assert.equal(res.status, 200);
   assert.ok(body.length > 0);
 });
+
+// ---- 7. wrangler config invariants (a real incident, 2026-07-27) -----------
+//
+// Deploying U1's custom-domain route SILENTLY unbound
+// sonsteng-chat.damienriehl.workers.dev — the fallback door — because wrangler
+// defaults `workers_dev` to FALSE the moment any `routes` key exists, and says
+// so only in an advisory warning buried in deploy output. The live door served a
+// bare Cloudflare "error code: 1042" until it was caught by probing. That is
+// exactly the R4 breakage the plan exists to prevent, caused by the plan's own
+// U1, and nothing in the test suite could see it because it is a config
+// property, not a code property. These assertions are cheap and they would have
+// caught it.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+function wranglerConfig() {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const raw = readFileSync(join(here, "..", "wrangler.jsonc"), "utf8");
+  // The file is JSONC; strip whole-line // comments only (no block comments and
+  // no trailing comments are used in it).
+  return JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ""));
+}
+
+test("workers_dev stays explicitly true so the fallback door survives a route", () => {
+  const cfg = wranglerConfig();
+  assert.equal(
+    cfg.workers_dev, true,
+    "adding any `routes` key defaults workers_dev to false and unbinds " +
+    "sonsteng-chat.damienriehl.workers.dev — John's and Roger's door (R4)",
+  );
+});
+
+test("env.production declares an empty routes list so it cannot inherit the Access host", () => {
+  const cfg = wranglerConfig();
+  assert.deepEqual(
+    cfg.env.production.routes, [],
+    "`routes` is inheritable; without an explicit empty list the Access custom " +
+    "domain follows `--env production` and R7 breaks",
+  );
+});
+
+test("PROD carries no Access config, so its door is closed by construction (R7)", () => {
+  const v = wranglerConfig().env.production.vars;
+  assert.equal(v.EDIT_ACCESS_AUD, undefined);
+  assert.equal(v.EDIT_ACCESS_TEAM_DOMAIN, undefined);
+  assert.equal(v.EDIT_ACCESS_HOST, undefined);
+  assert.ok(!String(v.EDIT_TOKEN_SCOPES).includes("damienadmin"),
+    "the combined-scope slot must not exist in PROD");
+});
+
+test("both browser origins are on the DEV allowlist while the tokens live (KTD6)", () => {
+  const cfg = wranglerConfig();
+  for (const [name, vars] of [["top-level", cfg.vars], ["env.dev", cfg.env.dev.vars]]) {
+    const list = String(vars.EDIT_ORIGIN).split(",").map((s) => s.trim());
+    assert.ok(list.includes("https://edit.sonsteng.damienriehl.com"), `${name}: Access origin`);
+    assert.ok(list.includes("https://sonsteng-chat.damienriehl.workers.dev"), `${name}: fallback origin`);
+  }
+});

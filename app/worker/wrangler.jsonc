@@ -27,6 +27,18 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "logs": { "head_sampling_rate": 1 } },
 
+  // ⚠ REQUIRED, DO NOT REMOVE. Wrangler defaults `workers_dev` to FALSE as soon
+  // as any `routes` key is present, and it says so only in an advisory warning
+  // during deploy. Adding the Access-door route below therefore SILENTLY
+  // unbound sonsteng-chat.damienriehl.workers.dev — John's and Roger's fallback
+  // door — which returned a bare Cloudflare "error code: 1042" instead of the
+  // editor. That is precisely the R4 breakage this plan exists to prevent, and
+  // it was caused by the plan's own U1. Both doors stay open only while this is
+  // explicitly true. Inheritable, so it covers env.dev and env.production too
+  // (env.production now declares `routes: []`, which is enough to trip the same
+  // default).
+  "workers_dev": true,
+
   // ---- Access door custom domain (plan U1) ---------------------------------
   // `custom_domain: true` makes Cloudflare provision the DNS record and the
   // certificate for this hostname on the next deploy of the DEFAULT env. The
