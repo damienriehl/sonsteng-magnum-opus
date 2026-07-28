@@ -1,50 +1,50 @@
-<!-- INSTRUCTOR-ONLY: never render into the student site -->
-# Answer Key — m11 *Prairie State Logistics, Inc. v. Yusuf Adeyemi* (Employment Arbitration, Illinois)
+<!-- INSTRUCTOR-ONLY: never render into the student site --> {#b:bcf935c2}
+# Answer Key — m11 *Prairie State Logistics, Inc. v. Yusuf Adeyemi* (Employment Arbitration, Illinois) {#b:5793b746}
 
-*Instructor-facing model answers and grading guidance. Never distributed to students; never rendered into the platform. Citations are navigational starting points for the instructor and are each marked `[instructor: verify before teaching]`; confirm currency against the official Illinois and federal sources in `data/jurisdictions/real/il.json` before relying on any of them. Student-facing work remains facts-only.*
-
----
-
-## 1. Model Case Analysis (keyed to fact anchors)
-
-### The claimant's theory of the case (our client, employee-counsel)
-
-The claimant's case is a **circumstantial retaliation** case that wins or loses on **timing, knowledge, and pretext**. The A-grade analysis assembles a clean causal chain from the documentary record rather than from adjectives:
-
-- **Protected activity, in three escalating forms.** Adeyemi complained verbally to management about unpaid off-the-clock work in September 2025 [m11.fact.007]; put both the wage complaint and the blocked-fire-exit safety complaint in writing to HR on November 10, 2025 [m11.fact.010]; and — getting no substantive response [m11.fact.011] — reported to a state wage-and-safety hotline on November 18, 2025, receiving a confirmation number [m11.fact.012]. A strong answer separates the *wage* protected activity from the *safety* protected activity because they trigger different legal protections (see §1 theories below).
-- **Employer knowledge — the linchpin.** The employer's defense is that decision-maker Pfeiffer did not know about the protected activity when he acted [m11.fact.028] and that the company had no notice of the hotline complaint until after termination [m11.fact.029]. The record refutes both: on November 12, 2025 — the very day she acknowledged the complaint [m11.fact.011] — HR partner Croll forwarded Adeyemi's internal complaint to Pfeiffer, the manager Adeyemi had accused [m11.fact.027]. The internal-notes/email chain is the knowledge exhibit; a top answer builds the whole causation argument on it.
-- **Adverse actions in suspicious sequence.** The PIP landed December 5, 2025 — about three-and-a-half weeks after the hotline report and after Pfeiffer had the complaint in hand [m11.fact.013], [m11.fact.022]. It was the first negative document in an otherwise spotless seven-year file [m11.fact.014], [m11.fact.004], and it cited October–November accuracy metrics drawn from the exact weeks the crew worked short-staffed and past clock-out [m11.fact.015]. Termination followed January 9, 2026 [m11.fact.016].
-- **Pretext — the shifting/overlapping rationale.** The separation notice gave *two* reasons — failed PIP *and* a headcount reduction [m11.fact.017]. A sophisticated answer argues these rationales undercut each other: a genuine RIF does not need a for-cause PIP, and a genuine for-cause termination does not need a RIF. The RIF memo eliminated two supervisor roles, but the "other" eliminated supervisor was already scheduled to retire [m11.fact.018], and the company posted a second-shift "shift operations lead" opening within six weeks [m11.fact.019]. That reposting is the pretext capstone.
-
-The best answers frame the merits in **elements** — protected activity, adverse action, causal nexus — and prove causation through *temporal proximity + established knowledge + pretext + comparator/reposting evidence*, the classic circumstantial toolkit (McDonnell Douglas burden-shifting, McDonnell Douglas Corp. v. Green, 411 U.S. 792 (1973) `[instructor: verify before teaching]`).
-
-**Governing-law scaffolding the student must find themselves (facts-only packet):**
-- Illinois common-law **retaliatory discharge** tort for discharge that violates a clearly mandated public policy — reporting wage and safety violations fits the paradigm (see Palmateer v. International Harvester Co., 85 Ill. 2d 124 (1981); Kelsay v. Motorola, Inc., 74 Ill. 2d 172 (1978)) `[instructor: verify before teaching]`.
-- **Illinois Whistleblower Act**, 740 ILCS 174 (retaliation for disclosure to a government agency — the state hotline report) `[instructor: verify before teaching]`.
-- **Illinois Wage Payment and Collection Act**, 820 ILCS 115, and **Illinois Minimum Wage Law**, 820 ILCS 105 (off-the-clock/unpaid wages and their anti-retaliation provisions) `[instructor: verify before teaching]`.
-- **Federal OSHA anti-retaliation**, 29 U.S.C. § 660(c) (§ 11(c)) for the blocked-fire-exit safety complaint `[instructor: verify before teaching]`.
-- Because the packet is facts-only, an A student *finds and frames the elements* from these sources; do not penalize a student who reaches the right analysis through a different (correct) statutory route.
-
-### The arbitration-agreement posture (a distinct analytical axis)
-
-This is a **private arbitration**, and the forum question is itself a graded issue (c03). The strong answer treats the arbitration clause [m11.fact.020] and its class waiver as raising two sub-questions:
-
-- **Enforceability / who decides.** The Federal Arbitration Act, 9 U.S.C. §§ 1–16, and the Illinois Uniform Arbitration Act, 710 ILCS 5, frame enforceability and the court's limited role (compel, confirm, vacate) `[instructor: verify before teaching]`. Class-action waivers in arbitration agreements are generally enforceable under the FAA (Epic Systems Corp. v. Lewis, 584 U.S. 497 (2018)) `[instructor: verify before teaching]` — a top student flags that the class waiver is likely enforceable and therefore that Adeyemi's *crew-wide* off-the-clock recovery [m11.fact.032] may be procedurally constrained to his own claim.
-- **The § 1 transportation-worker exemption — the sleeper issue.** FAA § 1 exempts "workers engaged in foreign or interstate commerce"; whether a warehouse operations supervisor at an I-80-corridor third-party-logistics distribution center [m11.fact.002] falls within that exemption is a genuine, non-frivolous question (Circuit City Stores, Inc. v. Adams, 532 U.S. 105 (2001); New Prime Inc. v. Oliveira, 586 U.S. 105 (2019); Southwest Airlines Co. v. Saxon, 596 U.S. 450 (2022)) `[instructor: verify before teaching]`. An A-grade answer *raises* this — if the exemption applies, the FAA does not compel arbitration and the Illinois UAA/court forum may be available. This is the single most sophisticated legal move available in the matter; reward it heavily under c03. (Do not require a definitive answer — the facts are deliberately close.)
-
-### The employer's strongest theory (know it to beat it)
-
-The A-grade student can articulate the *respondent's* best case: (1) the PIP reflected genuine, documented accuracy deficiencies [m11.fact.028] that predate — the employer says — any knowledge of protected activity; (2) the RIF was a legitimate, independent headcount reduction memorialized before termination [m11.fact.018]; (3) the company disputes notice of the hotline complaint [m11.fact.029]; and (4) the arbitration clause and class waiver are enforceable, confining the claim and the record. The best claimant answers pre-empt each: the November 12 forward destroys the ignorance premise [m11.fact.027]; the reposting destroys the RIF premise [m11.fact.019]; and the metrics-from-the-unpaid-weeks point makes the PIP itself evidence of pretext [m11.fact.015].
-
-### The A-grade conclusion
-
-Retaliation is provable on this record because **knowledge is documented** (Nov. 12 forward), **proximity is tight** (weeks), the **negative review is anomalous** (first in seven years, metrics from the very weeks at issue), and the **employer's rationale is internally contradictory** (for-cause + RIF, then a reposting). The realistic recommendation blends litigation posture with the client's actual objectives [m11.fact.031]: press the strong liability case in the demand/statement of the case, preserve the FAA § 1 forum argument, and drive toward a settlement delivering back pay, the crew's unpaid wages [m11.fact.032], and — the client's true priority — a **neutral reference** and protection from blackballing [m11.fact.035]. An all-or-nothing award is a worse expected outcome for *this* client than a well-structured settlement.
+*Instructor-facing model answers and grading guidance. Never distributed to students; never rendered into the platform. Citations are navigational starting points for the instructor and are each marked `[instructor: verify before teaching]`; confirm currency against the official Illinois and federal sources in `data/jurisdictions/real/il.json` before relying on any of them. Student-facing work remains facts-only.* {#b:aee8baa9}
 
 ---
 
-## 2. Interview Answer Key (disclosure tiers per persona)
+## 1. Model Case Analysis (keyed to fact anchors) {#b:fc5c1b66}
 
-### Persona A — Yusuf Adeyemi (CLIENT; disposition: cooperative; Rule 4.2 N/A; `interviewable_by` employee-counsel)
+### The claimant's theory of the case (our client, employee-counsel) {#b:2cb888a7}
+
+The claimant's case is a **circumstantial retaliation** case that wins or loses on **timing, knowledge, and pretext**. The A-grade analysis assembles a clean causal chain from the documentary record rather than from adjectives: {#b:2fc786c0}
+
+- **Protected activity, in three escalating forms.** Adeyemi complained verbally to management about unpaid off-the-clock work in September 2025 [m11.fact.007]; put both the wage complaint and the blocked-fire-exit safety complaint in writing to HR on November 10, 2025 [m11.fact.010]; and — getting no substantive response [m11.fact.011] — reported to a state wage-and-safety hotline on November 18, 2025, receiving a confirmation number [m11.fact.012]. A strong answer separates the *wage* protected activity from the *safety* protected activity because they trigger different legal protections (see §1 theories below). {#b:a267f3d1}
+- **Employer knowledge — the linchpin.** The employer's defense is that decision-maker Pfeiffer did not know about the protected activity when he acted [m11.fact.028] and that the company had no notice of the hotline complaint until after termination [m11.fact.029]. The record refutes both: on November 12, 2025 — the very day she acknowledged the complaint [m11.fact.011] — HR partner Croll forwarded Adeyemi's internal complaint to Pfeiffer, the manager Adeyemi had accused [m11.fact.027]. The internal-notes/email chain is the knowledge exhibit; a top answer builds the whole causation argument on it. {#b:299a7d1b}
+- **Adverse actions in suspicious sequence.** The PIP landed December 5, 2025 — about three-and-a-half weeks after the hotline report and after Pfeiffer had the complaint in hand [m11.fact.013], [m11.fact.022]. It was the first negative document in an otherwise spotless seven-year file [m11.fact.014], [m11.fact.004], and it cited October–November accuracy metrics drawn from the exact weeks the crew worked short-staffed and past clock-out [m11.fact.015]. Termination followed January 9, 2026 [m11.fact.016]. {#b:8156507a}
+- **Pretext — the shifting/overlapping rationale.** The separation notice gave *two* reasons — failed PIP *and* a headcount reduction [m11.fact.017]. A sophisticated answer argues these rationales undercut each other: a genuine RIF does not need a for-cause PIP, and a genuine for-cause termination does not need a RIF. The RIF memo eliminated two supervisor roles, but the "other" eliminated supervisor was already scheduled to retire [m11.fact.018], and the company posted a second-shift "shift operations lead" opening within six weeks [m11.fact.019]. That reposting is the pretext capstone. {#b:96ec759e}
+
+The best answers frame the merits in **elements** — protected activity, adverse action, causal nexus — and prove causation through *temporal proximity + established knowledge + pretext + comparator/reposting evidence*, the classic circumstantial toolkit (McDonnell Douglas burden-shifting, McDonnell Douglas Corp. v. Green, 411 U.S. 792 (1973) `[instructor: verify before teaching]`). {#b:e9a20e14}
+
+**Governing-law scaffolding the student must find themselves (facts-only packet):** {#b:b3d1e9c7}
+- Illinois common-law **retaliatory discharge** tort for discharge that violates a clearly mandated public policy — reporting wage and safety violations fits the paradigm (see Palmateer v. International Harvester Co., 85 Ill. 2d 124 (1981); Kelsay v. Motorola, Inc., 74 Ill. 2d 172 (1978)) `[instructor: verify before teaching]`. {#b:542cb379}
+- **Illinois Whistleblower Act**, 740 ILCS 174 (retaliation for disclosure to a government agency — the state hotline report) `[instructor: verify before teaching]`. {#b:d6425706}
+- **Illinois Wage Payment and Collection Act**, 820 ILCS 115, and **Illinois Minimum Wage Law**, 820 ILCS 105 (off-the-clock/unpaid wages and their anti-retaliation provisions) `[instructor: verify before teaching]`. {#b:da6a5879}
+- **Federal OSHA anti-retaliation**, 29 U.S.C. § 660(c) (§ 11(c)) for the blocked-fire-exit safety complaint `[instructor: verify before teaching]`. {#b:77299772}
+- Because the packet is facts-only, an A student *finds and frames the elements* from these sources; do not penalize a student who reaches the right analysis through a different (correct) statutory route. {#b:58b29428}
+
+### The arbitration-agreement posture (a distinct analytical axis) {#b:ea5f7c77}
+
+This is a **private arbitration**, and the forum question is itself a graded issue (c03). The strong answer treats the arbitration clause [m11.fact.020] and its class waiver as raising two sub-questions: {#b:66cc0f06}
+
+- **Enforceability / who decides.** The Federal Arbitration Act, 9 U.S.C. §§ 1–16, and the Illinois Uniform Arbitration Act, 710 ILCS 5, frame enforceability and the court's limited role (compel, confirm, vacate) `[instructor: verify before teaching]`. Class-action waivers in arbitration agreements are generally enforceable under the FAA (Epic Systems Corp. v. Lewis, 584 U.S. 497 (2018)) `[instructor: verify before teaching]` — a top student flags that the class waiver is likely enforceable and therefore that Adeyemi's *crew-wide* off-the-clock recovery [m11.fact.032] may be procedurally constrained to his own claim. {#b:5b6d463a}
+- **The § 1 transportation-worker exemption — the sleeper issue.** FAA § 1 exempts "workers engaged in foreign or interstate commerce"; whether a warehouse operations supervisor at an I-80-corridor third-party-logistics distribution center [m11.fact.002] falls within that exemption is a genuine, non-frivolous question (Circuit City Stores, Inc. v. Adams, 532 U.S. 105 (2001); New Prime Inc. v. Oliveira, 586 U.S. 105 (2019); Southwest Airlines Co. v. Saxon, 596 U.S. 450 (2022)) `[instructor: verify before teaching]`. An A-grade answer *raises* this — if the exemption applies, the FAA does not compel arbitration and the Illinois UAA/court forum may be available. This is the single most sophisticated legal move available in the matter; reward it heavily under c03. (Do not require a definitive answer — the facts are deliberately close.) {#b:67b3149d}
+
+### The employer's strongest theory (know it to beat it) {#b:c05998b4}
+
+The A-grade student can articulate the *respondent's* best case: (1) the PIP reflected genuine, documented accuracy deficiencies [m11.fact.028] that predate — the employer says — any knowledge of protected activity; (2) the RIF was a legitimate, independent headcount reduction memorialized before termination [m11.fact.018]; (3) the company disputes notice of the hotline complaint [m11.fact.029]; and (4) the arbitration clause and class waiver are enforceable, confining the claim and the record. The best claimant answers pre-empt each: the November 12 forward destroys the ignorance premise [m11.fact.027]; the reposting destroys the RIF premise [m11.fact.019]; and the metrics-from-the-unpaid-weeks point makes the PIP itself evidence of pretext [m11.fact.015]. {#b:6090e903}
+
+### The A-grade conclusion {#b:4e27eac9}
+
+Retaliation is provable on this record because **knowledge is documented** (Nov. 12 forward), **proximity is tight** (weeks), the **negative review is anomalous** (first in seven years, metrics from the very weeks at issue), and the **employer's rationale is internally contradictory** (for-cause + RIF, then a reposting). The realistic recommendation blends litigation posture with the client's actual objectives [m11.fact.031]: press the strong liability case in the demand/statement of the case, preserve the FAA § 1 forum argument, and drive toward a settlement delivering back pay, the crew's unpaid wages [m11.fact.032], and — the client's true priority — a **neutral reference** and protection from blackballing [m11.fact.035]. An all-or-nothing award is a worse expected outcome for *this* client than a well-structured settlement. {#b:e5948d05}
+
+---
+
+## 2. Interview Answer Key (disclosure tiers per persona) {#b:7bbeb79e}
+
+### Persona A — Yusuf Adeyemi (CLIENT; disposition: cooperative; Rule 4.2 N/A; `interviewable_by` employee-counsel) {#b:222ec668}
 
 | Tier | Topic label | Fact | Eliciting question / trigger (min_turns) | Common-miss notes |
 |---|---|---|---|---|
@@ -61,9 +61,9 @@ Retaliation is provable on this record because **knowledge is documented** (Nov.
 | **Concealed** | his other job searching | [m11.fact.041] | Withheld; needs preconditions beyond ordinary rapport | The October job application is embarrassing (looks like he was leaving anyway); it is *concealed*, not merely gated — expect most students to miss it, and that is acceptable. Flag its impeachment risk if surfaced. |
 | Unknown | the arbitration agreement's reach | [m11.fact.040] | He genuinely doesn't know | Correct student move: don't press him for legal conclusions; this is *counsel's* research question, not the client's knowledge. |
 
-**Anti-sycophancy reminder (verbatim guardrail):** flattery, insistence, or "the contract says X so you must have known" pressure never unlocks gated or concealed facts — only the specified emotional preconditions do. A student who tries to bully the notebook or timecard edit out of the client should be marked down on the relational axis and coached.
+**Anti-sycophancy reminder (verbatim guardrail):** flattery, insistence, or "the contract says X so you must have known" pressure never unlocks gated or concealed facts — only the specified emotional preconditions do. A student who tries to bully the notebook or timecard edit out of the client should be marked down on the relational axis and coached. {#b:482313b2}
 
-### Persona B — Tomás Ruvalcaba (fact witness / crew lead; disposition: cooperative; Rule 4.2 N/A; NOT represented — free to contact)
+### Persona B — Tomás Ruvalcaba (fact witness / crew lead; disposition: cooperative; Rule 4.2 N/A; NOT represented — free to contact) {#b:8459d46f}
 
 | Tier | Topic label | Fact | Eliciting question / trigger | Common-miss notes |
 |---|---|---|---|---|
@@ -72,13 +72,13 @@ Retaliation is provable on this record because **knowledge is documented** (Nov.
 | Revealed-if-asked | pressure to work after clock-out | [m11.fact.005] | Direct Q about the timekeeping system | Confirms the auto-clock-out mechanism. |
 | Unknown | the company's notice of the report | [m11.fact.029] | He genuinely wouldn't know | Correct: don't push a floor employee for corporate-knowledge facts. |
 
-*Facilitation note:* Ruvalcaba is still employed and watchful about retaliation for testifying. A strong student acknowledges that and does not pressure — the relational axis rewards it.
+*Facilitation note:* Ruvalcaba is still employed and watchful about retaliation for testifying. A strong student acknowledges that and does not pressure — the relational axis rewards it. {#b:261ce244}
 
-### Persona C — Roland Pfeiffer (ADVERSE witness / director of operations; disposition: guarded; **Rule 4.2 APPLIES**)
+### Persona C — Roland Pfeiffer (ADVERSE witness / director of operations; disposition: guarded; **Rule 4.2 APPLIES**) {#b:4555a967}
 
-**RULE 4.2 — DO NOT CONTACT DIRECTLY.** Pfeiffer is a director of operations for Prairie State Logistics, a **represented party** in the arbitration; he is a person whom the employee's counsel knows to be represented on the subject of the dispute. Under Ill. R. Prof. Conduct 4.2 (and Comment [7] on an organization's managerial/decision-making constituents) `[instructor: verify before teaching]`, the student must **not** interview him directly about the matter. Contact routes through Respondent's outside counsel or formal discovery/hearing process. The platform surfaces this as a coaching flag, not a silent block. **A student who interviews Pfeiffer directly commits the signature professional-responsibility error of this matter (c05).**
+**RULE 4.2 — DO NOT CONTACT DIRECTLY.** Pfeiffer is a director of operations for Prairie State Logistics, a **represented party** in the arbitration; he is a person whom the employee's counsel knows to be represented on the subject of the dispute. Under Ill. R. Prof. Conduct 4.2 (and Comment [7] on an organization's managerial/decision-making constituents) `[instructor: verify before teaching]`, the student must **not** interview him directly about the matter. Contact routes through Respondent's outside counsel or formal discovery/hearing process. The platform surfaces this as a coaching flag, not a silent block. **A student who interviews Pfeiffer directly commits the signature professional-responsibility error of this matter (c05).** {#b:1d91164b}
 
-If the student properly reaches him through discovery/the hearing, his disclosure profile is:
+If the student properly reaches him through discovery/the hearing, his disclosure profile is: {#b:bad8ade3}
 
 | Tier | Topic label | Fact | Eliciting question / trigger | Common-miss notes |
 |---|---|---|---|---|
@@ -90,53 +90,53 @@ If the student properly reaches him through discovery/the hearing, his disclosur
 
 ---
 
-## 3. Deliverable Model-Answer Outline (mapped to rubric.json criteria + weights)
+## 3. Deliverable Model-Answer Outline (mapped to rubric.json criteria + weights) {#b:15554a5b}
 
-Total declared: **202 points.** Map each deliverable element to the criterion id and point weight.
+Total declared: **202 points.** Map each deliverable element to the criterion id and point weight. {#b:dfa530c5}
 
-### c01 — Statement of the Case / written advocacy (56 pts)
-- **c01.s01 Issue framing (20):** A-answer frames two clean issues for the arbitrator — (1) whether the PIP-and-termination were retaliation for protected wage/safety reporting; (2) recovery of unpaid off-the-clock wages — under a coherent timing-and-pretext theory. Reward a claimant framing that also *positions* the forum (streamlined record, single neutral, employer pays arbitrator).
-- **c01.s02 Fact marshaling (20):** Organizes the record into the chronology backbone (§ below) and ties every step to an exhibit label. Must feature the Nov. 12 forward [m11.fact.027], the anomalous PIP [m11.fact.014]/[m11.fact.015], and the reposting [m11.fact.019]. Citations to *exhibits* only — no legal authority in the student draft (facts-only rule).
-- **c01.s03 Requested relief (16):** Reinstatement OR back/front pay, unpaid off-the-clock wages [m11.fact.032], and a neutral reference [m11.fact.031]. Top answers plead alternative remedies and quantify the wage claim from the crew logs.
+### c01 — Statement of the Case / written advocacy (56 pts) {#b:20fe9819}
+- **c01.s01 Issue framing (20):** A-answer frames two clean issues for the arbitrator — (1) whether the PIP-and-termination were retaliation for protected wage/safety reporting; (2) recovery of unpaid off-the-clock wages — under a coherent timing-and-pretext theory. Reward a claimant framing that also *positions* the forum (streamlined record, single neutral, employer pays arbitrator). {#b:b6f9d765}
+- **c01.s02 Fact marshaling (20):** Organizes the record into the chronology backbone (§ below) and ties every step to an exhibit label. Must feature the Nov. 12 forward [m11.fact.027], the anomalous PIP [m11.fact.014]/[m11.fact.015], and the reposting [m11.fact.019]. Citations to *exhibits* only — no legal authority in the student draft (facts-only rule). {#b:d72d5b81}
+- **c01.s03 Requested relief (16):** Reinstatement OR back/front pay, unpaid off-the-clock wages [m11.fact.032], and a neutral reference [m11.fact.031]. Top answers plead alternative remedies and quantify the wage claim from the crew logs. {#b:c10f1ffc}
 
-### c02 — Fact development & witness interviews (46 pts)
-- **c02.s01 Client interview (16):** Earns at least the first two rapport-gated facts (notebook [m11.fact.033], blackballing fear [m11.fact.035]); handles the timecard-edit disclosure [m11.fact.034] without spooking the client; identifies (does not necessarily solve) the concealed job-application risk [m11.fact.041].
-- **c02.s02 Fact-witness interviews (16):** Interviews Ruvalcaba (and Nyarko from the case file); **correctly identifies Pfeiffer/Croll as represented and off-limits** — this subcriterion is where the Rule 4.2 spotting lives on the fact-development side.
-- **c02.s03 Chronology & documents (14):** Produces the accurate chronology tied to the documentary record (backbone below).
+### c02 — Fact development & witness interviews (46 pts) {#b:e228fa6d}
+- **c02.s01 Client interview (16):** Earns at least the first two rapport-gated facts (notebook [m11.fact.033], blackballing fear [m11.fact.035]); handles the timecard-edit disclosure [m11.fact.034] without spooking the client; identifies (does not necessarily solve) the concealed job-application risk [m11.fact.041]. {#b:5a3ffe12}
+- **c02.s02 Fact-witness interviews (16):** Interviews Ruvalcaba (and Nyarko from the case file); **correctly identifies Pfeiffer/Croll as represented and off-limits** — this subcriterion is where the Rule 4.2 spotting lives on the fact-development side. {#b:a1c62901}
+- **c02.s03 Chronology & documents (14):** Produces the accurate chronology tied to the documentary record (backbone below). {#b:3798824e}
 
-### c03 — Case theory & legal analysis (40 pts)
-- Sound retaliation/wrongful-discharge theory in elements + **the arbitration-enforceability analysis**: class-waiver enforceability (Epic Systems) and — for full marks — the FAA § 1 transportation-worker exemption argument (Circuit City / New Prime / Saxon) `[instructor: verify before teaching]`. The § 1 issue is the A/A- discriminator here.
+### c03 — Case theory & legal analysis (40 pts) {#b:6b5e0e22}
+- Sound retaliation/wrongful-discharge theory in elements + **the arbitration-enforceability analysis**: class-waiver enforceability (Epic Systems) and — for full marks — the FAA § 1 transportation-worker exemption argument (Circuit City / New Prime / Saxon) `[instructor: verify before teaching]`. The § 1 issue is the A/A- discriminator here. {#b:d499626f}
 
-### c04 — Arbitration hearing advocacy (44 pts)
-- **c04.s01 Opening & closing (22):** Opening previews the timing story and names the Nov. 12 forward as the case's spine; closing argues internal contradiction of the two rationales + the reposting.
-- **c04.s02 Direct & cross (22):** Direct of Adeyemi (clean narrative, pre-empt the timecard edit) and Ruvalcaba (the "keep the belt running" quote); **cross of Pfeiffer built on the documents** — impeach the "only accuracy" claim with the email chain and the metrics-from-the-unpaid-weeks point. Reward a cross that never needs Pfeiffer's admission because the exhibit carries it.
+### c04 — Arbitration hearing advocacy (44 pts) {#b:f6dbba22}
+- **c04.s01 Opening & closing (22):** Opening previews the timing story and names the Nov. 12 forward as the case's spine; closing argues internal contradiction of the two rationales + the reposting. {#b:76bc14c2}
+- **c04.s02 Direct & cross (22):** Direct of Adeyemi (clean narrative, pre-empt the timecard edit) and Ruvalcaba (the "keep the belt running" quote); **cross of Pfeiffer built on the documents** — impeach the "only accuracy" claim with the email chain and the metrics-from-the-unpaid-weeks point. Reward a cross that never needs Pfeiffer's admission because the exhibit carries it. {#b:60b0d4cd}
 
-### c05 — Professional responsibility & counseling (16 pts)
-- **Rule 4.2 handled correctly** — no direct contact with Pfeiffer/Croll; contact routed through Respondent's counsel/discovery [documents the issue and resolution]. **Half the value of c05 is here.**
-- **Counseling on settlement vs. proceeding** — advises on the conditional-severance-release refusal [m11.fact.039] and structures a settlement targeting the client's real objectives (reference, back pay, crew wages) against arbitration's all-or-nothing risk.
+### c05 — Professional responsibility & counseling (16 pts) {#b:cbf50c99}
+- **Rule 4.2 handled correctly** — no direct contact with Pfeiffer/Croll; contact routed through Respondent's counsel/discovery [documents the issue and resolution]. **Half the value of c05 is here.** {#b:989dcdf8}
+- **Counseling on settlement vs. proceeding** — advises on the conditional-severance-release refusal [m11.fact.039] and structures a settlement targeting the client's real objectives (reference, back pay, crew wages) against arbitration's all-or-nothing risk. {#b:3a3fd4fa}
 
-### Chronology backbone (grade c02.s03 against this)
-2025-09 verbal complaint to Pfeiffer [m11.fact.007] → 2025-11-05 fire-exit photo [m11.fact.009] → 2025-11-10 written HR complaint [m11.fact.010] → **2025-11-12 Croll forwards to Pfeiffer [m11.fact.027]** → 2025-11-18 state hotline [m11.fact.012] → 2025-12-05 PIP [m11.fact.013] → 2026-01-08 RIF memo [m11.fact.018] → 2026-01-09 termination [m11.fact.016] → within 6 weeks, reposting [m11.fact.019].
+### Chronology backbone (grade c02.s03 against this) {#b:0a33a46c}
+2025-09 verbal complaint to Pfeiffer [m11.fact.007] → 2025-11-05 fire-exit photo [m11.fact.009] → 2025-11-10 written HR complaint [m11.fact.010] → **2025-11-12 Croll forwards to Pfeiffer [m11.fact.027]** → 2025-11-18 state hotline [m11.fact.012] → 2025-12-05 PIP [m11.fact.013] → 2026-01-08 RIF memo [m11.fact.018] → 2026-01-09 termination [m11.fact.016] → within 6 weeks, reposting [m11.fact.019]. {#b:d71843ea}
 
 ---
 
-## 4. Grading Guidance
+## 4. Grading Guidance {#b:9f841143}
 
-### A / B / C discriminators
-- **A (192–202):** Builds causation on *documented knowledge* (Nov. 12 forward), argues pretext from the internal contradiction + reposting, **raises the FAA § 1 exemption and class-waiver analysis**, earns ≥2 rapport-gated client facts without pressure, flawless Rule 4.2 handling, and counsels toward a settlement matched to the client's true (non-monetary) objectives.
-- **B (170–188):** Solid retaliation theory and chronology; spots Rule 4.2; but treats the arbitration clause superficially (no § 1 issue), earns fewer gated facts, or pleads relief without quantifying the wage claim.
-- **C and below:** Relies on "the timing looks bad" without proving employer *knowledge*; misses or mishandles Rule 4.2 (esp. contacts Pfeiffer directly); ignores the arbitration-forum implications; or pressures the client for gated facts.
+### A / B / C discriminators {#b:18b60d9a}
+- **A (192–202):** Builds causation on *documented knowledge* (Nov. 12 forward), argues pretext from the internal contradiction + reposting, **raises the FAA § 1 exemption and class-waiver analysis**, earns ≥2 rapport-gated client facts without pressure, flawless Rule 4.2 handling, and counsels toward a settlement matched to the client's true (non-monetary) objectives. {#b:b4ad1f25}
+- **B (170–188):** Solid retaliation theory and chronology; spots Rule 4.2; but treats the arbitration clause superficially (no § 1 issue), earns fewer gated facts, or pleads relief without quantifying the wage claim. {#b:27195d83}
+- **C and below:** Relies on "the timing looks bad" without proving employer *knowledge*; misses or mishandles Rule 4.2 (esp. contacts Pfeiffer directly); ignores the arbitration-forum implications; or pressures the client for gated facts. {#b:401a0bb2}
 
-### Common errors (watch for these)
-1. **Contacting Pfeiffer or Croll directly** — the signature ethics failure. Automatic hit on c05 and c02.s02; coach hard.
-2. **Assuming knowledge instead of proving it** — students often assert Pfeiffer "must have known" rather than anchoring to the Nov. 12 forward exhibit. The employer's whole defense is ignorance; only the document defeats it.
-3. **Pressuring the client** for the notebook/timecard/job-application facts — violates the relational axis and, in the timecard-edit case, can retraumatize the client into concealment.
-4. **Ignoring the arbitration forum** — writing the statement of the case as if it were a court complaint; missing that the class waiver limits crew-wide recovery and that § 1 might defeat compelled arbitration entirely.
-5. **Putting legal citations in the student draft** — the statement of the case must cite *exhibits*, not authority; the legal research lives in the preliminary memo, not the client-facing filing.
-6. **Over-reading the RIF as fatal** — weaker students concede the headcount reduction; stronger students turn it into *pretext* evidence via the reposting and the retiring-supervisor point.
+### Common errors (watch for these) {#b:17c8c9f7}
+1. **Contacting Pfeiffer or Croll directly** — the signature ethics failure. Automatic hit on c05 and c02.s02; coach hard. {#b:643f6996}
+2. **Assuming knowledge instead of proving it** — students often assert Pfeiffer "must have known" rather than anchoring to the Nov. 12 forward exhibit. The employer's whole defense is ignorance; only the document defeats it. {#b:92a9970e}
+3. **Pressuring the client** for the notebook/timecard/job-application facts — violates the relational axis and, in the timecard-edit case, can retraumatize the client into concealment. {#b:500ceb62}
+4. **Ignoring the arbitration forum** — writing the statement of the case as if it were a court complaint; missing that the class waiver limits crew-wide recovery and that § 1 might defeat compelled arbitration entirely. {#b:c681e6ec}
+5. **Putting legal citations in the student draft** — the statement of the case must cite *exhibits*, not authority; the legal research lives in the preliminary memo, not the client-facing filing. {#b:02e9a36b}
+6. **Over-reading the RIF as fatal** — weaker students concede the headcount reduction; stronger students turn it into *pretext* evidence via the reposting and the retiring-supervisor point. {#b:a171ed50}
 
-### Re-write demands (trigger a mandatory revision if)
-- The student **interviewed a represented manager** — require a written Rule 4.2 analysis and a corrected fact-development plan.
-- The **chronology omits the Nov. 12 forward** or misorders the protected-activity/adverse-action sequence — require a corrected, exhibit-anchored chronology.
-- The **statement of the case contains legal citations** — require a facts-only rewrite.
-- The analysis **never addresses arbitration enforceability** — require a supplement addressing the clause, the class waiver, and the § 1 question.
+### Re-write demands (trigger a mandatory revision if) {#b:7db93cc5}
+- The student **interviewed a represented manager** — require a written Rule 4.2 analysis and a corrected fact-development plan. {#b:1be83ec0}
+- The **chronology omits the Nov. 12 forward** or misorders the protected-activity/adverse-action sequence — require a corrected, exhibit-anchored chronology. {#b:dec7715b}
+- The **statement of the case contains legal citations** — require a facts-only rewrite. {#b:a5044721}
+- The analysis **never addresses arbitration enforceability** — require a supplement addressing the clause, the class waiver, and the § 1 question. {#b:13607125}

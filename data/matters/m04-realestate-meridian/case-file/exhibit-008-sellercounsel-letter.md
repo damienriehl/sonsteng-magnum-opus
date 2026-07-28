@@ -1,29 +1,29 @@
-# Exhibit m04.exh.008 — Letter from Seller's Counsel re: Access
+# Exhibit m04.exh.008 — Letter from Seller's Counsel re: Access {#b:25a7d37e}
 
-*Letter from Ruth Renard's attorney to Ellingboe & Ravndal LLP (buyer's counsel), responding to the buyer's inquiries about access. Contains no citations; states the seller's negotiating position.*
+*Letter from Ruth Renard's attorney to Ellingboe & Ravndal LLP (buyer's counsel), responding to the buyer's inquiries about access. Contains no citations; states the seller's negotiating position.* {#b:a574830a}
 
 ---
 
-**[Seller's Counsel Letterhead]**
+**[Seller's Counsel Letterhead]** {#b:d761ffaf}
 
-March 19, 2026
+March 19, 2026 {#b:597e2f6d}
 
 Ellingboe & Ravndal LLP
 310 Riverwalk Plaza, Suite 400
-Norsholm, Meridian 55901
+Norsholm, Meridian 55901 {#b:d6f029f3}
 
-**Re: Sale of 4400 Kestrel Point — Access**
+**Re: Sale of 4400 Kestrel Point — Access** {#b:1d707b9c}
 
-Counsel:
+Counsel: {#b:5197d531}
 
-Thank you for your questions regarding access to the above property. On reflection, and to avoid any misunderstanding, my client wishes to characterize the access accurately. The listing's reference to a "shared driveway easement" was my client's lay description. The more precise characterization is that the Renards have had a longstanding permissive use of the gravel lane crossing the Delahaye parcel, supported by the recorded 1978 instrument, and that the family has used that lane openly and continuously for over forty years.
+Thank you for your questions regarding access to the above property. On reflection, and to avoid any misunderstanding, my client wishes to characterize the access accurately. The listing's reference to a "shared driveway easement" was my client's lay description. The more precise characterization is that the Renards have had a longstanding permissive use of the gravel lane crossing the Delahaye parcel, supported by the recorded 1978 instrument, and that the family has used that lane openly and continuously for over forty years. {#b:0ac69524}
 
-My client is not in a position to warrant the legal sufficiency or permanence of that access, and she will not do so. She is, however, willing to cooperate reasonably with your client's efforts to obtain a recorded easement from Mr. Delahaye, and she has no objection to a purchase-agreement contingency addressed to access, provided the contingency has a defined and reasonable outer date. My client is motivated to close this year and would prefer a negotiated cure over any dispute with her neighbor.
+My client is not in a position to warrant the legal sufficiency or permanence of that access, and she will not do so. She is, however, willing to cooperate reasonably with your client's efforts to obtain a recorded easement from Mr. Delahaye, and she has no objection to a purchase-agreement contingency addressed to access, provided the contingency has a defined and reasonable outer date. My client is motivated to close this year and would prefer a negotiated cure over any dispute with her neighbor. {#b:48615e9e}
 
-We understand your client may also be watching the City's proposed vacation of Verdant Shore Road. My client takes no position on that proceeding and makes no representation about its effect.
+We understand your client may also be watching the City's proposed vacation of Verdant Shore Road. My client takes no position on that proceeding and makes no representation about its effect. {#b:ba458d88}
 
-We look forward to working toward a purchase agreement.
+We look forward to working toward a purchase agreement. {#b:d892e137}
 
-Very truly yours,
+Very truly yours, {#b:71095b52}
 
-/s/ Counsel for Ruth Renard
+/s/ Counsel for Ruth Renard {#b:ff6aabe0}

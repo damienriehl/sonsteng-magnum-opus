@@ -34,13 +34,25 @@ sys.path.insert(0, TOOLS)
 
 import text_norm  # noqa: E402
 import apply_suggestions as ap  # noqa: E402
+import stamp_block_ids as sb  # noqa: E402
+
+BID_RE = sb.BID_RE
+
+
+def _bid_of(span):
+    """The trailing {#b:xxxxxxxx} durable-ID of a source paragraph."""
+    m = BID_RE.search(span)
+    if not m:
+        raise AssertionError("fixture block missing a bid marker: %r" % span[:60])
+    return m.group(1)
 
 
 # --------------------------------------------------------------------------- #
 # Honest map resolver — mirrors build_site's classification for the fixture.
 # --------------------------------------------------------------------------- #
 def _strip_markers(span):
-    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", span)
+    s = BID_RE.sub("", span).strip()
+    s = re.sub(r"\*\*([^*]+)\*\*", r"\1", s)
     s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", s)
     s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
     return s
@@ -72,24 +84,26 @@ def resolve_index(worktree, spec):
             continue
         raw = open(abspath, encoding="utf-8").read()
         if kind == "md":
-            for n, span in enumerate(_paragraphs(raw)):
-                ref = "%s#p%d" % (relpath, n)
+            for span in _paragraphs(raw):
+                ref = "%s#b%s" % (relpath, _bid_of(span))
+                text = BID_RE.sub("", span).strip()
                 index[ref] = {
                     "source_ref": ref, "kind": "prose", "json_path": None,
-                    "original_text": span, "original_hash": _hash(span),
-                    "has_inline_formatting": _has_fmt(span), "context": "",
+                    "original_text": text, "original_hash": _hash(span),
+                    "has_inline_formatting": _has_fmt(text), "context": "",
                 }
         else:  # json
             cfg = entry[2]
             obj = json.loads(raw)
             for field in cfg.get("body_md_fields", []):
                 body = ap.json_get(obj, field)
-                for n, span in enumerate(_paragraphs(body)):
-                    ref = "%s#%s.p%d" % (relpath, field, n)
+                for span in _paragraphs(body):
+                    ref = "%s#%s.b%s" % (relpath, field, _bid_of(span))
+                    text = BID_RE.sub("", span).strip()
                     index[ref] = {
                         "source_ref": ref, "kind": "prose", "json_path": None,
-                        "original_text": span, "original_hash": _hash(span),
-                        "has_inline_formatting": _has_fmt(span), "context": "",
+                        "original_text": text, "original_hash": _hash(span),
+                        "has_inline_formatting": _has_fmt(text), "context": "",
                     }
             for path in cfg.get("scalars", []):
                 val = ap.json_get(obj, path)
@@ -336,9 +350,28 @@ def make_repo():
             "An unrelated UCC matter where the deposit was $8,400 exactly."}},
     }, indent=2) + "\n")
 
+    # Stamp durable block IDs with the REAL stamper — fixtures carry the same
+    # {#b:} markers (and bid-keyed source_refs) as the migrated corpus.
+    existing = set()
+    for entry in SPEC:
+        relpath, kind = entry[0], entry[1]
+        fields = entry[2]["body_md_fields"] if kind == "json" else []
+        sb.stamp_file(os.path.join(root, relpath), fields, existing)
+
     _git(["add", "-A"], root)
     _git(["commit", "-q", "-m", "fixture"], root)
     return root
+
+
+def bref(root, relpath, n, field=None):
+    """The bid-keyed source_ref of the n-th paragraph of a fixture source
+    (ordinals exist only in the tests' heads now — refs carry bids)."""
+    raw = open(os.path.join(root, relpath), encoding="utf-8").read()
+    if field is not None:
+        raw = ap.json_get(json.loads(raw), field)
+    bid = _bid_of(_paragraphs(raw)[n])
+    return ("%s#%s.b%s" % (relpath, field, bid) if field is not None
+            else "%s#b%s" % (relpath, bid))
 
 
 def snapshot_data(root):
@@ -382,7 +415,7 @@ class ApplyEngineTest(unittest.TestCase):
 
     # 1) Clean prose edit -> validator green -> parity holds -> STOPS pre-deploy.
     def test_clean_prose_build_only_stops_before_deploy(self):
-        ref = "%s#sections.intro.body_md.p0" % M03_EX
+        ref = bref(self.root, M03_EX, 0, "sections.intro.body_md")
         self._add_edit("s1", ref, "You represent the plaintiff in a serious negligence action.")
         before = snapshot_data(self.root)
         pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
@@ -399,7 +432,7 @@ class ApplyEngineTest(unittest.TestCase):
 
     # Full round trip (deploy executed via fake) -> merges to canonical.
     def test_clean_prose_full_roundtrip_merges(self):
-        ref = "%s#p0" % M03_MD
+        ref = bref(self.root, M03_MD, 0)
         self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
         pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
         res = self._run("b1", pipe, deploy_plan_only=False)
@@ -413,7 +446,7 @@ class ApplyEngineTest(unittest.TestCase):
 
     # 2) Money edit that breaks reconciliation (validator RED) -> accepted_blocked.
     def test_money_edit_validator_red_blocks_and_discards(self):
-        ref = "%s#sections.intro.body_md.p2" % M03_EX
+        ref = bref(self.root, M03_EX, 2, "sections.intro.body_md")
         self._add_edit("s1", ref, "The demand letter seeks $15,000 in special damages.")
         before = snapshot_data(self.root)
         pipe = FakePipeline(SPEC, validate_ok=False)  # reconciliation broke
@@ -432,7 +465,7 @@ class ApplyEngineTest(unittest.TestCase):
     # 3) Formatted block whose SPAN TEXT is edited away -> needs_human (WP7 keeps
     #    the conservative fallback: the bold span 'bold emphasis' disappears).
     def test_formatted_block_needs_human(self):
-        ref = "%s#p0" % M03_FMT
+        ref = bref(self.root, M03_FMT, 0)
         self._add_edit("s1", ref, "This paragraph now says something else entirely.")
         before = snapshot_data(self.root)
         pipe = FakePipeline(SPEC)
@@ -446,7 +479,7 @@ class ApplyEngineTest(unittest.TestCase):
     # 3b) WP7: formatted block edited AROUND an unchanged span -> auto-applies,
     #     preserving the raw **markup** exactly, and merges to canonical.
     def test_formatted_block_span_splice_applies(self):
-        ref = "%s#p0" % M03_FMT  # "...has **bold emphasis** that plain text cannot..."
+        ref = bref(self.root, M03_FMT, 0)  # "...has **bold emphasis** that plain text cannot..."
         # plain edit keeps the span text 'bold emphasis' verbatim, changes around it
         self._add_edit(
             "s1", ref,
@@ -466,7 +499,7 @@ class ApplyEngineTest(unittest.TestCase):
     # 3c) WP7: a formatted-block edit that changes the SPAN's own text -> needs_human,
     #     canonical untouched (never silently corrupts the markup).
     def test_formatted_block_span_text_edit_rejected(self):
-        ref = "%s#p0" % M03_FMT
+        ref = bref(self.root, M03_FMT, 0)
         # 'bold emphasis' -> 'strong emphasis' edits the span interior
         self._add_edit(
             "s1", ref,
@@ -481,12 +514,14 @@ class ApplyEngineTest(unittest.TestCase):
 
     # 4) Drift: source changed after the suggestion was made -> drift, not patched.
     def test_drift_when_source_changed_post_suggest(self):
-        ref = "%s#p0" % M03_MD
+        ref = bref(self.root, M03_MD, 0)
         self._add_edit("s1", ref, "New intake summary.")  # captures OLD hash
-        # source changes post-suggest (a legitimate committed edit) ...
-        _write(self.root, M03_MD,
-               "Intake notes for the tort matter (amended by staff).\n\n"
-               "Client confirmed the retainer of $8,400 was paid in full.\n")
+        # source changes post-suggest (a legitimate committed edit — the bid
+        # marker survives; only the text changed, so the hash no longer matches)
+        cur = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
+        _write(self.root, M03_MD, cur.replace(
+            "Intake notes for the tort matter.",
+            "Intake notes for the tort matter (amended by staff)."))
         _git(["commit", "-aqm", "amend source"], self.root)
         before = snapshot_data(self.root)
         pipe = FakePipeline(SPEC)
@@ -499,26 +534,27 @@ class ApplyEngineTest(unittest.TestCase):
 
     # 5) Value-sync: companion for in-matter duplicate, NOT the same value in m07.
     def test_value_sync_scope_is_matter_bounded(self):
-        ref = "%s#sections.intro.body_md.p1" % M03_EX  # "$8,400 total"
+        ref = bref(self.root, M03_EX, 1, "sections.intro.body_md")  # "$8,400 total"
         self._add_edit("s1", ref, "The retainer for this matter is $9,100 total, due on signing.")
         pipe = FakePipeline(SPEC, validate_ok=True)
         res = self._run("b1", pipe, deploy_plan_only=True)
 
         proposed_refs = [c["source_ref"] for c in res.companions]
         # in-matter duplicate ($8,400 in m03 case-file .md) IS proposed ...
-        self.assertIn("%s#p1" % M03_MD, proposed_refs)
+        m03md_p1 = bref(self.root, M03_MD, 1)
+        self.assertIn(m03md_p1, proposed_refs)
         # ... the SAME value in another matter (m07) is NOT.
-        self.assertNotIn("%s#sections.intro.body_md.p0" % M07_EX, proposed_refs)
+        self.assertNotIn(bref(self.root, M07_EX, 0, "sections.intro.body_md"), proposed_refs)
         # companions are pending, never applied.
         for c in res.companions:
             self.assertEqual(self.store.rows[c["id"]]["status"], "pending")
         # the m03 companion carries the swapped value for Damien's review.
-        m03comp = next(c for c in res.companions if c["source_ref"] == "%s#p1" % M03_MD)
+        m03comp = next(c for c in res.companions if c["source_ref"] == m03md_p1)
         self.assertIn("$9,100", m03comp["new_text"])
 
     # 6) Parity mismatch aborts + rollback, canonical untouched.
     def test_parity_mismatch_aborts(self):
-        ref = "%s#p0" % M03_MD
+        ref = bref(self.root, M03_MD, 0)
         self._add_edit("s1", ref, "Edited intake notes.")
         before = snapshot_data(self.root)
         pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=False)
@@ -532,7 +568,7 @@ class ApplyEngineTest(unittest.TestCase):
     # 7) Crash-recovery reconcile re-queues an in_flight orphan.
     def test_reconcile_requeues_in_flight_orphan(self):
         # an orphaned in_flight from a crashed prior run (expired lease, pre-merged batch)
-        self.store.add(id="orphan", source_ref="%s#p0" % M03_MD, new_text="x",
+        self.store.add(id="orphan", source_ref=bref(self.root, M03_MD, 0), new_text="x",
                        status="in_flight", apply_batch_id="dead-batch",
                        lease_expires_at=-1)
         self.store.batches["dead-batch"] = {"phase": "patched", "lease_expires_at": -1}
@@ -558,8 +594,8 @@ class ApplyEngineTest(unittest.TestCase):
 
     # 8) Group atomicity: one member drifts -> whole group drifts, none applied.
     def test_group_atomic_drift(self):
-        r1 = "%s#p0" % M03_MD
-        r2 = "%s#sections.intro.body_md.p0" % M03_EX
+        r1 = bref(self.root, M03_MD, 0)
+        r2 = bref(self.root, M03_EX, 0, "sections.intro.body_md")
         self._add_edit("g1", r1, "Edited notes.", group_id="grp")
         self._add_edit("g2", r2, "Edited intro.", group_id="grp")
         # break the hash of only ONE member post-suggest
@@ -577,7 +613,7 @@ class ApplyEngineTest(unittest.TestCase):
         for bad in ("../etc/passwd", "/etc/passwd", "data/../../x", "site/index.html"):
             with self.assertRaises(ap.ApplyError):
                 ap.safe_data_path(self.root, bad)
-        ok = ap.safe_data_path(self.root, M03_MD + "#p0")
+        ok = ap.safe_data_path(self.root, M03_MD + "#b00000000")
         self.assertTrue(ok.startswith(os.path.join(self.root, "data")))
 
     # json_scalar edits are parse->set->serialize (valid JSON out, never spliced).
@@ -637,7 +673,7 @@ class HttpRpcRoutingTest(unittest.TestCase):
         import re as _re
         pat = _re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
         long_ref = ("data/matters/m01-arbitration-meridian/case-file/"
-                    "statement-rennick.md#sections.deep.body_md.p12")
+                    "statement-rennick.md#sections.deep.body_md.b3fa9c21e")
         cid = ap._companion_id("Gerald Rennick", long_ref)
         self.assertTrue(pat.match(cid), "companion id %r must match the uuid ceiling" % cid)
         # deterministic + unique per target_ref

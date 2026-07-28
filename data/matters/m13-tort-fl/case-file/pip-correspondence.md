@@ -1,8 +1,8 @@
-# Exhibit m13.exh.005 — PIP / No-Fault Insurance Correspondence Log
+# Exhibit m13.exh.005 — PIP / No-Fault Insurance Correspondence Log {#b:80916d97}
 
 **Insured/Claimant:** Sofia Reyes
 **Coverage:** Personal Injury Protection (PIP) under claimant's own auto policy
-**PIP limit:** $10,000
+**PIP limit:** $10,000 {#b:d9b04008}
 
 | Date | Event |
 |---|---|
@@ -13,10 +13,10 @@
 | 2025-05-02 | PIP benefits exhausted at the $10,000 limit; a fraction of the ~$42,000 in medical bills is covered. Remaining medical expenses, wage loss beyond the PIP cap, and all non-economic damages fall outside PIP. |
 | 2025-05-20 | Claimant notified that further medical expenses will not be paid under PIP; balance of bills outstanding to providers. |
 
-## Notes for the file
-- Under Florida's no-fault framework, the claimant's own PIP coverage is the first payer for medical and a portion of lost wages, up to the policy limit, regardless of fault.
-- PIP was exhausted quickly given the size of the medical bills, leaving the great majority of medical expenses and all pain-and-suffering damages uncovered by PIP.
-- Whether the claimant may pursue the at-fault driver directly for the remaining damages depends on whether her injury clears the statutory injury threshold — a legal question for counsel to research and analyze.
-- The initial delay in processing the wage-loss component added to the claimant's financial stress during her time off work.
+## Notes for the file {#b:127ed053}
+- Under Florida's no-fault framework, the claimant's own PIP coverage is the first payer for medical and a portion of lost wages, up to the policy limit, regardless of fault. {#b:94ad9c23}
+- PIP was exhausted quickly given the size of the medical bills, leaving the great majority of medical expenses and all pain-and-suffering damages uncovered by PIP. {#b:48d94b46}
+- Whether the claimant may pursue the at-fault driver directly for the remaining damages depends on whether her injury clears the statutory injury threshold — a legal question for counsel to research and analyze. {#b:f550e814}
+- The initial delay in processing the wage-loss component added to the claimant's financial stress during her time off work. {#b:a8544ff1}
 
-*Correspondence log maintained by counsel.*
+*Correspondence log maintained by counsel.* {#b:92139025}

@@ -1,19 +1,19 @@
-# Treating-Physician Narrative — Dr. Ifeoma Ekwueme, Physiatry
+# Treating-Physician Narrative — Dr. Ifeoma Ekwueme, Physiatry {#b:86de47d0}
 
-*Treating provider's summary report. Prepared for the file at counsel's request; clinical narrative only.*
+*Treating provider's summary report. Prepared for the file at counsel's request; clinical narrative only.* {#b:3459f2b5}
 
-I am Dr. Ifeoma Ekwueme, a physician board-certified in physical medicine and rehabilitation. I first evaluated Lorraine Petimeyer on February 12, 2025, on referral from an urgent-care clinic she had visited three days earlier.
+I am Dr. Ifeoma Ekwueme, a physician board-certified in physical medicine and rehabilitation. I first evaluated Lorraine Petimeyer on February 12, 2025, on referral from an urgent-care clinic she had visited three days earlier. {#b:2617ee23}
 
-**History.** Ms. Petimeyer reported that on February 7, 2025, she was rear-ended while stopped at a traffic signal. She described immediate feeling of being "jolted," with neck and right-shoulder stiffness and pain developing by the following morning and worsening over the weekend. She reported difficulty turning her head, reaching overhead, and performing the reaching and lifting her bus-driving work requires.
+**History.** Ms. Petimeyer reported that on February 7, 2025, she was rear-ended while stopped at a traffic signal. She described immediate feeling of being "jolted," with neck and right-shoulder stiffness and pain developing by the following morning and worsening over the weekend. She reported difficulty turning her head, reaching overhead, and performing the reaching and lifting her bus-driving work requires. {#b:b820ca8e}
 
-**Examination.** On initial examination I found reduced and painful range of motion in the cervical spine, tenderness in the paracervical and right trapezius musculature, and a positive impingement sign in the right shoulder. Neurologic examination of the upper extremities was intact. Imaging showed no fracture and no acute disc herniation; findings were consistent with soft-tissue injury and shoulder impingement, with some age-expected degenerative change also present.
+**Examination.** On initial examination I found reduced and painful range of motion in the cervical spine, tenderness in the paracervical and right trapezius musculature, and a positive impingement sign in the right shoulder. Neurologic examination of the upper extremities was intact. Imaging showed no fracture and no acute disc herniation; findings were consistent with soft-tissue injury and shoulder impingement, with some age-expected degenerative change also present. {#b:2990c98b}
 
-**Diagnosis.** Cervical strain and right-shoulder impingement syndrome.
+**Diagnosis.** Cervical strain and right-shoulder impingement syndrome. {#b:7e659db6}
 
-**Course of treatment.** I prescribed a course of physical therapy. Ms. Petimeyer attended approximately twenty therapy sessions between late February and July 2025, with home exercises. She made substantial functional gains over that period. At her most recent visit she retained intermittent neck stiffness and right-shoulder pain provoked by rapid head rotation and overhead reaching.
+**Course of treatment.** I prescribed a course of physical therapy. Ms. Petimeyer attended approximately twenty therapy sessions between late February and July 2025, with home exercises. She made substantial functional gains over that period. At her most recent visit she retained intermittent neck stiffness and right-shoulder pain provoked by rapid head rotation and overhead reaching. {#b:606d2ef2}
 
-**Prior condition and causation.** Ms. Petimeyer disclosed a history of right-shoulder rotator-cuff tendinitis treated in 2019, which had largely resolved. In my opinion, based on the mechanism of injury, the timing of symptom onset, and the examination findings, the February 2025 collision aggravated a previously quiescent shoulder condition and produced a new, symptomatic soft-tissue injury of the neck and shoulder. The degenerative changes on imaging are age-expected and were, in my judgment, asymptomatic before this collision.
+**Prior condition and causation.** Ms. Petimeyer disclosed a history of right-shoulder rotator-cuff tendinitis treated in 2019, which had largely resolved. In my opinion, based on the mechanism of injury, the timing of symptom onset, and the examination findings, the February 2025 collision aggravated a previously quiescent shoulder condition and produced a new, symptomatic soft-tissue injury of the neck and shoulder. The degenerative changes on imaging are age-expected and were, in my judgment, asymptomatic before this collision. {#b:54ba8b7c}
 
-I understand another physician retained by the opposing side has examined Ms. Petimeyer and reached a different conclusion regarding causation. My opinions are based on my own examinations and her course of care under my direction.
+I understand another physician retained by the opposing side has examined Ms. Petimeyer and reached a different conclusion regarding causation. My opinions are based on my own examinations and her course of care under my direction. {#b:c1b5c17a}
 
-*Ifeoma Ekwueme, M.D.*
+*Ifeoma Ekwueme, M.D.* {#b:ef01282d}

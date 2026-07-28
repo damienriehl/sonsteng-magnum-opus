@@ -1,10 +1,10 @@
-# Exhibit m09.exh.006 — Income & Benefits Summary (Both Parties)
+# Exhibit m09.exh.006 — Income & Benefits Summary (Both Parties) {#b:7dd98cad}
 
-*A factual side-by-side compiled from pay records, tax returns, and the parties' financial affidavits. Supporting documents (pay stubs, W-2s, returns) are on file.*
+*A factual side-by-side compiled from pay records, tax returns, and the parties' financial affidavits. Supporting documents (pay stubs, W-2s, returns) are on file.* {#b:4386d492}
 
 ---
 
-## Petitioner — Renata Sitko
+## Petitioner — Renata Sitko {#b:961331ee}
 
 | Item | Detail |
 |---|---|
@@ -15,7 +15,7 @@
 | Benefits | Employer health, dental, and vision covering the whole family; retirement plan with match |
 | Notes | Income is steady and predictable; benefits currently cover the children |
 
-## Respondent — Harlan Aldergrove
+## Respondent — Harlan Aldergrove {#b:4da2a2df}
 
 | Item | Detail |
 |---|---|
@@ -25,7 +25,7 @@
 | Benefits | Self-purchased individual health coverage; no employer retirement plan |
 | Notes | Income is variable month-to-month; strongest earning months coincide with the children's school year |
 
-## Comparative Snapshot
+## Comparative Snapshot {#b:61a3427d}
 
 | | Renata | Harlan |
 |---|---|---|
@@ -36,7 +36,7 @@
 
 ---
 
-**Points flagged for the file:**
-- Renata's higher, steadier income is the basis for Respondent's spousal-maintenance request.
-- Respondent's greater weekday availability in the off-season is the basis for his equal-parenting-time request.
-- Childcare cost, benefit coverage, and the parenting schedule are interdependent and will drive both child support and any maintenance determination.
+**Points flagged for the file:** {#b:a3ce408f}
+- Renata's higher, steadier income is the basis for Respondent's spousal-maintenance request. {#b:4b1b752d}
+- Respondent's greater weekday availability in the off-season is the basis for his equal-parenting-time request. {#b:a1794371}
+- Childcare cost, benefit coverage, and the parenting schedule are interdependent and will drive both child support and any maintenance determination. {#b:e79140be}

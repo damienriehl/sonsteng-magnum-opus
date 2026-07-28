@@ -1,8 +1,8 @@
-# VoltHaus Inventory & Recovery Record (EXHIBIT m08.exh.004)
+# VoltHaus Inventory & Recovery Record (EXHIBIT m08.exh.004) {#b:b3bc1cb5}
 
 **Store:** VoltHaus Electronics #218, Riverside Commons, Norsholm
 **Record Date:** March 15, 2026
-**Prepared By:** Store Operations Manager (on file)
+**Prepared By:** Store Operations Manager (on file) {#b:a1da071d}
 
 ---
 
@@ -19,6 +19,6 @@
 | Net merchandise loss after recovery | $0.00 |
 | Claimed restitution | To be determined; store has not yet submitted a fixed restitution figure |
 
-**NOTES:** The console recovered outside the doors matches the single unit that reconciliation showed missing from the gaming pallet after the incident. Because the unit was recovered intact and returned to stock, the store's actual out-of-pocket loss is limited to the scuffed retail box, which the store values as negligible. Any restitution demand and any characterization of the theft value for charging purposes remain open questions for the parties.
+**NOTES:** The console recovered outside the doors matches the single unit that reconciliation showed missing from the gaming pallet after the incident. Because the unit was recovered intact and returned to stock, the store's actual out-of-pocket loss is limited to the scuffed retail box, which the store values as negligible. Any restitution demand and any characterization of the theft value for charging purposes remain open questions for the parties. {#b:3d15ea9c}
 
-*This record is provided as a business record of the store's inventory reconciliation for the date in question.*
+*This record is provided as a business record of the store's inventory reconciliation for the date in question.* {#b:7ac5fae0}

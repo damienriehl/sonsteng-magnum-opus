@@ -189,17 +189,44 @@ def pct(n, digits=1):
 #     every other candidate (computed prose: KPI captions, section intros, TOCs)
 #     is read-only and simply absent from the map.
 #
-# SOURCE_REF GRAMMAR (stable across regenerates):
+# SOURCE_REF GRAMMAR (stable across regenerates AND across structural edits):
 #   "<repo-relpath>#<locator>"
-#     - prose from a .md file          -> locator = "p{n}"
-#         e.g. "data/curriculum/m1.md#p12"
-#     - prose from a JSON string field -> locator = "<json.path>.p{n}"
-#         e.g. "data/matters/m03-.../exercise.json#sections.intro.body_md.p3"
+#     - prose from a .md file          -> locator = "b{hex8}"
+#         e.g. "data/curriculum/m1.md#b3fa9c21e"
+#     - prose from a JSON string field -> locator = "<json.path>.b{hex8}"
+#         e.g. "data/matters/m03-.../exercise.json#sections.intro.body_md.b3fa9c21e"
 #     - json_scalar (a single field)   -> locator = "<json.path>"  (== json_path)
 #         e.g. "data/matters/m03-.../matter.json#caption"
-#   {n} is the 0-based ordinal of the editable block WITHIN that source render,
-#   so it is stable as long as the source's block order is stable.
+#   b{hex8} is the block's DURABLE ID, read from a trailing {#b:xxxxxxxx} marker
+#   stamped in the source itself (tools/stamp_block_ids.py). It survives insert,
+#   delete and reorder — identity is the marker, never the position. A prose
+#   block WITHOUT a marker still renders but is absent from the map (read-only)
+#   and reported in EDMAP.unmarked / build/editor-unmarked.generated.json.
 _CANDIDATE_TAGS = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
+
+# The durable-block-ID marker: trailing "{#b:xxxxxxxx}" (8 lowercase hex chars)
+# on the block's last source line. Stripped from every rendering; minted only by
+# tools/stamp_block_ids.py (migration/backfill) or the apply engine (inserts).
+_BID_MARKER_RE = re.compile(r"\s*\{#b:([0-9a-f]{8})\}\s*$")
+
+# Anywhere-in-text form, for scrubbing markers out of VERBATIM exports (the
+# student-safe data catalog copies raw source files — markers are editorial
+# identity, never content, and must not ship).
+_BID_MARKER_ANY_RE = re.compile(r" ?\{#b:[0-9a-f]{8}\}")
+
+
+def strip_bid_markers(text):
+    """Remove every {#b:} durable-ID marker from a text blob (verbatim exports)."""
+    return _BID_MARKER_ANY_RE.sub("", text)
+
+
+def copy_student_safe(src, dst):
+    """Copy a student-safe spine file into the public catalog, scrubbing
+    durable-ID markers. Byte-identical to shutil.copyfile otherwise."""
+    with open(src, "r", encoding="utf-8") as fh:
+        content = fh.read()
+    with open(dst, "w", encoding="utf-8") as fh:
+        fh.write(strip_bid_markers(content))
 
 
 class _EditorMap:
@@ -209,10 +236,12 @@ class _EditorMap:
     def __init__(self):
         self.enabled = False
         self.sources = {}   # source_ref -> metadata dict
+        self.unmarked = []  # src bases of blocks lacking a {#b:} marker (read-only)
 
     def reset(self):
         self.enabled = False
         self.sources = {}
+        self.unmarked = []
 
     def register(self, source_ref, kind, original_text, has_inline_formatting,
                  context, json_path=None):
@@ -278,11 +307,23 @@ def _inline(text):
     text = _ITALIC.sub(lambda m: "<em>" + m.group(1) + "</em>", text)
     return text
 
-def markdown(md, src=None):
+def markdown(md, src=None, spans=None):
     """Render markdown -> HTML. When `src` is a source_ref base AND the editor
     map is recording, each editable block (paragraph, heading, list item,
     blockquote) is annotated with a temporary data-ebsrc attribute and its
-    SOURCE span is registered in EDMAP (see the editor-map recorder above)."""
+    SOURCE span is registered in EDMAP (see the editor-map recorder above).
+
+    Every block's trailing {#b:xxxxxxxx} marker (see _BID_MARKER_RE) is
+    STRIPPED before rendering and registration — the marker is the block's
+    durable identity, never content. A recording render keys the source_ref by
+    that bid; a block with no marker renders read-only (no data-ebsrc, not
+    registered) and is counted in EDMAP.unmarked.
+
+    `spans`, when given, is a list this render appends one record per emitted
+    block to: {"tag", "end_line" (0-based index of the block's LAST source
+    line), "bid" (or None), "raw" (marker-stripped source span)}. It is how
+    tools/stamp_block_ids.py finds exactly the blocks this renderer emits,
+    with zero drift between the stamper's parse and this one."""
     lines = md.replace("\r\n", "\n").split("\n")
     out = []
     i = 0
@@ -291,25 +332,39 @@ def markdown(md, src=None):
     rec = EDMAP.enabled and src is not None
     blk = [0]        # 0-based editable-block ordinal within this render
     ctx = [""]       # nearest preceding heading text -> block context
+    end_line = [0]   # 0-based source-line index of the current block's last line
 
-    def _emit(tag, inner_html, source_span, attrs=""):
+    def _emit(tag, source_span, attrs=""):
         """Emit one editable block, annotating + registering it when recording."""
+        m = _BID_MARKER_RE.search(source_span or "")
+        bid = m.group(1) if m else None
+        clean = _BID_MARKER_RE.sub("", source_span or "")
+        inner_html = _inline(clean)
         open_attrs = (" " + attrs) if attrs else ""
+        if spans is not None:
+            spans.append({"tag": tag, "end_line": end_line[0],
+                          "bid": bid, "raw": clean})
         if not rec:
             return "<{t}{a}>{i}</{t}>".format(t=tag, a=open_attrs, i=inner_html)
-        nblk = blk[0]
         blk[0] += 1
+        if bid is None:
+            # Unmarked block: renders, but is read-only and absent from the map.
+            EDMAP.unmarked.append(src)
+            return "<{t}{a}>{i}</{t}>".format(t=tag, a=open_attrs, i=inner_html)
         sep = "." if "#" in src else "#"
-        source_ref = "{s}{sep}p{n}".format(s=src, sep=sep, n=nblk)
-        EDMAP.register(source_ref, "prose", source_span,
-                       _has_inline_formatting(source_span), ctx[0])
+        source_ref = "{s}{sep}b{b}".format(s=src, sep=sep, b=bid)
+        EDMAP.register(source_ref, "prose", clean,
+                       _has_inline_formatting(clean), ctx[0])
         return "<{t}{a} data-ebsrc=\"{r}\">{i}</{t}>".format(
             t=tag, a=open_attrs, r=esc(source_ref), i=inner_html)
+
+    para_end = [0]   # source-line index of the last line buffered into `para`
 
     def flush_para(buf):
         if buf:
             raw = " ".join(buf).strip()
-            out.append(_emit("p", _inline(raw), raw))
+            end_line[0] = para_end[0]
+            out.append(_emit("p", raw))
             buf.clear()
 
     para = []
@@ -336,8 +391,10 @@ def markdown(md, src=None):
             flush_para(para)
             level = min(len(h.group(1)) + 1, 6)  # demote so page h1 stays unique
             htext = h.group(2).strip()
-            out.append(_emit("h%d" % level, _inline(htext), htext))
-            ctx[0] = htext  # this heading becomes the context for following blocks
+            end_line[0] = i
+            out.append(_emit("h%d" % level, htext))
+            # this heading becomes the context for following blocks (marker-free)
+            ctx[0] = _BID_MARKER_RE.sub("", htext)
             i += 1
             continue
 
@@ -371,7 +428,8 @@ def markdown(md, src=None):
                 buf.append(lines[i].strip()[1:].strip())
                 i += 1
             qraw = " ".join(buf)
-            out.append(_emit("blockquote", _inline(qraw), qraw, attrs='class="md-quote"'))
+            end_line[0] = i - 1
+            out.append(_emit("blockquote", qraw, attrs='class="md-quote"'))
             continue
 
         # unordered list
@@ -380,7 +438,8 @@ def markdown(md, src=None):
             items = []
             while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
                 itemraw = re.sub(r"^[-*+]\s+", "", lines[i].strip())
-                items.append(_emit("li", _inline(itemraw), itemraw))
+                end_line[0] = i
+                items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ul>" + "".join(items) + "</ul>")
             continue
@@ -391,13 +450,15 @@ def markdown(md, src=None):
             items = []
             while i < n and re.match(r"^\d+\.\s+", lines[i].strip()):
                 itemraw = re.sub(r"^\d+\.\s+", "", lines[i].strip())
-                items.append(_emit("li", _inline(itemraw), itemraw))
+                end_line[0] = i
+                items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ol>" + "".join(items) + "</ol>")
             continue
 
         # paragraph text
         para.append(stripped)
+        para_end[0] = i
         i += 1
 
     flush_para(para)
@@ -2657,11 +2718,11 @@ def build_data_catalog(corpus):
     # copy student-safe spine files under site/platform/data/
     os.makedirs(os.path.join(OUT, "data", "taxonomy"), exist_ok=True)
     for f in ("skills.json", "tasks.json", "folio-crosswalk.json"):
-        shutil.copyfile(os.path.join(DATA, "taxonomy", f), os.path.join(OUT, "data", "taxonomy", f))
-    shutil.copyfile(os.path.join(DATA, "firm", "firm.json"), os.path.join(OUT, "data", "firm.json"))
+        copy_student_safe(os.path.join(DATA, "taxonomy", f), os.path.join(OUT, "data", "taxonomy", f))
+    copy_student_safe(os.path.join(DATA, "firm", "firm.json"), os.path.join(OUT, "data", "firm.json"))
     api_src = os.path.join(ROOT, "app", "worker", "API-CONTRACTS.md")
     if os.path.exists(api_src):
-        shutil.copyfile(api_src, os.path.join(OUT, "data", "api-contracts.md"))
+        copy_student_safe(api_src, os.path.join(OUT, "data", "api-contracts.md"))
 
     matters_cat = []
     for m in corpus["matters"]:
@@ -2669,12 +2730,12 @@ def build_data_catalog(corpus):
         mdir = os.path.join(OUT, "data", "matters", slug)
         os.makedirs(mdir, exist_ok=True)
         # student-safe copies
-        shutil.copyfile(os.path.join(m["_dir"], "matter.json"), os.path.join(mdir, "matter.json"))
+        copy_student_safe(os.path.join(m["_dir"], "matter.json"), os.path.join(mdir, "matter.json"))
         if m.get("_exercise") is not None:
-            shutil.copyfile(os.path.join(m["_dir"], "exercise", "exercise.json"),
-                            os.path.join(mdir, "exercise.json"))
+            copy_student_safe(os.path.join(m["_dir"], "exercise", "exercise.json"),
+                              os.path.join(mdir, "exercise.json"))
         if m.get("_rubric") is not None:
-            shutil.copyfile(os.path.join(m["_dir"], "rubric.json"), os.path.join(mdir, "rubric.json"))
+            copy_student_safe(os.path.join(m["_dir"], "rubric.json"), os.path.join(mdir, "rubric.json"))
 
         personas_cat = []
         for p in m["_personas"].values():
@@ -3092,6 +3153,27 @@ def main(argv):
     write_build_stamp(SPINE_BUILD_ID)
     ed_pages, ed_total = build_editor_map(SPINE_BUILD_ID)
 
+    # ---- unmarked-block report (durable-ID coverage) ----
+    # A prose block without a {#b:} marker renders read-only and is absent from
+    # the map. That is safe, never fatal — but it is a coverage gap the stamper
+    # (tools/stamp_block_ids.py) closes, so report it loudly and durably.
+    unmarked_path = os.path.join(BUILD_DIR, "editor-unmarked.generated.json")
+    if EDMAP.unmarked:
+        counts = {}
+        for s in EDMAP.unmarked:
+            counts[s] = counts.get(s, 0) + 1
+        with open(unmarked_path, "w", encoding="utf-8") as fh:
+            json.dump({"note": ("Prose blocks lacking a {#b:} durable-ID marker "
+                                "— read-only until stamped. Fix: python3 "
+                                "tools/stamp_block_ids.py"),
+                       "unmarked": counts}, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        print("WARNING: %d prose block(s) lack a {#b:} marker (read-only) — "
+              "see build/editor-unmarked.generated.json; run tools/stamp_block_ids.py"
+              % len(EDMAP.unmarked))
+    elif os.path.exists(unmarked_path):
+        os.remove(unmarked_path)
+
     # ---- page budget report ----
     all_pages = []
     for pg in glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True):
@@ -3143,6 +3225,27 @@ def main(argv):
                 print("  LEAK: " + l)
         else:
             print("no instructor-side content in any generated page.")
+
+        # Durable-ID markers are editorial identity, never content: nothing
+        # under site/ may carry one (pages render them away; verbatim catalog
+        # copies are scrubbed by copy_student_safe).
+        marker_leaks = []
+        for path in glob.glob(os.path.join(OUT, "**", "*"), recursive=True):
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    if "{#b:" in fh.read():
+                        marker_leaks.append(os.path.relpath(path, OUT))
+            except OSError:
+                marker_leaks.append("unreadable: " + os.path.relpath(path, OUT))
+        print("== marker-leak sweep ==")
+        if marker_leaks:
+            for l in marker_leaks:
+                print("  LEAK: {#b:} marker in " + l)
+        else:
+            print("no durable-ID markers in any shipped file.")
+        leaks = leaks + marker_leaks
 
         # History-leak sweep — the editor-gated redline History output (redlines of
         # canonical sources expose instructor-only material) must NEVER reach the
