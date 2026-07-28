@@ -84,6 +84,7 @@ def _build_fresh_map():
         bs.build_matter_library(corpus)
         bs.build_packet_pages(corpus)
         bs.build_facts_pages(corpus)
+        bs.build_law_pages(corpus)
         bs.build_firm_dashboard(corpus)
         bs.build_third_party()
         bs.build_data_catalog(corpus)
