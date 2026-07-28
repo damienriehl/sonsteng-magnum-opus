@@ -234,3 +234,84 @@ export function projectPendingItems(items, previewMax = 200) {
 }
 
 export { EDITOR_MAP, INSTRUCTOR_BUNDLE };
+
+// ---- U6: the scope ladder — deterministic enumeration -----------------------
+// part -> matter -> module -> course resolve to exact block sets from THIS
+// bundled map + its build-time `scopes` index (compute_scope_index in
+// build_site.py — task-derived module membership). Enumeration runs BEFORE any
+// model does (KTD4): the blast radius (matters/files/blocks) is known before a
+// single token is spent. Pure + synchronous; nothing here touches the store.
+const SCOPES = EDITOR_MAP.scopes || { matters: {}, modules: {} };
+const SCOPE_REFS_CAP = 200;
+
+function _allBlocks() {
+  const out = [];
+  for (const [page, blocks] of Object.entries(EDITOR_MAP.pages || {})) {
+    for (const b of blocks) out.push({ page, ref: b.source_ref });
+  }
+  return out;
+}
+
+function _summarize(level, picked) {
+  const files = new Set();
+  const matters = new Set();
+  const pages = new Set();
+  for (const x of picked) {
+    const f = x.ref.split("#", 1)[0];
+    files.add(f);
+    pages.add(x.page);
+    const m = f.match(/^data\/matters\/([^/]+)\//);
+    if (m) matters.add(m[1]);
+  }
+  const refs = picked.slice(0, SCOPE_REFS_CAP).map((x) => x.ref);
+  return {
+    ok: true, level,
+    blocks: picked.length,
+    files: files.size,
+    pages: pages.size,
+    matters: [...matters].sort(),
+    refs,
+    refs_truncated: picked.length > refs.length,
+  };
+}
+
+export function enumerateScope({ level, matter, part, module: mod } = {}) {
+  const bad = { ok: false, reason: "validation_error" };
+  const all = _allBlocks();
+
+  if (level === "course") {
+    const r = _summarize(level, all);
+    // course radius counts every matter, even ones whose blocks are all
+    // currently outside data/matters (defensive — today they never are).
+    r.matters = Object.keys(SCOPES.matters).sort();
+    return r;
+  }
+
+  if (level === "matter") {
+    if (!matter || !SCOPES.matters[matter]) return bad;
+    return _summarize(level,
+      all.filter((x) => x.ref.startsWith(`data/matters/${matter}/`)));
+  }
+
+  if (level === "part") {
+    const meta = matter ? SCOPES.matters[matter] : null;
+    if (!meta || !part || !meta.parts.includes(part)) return bad;
+    const prefix = part === "matter"
+      ? `data/matters/${matter}/matter.json#`
+      : `data/matters/${matter}/${part}/`;
+    return _summarize(level, all.filter((x) => x.ref.startsWith(prefix)));
+  }
+
+  if (level === "module") {
+    const meta = mod ? SCOPES.modules[mod] : null;
+    if (!meta) return bad;
+    const prefixes = [meta.curriculum + "#"]
+      .concat(meta.matters.map((s) => `data/matters/${s}/exercise/`));
+    const picked = all.filter((x) => prefixes.some((p) => x.ref.startsWith(p)));
+    const r = _summarize(level, picked);
+    r.matters = meta.matters.slice();  // the module's members ARE the radius
+    return r;
+  }
+
+  return bad;
+}

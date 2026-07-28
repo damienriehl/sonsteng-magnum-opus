@@ -8,6 +8,7 @@ import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
+  enumerateScope,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 
@@ -439,6 +440,26 @@ export async function revertResolveEndpoint(request, env, auth) {
     return editError(result.reason, message, status);
   }
   return json({ ok: true, id: result.id, status: result.status });
+}
+
+// ---- GET /edit/v1/scope (edit/instructor/admin) -----------------------------
+// U6: deterministic blast-radius enumeration for the scope ladder. Read-only,
+// map-derived, and cheap enough to show interactively while an editor chooses
+// the scope of a broader change. Refs are capped (refs_truncated says so).
+export async function scopeEndpoint(request, env, auth) {
+  const anyScope = auth.editor && (auth.scopes.edit.granted ||
+    auth.scopes.instructor.granted || auth.scopes.admin.granted);
+  if (!anyScope) return editError("forbidden", "No edit scope.", 403);
+  const url = new URL(request.url);
+  const result = enumerateScope({
+    level: url.searchParams.get("level"),
+    matter: url.searchParams.get("matter") || undefined,
+    part: url.searchParams.get("part") || undefined,
+    module: url.searchParams.get("module") || undefined,
+  });
+  if (!result.ok)
+    return editError("validation_error", "That scope could not be resolved.", 400);
+  return json(result);
 }
 
 // ---- GET /edit/v1/review (admin; all pending grouped) -----------------------

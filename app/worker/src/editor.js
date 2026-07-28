@@ -18,6 +18,7 @@ import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-h
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
+  scopeEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
 } from "./editor-endpoints.js";
@@ -154,6 +155,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await systemSuggestEndpoint(request, env, auth));
   if (path === "/edit/v1/pending" && request.method === "GET")
     return wrap(await pendingEndpoint(request, env, auth));
+  if (path === "/edit/v1/scope" && request.method === "GET")
+    return wrap(await scopeEndpoint(request, env, auth));
   if (path === "/edit/v1/review" && request.method === "GET")
     return wrap(await reviewJsonEndpoint(request, env, auth));
   if (path === "/edit/v1/decide" && request.method === "POST")
