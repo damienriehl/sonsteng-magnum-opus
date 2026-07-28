@@ -1577,6 +1577,21 @@ def build_skills(corpus):
     for t in corpus["tasks"]["tasks"]:
         tasks_by_skill[t["skill_id"]].append(t)
 
+    # U3 (editable coverage): task names and descriptions are authored prose and
+    # register as json_scalar blocks. The json_path is positional into the
+    # tasks.json list ("tasks.<i>.name") — the only dotted path json_get can
+    # address a list entry by. That identity holds because taxonomy files are
+    # never reordered by any editor operation; a manual insert/reorder of
+    # tasks.json entries would require regenerating the map in the same change.
+    # READ-ONLY by design: skill/task/subtask IDs, Bloom levels, module chips,
+    # FOLIO crosswalk chips and "no FOLIO equivalent" flags (join keys other
+    # pages resolve against), skill names (rendered in <summary>, which is not
+    # a walker candidate — Tier B, a deliberate decision point), alt_name and
+    # subtask <li>s (their candidate elements mix generated framing or IDs
+    # with more than one authored field).
+    tasks_rel = data_relpath(DATA, "taxonomy", "tasks.json")
+    task_pos = {t["id"]: i for i, t in enumerate(corpus["tasks"]["tasks"])}
+
     def render_skill(s, open_first=False):
         sid = s["id"]
         ts = tasks_by_skill.get(sid, [])
@@ -1600,15 +1615,25 @@ def build_skills(corpus):
                     n=esc(st["name"]), d=esc(st.get("description", "")), i=esc(st["id"]))
                 for st in (t.get("subtasks") or []))
             tf = folio_chip(t.get("folio"), t.get("no_folio_equivalent"))
+            # The editable element must contain ONLY the authored string (KTD3):
+            # the ID + Bloom chips move into the read-only chips row so the name
+            # <p> and description <p> — both already walker candidates — carry
+            # exactly one JSON scalar each. Candidate count is unchanged.
+            name_path = "tasks.{i}.name".format(i=task_pos[t["id"]])
+            desc_path = "tasks.{i}.description".format(i=task_pos[t["id"]])
+            name_eb = _eb_scalar_attr(tasks_rel + "#" + name_path,
+                                      t["name"], name_path, s["name"])
+            desc_eb = _eb_scalar_attr(tasks_rel + "#" + desc_path,
+                                      t.get("description", ""), desc_path, s["name"])
             task_html.append("""
       <div class="task-block">
-        <p style="margin:0"><span class="task-name">{name}</span>
-          <span class="skill-id">{tid}</span> <span class="bloom">BLOOM · {bloom} · {mod}</span></p>
-        <p class="subtask" style="margin:.2rem 0 .4rem">{desc}</p>
-        <div class="chips">{tf} {chips}</div>
+        <p style="margin:0"{name_eb}><span class="task-name">{name}</span></p>
+        <p class="subtask" style="margin:.2rem 0 .4rem"{desc_eb}>{desc}</p>
+        <div class="chips"><span class="skill-id">{tid}</span> <span class="bloom">BLOOM · {bloom} · {mod}</span> {tf} {chips}</div>
         <ul style="margin:.4rem 0 0">{subs}</ul>
       </div>""".format(name=esc(t["name"]), tid=esc(t["id"]), bloom=esc(t.get("bloom_level", "")),
                        mod=esc(t.get("module", "")), desc=esc(t.get("description", "")),
+                       name_eb=name_eb, desc_eb=desc_eb,
                        tf=tf, chips=chips, subs=subs))
         alt = ('<p class="subtask" style="margin:.2rem 0 0">Survey phrasing also recorded as: '
                '<em>{a}</em></p>'.format(a=esc(s["alt_name"]))) if s.get("alt_name") else ""
@@ -2670,13 +2695,26 @@ def build_firm_dashboard(corpus):
             n=esc(name), l=esc(name.replace(".csv", "").replace("-", " ").upper() + " CSV")))
 
     ident = firm["identity"]
+    # U3 (editable coverage): the firm name and letterhead note are the page's
+    # authored prose — register them as json_scalar blocks on elements that are
+    # already walker candidates. The generated data-provenance sentence moves to
+    # its own NON-candidate <div> (styled to match a paragraph) so the lede <p>
+    # contains ONLY the authored note; candidate count is unchanged. Everything
+    # else on this page is derived from firm.json figures and stays read-only.
+    firm_rel = data_relpath(DATA, "firm", "firm.json")
+    fname_eb = _eb_scalar_attr(firm_rel + "#identity.name", ident.get("name", ""),
+                               "identity.name", "firm identity")
+    fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
+                               ident.get("letterhead_note", ""),
+                               "identity.letterhead_note", "firm identity")
     body = """
 <section class="reveal">
   <p class="eyebrow">THE PRACTICE LEDGER · AS OF {asof}</p>
-  <h1>{name}</h1>
-  <p class="lede">{note} Every figure below is generated from the same open dataset the
-  matters use — <span class="mono">data/firm/firm.json</span> — so the money on this page
-  reconciles with the billing statements inside each packet.</p>
+  <h1{fname_eb}>{name}</h1>
+  <p class="lede"{fnote_eb}>{note}</p>
+  <div class="lede" style="margin:0 0 var(--space)">Every figure below is generated from the same
+  open dataset the matters use — <span class="mono">data/firm/firm.json</span> — so the money on
+  this page reconciles with the billing statements inside each packet.</div>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2710,6 +2748,7 @@ def build_firm_dashboard(corpus):
 
 <div id="viz-tip" class="viz-tip" aria-hidden="true" hidden><span class="viz-tip__sw" aria-hidden="true"></span><span class="viz-tip__v"></span><span class="viz-tip__l"></span></div>
 """.format(asof=esc(firm["as_of_date"]), name=esc(ident["name"]),
+           fname_eb=fname_eb, fnote_eb=fnote_eb,
            note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis), defs=_pattern_defs(),
            c1=chart1, c2=chart2, c3=chart3, c4=chart4, c5=chart5, c6=chart6, c7=chart7,
            dls="".join(dls))
