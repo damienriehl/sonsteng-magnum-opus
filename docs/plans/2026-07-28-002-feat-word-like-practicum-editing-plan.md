@@ -82,14 +82,24 @@ does not move.** That is U1, and everything else depends on it.
   `data/jurisdictions/`, `data/firm/`).
 - **R2. Structural editing.** An editor can **add, delete, split, merge and reorder** blocks, not
   merely replace their text. *(session-settled: user-directed, 2026-07-28 — "Yes.")*
-- **R3. Facts are editable, with their blast radius shown first.** Changing a party name, date or
-  amount presents where it surfaces before it commits. *(session-settled: user-directed — "Yes.")*
-  Critically, the preview must distinguish two cases that behave differently:
-  - **derived** — the fact lives in one JSON field and every rendering follows automatically on
-    rebuild; changing the field changes all of them;
-  - **restated** — the same fact was independently written into prose somewhere ("Meridian's filing
-    deadline of 14 days…"). These do **not** follow, and are the ones that leave a scenario
-    internally inconsistent if missed.
+- **R3. Facts are the UPSTREAM editing surface, and the flow is staged.** *(session-settled:
+  user-directed, 2026-07-28 — Damien: facts "are more likely the things that the editors will want
+  to change", including "adding additional facts", and he specified the flow.)* The editing flow is:
+  - **Stage 1 — edit the Facts** (if at all): a first-class facts surface per matter, where an
+    editor can **change** a fact (party name, date, amount, jurisdiction) or **add** a new one —
+    not hunt for where a fact happens to render in prose.
+  - **Stage 1.5 — the system propagates** the factual change through the prose. Two classes that
+    behave differently, and the distinction is the design:
+    - **derived** — the fact lives in one JSON field and every rendering follows automatically on
+      rebuild; nothing to draft;
+    - **restated** — the same fact was independently written into prose ("Meridian's filing
+      deadline of 14 days…"). These do NOT follow. The system finds them by corpus search and
+      drafts a per-site edit as an AI batch for review — Stage 1.5 IS a scoped change (R5's
+      machinery) with a mechanical instruction, not a separate invention.
+  - **Stage 2 — edit the Prose** (if at all): line edits on the fast path, and broader conceptual
+    edits ("Throughout this section, please <X>…") through the scoped-change machinery.
+  A **new** fact has no renderings yet, so adding one offers — but never forces — a drafted set of
+  prose insertions mentioning it (structural inserts under one group).
 - **R4. A four-level scope ladder**, all of which a broader change may target
   *(session-settled: user-directed, 2026-07-28 — Damien specified both levels rather than choosing
   between them)*:
@@ -181,11 +191,20 @@ and letting an editor change how the site is generated rather than what it says.
   to draft without explicit confirmation. Module- and course-scoped batches apply to one matter
   first; the remainder waits on that matter verifying clean. This is KD2's refactor discipline made
   mechanical.
-- **KTD6. Fact propagation is derived-vs-restated, and the restated set is found by search, not
-  assumed.** For a fact edit, enumerate the JSON field's render sites from the editor map (derived,
-  automatic) and separately search the prose corpus for the old literal (restated, each needing its
-  own edit). Present both. Silently doing the first and not the second is how a scenario ends up
-  internally contradictory.
+- **KTD6. Stage 1.5 is implemented AS a scoped batch, not as new machinery.** For a fact edit,
+  enumerate the JSON field's render sites from the editor map (derived — automatic on rebuild,
+  nothing to draft) and separately search the prose corpus for the old literal (restated — each
+  needing its own edit). The restated set becomes an AI-drafted `group_id` batch through the same
+  enumerate → draft → review pipeline as any scoped change (KTD4), with the instruction generated
+  mechanically ("this fact changed from X to Y; update this sentence accordingly"). One review, one
+  approval, one undo. Silently doing the derived half and not the restated half is how a scenario
+  ends up internally contradictory — so the review screen always shows both classes, and completion
+  is never implied while restated edits sit undecided.
+- **KTD7. The facts surface is generated from the matter's JSON + schemas, not hand-curated.** Each
+  matter's `business/*.json` and friends render as a labelled facts panel (label, current value,
+  where-used count). Adding a fact appends a schema-valid key. IDs and join keys stay read-only on
+  this surface exactly as everywhere else. This is what makes Stage 1 feel like "editing the facts
+  of the scenario" rather than "editing JSON".
 
 ---
 
@@ -262,22 +281,40 @@ and letting an editor change how the site is generated rather than what it says.
   - Every operation is attributed and appears in history like a text edit.
 - **Verification:** a full add → edit → move → delete → undo cycle through the browser on DEV.
 
-### U5. Fact editing with a blast-radius preview
+### U5. The facts surface, and Stage 1.5 propagation
 
-- **Goal:** changing a fact is safe and legible.
+- **Goal:** Stage 1 and Stage 1.5 of the flow — facts are edited on their own surface, and changes
+  propagate legibly.
 - **Requirements:** R3
-- **Dependencies:** U2, U3
-- **Files:** `app/worker/src/editor-endpoints.js`, `app/editor/editor.js`, `tools/build_site.py`
-- **Approach:** on a `json_scalar` edit, return the **derived** render sites (from the map) and the
-  **restated** matches (a corpus search for the old literal in prose), per KTD6. The UI shows
-  "changes 12 places automatically; 3 other places mention this in prose — review them too", with
-  the restated ones offered as a follow-on group.
+- **Dependencies:** U2, U3; the propagation batch reuses U7's pipeline, so U5's Stage 1.5 half lands
+  with or after U7
+- **Files:** `app/worker/src/editor-endpoints.js`, `app/editor/editor.js`, `tools/build_site.py`,
+  `app/worker/src/editor-admin.js` (a facts entry point per matter)
+- **Approach:**
+  1. **Stage 1 (the facts panel, KTD7):** render each matter's facts from its JSON + schema as a
+     labelled panel — label, current value, where-used count — reachable from the matter's pages and
+     the editor landing. Editing a value is a `json_scalar` suggestion exactly as today. **Adding a
+     fact** appends a schema-valid key via a new `json_add` suggestion kind (same validation
+     posture; schema decides what may be added and of what type).
+  2. **Stage 1.5 (propagation, KTD6):** on accept of a fact change, enumerate derived sites (report
+     only — rebuild handles them) and search the corpus for restated matches of the old value; draft
+     the restated edits as one `group_id` batch with mechanical instructions; present the redline.
+     Approving applies the batch; declining leaves prose untouched and says so plainly.
+  3. **New facts:** offer a drafted set of prose insertions mentioning the new fact (structural
+     inserts under one group) — offered, never forced.
 - **Test scenarios:**
-  - A party-name change reports its derived sites correctly.
-  - A fact also written into a narrative is reported as restated, not derived.
-  - Declining the restated follow-on leaves the derived change applied and the prose untouched — and
-    says so plainly rather than implying completeness.
-- **Verification:** on a real matter, the counts match a hand audit.
+  - The facts panel for a real matter lists the schema-derived fields with correct where-used counts.
+  - A party-name change reports derived sites correctly, and a fact restated in a narrative is
+    classed restated, not derived.
+  - The Stage 1.5 batch drafts one edit per restated site, applies atomically, undoes in one gesture.
+  - Declining the batch leaves the derived change applied and the prose untouched — stated plainly,
+    completion never implied.
+  - `json_add` accepts a schema-valid new key and rejects a schema-invalid one; IDs/join keys are
+    not addable or editable from the panel.
+  - A short-string fact (a common first name) does not flood the restated search with false
+    positives — matching is value+context, and the review screen makes over-matching cheap to reject.
+- **Verification:** on a real matter, the counts match a hand audit; one fact edit round-trips
+  through Stage 1 → 1.5 on DEV.
 
 ### U6. The scope ladder and deterministic enumeration
 
@@ -375,7 +412,13 @@ gesture; and John's guide describes the new verbs.
   one-gesture undo.
 - **Restated facts are the silent failure** (KTD6). Changing the JSON and missing the prose leaves a
   scenario that contradicts itself — worse than not editing at all, because it looks finished.
-  Mitigated by reporting restated matches separately and never implying completeness.
+  Mitigated by making propagation a first-class stage (1.5) rather than a footnote on fact edits,
+  and by never implying completeness while restated edits sit undecided.
+- **Restated-search over- and under-matching.** Searching for the old literal misses paraphrases
+  ("two weeks" for a 14-day deadline) and over-matches short values. Under-matching is mitigated but
+  not eliminated by value+context search — the plan does not promise to find paraphrases, and the
+  review screen says the list is "mentions found", not "all mentions". Over-matching is cheap to
+  reject in review.
 - **Structural ops meeting the apply engine.** Insert and delete change file shape, not just content.
   Mitigated by teaching one operation at a time with round-trip tests, and by not auto-applying them
   initially.
@@ -394,6 +437,11 @@ gesture; and John's guide describes the new verbs.
 - **OQ3.** Does the markdown ID marker belong in the file, or in a sidecar index keyed by content
   position? In-file is stable under external edits, which is the point — but it does mean the
   curriculum source carries machine tokens. Settle in U1.
+- **OQ4.** Where does the facts panel live — a per-matter facts page linked from the matter's pages
+  and the admin landing (recommended), or inline panels on each page that renders the facts? Decide
+  in U5; the recommended shape matches "edit the facts of the scenario" as one sitting.
+- **OQ5.** When a new fact's prose insertions are declined, is the fact still added (recommended —
+  it simply renders nowhere yet), or does the add wait until at least one mention exists?
 
 ## Sources & Research
 
