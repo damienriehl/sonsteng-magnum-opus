@@ -7,7 +7,14 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { EDIT_CSP, editSecurityHeaders, uniform404, csrfOk } from "../src/editor-http.js";
+import {
+  EDIT_CSP,
+  editSecurityHeaders,
+  uniform404,
+  csrfOk,
+  editOrigin,
+  editCorsHeaders,
+} from "../src/editor-http.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const srcDir = join(__dirname, "..", "src");
@@ -18,7 +25,11 @@ function editorSources() {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
       if (statSync(p).isDirectory()) walk(p);
-      else if (name.endsWith(".js") && /editor|text-norm/.test(name)) files.push(p);
+      // `access-jwt` is in the glob deliberately: the Cf-Access-Jwt-Assertion is a
+      // bearer credential exactly like the ?t= token, so the never-log rule has to
+      // cover the Access door too. Without it the newest auth path was the only
+      // one this scan could not see.
+      else if (name.endsWith(".js") && /editor|text-norm|access-jwt/.test(name)) files.push(p);
     }
   })(srcDir);
   return files;
@@ -89,4 +100,152 @@ test("csrfOk rejects a missing custom header even with same-origin", () => {
     headers: { Origin: "https://w.example.com", "Sec-Fetch-Site": "same-origin" },
   });
   assert.equal(csrfOk(req, env), false);
+});
+
+// ---------------------------------------------------------------------------
+// EDIT_ORIGIN is a LIST (KTD6). One deployment answers on two browser origins at
+// once — the Cloudflare Access hostname and the older workers.dev fallback that
+// every already-sent link points at. csrfOk gates all eleven mutation endpoints
+// on the Origin header, so a single swapped value would let every old bookmark
+// keep LOADING pages (navigations send no Origin) while every SAVE from those
+// pages returned 403 csrf_failed. That failure is invisible to fixtures that set
+// EDIT_ORIGIN to whatever origin they simulate, which is every other test in this
+// suite — these are the tests that actually hold the property.
+// ---------------------------------------------------------------------------
+
+const NEW_DOOR = "https://edit.sonsteng.damienriehl.com";
+const OLD_DOOR = "https://sonsteng-chat.damienriehl.workers.dev";
+const STRANGER = "https://evil.example.com";
+
+// An XHR the editor page itself would send: custom header + Origin + same-origin
+// fetch metadata.
+function editXhr(origin, extra = {}) {
+  return new Request(`${origin}/edit/v1/suggest`, {
+    method: "POST",
+    headers: { "X-Edit-Request": "1", Origin: origin, "Sec-Fetch-Site": "same-origin", ...extra },
+  });
+}
+
+test("EDIT_ORIGIN with a single value behaves exactly as before (regression guard)", () => {
+  const env = { EDIT_ORIGIN: OLD_DOOR };
+  assert.deepEqual([...editOrigin(env)], [OLD_DOOR]);
+  assert.equal(csrfOk(editXhr(OLD_DOOR), env), true);
+  assert.equal(csrfOk(editXhr(STRANGER), env), false);
+  assert.equal(editCorsHeaders(env, OLD_DOOR)["Access-Control-Allow-Origin"], OLD_DOOR);
+  assert.deepEqual(editCorsHeaders(env, STRANGER), {});
+});
+
+test("EDIT_ORIGIN unset leaves the allowlist empty and unenforced (dev)", () => {
+  const env = {};
+  assert.equal(editOrigin(env).size, 0);
+  // No allowlist configured => the Origin check is skipped, not failed. Several
+  // fixtures elsewhere in the suite rely on this; do not tighten it.
+  assert.equal(csrfOk(editXhr(STRANGER), env), true);
+  // ...but with nothing allowlisted there is still no ACAO to hand out.
+  assert.deepEqual(editCorsHeaders(env, STRANGER), {});
+});
+
+test("both listed origins pass csrfOk and get CORS headers", () => {
+  const env = { EDIT_ORIGIN: `${NEW_DOOR},${OLD_DOOR}` };
+  assert.deepEqual([...editOrigin(env)], [NEW_DOOR, OLD_DOOR]);
+  for (const origin of [NEW_DOOR, OLD_DOOR]) {
+    assert.equal(csrfOk(editXhr(origin), env), true, `${origin} must pass csrfOk`);
+    const h = editCorsHeaders(env, origin);
+    assert.equal(h["Access-Control-Allow-Origin"], origin);
+    assert.equal(h["Access-Control-Allow-Credentials"], "true");
+    assert.equal(h["Vary"], "Origin, Cookie");
+  }
+});
+
+test("the echoed ACAO is the single matched origin — never the list, never '*'", () => {
+  const env = { EDIT_ORIGIN: `${NEW_DOOR},${OLD_DOOR}` };
+  for (const origin of [NEW_DOOR, OLD_DOOR]) {
+    const acao = editCorsHeaders(env, origin)["Access-Control-Allow-Origin"];
+    assert.equal(acao, origin);
+    assert.doesNotMatch(acao, /,/, "ACAO must never be the comma-separated list");
+    assert.notEqual(acao, "*", "credentialed responses may never wildcard");
+  }
+});
+
+test("an unlisted third origin is refused by BOTH csrfOk and editCorsHeaders", () => {
+  const env = { EDIT_ORIGIN: `${NEW_DOOR},${OLD_DOOR}` };
+  assert.equal(csrfOk(editXhr(STRANGER), env), false);
+  assert.deepEqual(editCorsHeaders(env, STRANGER), {});
+  // A near-miss (right suffix, wrong host) must not slip through a substring bug.
+  const lookalike = "https://evil-edit.sonsteng.damienriehl.com.attacker.test";
+  assert.equal(csrfOk(editXhr(lookalike), env), false);
+  assert.deepEqual(editCorsHeaders(env, lookalike), {});
+  // No Origin at all still gets no CORS headers (and needs none: same-origin).
+  assert.deepEqual(editCorsHeaders(env, null), {});
+});
+
+test("X-Edit-Request is still required, even from a listed origin", () => {
+  const env = { EDIT_ORIGIN: `${NEW_DOOR},${OLD_DOOR}` };
+  for (const origin of [NEW_DOOR, OLD_DOOR]) {
+    const req = new Request(`${origin}/edit/v1/suggest`, {
+      method: "POST",
+      headers: { Origin: origin, "Sec-Fetch-Site": "same-origin" },
+    });
+    assert.equal(csrfOk(req, env), false, `${origin} must still need the custom header`);
+  }
+});
+
+test("Sec-Fetch-Site: cross-site is still rejected, even from a listed origin", () => {
+  const env = { EDIT_ORIGIN: `${NEW_DOOR},${OLD_DOOR}` };
+  for (const origin of [NEW_DOOR, OLD_DOOR]) {
+    assert.equal(
+      csrfOk(editXhr(origin, { "Sec-Fetch-Site": "cross-site" }), env),
+      false,
+      `${origin} must still fail the fetch-metadata check`
+    );
+  }
+});
+
+test("whitespace and empty entries around the commas are tolerated", () => {
+  const env = { EDIT_ORIGIN: `  ${NEW_DOOR} ,, ${OLD_DOOR}  ,  ` };
+  assert.deepEqual([...editOrigin(env)], [NEW_DOOR, OLD_DOOR]);
+  assert.equal(csrfOk(editXhr(NEW_DOOR), env), true);
+  assert.equal(csrfOk(editXhr(OLD_DOOR), env), true);
+  assert.equal(editCorsHeaders(env, NEW_DOOR)["Access-Control-Allow-Origin"], NEW_DOOR);
+  assert.equal(csrfOk(editXhr(STRANGER), env), false);
+});
+
+// The 404 now has to serve BOTH doors: someone denied at the Access check who
+// never held a personal link, and someone whose old bookmark lapsed. It still
+// may not vary by request — the byte-identity IS the no-oracle property.
+test("uniform404 is byte-identical across unknown, under-scoped and hostile paths", async () => {
+  // uniform404() takes no request by design; simulate the call sites (unknown
+  // path, known path without the right scope, traversal probe) and prove the
+  // bytes and status never diverge.
+  const bodies = [];
+  for (const _path of [
+    "/edit/nope",
+    "/edit/admin",
+    "/edit/practicum/m1/doc",
+    "/edit/../../etc/passwd",
+    "/edit/v1/pending",
+  ]) {
+    const r = uniform404();
+    assert.equal(r.status, 404);
+    assert.equal(r.headers.get("content-type"), "text/html; charset=utf-8");
+    bodies.push(await r.text());
+  }
+  for (const b of bodies) assert.equal(b, bodies[0], "the 404 body must not vary by path");
+});
+
+test("uniform404 names the Access address and drops the token-only phrasing", async () => {
+  const body = await uniform404().text();
+  assert.match(body, /edit\.sonsteng\.damienriehl\.com/, "must name the durable way back in");
+  assert.doesNotMatch(
+    body,
+    /only opens through the\s+personal link|personal link Damien sent you/i,
+    "must not tell an Access visitor to reopen a link they never had"
+  );
+  // Still helps the person holding an old link, and still reassures.
+  assert.match(body, /reopen your editing link/i);
+  assert.match(body, /nothing you wrote has been lost/i);
+  // Design is unchanged: serif stack, cream ground, crimson rule.
+  assert.match(body, /Iowan Old Style/);
+  assert.match(body, /#f4efe4/);
+  assert.match(body, /#7c1e2b/);
 });

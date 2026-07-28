@@ -24,13 +24,31 @@ Comments are the exception — they're notes for Damien, not live edits.
 
 ## Getting in
 
-Click your **personal edit link** (Damien will send it — save it as a bookmark). It opens the
-real practicum website, but now you can change it. A green bar across the top reads
-**"You're editing — your edits go live automatically (~2 min)."** If you ever don't see that
-bar, you're on the normal site; click your bookmark again.
+**Go to `edit.sonsteng.damienriehl.com`.** Type it into your browser, or save it as a bookmark —
+it is short enough to read aloud over the phone, and there is nothing secret in it.
+
+The first time (and about once a month after), the page asks for your email address and then
+emails you a **six-digit code**. Type the code in. That's the whole sign-in — no password to
+choose, no account to create. Use the same address Damien put on the list; if a different one
+is typed in, the code never arrives.
+
+Once you're in, it opens the real practicum website, but now you can change it. A green bar
+across the top reads **"You're editing — your edits go live automatically (~2 min)."** If you
+ever don't see that bar, you're on the normal site; go to the address again.
+
+*Your old personal link still works too, for now — nothing you have bookmarked has stopped
+working. The new address is simply the better door, and the one to use from here on.*
 
 Use **Chrome or Edge on your Windows PC** (an iPad works too). Tap **Large Type** in the top bar
 any time to make everything bigger.
+
+### If it won't let you in
+
+- **The code didn't arrive.** Check the junk folder first. If it still isn't there, the address
+  on the list may be a different one — text Damien and he can add the one you're using.
+- **You get a page saying "Please reopen your editing link".** That means you reached the editor
+  but aren't recognised yet. Go to `edit.sonsteng.damienriehl.com` again and sign in with the
+  emailed code. Nothing you wrote has been lost.
 
 ## The two things you can do
 

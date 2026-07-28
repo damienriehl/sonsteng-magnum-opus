@@ -265,7 +265,16 @@ def review_url_from_env():
         return explicit.rstrip("/")
     origin = os.environ.get(ENV_EDIT_ORIGIN)
     if origin:
-        return origin.rstrip("/") + "/edit/review"
+        # EDIT_ORIGIN is a COMMA-SEPARATED LIST in the Worker's own config as of
+        # the Access door (plan KTD6) — the Worker answers on both the Access
+        # hostname and the workers.dev fallback. This reads a *process* env var,
+        # not the Worker's, so the two are not the same value today; but the names
+        # are identical and copying one into the other is the obvious mistake.
+        # Take the first entry rather than concatenating the whole list into a
+        # URL, which would have produced a click-through that silently 404s.
+        first = origin.split(",")[0].strip()
+        if first:
+            return first.rstrip("/") + "/edit/review"
     return DEFAULT_REVIEW_URL
 
 

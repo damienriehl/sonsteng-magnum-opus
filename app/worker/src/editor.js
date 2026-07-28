@@ -5,7 +5,11 @@
 // OWN edit origin only.
 
 import { withEditHeaders, uniform404, editSecurityHeaders } from "./editor-http.js";
-import { resolveAuth, resolveOpaqueToken, mintCookieValue, buildSetCookie } from "./editor-auth.js";
+import {
+  resolveAuth, resolveOpaqueToken, mintCookieValue, buildSetCookie,
+  readCookie, attributionLabel,
+} from "./editor-auth.js";
+import { renderAdminPage, buildEditorialFlags } from "./editor-admin.js";
 import { resolvePagePath, resolveInstructorDoc } from "./editor-map.js";
 import { handleEditPage, serveSiteAsset } from "./editor-inject.js";
 import { renderInstructorDoc } from "./editor-instructor.js";
@@ -22,6 +26,32 @@ function editorStub(env) {
   return env.EDITOR.getByName("global-v1");
 }
 
+// A bare same-origin 302. Kept no-store so a scope-dependent landing decision is
+// never cached and replayed for a different identity.
+function redirectTo(location) {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: location, "Cache-Control": "private, no-store" },
+  });
+}
+
+// ---- the bare-hostname doorway (KTD7) --------------------------------------
+// Exported and pure so it can be tested: index.js imports `cloudflare:workers`
+// (for the Durable Object base class) and therefore cannot be loaded by
+// `node --test` at all, so anything left inline in that file is untestable by
+// construction. Returns a Response to send, or null to fall through.
+//
+// `edit.sonsteng.damienriehl.com` has to land somewhere useful when someone just
+// types it — that memorability is the entire point of the hostname — but the
+// editor surface lives under /edit. So the root forwards into it and the
+// scope-aware landing there picks the destination. Bound to EDIT_ACCESS_HOST so
+// the workers.dev root is untouched.
+export function accessDoorwayRedirect(env, url) {
+  if (!env || !env.EDIT_ACCESS_HOST) return null;
+  if (url.host !== env.EDIT_ACCESS_HOST || url.pathname !== "/") return null;
+  return redirectTo("/edit/");
+}
+
 // 302 to the same URL with ?t stripped, setting the signed scope cookie.
 function redirectClean(url, setCookie) {
   const clean = new URL(url.toString());
@@ -29,6 +59,42 @@ function redirectClean(url, setCookie) {
   const headers = new Headers({ Location: clean.pathname + (clean.search || "") });
   if (setCookie) headers.set("Set-Cookie", setCookie);
   return new Response(null, { status: 302, headers });
+}
+
+// ---- "since you last looked" marker for the editorial flags (R5) -----------
+// A cookie, deliberately, not store state. The EditorStore has no generic
+// key/value surface and its Durable Object migrations are APPEND-ONLY, so
+// persisting a per-editor bookmark server-side would mean a schema migration —
+// far and away the riskiest change available — to remember a timestamp. The
+// tradeoff is that "since you last looked" means "on this device"; that is
+// honest for what the feature is, and a first visit on a new device shows an
+// empty list rather than replaying months of history (which is also exactly the
+// first-visit behaviour buildEditorialFlags specifies).
+//
+// It is NOT a credential: it carries a timestamp and nothing else, it grants no
+// access, and it is scoped to the admin page. Path is /edit/admin so it never
+// rides along with the editing or endpoint traffic.
+const SEEN_COOKIE = "edit_seen";
+
+function buildSeenCookie(nowISO) {
+  return `${SEEN_COOKIE}=${encodeURIComponent(nowISO)}; HttpOnly; Secure; ` +
+    `SameSite=Lax; Path=/edit/admin; Max-Age=${60 * 60 * 24 * 365}`;
+}
+
+// Returns the previous visit's ISO stamp, or null on a first visit / anything
+// unparseable. Never throws — a corrupt cookie must degrade to "first visit",
+// not to an error page.
+function readLastSeen(request) {
+  const raw = readCookie(request, SEEN_COOKIE);
+  if (!raw) return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  const t = Date.parse(decoded);
+  return Number.isFinite(t) ? decoded : null;
 }
 
 // This editor's pending items for an instructor doc (page is null on instructor
@@ -125,6 +191,57 @@ export async function editorFetch(request, env, ctx) {
     const found = findDocBySlug(slug);
     if (!found) return wrap(uniform404());
     return wrap(renderHistoryPage(found[1]));
+  }
+
+  // ---- the editor's own landing (KTD7) --------------------------------------
+  // index.js 302s the BARE Access hostname here, so this is where "typing the
+  // address" actually arrives. It is a doorway, not a page: `/edit/` resolves to
+  // no page key of its own (resolvePagePath("") is null), so without this branch
+  // everyone — including John — would land on the uniform 404 immediately after
+  // completing a sign-in, which is the dead end this whole plan exists to close.
+  // Scope decides the destination; no identity still takes the uniform 404, so
+  // the doorway is not an oracle either.
+  if (path === "/edit/" || path === "/edit") {
+    if (request.method !== "GET") return wrap(uniform404());
+    if (auth.scopes.admin.granted) return wrap(redirectTo("/edit/admin"));
+    if (auth.scopes.edit.granted || auth.scopes.instructor.granted)
+      return wrap(redirectTo("/edit/index.html"));
+    return wrap(uniform404());
+  }
+
+  // ---- tokenless admin dashboard (R5, R8, KTD5) -----------------------------
+  // Lives UNDER /edit on purpose. The prefix is what index.js already delegates
+  // here, so this page inherits the router, the withEditHeaders wrapper, the
+  // uniform 404 and the Path=/edit cookie scope with no new code — and an
+  // under-scoped request returns bytes identical to any unknown /edit path,
+  // which serving it at the bare root could not have done.
+  if (path === "/edit/admin") {
+    if (request.method !== "GET" || !auth.scopes.admin.granted) return wrap(uniform404());
+    const stub = editorStub(env);
+    const items = await stub.listAll();
+    const reverts = await stub.listRevertRequests(null);
+    const lastSeen = readLastSeen(request);
+    const flags = buildEditorialFlags(items, auth.slot, lastSeen);
+    const nowISO = new Date().toISOString();
+    const page = renderAdminPage({
+      items,
+      reverts,
+      flags,
+      viewerLabel: attributionLabel(auth.editor),
+      // The public practicum IS the student view — a different origin,
+      // unauthenticated, with the editing layer absent and instructor material
+      // reachable only through /edit. EDIT_UPSTREAM is exactly that origin, so
+      // the link is derived rather than hardcoded and cannot drift from the site
+      // the injector actually wraps.
+      studentViewUrl: env.EDIT_UPSTREAM || "",
+    });
+    const withSeen = new Response(page.body, {
+      status: page.status,
+      statusText: page.statusText,
+      headers: new Headers(page.headers),
+    });
+    withSeen.headers.set("Set-Cookie", buildSeenCookie(nowISO));
+    return wrap(withSeen);
   }
 
   // ---- admin review page ----------------------------------------------------
