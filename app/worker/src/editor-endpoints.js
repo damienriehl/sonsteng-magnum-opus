@@ -9,8 +9,70 @@ import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
 } from "./editor-map.js";
+import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
+
+// "{#b:" is the durable-block-ID marker lead-in — reserved bytes that may never
+// enter any suggested text (a payload carrying one could forge or corrupt block
+// identity at apply time).
+const RESERVED_MARKER = "{#b:";
+
+// A structural payload is ONE block's plain text: single line, non-empty, no
+// reserved marker bytes.
+function validStructuralPayload(s) {
+  return typeof s === "string" && s.trim().length > 0 &&
+    !s.includes("\n") && !s.includes(RESERVED_MARKER);
+}
+
+// Validate + normalize a structural operation (U4, KTD3). `body` is the client
+// request; `block` is the map-resolved anchor; `scope` is the granted scope the
+// anchor resolved in. Returns { kind, new_text, op_arg } or { error: [code,
+// message] }. Rules:
+//   * structural ops address PROSE blocks only (never scalars/comment-only);
+//   * insert_after needs a single-block payload;
+//   * delete carries no payload;
+//   * split carries exactly two single-block parts (stored "part1\n\npart2");
+//   * merge/move carry op_arg — a second ref that must resolve in the SAME
+//     scope's map, be prose, and live in the SAME source (file + body field).
+function resolveStructuralOp(body, block, scope) {
+  const op = body.op;
+  if (!STRUCTURAL_KINDS.has(op)) return { error: ["validation_error", "Unknown operation."] };
+  if (block.kind !== "prose")
+    return { error: ["validation_error", "That operation applies to paragraphs only."] };
+
+  const new_text = typeof body.new_text === "string" ? body.new_text : null;
+  const new_text2 = typeof body.new_text2 === "string" ? body.new_text2 : null;
+  const op_arg = typeof body.op_arg === "string" ? body.op_arg : null;
+
+  // The base a ref must share for merge/move: file + json body field (the part
+  // of the locator before the trailing .b<hex8> / #b<hex8> bid).
+  const baseOf = (ref) => ref.replace(/(\.|#)b[0-9a-f]{8}$/, "");
+
+  if (op === "insert_after") {
+    if (!validStructuralPayload(new_text))
+      return { error: ["validation_error", "Provide the new paragraph's text."] };
+    return { kind: op, new_text: new_text.trim(), op_arg: null };
+  }
+  if (op === "delete") {
+    if (new_text != null)
+      return { error: ["validation_error", "Delete carries no text."] };
+    return { kind: op, new_text: null, op_arg: null };
+  }
+  if (op === "split") {
+    if (!validStructuralPayload(new_text) || !validStructuralPayload(new_text2))
+      return { error: ["validation_error", "Provide both parts of the split."] };
+    return { kind: op, new_text: new_text.trim() + "\n\n" + new_text2.trim(), op_arg: null };
+  }
+  // merge | move — need a second allowlisted ref in the same source.
+  if (!op_arg) return { error: ["validation_error", "That operation needs a target."] };
+  const target = lookupBlock(op_arg, scope);
+  if (!target || target.kind !== "prose")
+    return { error: ["validation_error", "That target is not editable."] };
+  if (baseOf(op_arg) !== baseOf(block.source_ref))
+    return { error: ["validation_error", "Both blocks must be in the same document."] };
+  return { kind: op, new_text: null, op_arg };
+}
 
 function editorStub(env) {
   return env.EDITOR.getByName("global-v1");
@@ -57,17 +119,23 @@ export async function suggestEndpoint(request, env, auth) {
   const new_text = typeof body.new_text === "string" ? body.new_text : null;
   const comment = typeof body.comment === "string" ? body.comment : null;
   const clientHash = typeof body.original_hash === "string" ? body.original_hash : null;
+  const op = typeof body.op === "string" ? body.op : null;
 
   if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(id))
     return editError("validation_error", "A valid suggestion id (uuid) is required.", 400);
   if (typeof source_ref !== "string")
     return editError("validation_error", "source_ref is required.", 400);
-  if (new_text == null && comment == null)
+  if (op == null && new_text == null && comment == null)
     return editError("validation_error", "Provide new_text or a comment.", 400);
+  // Reserved marker bytes may never enter suggested text (identity forgery).
+  if ((new_text && new_text.includes(RESERVED_MARKER)) ||
+      (comment && comment.includes(RESERVED_MARKER)))
+    return editError("validation_error", "That text contains a reserved sequence.", 400);
 
   // Size ceiling -> graceful 413.
   const ceilings = ceilingsFor(env);
-  if (byteLen(new_text, comment) > ceilings.maxBytes)
+  if (byteLen(new_text, typeof body.new_text2 === "string" ? body.new_text2 : null,
+              comment) > ceilings.maxBytes)
     return editError("too_large", "That change is too large. Please split it up.", 413);
 
   // ALLOWLIST: the source_ref MUST resolve in one of the caller's GRANTED maps.
@@ -94,8 +162,17 @@ export async function suggestEndpoint(request, env, auth) {
   if (block.kind === "comment_only" && new_text != null)
     return editError("validation_error", "That block can only be commented on.", 400);
 
-  // The kind we STORE is derived from the map (+ comment intent), never trusted.
-  const kind = new_text == null ? "comment" : block.kind;
+  // Structural operation (U4): validate + normalize; the stored kind is the op.
+  let structural = null;
+  if (op != null) {
+    structural = resolveStructuralOp(body, block, scope);
+    if (structural.error)
+      return editError(structural.error[0], structural.error[1], 400);
+  }
+
+  // The kind we STORE is derived from the map (+ comment/op intent), never trusted.
+  const kind = structural ? structural.kind
+    : new_text == null ? "comment" : block.kind;
 
   // Drift at suggest time: if the client's seen-hash disagrees with the map, the
   // page is stale — ask for a reload rather than pinning to old text.
@@ -115,11 +192,12 @@ export async function suggestEndpoint(request, env, auth) {
     json_path: block.kind === "json_scalar" ? block.json_path : null,
     original_text: block.original_text, // SERVER-resolved from the map
     original_hash: block.original_hash, // SERVER-authoritative
-    new_text,
+    new_text: structural ? structural.new_text : new_text,
     comment,
     context: block.context || "",
     map_version: MAP_VERSION,
     group_id: null,
+    op_arg: structural ? structural.op_arg : null,
   }, ceilings, { directApply: env.DIRECT_APPLY === "true" });
 
   if (!result.ok) {

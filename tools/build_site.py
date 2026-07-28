@@ -320,8 +320,9 @@ def markdown(md, src=None, spans=None):
     registered) and is counted in EDMAP.unmarked.
 
     `spans`, when given, is a list this render appends one record per emitted
-    block to: {"tag", "end_line" (0-based index of the block's LAST source
-    line), "bid" (or None), "raw" (marker-stripped source span)}. It is how
+    block to: {"tag", "start_line"/"end_line" (0-based indices of the block's
+    first/last source lines), "bid" (or None), "raw" (marker-stripped source
+    span)}. It is how
     tools/stamp_block_ids.py finds exactly the blocks this renderer emits,
     with zero drift between the stamper's parse and this one."""
     lines = md.replace("\r\n", "\n").split("\n")
@@ -332,6 +333,7 @@ def markdown(md, src=None, spans=None):
     rec = EDMAP.enabled and src is not None
     blk = [0]        # 0-based editable-block ordinal within this render
     ctx = [""]       # nearest preceding heading text -> block context
+    start_line = [0] # 0-based source-line index of the current block's first line
     end_line = [0]   # 0-based source-line index of the current block's last line
 
     def _emit(tag, source_span, attrs=""):
@@ -342,8 +344,8 @@ def markdown(md, src=None, spans=None):
         inner_html = _inline(clean)
         open_attrs = (" " + attrs) if attrs else ""
         if spans is not None:
-            spans.append({"tag": tag, "end_line": end_line[0],
-                          "bid": bid, "raw": clean})
+            spans.append({"tag": tag, "start_line": start_line[0],
+                          "end_line": end_line[0], "bid": bid, "raw": clean})
         if not rec:
             return "<{t}{a}>{i}</{t}>".format(t=tag, a=open_attrs, i=inner_html)
         blk[0] += 1
@@ -358,11 +360,13 @@ def markdown(md, src=None, spans=None):
         return "<{t}{a} data-ebsrc=\"{r}\">{i}</{t}>".format(
             t=tag, a=open_attrs, r=esc(source_ref), i=inner_html)
 
-    para_end = [0]   # source-line index of the last line buffered into `para`
+    para_start = [0]  # source-line index of the first line buffered into `para`
+    para_end = [0]    # source-line index of the last line buffered into `para`
 
     def flush_para(buf):
         if buf:
             raw = " ".join(buf).strip()
+            start_line[0] = para_start[0]
             end_line[0] = para_end[0]
             out.append(_emit("p", raw))
             buf.clear()
@@ -391,7 +395,7 @@ def markdown(md, src=None, spans=None):
             flush_para(para)
             level = min(len(h.group(1)) + 1, 6)  # demote so page h1 stays unique
             htext = h.group(2).strip()
-            end_line[0] = i
+            start_line[0] = end_line[0] = i
             out.append(_emit("h%d" % level, htext))
             # this heading becomes the context for following blocks (marker-free)
             ctx[0] = _BID_MARKER_RE.sub("", htext)
@@ -423,6 +427,7 @@ def markdown(md, src=None, spans=None):
         # blockquote
         if stripped.startswith(">"):
             flush_para(para)
+            start_line[0] = i
             buf = []
             while i < n and lines[i].strip().startswith(">"):
                 buf.append(lines[i].strip()[1:].strip())
@@ -438,7 +443,7 @@ def markdown(md, src=None, spans=None):
             items = []
             while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
                 itemraw = re.sub(r"^[-*+]\s+", "", lines[i].strip())
-                end_line[0] = i
+                start_line[0] = end_line[0] = i
                 items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ul>" + "".join(items) + "</ul>")
@@ -450,13 +455,15 @@ def markdown(md, src=None, spans=None):
             items = []
             while i < n and re.match(r"^\d+\.\s+", lines[i].strip()):
                 itemraw = re.sub(r"^\d+\.\s+", "", lines[i].strip())
-                end_line[0] = i
+                start_line[0] = end_line[0] = i
                 items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ol>" + "".join(items) + "</ol>")
             continue
 
         # paragraph text
+        if not para:
+            para_start[0] = i
         para.append(stripped)
         para_end[0] = i
         i += 1
