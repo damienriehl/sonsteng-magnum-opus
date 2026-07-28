@@ -146,3 +146,45 @@ class NoCommittedPII(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoRawNulBytes(unittest.TestCase):
+    """No tracked text source may contain a raw NUL byte.
+
+    A NUL in the first 8000 bytes is how git decides a file is binary and how
+    grep decides to skip it. The failure is SILENT: `git diff` renders
+    "Bin ... bytes" instead of a reviewable patch, and grep reports NO MATCHES
+    for text that is plainly there -- an answer that looks correct and is not.
+
+    This session hit it twice, on editor-auth.js and editor-store-core.js, and
+    both times it produced a wrong conclusion before the cause was found. All
+    three call sites used NUL deliberately, as a field separator inside a
+    template literal; the escape sequence is byte-identical at runtime and
+    leaves the source greppable.
+    """
+
+    TEXT_SUFFIXES = {".js", ".mjs", ".py", ".md", ".json", ".jsonc", ".sh",
+                     ".html", ".css", ".txt", ".yml", ".yaml"}
+
+    def test_no_tracked_text_file_contains_a_raw_nul(self):
+        out = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
+        ).stdout
+        offenders = {}
+        for rel in out.split("\0"):
+            if not rel or Path(rel).suffix.lower() not in self.TEXT_SUFFIXES:
+                continue
+            try:
+                data = (REPO / rel).read_bytes()
+            except OSError:
+                continue
+            n = data.count(b"\x00")
+            if n:
+                offenders[rel] = n
+        self.assertEqual(
+            offenders, {},
+            "Raw NUL bytes in tracked text sources. git diffs these as binary and grep silently "
+            "skips them, so searches return false negatives that look like answers. Use the "
+            "backslash-u-0000 escape instead -- identical at runtime. "
+            f"Offenders: {offenders}",
+        )
