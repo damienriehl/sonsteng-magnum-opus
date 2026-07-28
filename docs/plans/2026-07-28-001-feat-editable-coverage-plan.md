@@ -1,6 +1,6 @@
 ---
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: implementation-ready
+artifact_readiness: superseded
 execution: code
 product_contract_source: ce-plan-bootstrap
 title: "feat: make the taxonomy, jurisdictions and firm content editable"
@@ -11,6 +11,18 @@ origin: briefs/qa/sonsteng-2026-07-28-taxonomy-not-editable.json (cockpit ask, i
 ---
 
 # feat: make the taxonomy, jurisdictions and firm content editable
+
+> **SUPERSEDED 2026-07-28 by
+> [`2026-07-28-002-feat-word-like-practicum-editing-plan.md`](2026-07-28-002-feat-word-like-practicum-editing-plan.md).**
+>
+> Damien reframed the goal the same day: John and Roger want to edit *all* the exercises like Word
+> documents, including adding and deleting paragraphs, plus AI-drafted changes scoped to a part, a
+> matter, a module or the whole course. This plan addresses only the coverage gap — content missing
+> from the editor map — which is one unit (U3) of the replacement.
+>
+> **Still accurate and worth reading:** the "How editability actually works" section below. It is
+> the reference write-up of the walker contract, the `data-ebsrc` mechanism and the two tiers, and
+> the replacement plan cites it rather than repeating it.
 
 **Target repo:** sonsteng-magnum-opus
 
