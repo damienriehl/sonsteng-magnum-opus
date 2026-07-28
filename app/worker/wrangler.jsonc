@@ -132,11 +132,13 @@
     // three is empty, so an env without them fails CLOSED — which is exactly how
     // env.production stays safe under R7 while carrying none of them.
     //
-    // EDIT_ACCESS_AUD is intentionally EMPTY until the Access application exists:
-    // it is that application's AUD tag, captured in U2 (credentialed account
-    // work). While it is empty the Access door is inert and only the ?t= door
-    // works — which is the correct, safe intermediate state.
-    "EDIT_ACCESS_AUD": "",
+    // EDIT_ACCESS_AUD is the Access application's Application Audience tag,
+    // captured from U2 on 2026-07-27 (app id 589cfc99-eb6d-40da-a225-f0f0c5828f74,
+    // "Sonsteng Practicum Editor"). It is not a secret — it rides in every
+    // assertion — but it IS load-bearing: access-jwt.js checks the token's `aud`
+    // against it, so a wrong value fails every sign-in closed. Emptying it turns
+    // the Access door off and leaves only the ?t= door, which is the safe state.
+    "EDIT_ACCESS_AUD": "ff942be4e3b4957a8106266e057dc916ac4153f8f28a7698186e8725d5c54ecc",
     "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
     "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
 
@@ -198,7 +200,7 @@
         // block must repeat every value — setting only the top-level one would
         // leave `--env dev` serving the old single origin.
         "EDIT_ORIGIN": "https://edit.sonsteng.damienriehl.com,https://sonsteng-chat.damienriehl.workers.dev",
-        "EDIT_ACCESS_AUD": "",
+        "EDIT_ACCESS_AUD": "ff942be4e3b4957a8106266e057dc916ac4153f8f28a7698186e8725d5c54ecc",
         "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
         "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1},\"admin\":{\"admin\":1}}",

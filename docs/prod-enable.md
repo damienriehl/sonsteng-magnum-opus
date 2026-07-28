@@ -152,11 +152,7 @@ both:
        npx wrangler@4 deploy --env production --dry-run   # MUST show no route for the Access host
        npx wrangler@4 deploy                              # default env == DEV
 
-2. **Create the Access application** on team `young-unit-68fd`
-   — ⚠ **you need John's and Roger's literal email addresses for this, and they are not in this
-   repo or in the cockpit.** A3 originally claimed they were in
-   `briefs/qa/sonsteng-2026-07-27-access-door-answers.json`; that file contains no addresses, and
-   neither does the rest of `briefs/`. This is the one thing blocking the door — — self-hosted, hostname above,
+2. **Create the Access application** on team `young-unit-68fd`. ✅ **DONE 2026-07-27** — — self-hosted, hostname above,
    policy allowing the three addresses, one-time PIN included, session 30 days. Capture the
    **AUD tag**, put it in `EDIT_ACCESS_AUD` in both var blocks, and redeploy.
 
@@ -187,6 +183,30 @@ both:
 any of the three `EDIT_ACCESS_*` vars is empty, so the only working door is `?t=`. That is the
 correct, safe intermediate state, and it is also why PROD (which carries none of these vars)
 cannot take the Access branch at all.
+
+## The application, as built (2026-07-27)
+
+| Field | Value |
+|---|---|
+| App ID | `589cfc99-eb6d-40da-a225-f0f0c5828f74` |
+| Name | Sonsteng Practicum Editor |
+| Domain | `edit.sonsteng.damienriehl.com` |
+| Type | `self_hosted` |
+| Session | `730h` (matches the Cockpit and Fence Edit) |
+| Identity | One-time PIN only (`9be03666-eb42-44b2-b3a0-7fa448455e4a`) |
+| AUD | `ff942be4…4ecc` — in `EDIT_ACCESS_AUD`, both var blocks |
+| Policy | "Practicum editors" · allow · 3 emails · no require/exclude |
+
+**The credential that can manage it is `~/.secrets/cloudflare-zt-token`.** Neither the wrangler
+OAuth token nor `~/.config/cloudflare/creds.env` can touch Access (both 403); the Cloudflare MCP
+can read Access but not write it. If you need to distinguish "no permission" from "bad request"
+on this API, POST an empty body: a permissions failure returns `10000 Authentication error`, a
+capable token returns a validation code such as `12130`.
+
+Verified live immediately after: the hostname 302s to
+`young-unit-68fd.cloudflareaccess.com/cdn-cgi/access/login/…` carrying the same AUD;
+`sonsteng-chat.damienriehl.workers.dev` still serves the editor's own uniform 404 and
+`/edit/assets/editor.css` 200 (R4 intact); PROD still serves the pitch title (R7 intact).
 
 ## Revoking someone — order matters
 
