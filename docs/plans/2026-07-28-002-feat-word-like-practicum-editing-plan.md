@@ -238,6 +238,37 @@ and letting an editor change how the site is generated rather than what it says.
   confirm `data/schemas/` permits an added key or plan the schema change.
 - **Verification:** a written spec for the ID format in both file types, plus proof it round-trips
   the renderer without rendering.
+- **Outcome (settled 2026-07-28, this session):**
+  - **A1 confirmed.** All 3,474 mapped blocks resolve to 280 files, every one `.md`/`.json` under
+    `data/`.
+  - **A2 confirmed.** The queue is checkable and drainable via the admin `/review` surface the
+    daemon already polls; the mandatory empty-check runs at U2 execution time.
+  - **A3 confirmed — stronger than assumed.** The apply engine locates a markdown block by
+    **unique exact-string match** of `original_text` in the raw file
+    (`apply_suggestions._count_and_replace`); the `#pN` ordinal is identity only in the map/store,
+    never in application. Insert/delete are extensions of a content-anchored path.
+  - **JSON scalars need no ID at all.** All 180 `json_scalar` blocks are key-addressed dotted
+    paths; the corpus contains **zero array-index paths**. `json_path` is already durable
+    identity, so KTD1's illustrative `_bid` key is unnecessary — **no schema change**; the strict
+    `additionalProperties: false` posture stands untouched.
+  - **ID format (markdown prose, including `body_md` strings inside JSON):** a trailing marker
+    `{#b:xxxxxxxx}` — 8 lowercase hex chars, minted by `tools/stamp_block_ids.py`, unique
+    corpus-wide, never reused — appended after a space at the end of the block's last source line
+    (paragraph, heading, list item, blockquote). Grammar: `\{#b:[0-9a-f]{8}\}`.
+  - **Locator grammar after U2:** `<file>#b<hex8>` for `.md` prose;
+    `<file>#<json.path>.b<hex8>` for `body_md` prose; `<file>#<json.path>` unchanged for scalars.
+  - **Renderer round-trip proven.** `markdown()` (one shared renderer — site AND instructor
+    bundle) will strip the marker from the block span before emit/registration. Verified on 400
+    sampled corpus blocks: stripped rendering is byte-identical, and the marker trips neither
+    `_has_inline_formatting` nor any block-syntax parse (heading/list/hr/table/quote).
+  - **Text edits preserve identity for free.** The engine replaces the marker-less
+    `original_text`, so the trailing marker — and the block's identity — survives every text edit
+    untouched.
+  - **Unstamped blocks stay safe.** The build remains deterministic: a block without a marker
+    renders normally but is absent from the editor map (read-only) and counted in a build
+    warning. The stamper is rerunnable and mints only missing markers; structural inserts (U4)
+    mint a bid at apply time.
+  - **OQ3 settled (user-directed, 2026-07-28): in-file markers, not a sidecar index.**
 
 ### U2. Stamp durable IDs across the corpus, and re-key the map
 
