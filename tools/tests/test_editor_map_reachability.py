@@ -105,7 +105,8 @@ class EditorMapReachabilityTest(unittest.TestCase):
     def test_matter_pages_still_carry_their_blocks(self):
         """Guard against the fix hollowing out the block allowlist."""
         matters = {k: v for k, v in self.pages.items()
-                   if k.startswith("matters/m") and k.endswith("/index.html")}
+                   if k.startswith("matters/m") and k.endswith("/index.html")
+                   and k.count("/") == 2}   # the packet page, not facts/ (U5)
         self.assertEqual(len(matters), 20)
         for page, blocks in matters.items():
             with self.subTest(page=page):

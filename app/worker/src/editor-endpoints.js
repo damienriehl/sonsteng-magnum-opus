@@ -8,7 +8,7 @@ import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
-  enumerateScope,
+  enumerateScope, EDITOR_MAP_FACTS,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 
@@ -124,7 +124,7 @@ export async function suggestEndpoint(request, env, auth) {
 
   if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(id))
     return editError("validation_error", "A valid suggestion id (uuid) is required.", 400);
-  if (typeof source_ref !== "string")
+  if (typeof source_ref !== "string" && op !== "json_add")
     return editError("validation_error", "source_ref is required.", 400);
   if (op == null && new_text == null && comment == null)
     return editError("validation_error", "Provide new_text or a comment.", 400);
@@ -138,6 +138,47 @@ export async function suggestEndpoint(request, env, auth) {
   if (byteLen(new_text, typeof body.new_text2 === "string" ? body.new_text2 : null,
               comment) > ceilings.maxBytes)
     return editError("too_large", "That change is too large. Please split it up.", 413);
+
+  // json_add (U5): a NEW fact — no map block exists yet, so it validates
+  // against the map's FACTS index instead of the block allowlist. The
+  // source_ref is SERVER-constructed from the matter's facts file; the key is
+  // a short slug; the value is the fact text. Queued for review (json_add is
+  // not in AUTO_APPLY_KINDS — a new fact changes file shape).
+  if (op === "json_add") {
+    const matterSlug = typeof body.matter === "string" ? body.matter : "";
+    const factKey = typeof body.fact_key === "string" ? body.fact_key : "";
+    const factsMeta = (EDITOR_MAP_FACTS || {})[matterSlug];
+    if (!factsMeta)
+      return editError("validation_error", "That matter has no facts panel.", 400);
+    if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(factKey))
+      return editError("validation_error",
+        "Give the fact a short name: lowercase letters, digits and dashes.", 400);
+    if (!new_text || !new_text.trim())
+      return editError("validation_error", "Provide the fact's text.", 400);
+    const jsonPath = "custom_facts." + factKey;
+    const addRef = factsMeta.file + "#" + jsonPath;
+    const result = await editorStub(env).suggest({
+      id,
+      editor: auth.editor,
+      scope: "edit",
+      origin: "human",
+      kind: "json_add",
+      page: `matters/${matterSlug}/facts/index.html`,
+      block_anchor: null,
+      source_ref: addRef,
+      json_path: jsonPath,
+      original_text: null,
+      original_hash: null,
+      new_text: new_text.trim(),
+      comment,
+      context: "new fact: " + factKey,
+      map_version: MAP_VERSION,
+      group_id: null,
+    }, ceilings, { directApply: env.DIRECT_APPLY === "true" });
+    if (!result.ok)
+      return editError(result.reason || "validation_error", "That fact could not be saved.", 400);
+    return json({ ok: true, id, status: result.suggestion.status, replay: !!result.replay });
+  }
 
   // ALLOWLIST: the source_ref MUST resolve in one of the caller's GRANTED maps.
   // Unknown in every granted scope (SSRF/forgery) -> validation_error (never a
@@ -285,8 +326,18 @@ export async function systemSuggestEndpoint(request, env, auth) {
   if (block.kind === "comment_only" && new_text != null)
     return editError("validation_error", "That block can only be commented on.", 400);
 
-  // The kind we STORE is derived from the map (+ comment intent), never trusted.
-  const kind = new_text == null ? "comment" : block.kind;
+  // Structural operation (U5: drafted mentions of new facts arrive as
+  // insert_after rows in an ai_rewrite group) — same validator as /suggest.
+  let structural = null;
+  if (typeof body.op === "string") {
+    structural = resolveStructuralOp(body, block, scope);
+    if (structural.error)
+      return editError(structural.error[0], structural.error[1], 400);
+  }
+
+  // The kind we STORE is derived from the map (+ comment/op intent), never trusted.
+  const kind = structural ? structural.kind
+    : new_text == null ? "comment" : block.kind;
 
   const stub = editorStub(env);
   const result = await stub.suggest({
@@ -301,11 +352,12 @@ export async function systemSuggestEndpoint(request, env, auth) {
     json_path: block.kind === "json_scalar" ? block.json_path : null,
     original_text: block.original_text, // SERVER-resolved from the map
     original_hash: block.original_hash, // SERVER-authoritative
-    new_text,
+    new_text: structural ? structural.new_text : new_text,
     comment,
     context: block.context || "",
     map_version: MAP_VERSION,
     group_id,                      // system suggestions carry the proposer's group
+    op_arg: structural ? structural.op_arg : null,
   }, ceilings);
 
   if (!result.ok) {
