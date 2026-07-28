@@ -157,14 +157,28 @@ slot model, and any change to how edits are applied, reverted or attributed.
   personal address committed now would ship with the first public release. Nothing in the codebase needs them: `EDIT_ACCESS_EMAILS`
   maps addresses to slots and is itself config, so it is set as a **secret**, not a var.
 
-  ⚠ **CORRECTION, 2026-07-27 (found during implementation).** A3 originally asserted the two
-  addresses "live in the private cockpit
-  (`briefs/qa/sonsteng-2026-07-27-access-door-answers.json`)". **They do not.** That file contains
-  no email addresses at all, and a sweep of the whole `briefs/` tree turns up no
-  sonsteng-associated pair. The addresses exist only wherever Damien holds them. This is the sole
-  blocker on U2: an Access policy and an `EDIT_ACCESS_EMAILS` map both need the literal strings,
-  and guessing one is not a recoverable error — a wrong address locks John out, or admits someone
-  else. Everything else in the plan is built and deployed.
+  **A3 was right, and an intermediate correction in this document was wrong.** For the record,
+  because the mistake is instructive:
+
+  - A3 said the addresses live in the cockpit at
+    `briefs/qa/sonsteng-2026-07-27-access-door-answers.json`. During implementation that file was
+    scanned, found to contain no addresses, and A3 was marked as an error. **That scan was of the
+    file's *current* contents.** `gen-board`'s completion-write had regenerated it — the rewritten
+    file carries `state: retired` markers and no addresses.
+  - The addresses **are** in that repo, in the blob history of exactly the path A3 named. A
+    full-history object sweep finds them there and nowhere else.
+  - `github.com/damienriehl/coding-projects` is **private** — verified twice: `gh repo view`
+    reports `isPrivate: true`, and an unauthenticated API probe returns 404.
+  - **This repository — the one headed public — contains them in neither the working tree nor any
+    blob in its history.** Swept both.
+
+  The lesson: *a file is not its history.* "The addresses are not in that file" and "the addresses
+  are not in that repo" are different claims, and only the second one was worth making. Checking
+  the current contents of a generated file says nothing about what git still holds.
+
+  Operationally: `EDIT_ACCESS_EMAILS` is a deploy **secret**, set 2026-07-27 by piping to
+  `wrangler secret put` so the values touched no file, no repo, and no shell history.
+  `tools/tests/test_no_committed_pii.py` now gates the convention.
 
 ### Key Technical Decisions
 
@@ -775,9 +789,16 @@ nor code; it was a deploy-tool default that a config key silently flipped. A gat
 the artifact cannot see a change in how the artifact is *published* — which is why the fix ships
 with assertions about the config file itself.
 
-### U2 is blocked, and not on effort
+### U2 is blocked, and not on anything I can do
 
-The Access application cannot be created without John's and Roger's literal email addresses, and
-A3's claim about where they live is wrong (see the correction in A3). Everything downstream of
-having them is already staged: `EDIT_ACCESS_AUD` is empty so the verifier fails closed, the
-`damienadmin` slot exists, and the runbook's remaining steps are three commands.
+`EDIT_ACCESS_EMAILS` is **set** (2026-07-27). What remains is creating the Access application
+itself, and that is not a matter of effort or of having the addresses:
+
+**The Cloudflare token cannot do it.** The wrangler OAuth token carries `account (read)`,
+`workers*`, `d1`, `pages`, `zone (read)`, `ssl_certs` — and **no Zero Trust scope**. A read-only
+probe of `/accounts/{id}/access/apps` returns `403 Authentication error`. Creating the application
+requires the dashboard, or a purpose-made API token with Access: Edit that does not exist.
+
+Everything downstream is staged and inert: `EDIT_ACCESS_AUD` is empty, so `access-jwt.js` fails
+closed and only the `?t=` door works. Once the application exists, the remaining work is pasting
+its AUD tag into both var blocks and deploying.
