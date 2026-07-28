@@ -1,7 +1,9 @@
 # Editing the Practicum — a one-page guide for Prof. Sonsteng
 
 *Your edits publish themselves — usually within two minutes — and **every version is kept**,
-so any change can be undone with one click. You can never break anything. Edit freely.*
+so any change can be undone with one click. You can never break anything. Edit freely.
+Bigger changes — adding or removing paragraphs, or anything you ask for across many pages —
+go to Damien first, so those waiting a little longer is normal.*
 
 ## Your edits go live on their own — in about 2 minutes
 
@@ -50,7 +52,7 @@ any time to make everything bigger.
   but aren't recognised yet. Go to `edit.sonsteng.damienriehl.com` again and sign in with the
   emailed code. Nothing you wrote has been lost.
 
-## The two things you can do
+## The things you can do
 
 **1. Fix the words (edit in place).**
 Click any paragraph. It becomes editable, like a Word document. Change a word, add a sentence,
@@ -64,7 +66,34 @@ words,"* or *"This chapter is too long — cut the middle."* Click **Comment**. 
 in the margin so you can see what you've already said.
 
 You can do this on **every page** — the exercises, the curriculum chapters, the templates, the
-website copy, and the private teaching notes and answer keys.
+website copy, the skills browser, and the private teaching notes and answer keys.
+
+**3. Add, remove and move whole paragraphs.**
+Next to every paragraph, alongside **Edit** and **Comment**, there are now buttons to
+**Add paragraph** (write a new one right where it will appear), **Remove** (ask for the
+paragraph to be taken out), and **Move up / Move down**. These are bigger changes than a
+word fix, so they work a little differently: **they go to Damien first.** The label on the
+paragraph says **"waiting for review"**, and the page changes only after he approves. Every
+one of them can be undone with one click, always — a removed paragraph is never gone.
+
+**4. Change the facts of a scenario — in one place.**
+Every matter now has a **Facts page** (the "FACTS" link at the top of the matter's contents).
+It lists the scenario's source values — names, dates, amounts — each with a note saying where
+it's used. Change a value there and everything *generated from it* follows automatically;
+passages that *restate* it in prose are found and drafted for Damien's review, so the scenario
+can't quietly contradict itself. You can also **add a new fact** at the bottom of the page —
+it's recorded first, and worked into the prose only through drafted wording you and Damien
+approve.
+
+**5. Ask for a bigger change — in your own words.**
+The green bar has a **"Bigger change…"** button. Click it, choose how far the change should
+reach — this matter, a whole module, or the entire course — and say what you want in a
+sentence or two, as if you were telling a colleague. For example: *"Wherever the filing
+deadline of 14 days appears, change it to 30 days."* The system drafts the change for every
+place it applies and shows Damien a redline; **nothing on the site changes until he approves.**
+If a request would touch a very large number of paragraphs, it tells you how many and asks
+once more, plainly, whether you mean it that widely. So the absence of an instant update after
+a bigger change is **expected** — it is waiting for Damien, not lost.
 
 ## What happens next
 

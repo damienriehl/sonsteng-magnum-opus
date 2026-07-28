@@ -465,3 +465,14 @@ Shipped as the interactive cockpit QA artifact
 3. **Merge `feat/weekend-fast-follows` → `main`** (decision-3; gates the merge), plus any
    judgment calls (streaming-default flip, PROD-enable timing).
 When answered: merge → send John's link → Wed walkthrough.
+
+## 2026-07-28 — Word-like editing shipped (plan 2026-07-28-002)
+
+Durable block identity ({#b:} markers, 5,952 blocks stamped, equivalence proven), structural
+editing end to end (add/delete/split/merge/move — queued for review, one-gesture undo proven
+live incl. bid-exact restore), editable coverage for taxonomy/firm, the scope ladder
+(GET /edit/v1/scope), AI-drafted scoped changes (scoped-request → home-box drafter →
+one ai_rewrite group → redline review; 100-block ceiling + canary), the per-matter Facts page
+(json_add via custom_facts; Stage 1.5 grouped companions), and the request-level client verbs.
+Line edits keep the ~2-min fast path; every scoped/structural change waits for Damien (KD3).
+Guide rewritten around the new verbs. See docs/plans/2026-07-28-002-*.md for the full contract.
