@@ -41,4 +41,9 @@ export class EditorStore extends DurableObject {
   fileRevertRequest(input) { return this.core.fileRevertRequest(input); }
   listRevertRequests(status) { return this.core.listRevertRequests(status); }
   resolveRevertRequest(id, status, note) { return this.core.resolveRevertRequest(id, status, note); }
+  fileScopedRequest(input) { return this.core.fileScopedRequest(input); }
+  listScopedRequests(status) { return this.core.listScopedRequests(status); }
+  claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
+  resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
+  groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
 }
