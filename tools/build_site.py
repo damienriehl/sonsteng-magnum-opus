@@ -2955,7 +2955,53 @@ def _extract_page_blocks(html_text):
 EDITOR_MAP_EXCLUDE_PREFIXES = ("assets/", "chat/")
 
 
-def build_editor_map(spine_build_id):
+def compute_scope_index(corpus):
+    """U6: the deterministic scope-ladder index (part -> matter -> module ->
+    course), embedded in the editor map so a scoped change's blast radius is
+    enumerable server-side BEFORE any model runs (R4, KD2).
+
+    Module membership is TASK-derived — a matter belongs to module M<N> iff its
+    rubric criteria or its exercise content reference a taxonomy task whose
+    `module` is M<N>. That is the only module<->matter joint the data records,
+    and it is why a module-scoped change can legitimately cascade across most
+    of the practicum (Damien: "almost akin to a code refactor")."""
+    task_mod = {t["id"]: t.get("module")
+                for t in corpus["tasks"]["tasks"] if t.get("module")}
+    matters = {}
+    modules = {code: {"curriculum": "data/curriculum/%s.md" % code.lower(),
+                      "matters": []}
+               for code in MODULE_META}
+    for m in corpus["matters"]:
+        slug = m["_slug"]
+        mdir = m["_dir"]
+        parts = set()
+        for sub in ("case-file", "exercise", "business"):
+            if os.path.isdir(os.path.join(mdir, sub)):
+                parts.add(sub)
+        if os.path.isfile(os.path.join(mdir, "matter.json")):
+            parts.add("matter")
+        matters[slug] = {"id": m.get("id") or slug.split("-", 1)[0],
+                         "parts": sorted(parts)}
+        mods = set()
+        for c in (m.get("_rubric") or {}).get("criteria", []):
+            mod = task_mod.get(c.get("task_id"))
+            if mod:
+                mods.add(mod)
+        ex = m.get("_exercise")
+        if ex is not None:
+            raw = json.dumps(ex)
+            for tid, mod in task_mod.items():
+                if tid in raw:
+                    mods.add(mod)
+        for mod in sorted(mods):
+            if mod in modules:
+                modules[mod]["matters"].append(slug)
+    for meta in modules.values():
+        meta["matters"].sort()
+    return {"matters": matters, "modules": modules}
+
+
+def build_editor_map(spine_build_id, scope_index=None):
     """POST-BUILD pass: for every written page, extract editable blocks in the
     walker's document order, then STRIP the data-ebsrc annotations so the public
     HTML carries nothing. Writes build/editor-map.generated.json (NOT into the
@@ -3004,6 +3050,7 @@ def build_editor_map(spine_build_id):
         "normalization": ("original_hash = sha256(normalize(rendered_text)); "
                           "normalize spec is frozen in tools/text_norm.py."),
         "counts": {},
+        "scopes": scope_index or {},
         "pages": pages,
     }
     for rel, entries in pages.items():
@@ -3197,7 +3244,8 @@ def main(argv):
 
     # ---- editor map + parity stamp (post-build: walk DOM, then strip anchors) ----
     write_build_stamp(SPINE_BUILD_ID)
-    ed_pages, ed_total = build_editor_map(SPINE_BUILD_ID)
+    ed_pages, ed_total = build_editor_map(SPINE_BUILD_ID,
+                                          compute_scope_index(corpus))
 
     # ---- unmarked-block report (durable-ID coverage) ----
     # A prose block without a {#b:} marker renders read-only and is absent from

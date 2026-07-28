@@ -106,6 +106,33 @@ export const SCHEMA_SQL = `
   -- run range on canonical, and marks them 'done' (or 'failed'). Visible on the
   -- review page + digest. run_first/run_last are the coalesced revision's [first,
   -- last] commit shas from the history bundle.
+  -- Scoped-change requests (U7, KTD4/KTD5). An editor's natural-language
+  -- instruction at a chosen scope, with its enumerated blast radius recorded at
+  -- request time. The home-box drafter claims a request, drafts one edit per
+  -- matched block as ONE ai_rewrite group, and module/course requests progress
+  -- canary -> remainder only after the canary matter verifies clean.
+  CREATE TABLE IF NOT EXISTS scoped_requests (
+    id TEXT PRIMARY KEY,
+    editor TEXT NOT NULL,
+    level TEXT NOT NULL,
+    matter TEXT,
+    part TEXT,
+    module TEXT,
+    instruction TEXT NOT NULL,
+    radius_blocks INTEGER NOT NULL,
+    radius_files INTEGER,
+    radius_matters INTEGER,
+    confirmed INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    group_id TEXT,
+    canary_matter TEXT,
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_scoped_status ON scoped_requests(status, created_at);
+
   CREATE TABLE IF NOT EXISTS revert_requests (
     id TEXT PRIMARY KEY,
     editor TEXT NOT NULL,
@@ -680,6 +707,85 @@ export class EditorStoreCore {
         status, now, id);
     }
     return { ok: true, id, status };
+  }
+
+  // ---- scoped-change requests (U7) -----------------------------------------
+  // Lifecycle: requested -> drafting -> drafted -> (drafting again for the
+  // remainder phase) -> done | failed | declined. claim() is the sole
+  // requested->drafting writer; resolve() owns every other move and refuses
+  // illegal jumps and terminal rewrites.
+  fileScopedRequest({ id, editor, level, matter, part, module, instruction,
+                      radius_blocks, radius_files, radius_matters,
+                      confirmed } = {}) {
+    const now = this.now();
+    if (typeof id !== "string" || !id) return { ok: false, reason: "validation_error" };
+    if (typeof editor !== "string" || !editor) return { ok: false, reason: "validation_error" };
+    if (typeof level !== "string" || !level) return { ok: false, reason: "validation_error" };
+    if (typeof instruction !== "string" || !instruction.trim())
+      return { ok: false, reason: "validation_error" };
+    if (!Number.isFinite(radius_blocks)) return { ok: false, reason: "validation_error" };
+    const existing = this._one("SELECT * FROM scoped_requests WHERE id=?", id);
+    if (existing) return { ok: true, replay: true, request: existing };
+    const phase = (level === "module" || level === "course") ? "canary" : "all";
+    this.sql.exec(
+      "INSERT INTO scoped_requests (id, editor, level, matter, part, module, " +
+        "instruction, radius_blocks, radius_files, radius_matters, confirmed, " +
+        "status, phase, group_id, canary_matter, note, created_at, updated_at) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?)",
+      id, editor, level, matter || null, part || null, module || null,
+      instruction, radius_blocks, radius_files ?? null, radius_matters ?? null,
+      confirmed ? 1 : 0, "requested", phase, now, now
+    );
+    return { ok: true, request: this._one("SELECT * FROM scoped_requests WHERE id=?", id) };
+  }
+
+  listScopedRequests(status = null) {
+    if (status) {
+      return this._all(
+        "SELECT * FROM scoped_requests WHERE status=? ORDER BY created_at ASC", status);
+    }
+    return this._all("SELECT * FROM scoped_requests ORDER BY created_at DESC");
+  }
+
+  claimScopedRequest(id) {
+    const row = this._one("SELECT status FROM scoped_requests WHERE id=?", id);
+    if (!row || row.status !== "requested") return { ok: false, reason: "not_claimable" };
+    this.sql.exec("UPDATE scoped_requests SET status='drafting', updated_at=? WHERE id=?",
+      this.now(), id);
+    return { ok: true, id };
+  }
+
+  resolveScopedRequest(id, { status, group_id, phase, canary_matter, note } = {}) {
+    const ALLOWED = {
+      drafting: new Set(["drafted", "failed"]),
+      drafted: new Set(["drafting", "done", "failed", "declined"]),
+    };
+    const row = this._one("SELECT status FROM scoped_requests WHERE id=?", id);
+    if (!row) return { ok: false, reason: "not_found" };
+    const from = row.status;
+    if (!ALLOWED[from] || !ALLOWED[from].has(status))
+      return { ok: false, reason: "illegal_transition" };
+    const sets = ["status=?", "updated_at=?"];
+    const binds = [status, this.now()];
+    if (group_id != null) { sets.push("group_id=?"); binds.push(group_id); }
+    if (phase != null) { sets.push("phase=?"); binds.push(phase); }
+    if (canary_matter != null) { sets.push("canary_matter=?"); binds.push(canary_matter); }
+    if (note != null) { sets.push("note=?"); binds.push(note); }
+    binds.push(id);
+    this.sql.exec(`UPDATE scoped_requests SET ${sets.join(", ")} WHERE id=?`, ...binds);
+    return { ok: true, id, status };
+  }
+
+  // Every member of a group by status — TERMINAL ones included (listAll hides
+  // them, but the canary gate needs to see applied/declined rows).
+  groupOutcome(group_id) {
+    const rows = this._all(
+      "SELECT status, COUNT(*) AS n FROM suggestions WHERE group_id=? GROUP BY status",
+      group_id);
+    const by_status = {};
+    let total = 0;
+    for (const r of rows) { by_status[r.status] = r.n; total += r.n; }
+    return { group_id, total, by_status };
   }
 
   // ---- digest --------------------------------------------------------------
