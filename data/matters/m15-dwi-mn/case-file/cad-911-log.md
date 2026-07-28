@@ -1,12 +1,12 @@
-# 911 DISPATCH / CAD CALL LOG
+# 911 DISPATCH / CAD CALL LOG {#b:f9c01d2a}
 
-**Exhibit m15.exh.006**
+**Exhibit m15.exh.006** {#b:978ed910}
 
-- **Agency:** Sherburne County Emergency Communications
-- **Incident Type:** Suspicious / possible impaired driver (weaving vehicle)
-- **Date:** January 17, 2025
+- **Agency:** Sherburne County Emergency Communications {#b:f545e51b}
+- **Incident Type:** Suspicious / possible impaired driver (weaving vehicle) {#b:6b9dcee3}
+- **Date:** January 17, 2025 {#b:88bfd94c}
 
-## Call Log
+## Call Log {#b:289e0561}
 
 | Time | Entry |
 |---|---|
@@ -19,8 +19,8 @@
 | 22:58 | Unit 214 advises traffic stop initiated. |
 | 23:16 | Unit 214 advises one in custody; transporting to jail. |
 
-## Reporting-Party Notation
+## Reporting-Party Notation {#b:cbdb50cf}
 
-RP later provided a written statement (filed separately). RP indicated she lost visual contact with the reported vehicle for a period near an interchange and could not confirm the stopped vehicle was the same pickup she observed.
+RP later provided a written statement (filed separately). RP indicated she lost visual contact with the reported vehicle for a period near an interchange and could not confirm the stopped vehicle was the same pickup she observed. {#b:a5e1db01}
 
-*CAD entries are computer-timestamped. The recorded 911 audio is available in discovery.*
+*CAD entries are computer-timestamped. The recorded 911 audio is available in discovery.* {#b:cf123915}

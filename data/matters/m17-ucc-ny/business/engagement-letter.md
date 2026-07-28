@@ -1,45 +1,45 @@
-# Engagement Letter
+# Engagement Letter {#b:92d067f0}
 
 **Ellingboe & Ravndal LLP**
-310 Riverwalk Plaza, Suite 400, Norsholm, Meridian 55901
+310 Riverwalk Plaza, Suite 400, Norsholm, Meridian 55901 {#b:5dcc7006}
 
-March 9, 2026
+March 9, 2026 {#b:b0a81871}
 
 Ms. Marisol Beltran
 Procurement Director
 Empire Provisions Corp.
 1400 Riverfront Way
-Newburgh, New York 12550
+Newburgh, New York 12550 {#b:791d3287}
 
-**Re: Empire Provisions Corp. v. Ostervold Packing Co. — Defense of price action (Supreme Court of the State of New York, Commercial Division, Westchester County)**
+**Re: Empire Provisions Corp. v. Ostervold Packing Co. — Defense of price action (Supreme Court of the State of New York, Commercial Division, Westchester County)** {#b:25fa5538}
 
-Dear Ms. Beltran:
+Dear Ms. Beltran: {#b:bbba643c}
 
-Thank you for returning to Ellingboe & Ravndal LLP. This letter confirms the terms on which the firm will represent Empire Provisions Corp. ("Empire" or "you") in connection with the lawsuit brought by Ostervold Packing Co. seeking the contract price for three truckloads of packaged goods that Empire rejected.
+Thank you for returning to Ellingboe & Ravndal LLP. This letter confirms the terms on which the firm will represent Empire Provisions Corp. ("Empire" or "you") in connection with the lawsuit brought by Ostervold Packing Co. seeking the contract price for three truckloads of packaged goods that Empire rejected. {#b:7ebf701c}
 
-**Scope of engagement.** We will represent Empire as defendant in the above action. Our work includes answering the complaint, developing the facts, conducting discovery, analyzing Empire's rejection and warranty defenses and Ostervold's price claim, counseling you on strategy and settlement, and, if the matter does not resolve, motion practice and preparation through trial. Any appeal, or any separate claim against a third party, would be the subject of a separate agreement.
+**Scope of engagement.** We will represent Empire as defendant in the above action. Our work includes answering the complaint, developing the facts, conducting discovery, analyzing Empire's rejection and warranty defenses and Ostervold's price claim, counseling you on strategy and settlement, and, if the matter does not resolve, motion practice and preparation through trial. Any appeal, or any separate claim against a third party, would be the subject of a separate agreement. {#b:7f8be178}
 
-**Fees.** This is an hourly engagement. Our current rates are $250 per hour for Amara Ellingboe (senior attorney), $225 per hour for Marcus Ravndal (associate attorney), and $120 per hour for paralegal time. We will staff the matter to be efficient, assigning work to the lowest-cost timekeeper suited to it. Rates may be adjusted on written notice, no more than once per year.
+**Fees.** This is an hourly engagement. Our current rates are $250 per hour for Amara Ellingboe (senior attorney), $225 per hour for Marcus Ravndal (associate attorney), and $120 per hour for paralegal time. We will staff the matter to be efficient, assigning work to the lowest-cost timekeeper suited to it. Rates may be adjusted on written notice, no more than once per year. {#b:b7e43ab7}
 
-**Costs.** You are responsible for out-of-pocket costs we advance — filing and court fees, transcript and deposition costs, the retained labeling consultant's fees, copying, and similar expenses. These appear as itemized expenses on your statements.
+**Costs.** You are responsible for out-of-pocket costs we advance — filing and court fees, transcript and deposition costs, the retained labeling consultant's fees, copying, and similar expenses. These appear as itemized expenses on your statements. {#b:be803345}
 
-**Billing.** We bill monthly. Statements itemize the timekeeper, date, time in tenth-of-an-hour increments, and a narrative, along with any costs. Payment is due within thirty days.
+**Billing.** We bill monthly. Statements itemize the timekeeper, date, time in tenth-of-an-hour increments, and a narrative, along with any costs. Payment is due within thirty days. {#b:0db9d5c4}
 
-**Your role.** You agree to provide complete and accurate information, preserve relevant records (including the receiving, procurement, and inventory files), and remain reasonably available. Candor with us — including about facts that may not help Empire — lets us give you sound advice.
+**Your role.** You agree to provide complete and accurate information, preserve relevant records (including the receiving, procurement, and inventory files), and remain reasonably available. Candor with us — including about facts that may not help Empire — lets us give you sound advice. {#b:6eb82bb0}
 
-**No guarantee.** We cannot and do not guarantee any particular outcome.
+**No guarantee.** We cannot and do not guarantee any particular outcome. {#b:6dee52e5}
 
-If these terms are acceptable, please sign below and return one copy. We appreciate the opportunity to represent Empire.
+If these terms are acceptable, please sign below and return one copy. We appreciate the opportunity to represent Empire. {#b:002b08f2}
 
-Sincerely,
+Sincerely, {#b:4a5d3b80}
 
 **Amara Ellingboe**
-Ellingboe & Ravndal LLP
+Ellingboe & Ravndal LLP {#b:69b20ffa}
 
 ---
 
-Agreed and accepted:
+Agreed and accepted: {#b:554b27c0}
 
 ______________________________
 Marisol Beltran, for Empire Provisions Corp.
-Date: ____________
+Date: ____________ {#b:71d35595}

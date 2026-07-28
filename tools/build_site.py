@@ -209,6 +209,25 @@ _CANDIDATE_TAGS = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
 # tools/stamp_block_ids.py (migration/backfill) or the apply engine (inserts).
 _BID_MARKER_RE = re.compile(r"\s*\{#b:([0-9a-f]{8})\}\s*$")
 
+# Anywhere-in-text form, for scrubbing markers out of VERBATIM exports (the
+# student-safe data catalog copies raw source files — markers are editorial
+# identity, never content, and must not ship).
+_BID_MARKER_ANY_RE = re.compile(r" ?\{#b:[0-9a-f]{8}\}")
+
+
+def strip_bid_markers(text):
+    """Remove every {#b:} durable-ID marker from a text blob (verbatim exports)."""
+    return _BID_MARKER_ANY_RE.sub("", text)
+
+
+def copy_student_safe(src, dst):
+    """Copy a student-safe spine file into the public catalog, scrubbing
+    durable-ID markers. Byte-identical to shutil.copyfile otherwise."""
+    with open(src, "r", encoding="utf-8") as fh:
+        content = fh.read()
+    with open(dst, "w", encoding="utf-8") as fh:
+        fh.write(strip_bid_markers(content))
+
 
 class _EditorMap:
     """Accumulates SOURCE metadata per source_ref during a build. Page + index +
@@ -2699,11 +2718,11 @@ def build_data_catalog(corpus):
     # copy student-safe spine files under site/platform/data/
     os.makedirs(os.path.join(OUT, "data", "taxonomy"), exist_ok=True)
     for f in ("skills.json", "tasks.json", "folio-crosswalk.json"):
-        shutil.copyfile(os.path.join(DATA, "taxonomy", f), os.path.join(OUT, "data", "taxonomy", f))
-    shutil.copyfile(os.path.join(DATA, "firm", "firm.json"), os.path.join(OUT, "data", "firm.json"))
+        copy_student_safe(os.path.join(DATA, "taxonomy", f), os.path.join(OUT, "data", "taxonomy", f))
+    copy_student_safe(os.path.join(DATA, "firm", "firm.json"), os.path.join(OUT, "data", "firm.json"))
     api_src = os.path.join(ROOT, "app", "worker", "API-CONTRACTS.md")
     if os.path.exists(api_src):
-        shutil.copyfile(api_src, os.path.join(OUT, "data", "api-contracts.md"))
+        copy_student_safe(api_src, os.path.join(OUT, "data", "api-contracts.md"))
 
     matters_cat = []
     for m in corpus["matters"]:
@@ -2711,12 +2730,12 @@ def build_data_catalog(corpus):
         mdir = os.path.join(OUT, "data", "matters", slug)
         os.makedirs(mdir, exist_ok=True)
         # student-safe copies
-        shutil.copyfile(os.path.join(m["_dir"], "matter.json"), os.path.join(mdir, "matter.json"))
+        copy_student_safe(os.path.join(m["_dir"], "matter.json"), os.path.join(mdir, "matter.json"))
         if m.get("_exercise") is not None:
-            shutil.copyfile(os.path.join(m["_dir"], "exercise", "exercise.json"),
-                            os.path.join(mdir, "exercise.json"))
+            copy_student_safe(os.path.join(m["_dir"], "exercise", "exercise.json"),
+                              os.path.join(mdir, "exercise.json"))
         if m.get("_rubric") is not None:
-            shutil.copyfile(os.path.join(m["_dir"], "rubric.json"), os.path.join(mdir, "rubric.json"))
+            copy_student_safe(os.path.join(m["_dir"], "rubric.json"), os.path.join(mdir, "rubric.json"))
 
         personas_cat = []
         for p in m["_personas"].values():
@@ -3206,6 +3225,27 @@ def main(argv):
                 print("  LEAK: " + l)
         else:
             print("no instructor-side content in any generated page.")
+
+        # Durable-ID markers are editorial identity, never content: nothing
+        # under site/ may carry one (pages render them away; verbatim catalog
+        # copies are scrubbed by copy_student_safe).
+        marker_leaks = []
+        for path in glob.glob(os.path.join(OUT, "**", "*"), recursive=True):
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                    if "{#b:" in fh.read():
+                        marker_leaks.append(os.path.relpath(path, OUT))
+            except OSError:
+                marker_leaks.append("unreadable: " + os.path.relpath(path, OUT))
+        print("== marker-leak sweep ==")
+        if marker_leaks:
+            for l in marker_leaks:
+                print("  LEAK: {#b:} marker in " + l)
+        else:
+            print("no durable-ID markers in any shipped file.")
+        leaks = leaks + marker_leaks
 
         # History-leak sweep — the editor-gated redline History output (redlines of
         # canonical sources expose instructor-only material) must NEVER reach the

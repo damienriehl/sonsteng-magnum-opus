@@ -1,38 +1,38 @@
-# Engagement Letter
+# Engagement Letter {#b:5b3b778e}
 
 **ELLINGBOE & RAVNDAL LLP**
-310 Riverwalk Plaza, Suite 400, Norsholm, Meridian 55901
+310 Riverwalk Plaza, Suite 400, Norsholm, Meridian 55901 {#b:c225973b}
 
-November 14, 2025
+November 14, 2025 {#b:39783cf1}
 
 Gregor A. Winterhalt
 24 Riverbend Road
-Danforth, Meridian 55823
+Danforth, Meridian 55823 {#b:6fe0baae}
 
-Re: Representation in In re Petition for Disciplinary Action against Gregor A. Winterhalt
+Re: Representation in In re Petition for Disciplinary Action against Gregor A. Winterhalt {#b:1e3177e9}
 
-Dear Mr. Winterhalt:
+Dear Mr. Winterhalt: {#b:3e7bfbe0}
 
-Thank you for retaining Ellingboe & Ravndal LLP. This letter sets out the terms of our engagement.
+Thank you for retaining Ellingboe & Ravndal LLP. This letter sets out the terms of our engagement. {#b:caa313f3}
 
-**Scope.** We will represent you as respondent's counsel in the disciplinary proceeding brought against you by the Meridian Office of Lawyer Conduct, currently pending before a hearing panel of the Lawyers Professional Responsibility Board. Our work will include reviewing the Petition and investigation record, preparing your responsive pleading, counseling you, preparing and filing a pre-hearing brief, representing you at the hearing before the referee, and, where appropriate, negotiating with disciplinary counsel toward a stipulated disposition. The scope does not include any related civil claim, malpractice matter, or appeal to the Meridian Supreme Court, which would require a separate agreement.
+**Scope.** We will represent you as respondent's counsel in the disciplinary proceeding brought against you by the Meridian Office of Lawyer Conduct, currently pending before a hearing panel of the Lawyers Professional Responsibility Board. Our work will include reviewing the Petition and investigation record, preparing your responsive pleading, counseling you, preparing and filing a pre-hearing brief, representing you at the hearing before the referee, and, where appropriate, negotiating with disciplinary counsel toward a stipulated disposition. The scope does not include any related civil claim, malpractice matter, or appeal to the Meridian Supreme Court, which would require a separate agreement. {#b:abaa0c92}
 
-**Fees.** This is an hourly-fee engagement. Amara Ellingboe's time is billed at $250 per hour and Marcus Ravndal's at $225 per hour; any paralegal time is billed at $120 per hour. We bill in tenth-of-an-hour increments and send statements periodically. Fees are earned as work is performed.
+**Fees.** This is an hourly-fee engagement. Amara Ellingboe's time is billed at $250 per hour and Marcus Ravndal's at $225 per hour; any paralegal time is billed at $120 per hour. We bill in tenth-of-an-hour increments and send statements periodically. Fees are earned as work is performed. {#b:8c5e2e37}
 
-**Advance fee deposit.** You have agreed to deposit an advance of $3,500, which we will hold in our client trust account and apply against your statements as fees are earned and billed, replenishing it as needed. Any unearned balance at the conclusion of the matter will be refunded to you.
+**Advance fee deposit.** You have agreed to deposit an advance of $3,500, which we will hold in our client trust account and apply against your statements as fees are earned and billed, replenishing it as needed. Any unearned balance at the conclusion of the matter will be refunded to you. {#b:76aeb426}
 
-**Your responsibilities.** You agree to be candid and complete with us, to provide the documents and information we request, and to keep us informed. Candor with your own counsel is essential; we cannot defend you effectively against facts we do not know.
+**Your responsibilities.** You agree to be candid and complete with us, to provide the documents and information we request, and to keep us informed. Candor with your own counsel is essential; we cannot defend you effectively against facts we do not know. {#b:d86bb09f}
 
-**Communications.** Please direct communications to Marcus Ravndal in the first instance. Do not communicate directly with the Office of Lawyer Conduct, opposing complainants, or their counsel about this matter without first consulting us.
+**Communications.** Please direct communications to Marcus Ravndal in the first instance. Do not communicate directly with the Office of Lawyer Conduct, opposing complainants, or their counsel about this matter without first consulting us. {#b:7ab70ff2}
 
-If these terms are acceptable, please sign below and return one copy.
+If these terms are acceptable, please sign below and return one copy. {#b:eda19065}
 
-Sincerely,
+Sincerely, {#b:94f15d3c}
 
 Amara Ellingboe
-Ellingboe & Ravndal LLP
+Ellingboe & Ravndal LLP {#b:266412d0}
 
-Agreed and accepted:
+Agreed and accepted: {#b:69202712}
 
 ________________________________    Date: ____________
-Gregor A. Winterhalt
+Gregor A. Winterhalt {#b:1585d52b}

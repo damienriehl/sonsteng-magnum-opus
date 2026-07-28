@@ -1,14 +1,14 @@
-# SQUAD DASHCAM AND BODY-WORN CAMERA INDEX
+# SQUAD DASHCAM AND BODY-WORN CAMERA INDEX {#b:47f82e2c}
 
-**Exhibit m15.exh.005**
+**Exhibit m15.exh.005** {#b:6fad46de}
 
-- **Agency:** Sherburne County Sheriff's Office
-- **Deputy:** Reid Kallestad, #214
-- **Subject:** WENZLOFF, Travis O.
-- **Recording Date:** January 17, 2025
-- **Media:** Two files produced in discovery (squad dashcam; body-worn camera)
+- **Agency:** Sherburne County Sheriff's Office {#b:1a8df5d7}
+- **Deputy:** Reid Kallestad, #214 {#b:51fbea2f}
+- **Subject:** WENZLOFF, Travis O. {#b:1e9638c8}
+- **Recording Date:** January 17, 2025 {#b:cfc14409}
+- **Media:** Two files produced in discovery (squad dashcam; body-worn camera) {#b:7e3833c9}
 
-## Squad Dashcam — Log
+## Squad Dashcam — Log {#b:b2eaaedf}
 
 | Timestamp | Event |
 |---|---|
@@ -18,7 +18,7 @@
 | 22:58 | Emergency lights activated; pickup signals and pulls to right shoulder |
 | 22:59 | Deputy approaches driver's window |
 
-## Body-Worn Camera — Log
+## Body-Worn Camera — Log {#b:2d661f62}
 
 | Timestamp | Event |
 |---|---|
@@ -28,4 +28,4 @@
 | 23:15 | Preliminary breath test administered |
 | 23:16 | Driver placed under arrest and secured in squad |
 
-*Notes of record: the stretch the deputy followed is on the dashcam and may be reviewed for the number and severity of lane deviations. The shoulder surface and weather during the field tests are visible on the bodycam. Audio captures the driver's statements about cold and fatigue. The evidentiary test at the jail is recorded on separate booking-room video, referenced in the breath-test record.*
+*Notes of record: the stretch the deputy followed is on the dashcam and may be reviewed for the number and severity of lane deviations. The shoulder surface and weather during the field tests are visible on the bodycam. Audio captures the driver's statements about cold and fatigue. The evidentiary test at the jail is recorded on separate booking-room video, referenced in the breath-test record.* {#b:925e7781}

@@ -1,10 +1,10 @@
-# Parking-Lot Surveillance & Phone-Video Still-Frame Log
+# Parking-Lot Surveillance & Phone-Video Still-Frame Log {#b:0b035bd3}
 
-**Exhibit m18.exh.004**
+**Exhibit m18.exh.004** {#b:281fbfb5}
 
-*Descriptive log prepared from (a) the school's fixed parking-lot security camera and (b) references in the file to a phone recording. No enhancement was performed; frames are described as they appear.*
+*Descriptive log prepared from (a) the school's fixed parking-lot security camera and (b) references in the file to a phone recording. No enhancement was performed; frames are described as they appear.* {#b:da9a6341}
 
-## Part A — School security camera (Camera 3, north lot)
+## Part A — School security camera (Camera 3, north lot) {#b:1e930e64}
 
 | Frame | Time (approx.) | Description |
 |---|---|---|
@@ -14,10 +14,10 @@
 | A-04 | 20:40:30 | One figure crouches at the driver's side of a sedan for several seconds. The image does not resolve what the figure is doing. |
 | A-05 | 20:41:15 | All three figures move off-frame toward the east exit. No further activity recorded. |
 
-**Analyst note:** The camera does not resolve which individual applied paint to which surface, nor whether the crouching figure at A-04 caused the keyed scratch. The figure holding the raised object at A-02/A-03 does not appear to approach the wall or the vehicles.
+**Analyst note:** The camera does not resolve which individual applied paint to which surface, nor whether the crouching figure at A-04 caused the keyed scratch. The figure holding the raised object at A-02/A-03 does not appear to approach the wall or the vehicles. {#b:09eff07a}
 
-## Part B — Phone recording (referenced, not produced)
+## Part B — Phone recording (referenced, not produced) {#b:ff5c69d5}
 
-The file reflects that one participant recorded a portion of the incident on a personal phone. That recording has **not been produced** and is not part of this log. Its existence, content, and location are unconfirmed from the materials reviewed here; it is noted only because the security footage at A-02/A-03 shows a figure in a recording posture.
+The file reflects that one participant recorded a portion of the incident on a personal phone. That recording has **not been produced** and is not part of this log. Its existence, content, and location are unconfirmed from the materials reviewed here; it is noted only because the security footage at A-02/A-03 shows a figure in a recording posture. {#b:08dcd5b9}
 
-*Log prepared for file purposes; not a forensic examination.*
+*Log prepared for file purposes; not a forensic examination.* {#b:7cecfcae}

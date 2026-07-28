@@ -1,45 +1,45 @@
-<!-- INSTRUCTOR-ONLY: never render into the student site -->
-# Answer Key — m12 *In re Petition for Disciplinary Action against Delphine A. Karsgaard* (Attorney Discipline, Minnesota)
+<!-- INSTRUCTOR-ONLY: never render into the student site --> {#b:ba1723ec}
+# Answer Key — m12 *In re Petition for Disciplinary Action against Delphine A. Karsgaard* (Attorney Discipline, Minnesota) {#b:519bdac4}
 
-*Instructor-facing model answers and grading guidance. Never distributed to students; never rendered into the platform. Citations are navigational starting points and are each marked `[instructor: verify before teaching]`; confirm currency against the official Minnesota sources in `data/jurisdictions/real/mn.json` (revisor.mn.gov, mncourts.gov, lprb.mncourts.gov) before relying on any of them. Student-facing work remains facts-only.*
-
----
-
-## 1. Model Case Analysis (keyed to fact anchors)
-
-### The three charges, and where the case is actually won
-
-The Director's petition alleges three clusters [m12.fact.034]. The pedagogical spine of the matter is that they sit on **very different rungs of the sanction ladder**, and a top student sequences the defense accordingly.
-
-**Charge 1 — Neglect / lack of diligence (largely conceded).** Karsgaard filed the summons and complaint on May 15, 2024 [m12.fact.009], the service-and-proof deadline fell August 13, 2024 [m12.fact.010], and it passed with no service ever effected [m12.fact.015], losing Dieterle's claim when the limitations period ran soon after [m12.fact.016]. The defense concedes the neglect but reframes it as a **systems-and-staffing failure**: the firm never adopted centralized docketing [m12.fact.004], the departed paralegal's personal task list was never migrated [m12.fact.013], and no replacement was hired for months [m12.fact.014]. Governing standard: Minn. R. Prof. Conduct 1.3 (diligence), with communication failures under Rule 1.4 `[instructor: verify before teaching]`. The A-answer concedes cleanly but bounds the concession — this is ordinary neglect, not a pattern, in a 19-year discipline-free career [m12.fact.001].
-
-**Charge 3 — Supervisory responsibility (systems failure).** The reliance on a single staffer's personal calendar with no redundancy is the Rule 5.3 (responsibilities regarding non-lawyer assistance) failure `[instructor: verify before teaching]`. Karsgaard *knew* deadlines lived only in Delacroix's personal app [m12.fact.005] — which cuts against her, because a supervising lawyer's knowing reliance on an un-backed-up single point of failure is itself the lapse. The remedial cloud docketing system with redundant reminders [m12.fact.038] is both a mitigation fact and the answer to "will it recur."
-
-**Charge 2 — Candor to the tribunal (THE case).** Karsgaard's affidavit supporting the motion to vacate swore she "first became aware of the failure of service on November 26, 2024" [m12.fact.025]. That was false: opposing counsel Prentice emailed her on September 18, 2024 that service had not been effected [m12.fact.017], she *opened and read it* [m12.fact.018], and the dismissal order was served on her October 2, 2024 [m12.fact.020], [m12.fact.026]. Governing standards: Minn. R. Prof. Conduct 3.3(a)(1) (false statement of fact to a tribunal), 8.4(c) (conduct involving dishonesty, fraud, deceit, or misrepresentation), and 4.1 (truthfulness) `[instructor: verify before teaching]`. **This is where the case is won or lost**, because candor/dishonesty is treated far more severely than neglect.
-
-### The central strategic tension — and the honesty trap
-
-The defense theory is that the November 26 date was an **honest reconstruction**, not a knowing misrepresentation — Karsgaard says she conflated the date she "fully grasped" the consequences (the client call) with when she "first became aware," drafting hurriedly from memory without pulling her email [m12.fact.027].
-
-The A-grade student sees the **problem the interview facts create for that theory**:
-- Karsgaard privately admits (rapport-gated) that she *did* read the September email at the time and told herself it was posturing [m12.fact.018] — she has said this "out loud" to her own counsel. That is actual knowledge months before the affidavit date.
-- She also lied to Dieterle in October that the case was "on track," knowing service had been blown [m12.fact.021], [m12.fact.022] — a concealed fact showing a *pattern* of buying time with untruths, which the Director will use to argue the affidavit was knowing, not careless.
-
-The best answers **do not hide from these facts**. They grapple honestly: even if the affidavit is defensible as reconstruction on its face, counsel now has actual knowledge (from the client) that the affidavit's central assertion is false. This raises **counsel's own Rule 3.3 duty of candor** — the student cannot let the affidavit stand uncorrected before the referee/tribunal, and cannot argue the "good-faith reconstruction" theory as if the September-email fact did not exist. A truly sophisticated answer counsels Karsgaard to correct the record and pivots the candor defense from "it was true" to "it was a serious lapse under extraordinary personal strain, promptly owned" — a mitigation posture, not an innocence posture.
-
-### The Director's strongest theory (know it to beat it)
-
-The Director will argue: (1) neglect that destroyed a client's meritorious claim [m12.fact.008], [m12.fact.016]; (2) a *knowing* false statement to a tribunal — she read the September warning and did nothing [m12.fact.039]; (3) a supervision failure she knew about [m12.fact.005]; and (4) the October client-reassurance lie [m12.fact.021] as evidence the affidavit misdate was of a piece with a habit of dishonesty under pressure — together warranting a **suspension** [m12.fact.046].
-
-### The A-grade conclusion (sanction)
-
-The proportional-sanction argument runs through Minnesota's four-factor framework — nature of the misconduct, cumulative weight of the violations, harm to the public, and harm to the profession — with aggravating and mitigating factors `[instructor: verify before teaching]`. Aggravation the defense **must confront, not bury**: the read-and-ignored September email [m12.fact.039] and the false client reassurance [m12.fact.021]. Mitigation: 19 years discipline-free [m12.fact.001], cooperation, concrete remedial docketing reforms [m12.fact.038], and — handled with care — the terminally-ill father and exhausted short-staffed autumn [m12.fact.040]. The realistic A-conclusion: candid concession of neglect and supervision, honest ownership of the candor lapse (correcting the record), and an argument for a **public reprimand with probation and conditions** rather than suspension — grounded in comparable Minnesota outcomes, not sympathy [m12.fact.046].
+*Instructor-facing model answers and grading guidance. Never distributed to students; never rendered into the platform. Citations are navigational starting points and are each marked `[instructor: verify before teaching]`; confirm currency against the official Minnesota sources in `data/jurisdictions/real/mn.json` (revisor.mn.gov, mncourts.gov, lprb.mncourts.gov) before relying on any of them. Student-facing work remains facts-only.* {#b:c07838bc}
 
 ---
 
-## 2. Interview Answer Key (disclosure tiers per persona)
+## 1. Model Case Analysis (keyed to fact anchors) {#b:bd9cc406}
 
-### Persona A — Delphine A. Karsgaard (CLIENT / respondent attorney; disposition: distressed; Rule 4.2 N/A — she's our client)
+### The three charges, and where the case is actually won {#b:73250ed1}
+
+The Director's petition alleges three clusters [m12.fact.034]. The pedagogical spine of the matter is that they sit on **very different rungs of the sanction ladder**, and a top student sequences the defense accordingly. {#b:b1ae31fd}
+
+**Charge 1 — Neglect / lack of diligence (largely conceded).** Karsgaard filed the summons and complaint on May 15, 2024 [m12.fact.009], the service-and-proof deadline fell August 13, 2024 [m12.fact.010], and it passed with no service ever effected [m12.fact.015], losing Dieterle's claim when the limitations period ran soon after [m12.fact.016]. The defense concedes the neglect but reframes it as a **systems-and-staffing failure**: the firm never adopted centralized docketing [m12.fact.004], the departed paralegal's personal task list was never migrated [m12.fact.013], and no replacement was hired for months [m12.fact.014]. Governing standard: Minn. R. Prof. Conduct 1.3 (diligence), with communication failures under Rule 1.4 `[instructor: verify before teaching]`. The A-answer concedes cleanly but bounds the concession — this is ordinary neglect, not a pattern, in a 19-year discipline-free career [m12.fact.001]. {#b:e8e50f9a}
+
+**Charge 3 — Supervisory responsibility (systems failure).** The reliance on a single staffer's personal calendar with no redundancy is the Rule 5.3 (responsibilities regarding non-lawyer assistance) failure `[instructor: verify before teaching]`. Karsgaard *knew* deadlines lived only in Delacroix's personal app [m12.fact.005] — which cuts against her, because a supervising lawyer's knowing reliance on an un-backed-up single point of failure is itself the lapse. The remedial cloud docketing system with redundant reminders [m12.fact.038] is both a mitigation fact and the answer to "will it recur." {#b:4876a014}
+
+**Charge 2 — Candor to the tribunal (THE case).** Karsgaard's affidavit supporting the motion to vacate swore she "first became aware of the failure of service on November 26, 2024" [m12.fact.025]. That was false: opposing counsel Prentice emailed her on September 18, 2024 that service had not been effected [m12.fact.017], she *opened and read it* [m12.fact.018], and the dismissal order was served on her October 2, 2024 [m12.fact.020], [m12.fact.026]. Governing standards: Minn. R. Prof. Conduct 3.3(a)(1) (false statement of fact to a tribunal), 8.4(c) (conduct involving dishonesty, fraud, deceit, or misrepresentation), and 4.1 (truthfulness) `[instructor: verify before teaching]`. **This is where the case is won or lost**, because candor/dishonesty is treated far more severely than neglect. {#b:9527e24c}
+
+### The central strategic tension — and the honesty trap {#b:50634807}
+
+The defense theory is that the November 26 date was an **honest reconstruction**, not a knowing misrepresentation — Karsgaard says she conflated the date she "fully grasped" the consequences (the client call) with when she "first became aware," drafting hurriedly from memory without pulling her email [m12.fact.027]. {#b:fc935711}
+
+The A-grade student sees the **problem the interview facts create for that theory**: {#b:b7f61897}
+- Karsgaard privately admits (rapport-gated) that she *did* read the September email at the time and told herself it was posturing [m12.fact.018] — she has said this "out loud" to her own counsel. That is actual knowledge months before the affidavit date. {#b:ea3f70ee}
+- She also lied to Dieterle in October that the case was "on track," knowing service had been blown [m12.fact.021], [m12.fact.022] — a concealed fact showing a *pattern* of buying time with untruths, which the Director will use to argue the affidavit was knowing, not careless. {#b:46d20e00}
+
+The best answers **do not hide from these facts**. They grapple honestly: even if the affidavit is defensible as reconstruction on its face, counsel now has actual knowledge (from the client) that the affidavit's central assertion is false. This raises **counsel's own Rule 3.3 duty of candor** — the student cannot let the affidavit stand uncorrected before the referee/tribunal, and cannot argue the "good-faith reconstruction" theory as if the September-email fact did not exist. A truly sophisticated answer counsels Karsgaard to correct the record and pivots the candor defense from "it was true" to "it was a serious lapse under extraordinary personal strain, promptly owned" — a mitigation posture, not an innocence posture. {#b:87fe8f40}
+
+### The Director's strongest theory (know it to beat it) {#b:0c858a11}
+
+The Director will argue: (1) neglect that destroyed a client's meritorious claim [m12.fact.008], [m12.fact.016]; (2) a *knowing* false statement to a tribunal — she read the September warning and did nothing [m12.fact.039]; (3) a supervision failure she knew about [m12.fact.005]; and (4) the October client-reassurance lie [m12.fact.021] as evidence the affidavit misdate was of a piece with a habit of dishonesty under pressure — together warranting a **suspension** [m12.fact.046]. {#b:7e4cee41}
+
+### The A-grade conclusion (sanction) {#b:71f5ab71}
+
+The proportional-sanction argument runs through Minnesota's four-factor framework — nature of the misconduct, cumulative weight of the violations, harm to the public, and harm to the profession — with aggravating and mitigating factors `[instructor: verify before teaching]`. Aggravation the defense **must confront, not bury**: the read-and-ignored September email [m12.fact.039] and the false client reassurance [m12.fact.021]. Mitigation: 19 years discipline-free [m12.fact.001], cooperation, concrete remedial docketing reforms [m12.fact.038], and — handled with care — the terminally-ill father and exhausted short-staffed autumn [m12.fact.040]. The realistic A-conclusion: candid concession of neglect and supervision, honest ownership of the candor lapse (correcting the record), and an argument for a **public reprimand with probation and conditions** rather than suspension — grounded in comparable Minnesota outcomes, not sympathy [m12.fact.046]. {#b:bdc94643}
+
+---
+
+## 2. Interview Answer Key (disclosure tiers per persona) {#b:36ae4d51}
+
+### Persona A — Delphine A. Karsgaard (CLIENT / respondent attorney; disposition: distressed; Rule 4.2 N/A — she's our client) {#b:21ae0222}
 
 | Tier | Topic label | Fact | Eliciting question / trigger (min_turns) | Common-miss notes |
 |---|---|---|---|---|
@@ -54,9 +54,9 @@ The proportional-sanction argument runs through Minnesota's four-factor framewor
 | **Concealed** | what she told the client | [m12.fact.021] | Withheld; deeper preconditions than ordinary rapport | She lied to Dieterle in October that the case was "on track." This is the most damaging fact and she conceals it. If surfaced, it changes the candor analysis (pattern) and triggers hard counseling. Expect most students to miss it. |
 | Unknown | the underlying claim's future | [m12.fact.042] | She genuinely doesn't know | Correct student move: don't press her for a legal conclusion outside her knowledge. |
 
-**Anti-sycophancy / candor caution:** The two most important facts (September email; October client lie) are gated/concealed precisely because they are shameful. Pressure never unlocks them — only confidentiality reassurance, non-judgment, and genuine wellbeing inquiry do. A student who bullies or shames the client both fails the relational axis and forfeits the facts the defense cannot be built without.
+**Anti-sycophancy / candor caution:** The two most important facts (September email; October client lie) are gated/concealed precisely because they are shameful. Pressure never unlocks them — only confidentiality reassurance, non-judgment, and genuine wellbeing inquiry do. A student who bullies or shames the client both fails the relational axis and forfeits the facts the defense cannot be built without. {#b:cb7fbfdf}
 
-### Persona B — Jonas Emberly (fact witness / associate; disposition: cooperative; Rule 4.2 N/A — not represented, free to contact)
+### Persona B — Jonas Emberly (fact witness / associate; disposition: cooperative; Rule 4.2 N/A — not represented, free to contact) {#b:f15b9674}
 
 | Tier | Topic label | Fact | Eliciting question / trigger | Common-miss notes |
 |---|---|---|---|---|
@@ -66,11 +66,11 @@ The proportional-sanction argument runs through Minnesota's four-factor framewor
 | Revealed-if-asked | her personal circumstances then | [m12.fact.040] | Direct Q about how Karsgaard was doing that fall | Emberly independently corroborates the exhaustion/dying-father mitigation — valuable because it doesn't rely on the client's self-report. |
 | Unknown | when she saw the warning | [m12.fact.018] | He genuinely doesn't know | He never saw the September email; correct not to push him to speculate. |
 
-### Persona C — Marguerite Dieterle (complaining former client; disposition: guarded; **Rule 4.2 APPLIES**)
+### Persona C — Marguerite Dieterle (complaining former client; disposition: guarded; **Rule 4.2 APPLIES**) {#b:be94a125}
 
-**RULE 4.2 — DO NOT CONTACT DIRECTLY.** Dieterle is a **represented adverse party**: she has retained malpractice counsel, Sunila Achterberg, in a related claim against Karsgaard [m12.fact.041]. Under Minn. R. Prof. Conduct 4.2, respondent's counsel may not communicate about the subject of the representation with a person known to be represented by another lawyer without that lawyer's consent `[instructor: verify before teaching]`. Route contact through Attorney Achterberg. **A student who interviews Dieterle directly commits the signature professional-responsibility error of this matter (graded under c04.s02).** Note the twist: even though the *disciplinary* matter and the *malpractice* matter are technically distinct, they share the same subject; the prudent and correct move is to route through Achterberg.
+**RULE 4.2 — DO NOT CONTACT DIRECTLY.** Dieterle is a **represented adverse party**: she has retained malpractice counsel, Sunila Achterberg, in a related claim against Karsgaard [m12.fact.041]. Under Minn. R. Prof. Conduct 4.2, respondent's counsel may not communicate about the subject of the representation with a person known to be represented by another lawyer without that lawyer's consent `[instructor: verify before teaching]`. Route contact through Attorney Achterberg. **A student who interviews Dieterle directly commits the signature professional-responsibility error of this matter (graded under c04.s02).** Note the twist: even though the *disciplinary* matter and the *malpractice* matter are technically distinct, they share the same subject; the prudent and correct move is to route through Achterberg. {#b:a3c55302}
 
-If contact is properly made through counsel, her disclosure profile is:
+If contact is properly made through counsel, her disclosure profile is: {#b:2ebaad10}
 
 | Tier | Topic label | Fact | Eliciting question / trigger | Common-miss notes |
 |---|---|---|---|---|
@@ -81,49 +81,49 @@ If contact is properly made through counsel, her disclosure profile is:
 
 ---
 
-## 3. Deliverable Model-Answer Outline (mapped to rubric.json criteria + weights)
+## 3. Deliverable Model-Answer Outline (mapped to rubric.json criteria + weights) {#b:0dff1b0f}
 
-Total declared: **207 points.**
+Total declared: **207 points.** {#b:53938d3f}
 
-### c01 — Misconduct analysis across the three charges (70 pts)
-- **c01.s01 Neglect & diligence (25):** Concede the missed service deadline and post-departure monitoring gap as a Rule 1.3 failure [m12.fact.015]; frame the concession's limits (isolated, systems-driven, 19-year clean record). Distinguish conceded from contested.
-- **c01.s02 Candor to the tribunal (25):** Analyze the affidavit date [m12.fact.025] under the Rule 3.3(a)(1)/8.4(c) false-statement standard; **grapple honestly** with the September-email fact [m12.fact.018] and the October client lie [m12.fact.021]. The A-answer treats "reconstruction" as (at best) mitigation of a serious lapse, not innocence, and recognizes counsel's own 3.3 duty to correct the record.
-- **c01.s03 Supervisory responsibility (20):** Analyze the single-staffer-personal-calendar reliance [m12.fact.004], [m12.fact.005] as a Rule 5.3 failure; weigh the remedial cloud docketing [m12.fact.038].
+### c01 — Misconduct analysis across the three charges (70 pts) {#b:189bed90}
+- **c01.s01 Neglect & diligence (25):** Concede the missed service deadline and post-departure monitoring gap as a Rule 1.3 failure [m12.fact.015]; frame the concession's limits (isolated, systems-driven, 19-year clean record). Distinguish conceded from contested. {#b:d177d601}
+- **c01.s02 Candor to the tribunal (25):** Analyze the affidavit date [m12.fact.025] under the Rule 3.3(a)(1)/8.4(c) false-statement standard; **grapple honestly** with the September-email fact [m12.fact.018] and the October client lie [m12.fact.021]. The A-answer treats "reconstruction" as (at best) mitigation of a serious lapse, not innocence, and recognizes counsel's own 3.3 duty to correct the record. {#b:ce21ddca}
+- **c01.s03 Supervisory responsibility (20):** Analyze the single-staffer-personal-calendar reliance [m12.fact.004], [m12.fact.005] as a Rule 5.3 failure; weigh the remedial cloud docketing [m12.fact.038]. {#b:4106278c}
 
-### c02 — Sanction analysis & proportionality (45 pts)
-- **c02.s01 Aggravating & mitigating factors (25):** Marshal aggravation (read-and-ignored September email [m12.fact.039]; false client reassurance [m12.fact.021]) AND mitigation (clean record [m12.fact.001], cooperation, remedial steps [m12.fact.038], dying-father/exhaustion [m12.fact.040]) — accurately, not selectively.
-- **c02.s02 Comparable-outcome reasoning (20):** Argue proportionality from comparable Minnesota neglect-plus-misrepresentation outcomes (public reprimand + probation to suspension) `[instructor: verify before teaching]` — reasoning from precedent, not sympathy. Point students to current Minnesota Supreme Court discipline opinions via lprb.mncourts.gov.
+### c02 — Sanction analysis & proportionality (45 pts) {#b:a0dff94a}
+- **c02.s01 Aggravating & mitigating factors (25):** Marshal aggravation (read-and-ignored September email [m12.fact.039]; false client reassurance [m12.fact.021]) AND mitigation (clean record [m12.fact.001], cooperation, remedial steps [m12.fact.038], dying-father/exhaustion [m12.fact.040]) — accurately, not selectively. {#b:fb13eb43}
+- **c02.s02 Comparable-outcome reasoning (20):** Argue proportionality from comparable Minnesota neglect-plus-misrepresentation outcomes (public reprimand + probation to suspension) `[instructor: verify before teaching]` — reasoning from precedent, not sympathy. Point students to current Minnesota Supreme Court discipline opinions via lprb.mncourts.gov. {#b:b4c86442}
 
-### c03 — Respondent's pre-hearing brief (45 pts)
-- **c03.s01 Structure & rule compliance (20):** Correct format and procedural compliance for the referee/Supreme Court posture under the RLPR `[instructor: verify before teaching]`.
-- **c03.s02 Argument & standard of review (25):** Deploy the correct standard/burden — the Director bears the burden of proving misconduct (typically by clear and convincing evidence) `[instructor: verify before teaching]`; referee findings receive deference where a transcript is ordered, and the Supreme Court determines the appropriate discipline independently.
+### c03 — Respondent's pre-hearing brief (45 pts) {#b:97e7bd4f}
+- **c03.s01 Structure & rule compliance (20):** Correct format and procedural compliance for the referee/Supreme Court posture under the RLPR `[instructor: verify before teaching]`. {#b:05f00b6d}
+- **c03.s02 Argument & standard of review (25):** Deploy the correct standard/burden — the Director bears the burden of proving misconduct (typically by clear and convincing evidence) `[instructor: verify before teaching]`; referee findings receive deference where a transcript is ordered, and the Supreme Court determines the appropriate discipline independently. {#b:8a8d6fa7}
 
-### c04 — Fact development & client counseling (27 pts)
-- **c04.s01 Timeline reconstruction (15):** Accurately distinguish *when the client actually knew* (Sept. 18 [m12.fact.018] / Oct. 2 [m12.fact.020]) from *when she said she knew* (Nov. 26 [m12.fact.025]), tested against the record.
-- **c04.s02 Counseling the distressed client (12):** Interview with rapport, earn the gated facts, counsel ethically on the misstatement (the 3.3 correction duty), and **recognize the Rule 4.2 boundary with Dieterle** — half the value here.
+### c04 — Fact development & client counseling (27 pts) {#b:628fd66a}
+- **c04.s01 Timeline reconstruction (15):** Accurately distinguish *when the client actually knew* (Sept. 18 [m12.fact.018] / Oct. 2 [m12.fact.020]) from *when she said she knew* (Nov. 26 [m12.fact.025]), tested against the record. {#b:477dbf33}
+- **c04.s02 Counseling the distressed client (12):** Interview with rapport, earn the gated facts, counsel ethically on the misstatement (the 3.3 correction duty), and **recognize the Rule 4.2 boundary with Dieterle** — half the value here. {#b:043fc511}
 
-### c05 — Oral argument readiness (20 pts)
-- Prepared, responsive argument before Referee Kessler; fields hard questions on the candor charge and sanction without evasion. Reward a student who can concede the candor lapse to the referee's face and still argue for proportionality.
+### c05 — Oral argument readiness (20 pts) {#b:ad7cec1e}
+- Prepared, responsive argument before Referee Kessler; fields hard questions on the candor charge and sanction without evasion. Reward a student who can concede the candor lapse to the referee's face and still argue for proportionality. {#b:f3fb82c8}
 
 ---
 
-## 4. Grading Guidance
+## 4. Grading Guidance {#b:14f60877}
 
-### A / B / C discriminators
-- **A (197–207):** Sequences the three charges by severity; **confronts the September-email and client-lie facts head-on** and recognizes counsel's own Rule 3.3 correction duty; argues sanction through the four-factor framework with honest aggravation *and* mitigation; flawless Rule 4.2 handling with Dieterle; counsels the distressed client with real rapport and ethical clarity.
-- **B (177–187):** Solid three-charge analysis and a competent sanction argument; spots Rule 4.2; but soft-pedals the candor problem (argues "reconstruction = innocence"), or under-earns the gated facts, or leans on sympathy rather than comparable outcomes.
-- **C (~160):** Treats the case as simple neglect; misses or mishandles the candor charge; contacts Dieterle directly; or builds a sanction argument on sympathy with no proportionality reasoning.
+### A / B / C discriminators {#b:d35699ae}
+- **A (197–207):** Sequences the three charges by severity; **confronts the September-email and client-lie facts head-on** and recognizes counsel's own Rule 3.3 correction duty; argues sanction through the four-factor framework with honest aggravation *and* mitigation; flawless Rule 4.2 handling with Dieterle; counsels the distressed client with real rapport and ethical clarity. {#b:4d6056ea}
+- **B (177–187):** Solid three-charge analysis and a competent sanction argument; spots Rule 4.2; but soft-pedals the candor problem (argues "reconstruction = innocence"), or under-earns the gated facts, or leans on sympathy rather than comparable outcomes. {#b:8de9e65f}
+- **C (~160):** Treats the case as simple neglect; misses or mishandles the candor charge; contacts Dieterle directly; or builds a sanction argument on sympathy with no proportionality reasoning. {#b:0f7fe37d}
 
-### Common errors (watch for these)
-1. **Contacting Dieterle directly** — the signature ethics failure (c04.s02). Coach hard; route through Achterberg.
-2. **Arguing the affidavit was true** — the "good-faith reconstruction" theory collapses once counsel learns (from the client) she read the September email. A student who argues innocence after learning [m12.fact.018] has an integrity/analysis failure and misunderstands counsel's own 3.3 duty.
-3. **Burying the aggravation** — students who present only mitigation lose credibility; the A-answer names the read-and-ignored email and the client lie and argues *despite* them.
-4. **Mishandling the mitigation** — dumping the dying-father facts as an "excuse" (which the client herself resists [m12.fact.040]) rather than framing them as context for a proportional sanction.
-5. **Pressuring the client** for the gated/concealed facts — fails the relational axis and forfeits the defense's foundation.
-6. **Wrong burden/standard of review** — asserting the respondent must prove innocence, or ignoring the deference given to referee findings.
+### Common errors (watch for these) {#b:6b0ac8fc}
+1. **Contacting Dieterle directly** — the signature ethics failure (c04.s02). Coach hard; route through Achterberg. {#b:f5a2cfc1}
+2. **Arguing the affidavit was true** — the "good-faith reconstruction" theory collapses once counsel learns (from the client) she read the September email. A student who argues innocence after learning [m12.fact.018] has an integrity/analysis failure and misunderstands counsel's own 3.3 duty. {#b:cb9ff649}
+3. **Burying the aggravation** — students who present only mitigation lose credibility; the A-answer names the read-and-ignored email and the client lie and argues *despite* them. {#b:248831e5}
+4. **Mishandling the mitigation** — dumping the dying-father facts as an "excuse" (which the client herself resists [m12.fact.040]) rather than framing them as context for a proportional sanction. {#b:da8c9032}
+5. **Pressuring the client** for the gated/concealed facts — fails the relational axis and forfeits the defense's foundation. {#b:58cfbc76}
+6. **Wrong burden/standard of review** — asserting the respondent must prove innocence, or ignoring the deference given to referee findings. {#b:2e7a2c15}
 
-### Re-write demands (trigger a mandatory revision if)
-- The brief or analysis **argues the affidavit was truthful** while ignoring [m12.fact.018] — require a corrected analysis addressing counsel's Rule 3.3 duty and reframing the candor position as mitigation.
-- The student **contacted Dieterle directly** — require a written Rule 4.2 analysis and a corrected fact-development plan routed through Achterberg.
-- The sanction argument **rests on sympathy** with no comparable-outcome reasoning — require a proportionality supplement grounded in the four-factor framework.
-- The **timeline conflates "knew" with "said she knew"** — require a record-anchored corrected chronology.
+### Re-write demands (trigger a mandatory revision if) {#b:adc9da54}
+- The brief or analysis **argues the affidavit was truthful** while ignoring [m12.fact.018] — require a corrected analysis addressing counsel's Rule 3.3 duty and reframing the candor position as mitigation. {#b:eeaf8906}
+- The student **contacted Dieterle directly** — require a written Rule 4.2 analysis and a corrected fact-development plan routed through Achterberg. {#b:2e1824a1}
+- The sanction argument **rests on sympathy** with no comparable-outcome reasoning — require a proportionality supplement grounded in the four-factor framework. {#b:01166d63}
+- The **timeline conflates "knew" with "said she knew"** — require a record-anchored corrected chronology. {#b:1dd13739}
