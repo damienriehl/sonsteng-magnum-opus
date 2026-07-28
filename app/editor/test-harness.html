@@ -184,6 +184,18 @@
         return { ok: true, status: 200, data: { items: items, heartbeat_age_s: ctrl.hbAge, direct_apply: ctrl.directApply } };
       }
 
+      if (path.indexOf('/scoped-request') === 0) {
+        ctrl.server.last = body;
+        // first send of an over-wide scope asks for confirmation, mirroring the
+        // Worker's 409; a confirmed resend files.
+        if (body.level === 'course' && !body.confirmed) {
+          return { ok: false, status: 409, data: { ok: false,
+            error: { code: 'ceiling_confirmation_required' },
+            radius: { blocks: 3692, files: 282, matters: 20 } } };
+        }
+        return { ok: true, status: 200, data: { ok: true, id: body.id, status: 'requested' } };
+      }
+
       if (path.indexOf('/suggest') === 0) {
         ctrl.server.calls++;
         ctrl.server.last = body;   // capture the exact payload (id/source_ref/new_text/original_hash)

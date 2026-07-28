@@ -448,6 +448,149 @@
     no.focus();
   }
 
+  /* U8: the scoped-change dialog — an editor describes a bigger change in
+     their own words at a chosen scope. The blast radius is server-enumerated;
+     above the ceiling the server asks once for plain-words confirmation. */
+  var scopedDlg = null;
+  function scopeOptions() {
+    var opts = [];
+    var m = PAGE.match(/^matters\/([^/]+)\//);
+    if (m) {
+      var slug = m[1];
+      opts.push({ label: 'This matter\u2019s case file', level: 'part', matter: slug, part: 'case-file' });
+      opts.push({ label: 'This matter\u2019s exercise', level: 'part', matter: slug, part: 'exercise' });
+      opts.push({ label: 'This whole matter', level: 'matter', matter: slug });
+    }
+    ['M1', 'M2', 'M3'].forEach(function (mod) {
+      opts.push({ label: 'Module ' + mod.slice(1) + ' (across all its matters)', level: 'module', module: mod });
+    });
+    opts.push({ label: 'The whole course', level: 'course' });
+    return opts;
+  }
+  function openScopedDialog() {
+    if (scopedDlg && scopedDlg.isConnected) { scopedDlg.querySelector('textarea').focus(); return; }
+    var d = el('div', 'eb-scoped');
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+    d.setAttribute('aria-label', 'Ask for a bigger change');
+    var inner = el('div', 'eb-scoped__inner');
+    inner.appendChild(el('h2', 'eb-scoped__title', 'Ask for a bigger change'));
+    inner.appendChild(el('p', 'eb-scoped__lede',
+      'Say what you want changed, in your own words. The change is drafted for every place it applies, and Damien approves it before anything on the site changes.'));
+    var lab1 = el('label', 'eb-scoped__label', 'Where should it apply?');
+    var sel = document.createElement('select');
+    sel.className = 'eb-scoped__scope';
+    scopeOptions().forEach(function (o, i) {
+      var op = document.createElement('option');
+      op.value = String(i); op.textContent = o.label;
+      sel.appendChild(op);
+    });
+    lab1.appendChild(sel);
+    inner.appendChild(lab1);
+    var lab2 = el('label', 'eb-scoped__label', 'What should change?');
+    var ta = document.createElement('textarea');
+    ta.className = 'eb-scoped__text'; ta.rows = 4;
+    ta.setAttribute('placeholder', 'For example: Wherever the filing deadline of 14 days appears, change it to 30 days.');
+    lab2.appendChild(ta);
+    inner.appendChild(lab2);
+    var status = el('p', 'eb-scoped__status', '');
+    inner.appendChild(status);
+    var row = el('div', 'eb-scoped__row');
+    var send = el('button', 'eb-scoped__send', 'Send to Damien'); send.type = 'button';
+    var cancel = el('button', 'eb-scoped__cancel', 'Cancel'); cancel.type = 'button';
+    row.appendChild(send); row.appendChild(cancel);
+    inner.appendChild(row);
+    d.appendChild(inner);
+    document.body.appendChild(d);
+    scopedDlg = d;
+    var reqId = uuid();
+    var confirmed = false;
+    var close = function () { if (d.parentNode) d.parentNode.removeChild(d); scopedDlg = null; };
+    cancel.addEventListener('click', close);
+    d.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    send.addEventListener('click', function () {
+      var text = (ta.value || '').trim();
+      if (!text) { ta.focus(); return; }
+      var o = scopeOptions()[parseInt(sel.value, 10) || 0];
+      var body = { id: reqId, level: o.level, instruction: text };
+      if (o.matter) body.matter = o.matter;
+      if (o.part) body.part = o.part;
+      if (o.module) body.module = o.module;
+      if (confirmed) body.confirmed = true;
+      send.disabled = true;
+      status.textContent = 'Sending\u2026';
+      api('/scoped-request', { body: body }).then(function (out) {
+        if (out.ok) {
+          status.textContent = 'Sent. Damien will review the drafted change before anything on the site changes.';
+          send.textContent = 'Sent \u2713';
+          setTimeout(close, 3500);
+          return;
+        }
+        var data = out.data || {};
+        var code = (data.error && data.error.code) || data.code;
+        if (code === 'ceiling_confirmation_required') {
+          var r = data.radius || {};
+          confirmed = true;
+          send.disabled = false;
+          send.textContent = 'Yes \u2014 that wide. Send it';
+          status.textContent = 'That change would touch ' + (r.blocks || '?') +
+            ' paragraphs across ' + (r.matters || '?') +
+            ' matter(s). If you mean it that widely, press the button again.';
+          return;
+        }
+        send.disabled = false;
+        status.textContent = 'That didn\u2019t send. Please try again in a moment.';
+        log('SCOPED error code=' + code);
+      });
+    });
+    setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
+  }
+
+  /* U8: "Add a fact" on the per-matter Facts page (U5/OQ5). */
+  function factsMatterSlug() {
+    var m = PAGE.match(/^matters\/([^/]+)\/facts\//);
+    return m ? m[1] : null;
+  }
+  function buildAddFact() {
+    var slug = factsMatterSlug();
+    if (!slug) return;
+    var main = document.querySelector('main');
+    if (!main) return;
+    var box = el('div', 'eb-composer');
+    box.appendChild(el('div', 'eb-composer__label',
+      'Add a fact — it is recorded here first, and appears in the prose only through drafted mentions Damien approves.'));
+    var name = document.createElement('input');
+    name.type = 'text'; name.className = 'eb-addfact__name';
+    name.setAttribute('aria-label', 'Short name for the fact');
+    name.setAttribute('placeholder', 'short-name (letters, digits, dashes)');
+    var ta = document.createElement('textarea');
+    ta.className = 'eb-composer__text'; ta.rows = 2;
+    ta.setAttribute('aria-label', 'The fact itself');
+    ta.setAttribute('placeholder', 'The fact itself \u2014 e.g. The response deadline is 21 days.');
+    var row = el('div', 'eb-composer__row');
+    var send = el('button', 'eb-composer__send', 'Add this fact'); send.type = 'button';
+    var status = el('span', 'eb-scoped__status', '');
+    row.appendChild(send); row.appendChild(status);
+    box.appendChild(name); box.appendChild(ta); box.appendChild(row);
+    main.appendChild(box);
+    send.addEventListener('click', function () {
+      var key = (name.value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+      var text = (ta.value || '').trim();
+      if (!key) { name.focus(); return; }
+      if (!text) { ta.focus(); return; }
+      send.disabled = true;
+      api('/suggest', { body: { id: uuid(), op: 'json_add', matter: slug,
+                                fact_key: key, new_text: text } }).then(function (out) {
+        if (out.ok) {
+          status.textContent = 'Added \u2014 waiting for review.';
+          name.value = ''; ta.value = ''; send.disabled = false;
+        } else {
+          send.disabled = false;
+          status.textContent = 'That didn\u2019t save \u2014 check the short name and try again.';
+        }
+      });
+    });
+  }
+
   function requestMove(s, dir) {
     var peers = sameFilePeers(s);
     var i = -1;
@@ -1535,6 +1678,14 @@
     histLink.setAttribute('title', 'Redline change history for every document');
     banner.appendChild(histLink);
 
+    // U8: the request-level verb — "ask for a bigger change in your own words".
+    // Every scoped change waits for Damien (R6/KD3), and the dialog says so.
+    var bigBtn = el('button', 'editor-banner__bigger', 'Bigger change…');
+    bigBtn.type = 'button';
+    bigBtn.setAttribute('title', 'Describe a change across this matter, a module, or the whole course — Damien approves it before anything changes');
+    bigBtn.addEventListener('click', function () { openScopedDialog(); });
+    banner.appendChild(bigBtn);
+
     var tg = el('div', 'segmented-toggle'); tg.setAttribute('role', 'group'); tg.setAttribute('aria-label', 'Type size');
     var bStd = el('button', null, 'STANDARD'); bStd.type = 'button'; bStd.setAttribute('aria-pressed', 'true');
     var bLg = el('button', null, 'LARGE TYPE'); bLg.type = 'button'; bLg.setAttribute('aria-pressed', 'false');
@@ -1669,6 +1820,8 @@
     if (missing.length) log('WALKER MISMATCH: ' + missing.length + ' block index(es) not found — map/page drift');
 
     buildBanner();
+
+    buildAddFact();
     buildBar();
     buildCommentUI();
     scheduleRailLayout();

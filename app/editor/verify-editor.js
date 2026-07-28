@@ -408,6 +408,41 @@ async function run() {
       /New paragraph/.test(stHyState.st || ''),
       'text="' + stHyState.text.slice(0, 30) + '" pill="' + stHyState.st + '"');
 
+    /* --- SC: the scoped-change dialog (U8) -------------------------------- */
+    await page.click('.editor-banner__bigger');
+    await page.waitForSelector('.eb-scoped', { timeout: 3000 });
+    const scCopy = await page.$eval('.eb-scoped__lede', el => el.textContent);
+    assert('SC1 dialog states plainly that Damien approves before anything changes',
+      /Damien approves/.test(scCopy), '"' + scCopy.slice(0, 60) + '"');
+    await page.evaluate(() => {
+      const sel = document.querySelector('.eb-scoped__scope');
+      sel.value = String(sel.options.length - 1);          // "The whole course"
+      document.querySelector('.eb-scoped__text').value = 'Modernize the tone throughout.';
+    });
+    await page.click('.eb-scoped__send');
+    await page.waitForFunction(() => {
+      const l = window.__MOCK_CTRL__.last();
+      return l && l.level === 'course';
+    }, { timeout: 4000 });
+    const scStatus = await page.$eval('.eb-scoped__status', el => el.textContent);
+    assert('SC2 over-wide scope asks for plain-words confirmation with the radius',
+      /3692 paragraphs/.test(scStatus) && /20 matter/.test(scStatus),
+      '"' + scStatus.slice(0, 70) + '"');
+    await page.click('.eb-scoped__send');
+    await page.waitForFunction(() => {
+      const l = window.__MOCK_CTRL__.last();
+      return l && l.confirmed === true;
+    }, { timeout: 4000 });
+    const scLast = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    assert('SC3 confirmed resend files the request with the SAME id (idempotent)',
+      scLast.confirmed === true && scLast.level === 'course' &&
+      typeof scLast.id === 'string' && scLast.instruction === 'Modernize the tone throughout.',
+      'id=' + String(scLast.id).slice(0, 8));
+    await page.evaluate(() => {
+      const d = document.querySelector('.eb-scoped');
+      if (d) d.parentNode.removeChild(d);
+    });
+
     await page.screenshot({ path: path.join(OUT, 'editor-desktop.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-desktop.png'));
     // large-type screenshot for visual QA
