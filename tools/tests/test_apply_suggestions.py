@@ -107,10 +107,11 @@ def resolve_index(worktree, spec):
                     }
             for path in cfg.get("scalars", []):
                 val = ap.json_get(obj, path)
+                rendered = str(val)
                 ref = "%s#%s" % (relpath, path)
                 index[ref] = {
                     "source_ref": ref, "kind": "json_scalar", "json_path": path,
-                    "original_text": val, "original_hash": _hash(val),
+                    "original_text": rendered, "original_hash": _hash(rendered),
                     "has_inline_formatting": False, "context": "",
                 }
     return index
@@ -311,12 +312,14 @@ def _write(root, rel, content):
 
 
 M03_EX = "data/matters/m03-tort-meridian/exercise/exercise.json"
+M03_BUS = "data/matters/m03-tort-meridian/business/business.json"
 M03_MD = "data/matters/m03-tort-meridian/case-file/exh-notes.md"
 M03_FMT = "data/matters/m03-tort-meridian/case-file/exh-formatted.md"
 M07_EX = "data/matters/m07-ucc-meridian/exercise/exercise.json"
 
 SPEC = [
     (M03_EX, "json", {"body_md_fields": ["sections.intro.body_md"], "scalars": ["caption"]}),
+    (M03_BUS, "json", {"body_md_fields": [], "scalars": ["engagement.rate"]}),
     (M03_MD, "md"),
     (M03_FMT, "md"),
     (M07_EX, "json", {"body_md_fields": ["sections.intro.body_md"], "scalars": ["caption"]}),
@@ -343,6 +346,18 @@ def make_repo():
            "Client confirmed the retainer of $8,400 was paid in full.\n")
     _write(root, M03_FMT,
            "This paragraph has **bold emphasis** that plain text cannot round-trip.\n")
+    _write(root, M03_BUS, json.dumps({
+        "engagement": {"fee_type": "hourly", "rate": 250},
+    }, indent=2) + "\n")
+    _write(root, "data/schemas/business.schema.json", json.dumps({
+        "type": "object",
+        "properties": {
+            "engagement": {
+                "type": "object",
+                "properties": {"rate": {"type": "number"}},
+            },
+        },
+    }, indent=2) + "\n")
     _write(root, M07_EX, json.dumps({
         "id": "m07",
         "caption": "Bell v. Osgard Supply (UCC)",
@@ -625,6 +640,67 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertTrue(res.committed)
         obj = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
         self.assertEqual(obj["caption"], "Osgard v. Meridian Freight Co. (Tort)")
+
+    def test_numeric_json_scalar_round_trips_as_a_number(self):
+        ref = "%s#engagement.rate" % M03_BUS
+        self._add_edit("numeric1", ref, "275.5")
+        pipe = FakePipeline(SPEC, validate_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        obj = json.loads(open(os.path.join(self.root, M03_BUS), encoding="utf-8").read())
+        self.assertEqual(obj["engagement"]["rate"], 275.5)
+        self.assertIsInstance(obj["engagement"]["rate"], float)
+
+    def test_bad_numeric_scalar_isolated_from_other_suggestions(self):
+        self._add_edit("bad-number", "%s#engagement.rate" % M03_BUS, "not-a-rate")
+        self._add_edit("good-string", "%s#caption" % M03_EX,
+                       "Osgard v. Meridian Freight Co. (Tort)")
+        pipe = FakePipeline(SPEC, validate_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["good-string"])
+        self.assertEqual([r["id"] for r in res.needs_human], ["bad-number"])
+        business = json.loads(open(os.path.join(self.root, M03_BUS), encoding="utf-8").read())
+        exercise = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        self.assertEqual(business["engagement"]["rate"], 250)
+        self.assertEqual(exercise["caption"], "Osgard v. Meridian Freight Co. (Tort)")
+
+    def test_bad_numeric_scalar_rolls_out_its_whole_group(self):
+        self._add_edit("group-bad-number", "%s#engagement.rate" % M03_BUS,
+                       "not-a-rate", group_id="scoped-group")
+        self._add_edit("group-good-string", "%s#caption" % M03_EX,
+                       "Osgard v. Meridian Freight Co. (Tort)",
+                       group_id="scoped-group")
+        pipe = FakePipeline(SPEC, validate_ok=True)
+        res = self._run("b1", pipe, deploy_plan_only=False)
+
+        self.assertEqual([], res.applied)
+        self.assertEqual(
+            {r["id"] for r in res.needs_human},
+            {"group-bad-number", "group-good-string"},
+        )
+        business = json.loads(open(os.path.join(self.root, M03_BUS), encoding="utf-8").read())
+        exercise = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        self.assertEqual(business["engagement"]["rate"], 250)
+        self.assertEqual(exercise["caption"], "Osgard v. Meridian Freight (Tort)")
+
+    def test_json_scalar_with_absent_current_leaf_is_validation_error(self):
+        patch = ap.Patch(
+            suggestion_id="missing-leaf",
+            group_id="solo:missing-leaf",
+            source_ref="%s#missing.value" % M03_EX,
+            relpath=M03_EX,
+            kind="json_scalar",
+            json_path="missing.value",
+            original_text="",
+            new_text="12",
+        )
+
+        outcomes = ap.apply_file_patches(self.root, M03_EX, [patch])
+
+        self.assertEqual(outcomes, {"missing-leaf": ap.OUT_VALIDATION_ERROR})
 
     def _porcelain(self):
         out = subprocess.run(["git", "status", "--porcelain"], cwd=self.root,
@@ -927,5 +1003,3 @@ class FactsApplyTest(unittest.TestCase):
                 original_text="Oz.", new_text="Ozzy")],
             self.index, self.client, "bX")
         self.assertEqual(payloads, [])
-
-

@@ -101,6 +101,7 @@ OUT_APPLIED = "applied"
 OUT_ACCEPTED_BLOCKED = "accepted_blocked"
 OUT_NEEDS_HUMAN = "needs_human"
 OUT_DRIFT = "drift"
+OUT_VALIDATION_ERROR = "validation_error"
 
 
 class ApplyError(RuntimeError):
@@ -473,6 +474,96 @@ def classify(source_ref, block, op=None):
     return "prose_json_body", body_path
 
 
+SCHEMA_BY_BASENAME = {
+    "matter.json": "matter.schema.json",
+    "business.json": "business.schema.json",
+    "exercise.json": "exercise.schema.json",
+    "rubric.json": "rubric.schema.json",
+    "firm.json": "firm.schema.json",
+    "skills.json": "skill.schema.json",
+    "tasks.json": "task.schema.json",
+}
+
+
+def _schema_leaf(worktree, relpath, json_path):
+    """Return the JSON-Schema node declaring ``json_path``, when available."""
+    schema_name = SCHEMA_BY_BASENAME.get(os.path.basename(relpath))
+    if not schema_name:
+        return None
+    schema_path = os.path.join(worktree, "data", "schemas", schema_name)
+    try:
+        with open(schema_path, encoding="utf-8") as fh:
+            root = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    node = root
+    for part in json_path.split("."):
+        while "$ref" in node:
+            ref = node["$ref"]
+            if not ref.startswith("#/"):
+                return None
+            node = root
+            for token in ref[2:].split("/"):
+                node = node[token.replace("~1", "/").replace("~0", "~")]
+        if part.isdigit():
+            node = node.get("items", {})
+        else:
+            node = node.get("properties", {}).get(part, {})
+        if not node:
+            return None
+    while "$ref" in node:
+        ref = node["$ref"]
+        if not ref.startswith("#/"):
+            return None
+        node = root
+        for token in ref[2:].split("/"):
+            node = node[token.replace("~1", "/").replace("~0", "~")]
+    return node
+
+
+def coerce_json_scalar(worktree, relpath, json_path, incoming, current):
+    """Coerce editor text to the schema-declared scalar type.
+
+    Schema-less legacy fixtures fall back to the existing leaf's JSON type;
+    production spine files resolve through ``data/schemas``.
+    """
+    node = _schema_leaf(worktree, relpath, json_path) or {}
+    declared = node.get("type")
+    if isinstance(declared, list):
+        declared = next((t for t in declared if t != "null"), None)
+    if not declared:
+        if isinstance(current, bool):
+            declared = "boolean"
+        elif isinstance(current, int):
+            declared = "integer"
+        elif isinstance(current, float):
+            declared = "number"
+        elif isinstance(current, str):
+            declared = "string"
+    text = incoming if isinstance(incoming, str) else str(incoming)
+    if declared == "string":
+        return text
+    if declared == "boolean":
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        raise ValueError("expected boolean")
+    if declared == "integer":
+        if not re.fullmatch(r"-?(?:0|[1-9][0-9]*)", text):
+            raise ValueError("expected integer")
+        return int(text)
+    if declared == "number":
+        try:
+            value = decimal.Decimal(text)
+        except decimal.InvalidOperation as exc:
+            raise ValueError("expected number") from exc
+        if not value.is_finite():
+            raise ValueError("expected finite number")
+        return int(value) if value == value.to_integral_value() else float(value)
+    raise ValueError("unsupported scalar schema type")
+
+
 def _bid_of_ref(source_ref):
     """The trailing durable-ID of a prose ref, or None."""
     m = re.search(r"(?:\.|#)b([0-9a-f]{8})$", source_ref)
@@ -796,7 +887,14 @@ def apply_file_patches(worktree, relpath, patches):
             results[p.suggestion_id] = True
             continue
         if p.kind == "json_scalar":
-            edits.append((p.json_path, p.new_text))
+            try:
+                value = coerce_json_scalar(
+                    worktree, relpath, p.json_path, p.new_text,
+                    json_get(obj, p.json_path))
+            except (ValueError, KeyError, IndexError):
+                results[p.suggestion_id] = OUT_VALIDATION_ERROR
+                continue
+            edits.append((p.json_path, value))
             results[p.suggestion_id] = True
         else:  # prose_json_body
             body = _body(p.json_path)
@@ -1199,20 +1297,24 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         for relpath, patches in patch_by_file.items():
             file_results.update(apply_file_patches(wt, relpath, patches))
 
-        # Ambiguity discovered at splice time -> whole group -> needs_human.
-        blocked_by_ambiguity = {sid for sid, ok in file_results.items()
-                                if ok == OUT_NEEDS_HUMAN}
-        if blocked_by_ambiguity:
-            # Roll the ambiguous groups (and their file co-tenants) out of applied.
-            ambiguous_groups = {p.group_id for p in candidate_patches
-                                if p.suggestion_id in blocked_by_ambiguity}
+        # Failures discovered at splice time -> whole group -> needs_human.
+        rollout_failures = {
+            sid for sid, outcome in file_results.items()
+            if outcome in (OUT_NEEDS_HUMAN, OUT_VALIDATION_ERROR)
+        }
+        if rollout_failures:
+            # Roll the failed groups (and their file co-tenants) out of applied.
+            failed_groups = {
+                p.group_id for p in candidate_patches
+                if p.suggestion_id in rollout_failures
+            }
             kept = []
             for p in candidate_patches:
-                if p.group_id in ambiguous_groups:
+                if p.group_id in failed_groups:
                     needs_human.append(_row_of(rows, p.suggestion_id))
                 else:
                     kept.append(p)
-            # Re-derive the worktree from scratch to drop the partial ambiguous writes.
+            # Re-derive the worktree from scratch to drop all partial group writes.
             git(["checkout", "--", "."], wt)
             candidate_patches = []
             patch_by_file = {}

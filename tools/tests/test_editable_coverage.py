@@ -181,12 +181,13 @@ class NewCoverageTest(unittest.TestCase):
                 relpath, locator = b["source_ref"].split("#", 1)
                 # json_scalar grammar: locator IS the json_path
                 self.assertEqual(b["json_path"], locator)
-                # the path resolves in the real source file to the real string
+                # the path resolves in the real source file to the rendered
+                # scalar text (JSON numbers render as text in the candidate)
                 obj = json.load(open(os.path.join(REPO, relpath), encoding="utf-8"))
                 cur = obj
                 for key in locator.split("."):
                     cur = cur[int(key)] if isinstance(cur, list) else cur[key]
-                self.assertEqual(cur, b["original_text"])
+                self.assertEqual(str(cur), b["original_text"])
 
     # ---- R2: no ID / crosswalk key inside an editable block's text ------- #
     def test_no_join_key_inside_any_new_block_text(self):
