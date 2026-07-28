@@ -4,9 +4,9 @@
 
 My name is Lorraine Petimeyer. I am fifty-two years old and I live in Elleston. I drive a school-bus route in the mornings and afternoons, and on weekends I clean houses and help a couple of older folks around their homes to make ends meet. {#b:c04f0a99}
 
-[U4 live-cycle test paragraph — EDITED, then moved, then removed.] {#b:fa667d2d}
-
 On Friday morning, February 7, 2025, I was driving to the bus depot to start my route. It was cold and there had been a nasty freezing drizzle overnight. The roads were slick — you could see the shine of ice on the pavement in spots, and nobody had put down sand yet on Elleston Road. {#b:b30ae38d}
+
+[U4 live-cycle test paragraph — EDITED, then moved, then removed.] {#b:fa667d2d}
 
 I came down Elleston Road toward the light at Birchmont Avenue. There was one car stopped ahead of me at the red light, so I came to a full stop behind it. I was completely stopped, both hands on the wheel, waiting for the light. I had been sitting there for a few seconds when — bang — something hit me hard from behind. My head snapped and the car lurched forward. {#b:216aa222}
 
