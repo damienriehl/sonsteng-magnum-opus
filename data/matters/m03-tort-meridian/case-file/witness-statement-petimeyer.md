@@ -2,7 +2,7 @@
 
 *Taken at the offices of Ellingboe & Ravndal LLP, Norsholm, Meridian. Given in the first person by the client.* {#b:ade66462}
 
-My name is Lorraine Petimeyer. I am fifty-two years old and I live in Elleston. I drive a school bus route in the mornings and afternoons, and on weekends I clean houses and help a couple of older folks around their homes to make ends meet. {#b:c04f0a99}
+My name is Lorraine Petimeyer. I am fifty-two years old and I live in Elleston. I drive a school-bus route in the mornings and afternoons, and on weekends I clean houses and help a couple of older folks around their homes to make ends meet. {#b:c04f0a99}
 
 On Friday morning, February 7, 2025, I was driving to the bus depot to start my route. It was cold and there had been a nasty freezing drizzle overnight. The roads were slick — you could see the shine of ice on the pavement in spots, and nobody had put down sand yet on Elleston Road. {#b:b30ae38d}
 
