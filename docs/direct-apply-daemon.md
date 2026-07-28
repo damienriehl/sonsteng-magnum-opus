@@ -36,6 +36,16 @@ The daemon runs **from its own git worktree**, not from an interactive checkout.
 `APPLY_DEPLOY_BRANCH=main` — `main` carries the direct-apply/History work as of the
 `merge: canonical direct-apply + redline History + docs` merge.
 
+**Amended 2026-07-28 — a revert must also rebuild and redeploy the Worker.**
+`git revert` restores tracked trees (`data/`, `site/`) but cannot restore
+*generated* artifacts — above all `build/editor-map.generated.json`, the
+server-side allowlist the Worker bundles. A revert that only deployed the site
+left the Worker serving a pre-revert map, so every block the revert restored
+answered "That block is not editable." The revert success path is now
+rebuild → deploy site → deploy Worker, and any failure among the three marks
+the revert failed. Detail:
+`docs/solutions/editor/2026-07-28-generated-artifacts-are-not-tracked-state.md`.
+
 **Why.** The apply engine (`assert_clean_tree`) and the History revert both refuse
 to run on a dirty tree. While the daemon lived in the interactive checkout, any
 session that parked an uncommitted edit — or merely ran `build_site.py` — silently
