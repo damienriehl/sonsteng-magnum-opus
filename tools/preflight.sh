@@ -60,10 +60,19 @@ if [ "$WANT_BROWSER" = "1" ]; then
   if xdpyinfo >/dev/null 2>&1; then
     run "editor client (headful, 43 assertions)" bash -c 'node app/editor/verify-editor.js | tail -1 | grep -q "43/43 PASS"'
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
+    # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
+    # a ?t= token — which meant that once the Access door retires those tokens
+    # (plan KD1) the gate could never run again and would sit permanently
+    # "SKIP", a gate that had quietly stopped being a gate. It needs no
+    # credential: verify-rail-placement.js defaults to the same local
+    # test-harness.html the 43-assertion editor-client gate above drives, and the
+    # property it proves is geometric (the rail's box never intersects its
+    # block's box at ten widths), which the harness reproduces faithfully.
+    # Setting TARGET_URL still upgrades it to a real editor page.
     if [ -n "${TARGET_URL:-}" ]; then
-      run "rail placement on the live page"      node app/editor/verify-rail-placement.js
+      run "rail placement (live page)"           node app/editor/verify-rail-placement.js
     else
-      skip "rail placement (live page)" "set TARGET_URL to an /edit URL with ?t= to include it"
+      run "rail placement (harness)"             node app/editor/verify-rail-placement.js
     fi
   else
     skip "editor client"        "no reachable X display"

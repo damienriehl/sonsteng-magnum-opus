@@ -16,6 +16,17 @@
          DISPLAY=:0 TARGET_URL='https://…/edit/matters/m01-…/?t=…' node …
    Defaults to the local harness; point TARGET_URL at a real editor page to check
    the layout the reviewers actually get. Exit code 1 on any overlap.
+
+   WHY THE DEFAULT MATTERS: preflight used to run this gate ONLY when TARGET_URL
+   was set, so it was skipped on every ordinary run — and once the Access door
+   retires the ?t= tokens there would be no way to produce such a URL at all, and
+   the gate would have sat "SKIP" forever without anyone deciding to drop it.
+   It now always runs against the harness. Do NOT "fix" that by pointing it at
+   the Access hostname with a Cloudflare service token: a service-token assertion
+   carries `common_name` and no `email` claim, and access-jwt.js deliberately
+   returns null for exactly that shape, so making this work would mean loosening
+   the auth path to satisfy a test. The geometry is the point, and the harness
+   reproduces it.
    ============================================================================ */
 const puppeteer = require('/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer');
 const HARNESS = process.env.TARGET_URL || 'file:///home/damienriehl/Coding Projects/sonsteng-magnum-opus/app/editor/test-harness.html';
