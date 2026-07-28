@@ -6,6 +6,8 @@ My name is Lorraine Petimeyer. I am fifty-two years old and I live in Elleston. 
 
 On Friday morning, February 7, 2025, I was driving to the bus depot to start my route. It was cold and there had been a nasty freezing drizzle overnight. The roads were slick — you could see the shine of ice on the pavement in spots, and nobody had put down sand yet on Elleston Road. {#b:b30ae38d}
 
+[U4 live-cycle test paragraph — EDITED, then moved, then removed.] {#b:fa667d2d}
+
 I came down Elleston Road toward the light at Birchmont Avenue. There was one car stopped ahead of me at the red light, so I came to a full stop behind it. I was completely stopped, both hands on the wheel, waiting for the light. I had been sitting there for a few seconds when — bang — something hit me hard from behind. My head snapped and the car lurched forward. {#b:216aa222}
 
 I did not see it coming. I was facing forward, watching the light, so I honestly cannot tell you what the other driver was doing right before he hit me. Afterward, the way he came down that hill and slammed into a car that was plainly stopped, I felt sure he had not been paying attention. But I did not see his hands or his phone or anything like that. That is my feeling, not something I watched happen. {#b:46a76ce7}
