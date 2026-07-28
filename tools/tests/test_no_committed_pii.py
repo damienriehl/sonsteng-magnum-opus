@@ -65,11 +65,11 @@ def scanned_files():
         yield rel, REPO / rel
 
 
-# Source files contain literal escape sequences inside string literals — e.g.
-# "sha2\tdamienriehl@gmail.com\tfeat: …" in a tab-separated git-log fixture. Read
-# as raw text, the backslash is not part of an address but the letter after it
-# is, so a naive scan reports "tdamienriehl@gmail.com" and then fails to match it
-# against the owner allowlist. Neutralise the escapes before scanning.
+# Source files contain literal escape sequences inside string literals — e.g. a
+# tab-separated git-log fixture written as "sha2" + backslash-t + an address.
+# Read as raw text the backslash is not part of the address, but the letter after
+# it is, so a naive scan splices that letter onto the local part and then fails to
+# match the result against the owner allowlist. Neutralise the escapes first.
 ESCAPES = re.compile(r"\\[trn0]")
 
 
@@ -129,14 +129,19 @@ class NoCommittedPII(unittest.TestCase):
 
     def test_the_sweep_actually_catches_something(self):
         """A guard that cannot fail is not a guard."""
-        self.assertEqual(offending("mail someone@example.com"), [])
-        self.assertEqual(offending("apply@sonsteng.local"), [])
+        # Built by concatenation on purpose: a literal address in this file would
+        # make the guard flag itself, and exempting the guard from its own sweep
+        # would leave the one file most likely to accumulate real addresses
+        # unchecked.
+        at = "@"
+        self.assertEqual(offending("mail someone" + at + "example.com"), [])
+        self.assertEqual(offending("apply" + at + "sonsteng.local"), [])
         self.assertEqual(offending(OWNER_ADDRESS), [])
         # The escape-sequence case that first broke this scanner.
-        self.assertEqual(offending(r'"sha2\tdamienriehl@gmail.com\tfeat: x"'), [])
-        caught = offending("a.person@a-real-university.edu")
-        self.assertEqual(caught, ["a.person@a-real-university.edu"])
-        self.assertEqual(mask(caught[0]), "a***@***.edu")
+        self.assertEqual(offending('"sha2\\t' + OWNER_ADDRESS + '\\tfeat: x"'), [])
+        planted = "a.person" + at + "a-real-university.edu"
+        self.assertEqual(offending(planted), [planted])
+        self.assertEqual(mask(planted), "a***@***.edu")
 
 
 if __name__ == "__main__":
