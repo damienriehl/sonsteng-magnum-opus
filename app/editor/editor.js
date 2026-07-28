@@ -88,6 +88,18 @@
   var SS = makeStore(window.sessionStorage);   // per-tab ACTIVE draft buffer
   var LS = makeStore(window.localStorage);     // cross-tab recovery-only + prefs
   var DRAFT_PREFIX = 'sonsteng_edit_draft:';   // keyed by page + source_ref
+  var SCOPED_DRAFT_KEY = DRAFT_PREFIX + 'scoped-request|' + location.pathname;
+  var FACT_DRAFT_KEY = DRAFT_PREFIX + 'add-fact|' + location.pathname;
+
+  function saveDialogDraft(key, rec) {
+    rec.ts = Date.now();
+    SS.set(key, JSON.stringify(rec));
+    LS.set(key, JSON.stringify(rec));
+  }
+  function loadDialogDraft(key) {
+    try { return JSON.parse(SS.get(key) || 'null'); } catch (e) { return null; }
+  }
+  function clearDialogDraft(key) { SS.del(key); LS.del(key); }
 
   /* ---------- uuid (VERBATIM) ---------------------------------------------- */
   function uuid() {
@@ -502,8 +514,22 @@
     d.appendChild(inner);
     document.body.appendChild(d);
     scopedDlg = d;
-    var reqId = uuid();
+    var draft = loadDialogDraft(SCOPED_DRAFT_KEY);
+    var reqId = draft && draft.id ? draft.id : uuid();
     var confirmed = false;
+    if (draft) {
+      ta.value = draft.instruction || '';
+      if (/^\d+$/.test(String(draft.scope_index)) &&
+          parseInt(draft.scope_index, 10) < sel.options.length) {
+        sel.value = String(draft.scope_index);
+      }
+    }
+    var persist = function () {
+      saveDialogDraft(SCOPED_DRAFT_KEY, {
+        id: reqId, scope_index: sel.value, instruction: ta.value
+      });
+    };
+    if (draft) persist(); // refresh the durable mirror; never restore confirmation
     // A confirmation is for the radius the editor was SHOWN. Change the scope
     // or the wording and that number is stale — carrying confirmed:true across
     // the edit would file a course-wide change on a module-sized "yes".
@@ -513,6 +539,7 @@
       reqId = uuid();
       send.textContent = 'Send to Damien';
       status.textContent = '';
+      persist();
     };
     var closeTimer = null;
     var close = function () {
@@ -520,7 +547,9 @@
       if (d.parentNode) d.parentNode.removeChild(d);
       if (scopedDlg === d) scopedDlg = null;   // a stale timer must not blind the guard
     };
-    cancel.addEventListener('click', function () { if (!send.disabled) close(); });
+    cancel.addEventListener('click', function () {
+      if (!send.disabled) { clearDialogDraft(SCOPED_DRAFT_KEY); close(); }
+    });
     d.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !send.disabled) close();
     });
@@ -537,6 +566,7 @@
       status.textContent = 'Sending\u2026';
       api('/scoped-request', { body: body }).then(function (out) {
         if (out.ok) {
+          clearDialogDraft(SCOPED_DRAFT_KEY);
           status.textContent = 'Sent. Damien will review the drafted change before anything on the site changes.';
           send.textContent = 'Sent \u2713';
           closeTimer = setTimeout(close, 3500);
@@ -559,8 +589,8 @@
         log('SCOPED error code=' + code);
       });
     });
-    sel.addEventListener('change', resetConfirmation);
-    ta.addEventListener('input', resetConfirmation);
+    sel.addEventListener('change', function () { resetConfirmation(); persist(); });
+    ta.addEventListener('input', function () { resetConfirmation(); persist(); });
     setTimeout(function () { try { ta.focus(); } catch (e) {} }, 0);
   }
 
@@ -592,7 +622,17 @@
     // fresh uuid per click makes a retry-after-failure file a SECOND fact
     // instead of replaying the first — the idempotency discipline the rest of
     // this client already keeps (see sendSuggestion's post-success rotation).
-    var factId = uuid();
+    var draft = loadDialogDraft(FACT_DRAFT_KEY);
+    var factId = draft && draft.id ? draft.id : uuid();
+    if (draft) {
+      name.value = draft.name || '';
+      ta.value = draft.text || '';
+    }
+    var persist = function () {
+      saveDialogDraft(FACT_DRAFT_KEY, { id: factId, name: name.value, text: ta.value });
+    };
+    name.addEventListener('input', persist);
+    ta.addEventListener('input', persist);
     row.appendChild(send); row.appendChild(status);
     box.appendChild(name); box.appendChild(ta); box.appendChild(row);
     main.appendChild(box);
@@ -605,6 +645,7 @@
       api('/suggest', { body: { id: factId, op: 'json_add', matter: slug,
                                 fact_key: key, new_text: text } }).then(function (out) {
         if (out.ok) {
+          clearDialogDraft(FACT_DRAFT_KEY);
           status.textContent = 'Added \u2014 waiting for review.';
           name.value = ''; ta.value = ''; send.disabled = false;
           factId = uuid();          // landed: the next fact is a new intent
