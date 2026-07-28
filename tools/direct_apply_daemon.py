@@ -511,6 +511,21 @@ def _new_batch_id(now):
     return "batch-" + now.strftime("%Y%m%dT%H%M%SZ")
 
 
+def dispatch_scoped_drafts(*, repo_root=REPO_ROOT, timeout=900):
+    """U7: run one scoped-drafts pass (tools/editor_scoped_drafts.py) — claim
+    requested scoped changes, draft them via the headless CLI, progress
+    canaries. Best-effort and NON-GATING: a drafting failure never blocks the
+    apply/flush flow. Returns (ok, tail)."""
+    cmd = [sys.executable, os.path.join(repo_root, "tools", "editor_scoped_drafts.py")]
+    try:
+        proc = subprocess.run(cmd, cwd=repo_root, check=False, shell=False,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    return proc.returncode == 0, (proc.stdout or "")[-2000:]
+
+
 def dispatch_editorial(batch_id, *, repo_root=REPO_ROOT, timeout=600):
     """Session-end trigger (a): fire the editorial pass over one batch. subprocess
     so a slow/hung reviewer can never block the 2-min apply cadence. Returns rc."""
@@ -527,7 +542,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         fetch=None, apply_engine=None, do_rebuild=None, do_deploy=None,
         heartbeat=None, notify=None, editorial=None, out=None,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
-        clean_site=None, do_deploy_worker=None):
+        clean_site=None, do_deploy_worker=None, do_scoped=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -590,6 +605,14 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
                 heartbeat(False, 0)
                 notify([rid])
                 print("[daemon] revert %s FAILED (%s)." % (rid, detail), file=out)
+
+    # U7: scoped-change drafting — opt-in, best-effort, never gates the flush.
+    if do_scoped is not None and not dry_run:
+        try:
+            sok, _stail = do_scoped()
+            steps.append(("scoped_drafts", sok))
+        except Exception:
+            steps.append(("scoped_drafts", False))
 
     rows = fetch()
     steps.append(("fetch_review", len(rows)))
@@ -733,7 +756,8 @@ def main(argv=None):
                          fetch_reverts=lambda: fetch_revert_requests(api_base, token),
                          revert_exec=lambda req: execute_revert(req),
                          revert_resolve=lambda rid, st: resolve_revert_request(
-                             api_base, token, rid, st))
+                             api_base, token, rid, st),
+                         do_scoped=lambda: dispatch_scoped_drafts())
     except DaemonError as exc:
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2

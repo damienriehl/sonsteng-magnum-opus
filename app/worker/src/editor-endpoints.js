@@ -462,6 +462,133 @@ export async function scopeEndpoint(request, env, auth) {
   return json(result);
 }
 
+// ---- U7: scoped-change requests ---------------------------------------------
+// POST /edit/v1/scoped-request (edit/instructor scope): file a natural-language
+// change at a chosen scope. The radius is SERVER-enumerated (never client-
+// supplied); above the ceiling the request refuses to file without explicit
+// confirmation (KTD5 — ceiling settled at 100 blocks, Damien 2026-07-28).
+// Drafting happens on the home box (tools/editor_scoped_drafts.py), which
+// claims requests through the admin surface below and posts one ai_rewrite
+// group via /system-suggest — reviewed and accepted as ONE unit (R7).
+const SCOPED_CEILING_DEFAULT = 100;
+const SCOPED_INSTRUCTION_MAX = 4000;
+
+export async function scopedRequestEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
+  if (!auth.editor || (!auth.scopes.edit.granted && !auth.scopes.instructor.granted))
+    return editError("forbidden", "No edit scope.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+
+  const id = body.id;
+  const instruction = typeof body.instruction === "string" ? body.instruction.trim() : "";
+  if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(id))
+    return editError("validation_error", "A valid request id is required.", 400);
+  if (!instruction || instruction.length > SCOPED_INSTRUCTION_MAX)
+    return editError("validation_error", "Describe the change in your own words (briefly).", 400);
+  if (instruction.includes(RESERVED_MARKER))
+    return editError("validation_error", "That text contains a reserved sequence.", 400);
+
+  const radius = enumerateScope({
+    level: body.level,
+    matter: typeof body.matter === "string" ? body.matter : undefined,
+    part: typeof body.part === "string" ? body.part : undefined,
+    module: typeof body.module === "string" ? body.module : undefined,
+  });
+  if (!radius.ok)
+    return editError("validation_error", "That scope could not be resolved.", 400);
+
+  const n = parseInt(env.EDIT_SCOPED_CEILING, 10);
+  const ceiling = n > 0 ? n : SCOPED_CEILING_DEFAULT;
+  const confirmed = body.confirmed === true;
+  if (radius.blocks > ceiling && !confirmed) {
+    // 409 carries the radius so the client can show the blast radius and ask
+    // the editor to confirm — the refusal IS the feature (KD2).
+    return new Response(JSON.stringify({
+      ok: false,
+      error: { code: "ceiling_confirmation_required",
+               message: "That change would touch " + radius.blocks +
+                        " paragraphs. Please confirm you mean it that widely." },
+      radius: { blocks: radius.blocks, files: radius.files,
+                matters: radius.matters.length },
+    }), { status: 409, headers: { "content-type": "application/json" } });
+  }
+
+  const result = await editorStub(env).fileScopedRequest({
+    id,
+    editor: auth.editor,                 // SERVER-resolved
+    level: body.level,
+    matter: typeof body.matter === "string" ? body.matter : null,
+    part: typeof body.part === "string" ? body.part : null,
+    module: typeof body.module === "string" ? body.module : null,
+    instruction,
+    radius_blocks: radius.blocks,        // SERVER-enumerated
+    radius_files: radius.files,
+    radius_matters: radius.matters.length,
+    confirmed,
+  });
+  if (!result.ok) return editError(result.reason || "validation_error", "Could not file the request.", 400);
+  return json({ ok: true, id: result.request.id, status: result.request.status,
+                phase: result.request.phase, replay: !!result.replay,
+                radius: { blocks: radius.blocks, files: radius.files,
+                          matters: radius.matters.length } });
+}
+
+// GET /edit/v1/scoped-requests?status= (admin/service): the drafter's poll.
+export async function scopedRequestsEndpoint(request, env, auth) {
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status") || null;
+  const items = await editorStub(env).listScopedRequests(status);
+  return json({ ok: true, items });
+}
+
+// POST /edit/v1/scoped-claim {id} (admin/service): requested -> drafting.
+export async function scopedClaimEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string")
+    return editError("validation_error", "id required.", 400);
+  const result = await editorStub(env).claimScopedRequest(body.id);
+  return json(result, result.ok ? 200 : 409);
+}
+
+// POST /edit/v1/scoped-resolve {id, status, group_id?, phase?, canary_matter?,
+// note?} (admin/service): every non-claim lifecycle move.
+export async function scopedResolveEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string" || typeof body.status !== "string")
+    return editError("validation_error", "id and status are required.", 400);
+  const result = await editorStub(env).resolveScopedRequest(body.id, {
+    status: body.status,
+    group_id: typeof body.group_id === "string" ? body.group_id : null,
+    phase: typeof body.phase === "string" ? body.phase : null,
+    canary_matter: typeof body.canary_matter === "string" ? body.canary_matter : null,
+    note: typeof body.note === "string" ? body.note.slice(0, 2000) : null,
+  });
+  if (!result.ok) {
+    const map = { not_found: [404, "Not found."],
+                  illegal_transition: [409, "That request can't move to that state."] };
+    const [status, message] = map[result.reason] || [400, "Could not resolve the request."];
+    return editError(result.reason, message, status);
+  }
+  return json(result);
+}
+
+// GET /edit/v1/group-status?group_id= (admin/service): every member by status,
+// terminal included — the canary gate reads this.
+export async function groupStatusEndpoint(request, env, auth) {
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const url = new URL(request.url);
+  const gid = url.searchParams.get("group_id");
+  if (!gid) return editError("validation_error", "group_id required.", 400);
+  const outcome = await editorStub(env).groupOutcome(gid);
+  return json({ ok: true, outcome });
+}
+
 // ---- GET /edit/v1/review (admin; all pending grouped) -----------------------
 export async function reviewJsonEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin scope required.", 403);

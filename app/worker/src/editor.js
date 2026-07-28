@@ -18,7 +18,8 @@ import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-h
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
-  scopeEndpoint,
+  scopeEndpoint, scopedRequestEndpoint, scopedRequestsEndpoint,
+  scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
 } from "./editor-endpoints.js";
@@ -155,6 +156,16 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await systemSuggestEndpoint(request, env, auth));
   if (path === "/edit/v1/pending" && request.method === "GET")
     return wrap(await pendingEndpoint(request, env, auth));
+  if (path === "/edit/v1/scoped-request" && request.method === "POST")
+    return wrap(await scopedRequestEndpoint(request, env, auth));
+  if (path === "/edit/v1/scoped-requests" && request.method === "GET")
+    return wrap(await scopedRequestsEndpoint(request, env, auth));
+  if (path === "/edit/v1/scoped-claim" && request.method === "POST")
+    return wrap(await scopedClaimEndpoint(request, env, auth));
+  if (path === "/edit/v1/scoped-resolve" && request.method === "POST")
+    return wrap(await scopedResolveEndpoint(request, env, auth));
+  if (path === "/edit/v1/group-status" && request.method === "GET")
+    return wrap(await groupStatusEndpoint(request, env, auth));
   if (path === "/edit/v1/scope" && request.method === "GET")
     return wrap(await scopeEndpoint(request, env, auth));
   if (path === "/edit/v1/review" && request.method === "GET")
