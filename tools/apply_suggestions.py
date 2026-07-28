@@ -448,8 +448,8 @@ def classify(source_ref, block):
         return "json_scalar", block.get("json_path") or locator
     if relpath.endswith(".md"):
         return "prose_md", ""
-    # prose living inside a JSON markdown field: locator = "<path>.body_md.pN"
-    body_path = re.sub(r"\.p\d+$", "", locator)
+    # prose living inside a JSON markdown field: locator = "<path>.body_md.b<hex8>"
+    body_path = re.sub(r"\.b[0-9a-f]{8}$", "", locator)
     return "prose_json_body", body_path
 
 
