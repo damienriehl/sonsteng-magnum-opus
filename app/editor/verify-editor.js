@@ -325,6 +325,89 @@ async function run() {
       last && last.source_ref === HYREF && last.original_hash === 'hash-idx4-v1' && /re-edit that starts/.test(last.new_text || ''),
       'sent hash=' + (last && last.original_hash) + ' text="' + ((last && last.new_text) || '').slice(0, 30) + '"');
 
+    /* --- ST: structural operations (U4) — add / remove / move ------------- */
+    // Affordance placement: prose blocks carry Add/Remove; move appears only
+    // where a destination is expressible (after-a-block only); scalars get none.
+    const stAff = await page.evaluate(() => {
+      var q = function (idx, cls) {
+        return !!document.querySelector('.eb-tools[data-eb-for="' + idx + '"] .eb-act--' + cls);
+      };
+      return { add5: q(5, 'add'), rm5: q(5, 'remove'), up5: q(5, 'up'), down5: q(5, 'down'),
+               add6: q(6, 'add'), rm6: q(6, 'remove'), up6: q(6, 'up'), down6: q(6, 'down'),
+               addScalar: q(2, 'add'), rmScalar: q(2, 'remove') };
+    });
+    assert('ST1 add/remove affordances on prose blocks; none on json_scalar',
+      stAff.add5 && stAff.rm5 && stAff.add6 && stAff.rm6 && !stAff.addScalar && !stAff.rmScalar,
+      JSON.stringify(stAff));
+    assert('ST2 move only where a destination is expressible (5: down only; 6: none)',
+      stAff.down5 && !stAff.up5 && !stAff.up6 && !stAff.down6, JSON.stringify(stAff));
+
+    // Add-paragraph: composer opens, sends op:insert_after with the typed text.
+    await page.click('.eb-tools[data-eb-for="5"] .eb-act--add');
+    await page.waitForSelector('.eb-composer', { timeout: 3000 });
+    await page.evaluate(() => {
+      document.querySelector('.eb-composer textarea').value = 'A paragraph John added himself.';
+    });
+    await page.click('.eb-composer__send');
+    await page.waitForFunction(() => {
+      var l = window.__MOCK_CTRL__.last();
+      return l && l.op === 'insert_after';
+    }, { timeout: 4000 });
+    const stAddBody = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    const REF5 = await page.evaluate(() => window.SonstengEditor.block(5).ref);
+    const REF6 = await page.evaluate(() => window.SonstengEditor.block(6).ref);
+    assert('ST3 composer sends op:insert_after anchored to the block, with the text',
+      stAddBody.op === 'insert_after' && stAddBody.source_ref === REF5 &&
+      stAddBody.new_text === 'A paragraph John added himself.' && stAddBody.original_hash === 'hash-idx5-v1',
+      'op=' + stAddBody.op + ' ref=' + stAddBody.source_ref.slice(-12));
+    const stPillTxt = await page.evaluate(() => window.SonstengEditor.statusText(5));
+    assert('ST4 structural pill says it waits for review (never an instant claim)',
+      /waiting for review/i.test(stPillTxt || ''), 'pill="' + stPillTxt + '"');
+
+    // Remove: two-step confirm, sends op:delete with no payload.
+    await page.click('.eb-tools[data-eb-for="6"] .eb-act--remove');
+    await page.waitForSelector('.eb-confirm', { timeout: 3000 });
+    const confirmCopy = await page.$eval('.eb-confirm__msg', el => el.textContent);
+    assert('ST5 delete confirm states review-first + restorability in plain words',
+      /Damien reviews/.test(confirmCopy) && /restored/.test(confirmCopy),
+      '"' + confirmCopy.slice(0, 60) + '"');
+    await page.click('.eb-confirm__yes');
+    await page.waitForFunction(() => {
+      var l = window.__MOCK_CTRL__.last();
+      return l && l.op === 'delete';
+    }, { timeout: 4000 });
+    const stDelBody = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    assert('ST6 confirm sends op:delete addressed to the block, no payload',
+      stDelBody.op === 'delete' && stDelBody.source_ref === REF6 && stDelBody.new_text == null,
+      'op=' + stDelBody.op);
+
+    // Move down: sends op:move with the NEXT same-file block as destination.
+    await page.click('.eb-tools[data-eb-for="5"] .eb-act--down');
+    await page.waitForFunction(() => {
+      var l = window.__MOCK_CTRL__.last();
+      return l && l.op === 'move';
+    }, { timeout: 4000 });
+    const stMoveBody = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    assert('ST7 move sends op:move with the same-document destination ref',
+      stMoveBody.op === 'move' && stMoveBody.source_ref === REF5 && stMoveBody.op_arg === REF6,
+      'op_arg=' + String(stMoveBody.op_arg).slice(-12));
+
+    // A pending structural item NEVER paints its payload into the anchor block.
+    await page.evaluate((ref) => window.SonstengEditor.applyPending([
+      { block_index: 5, source_ref: ref, status: 'pending', kind: 'insert_after',
+        new_text: 'Must never appear inside the anchor.', base_hash: 'hash-idx5-v1',
+        attribution: 'JOS', preview: 'new paragraph' }
+    ]), REF5);
+    const stHyState = await page.evaluate(() => ({
+      text: window.SonstengEditor.blockText(5),
+      hydrated: window.SonstengEditor.block(5).hydrated,
+      st: window.SonstengEditor.statusText(5)
+    }));
+    assert('ST8 structural pending shows as a pill on the anchor, never hydrates into it',
+      stHyState.text.indexOf('Must never appear') === -1 && stHyState.hydrated === false &&
+      /New paragraph/.test(stHyState.st || ''),
+      'text="' + stHyState.text.slice(0, 30) + '" pill="' + stHyState.st + '"');
+
     await page.screenshot({ path: path.join(OUT, 'editor-desktop.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-desktop.png'));
     // large-type screenshot for visual QA

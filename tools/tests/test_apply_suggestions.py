@@ -685,3 +685,142 @@ class HttpRpcRoutingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+# --------------------------------------------------------------------------- #
+# Structural operations through the apply engine (U4)
+# --------------------------------------------------------------------------- #
+class StructuralApplyTest(unittest.TestCase):
+    def setUp(self):
+        self.root = make_repo()
+        self.store = InMemoryEditorStore()
+        self.client = FakeClient(self.store)
+        self.index = resolve_index(self.root, SPEC)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _add_op(self, sid, source_ref, op, new_text=None, op_arg=None, **extra):
+        blk = self.index[source_ref]
+        return self.store.add(
+            id=sid, source_ref=source_ref, kind=op, new_text=new_text,
+            op_arg=op_arg, original_hash=blk["original_hash"],
+            original_text=blk["original_text"], json_path=None,
+            status="accepted", **extra)
+
+    def _run(self, batch_id, pipeline, deploy_plan_only=False):
+        return ap.run_apply(self.client, pipeline, batch_id,
+                            worktree_parent=None, deploy_plan_only=deploy_plan_only,
+                            branch="test", canonical_root=self.root, logger=lambda *a: None)
+
+    def _md(self):
+        return open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
+
+    def test_insert_after_lands_with_fresh_bid_and_no_bid_moves(self):
+        before_bids = BID_RE.findall(self._md())
+        anchor = bref(self.root, M03_MD, 0)
+        self._add_op("i1", anchor, "insert_after", new_text="A brand-new paragraph.")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["i1"])
+        after = self._md()
+        after_bids = BID_RE.findall(after)
+        self.assertEqual([b for b in after_bids if b in set(before_bids)], before_bids)
+        self.assertEqual(len(after_bids), len(before_bids) + 1)
+        paras = _paragraphs(after)
+        self.assertIn("A brand-new paragraph.", paras[1])  # right after the anchor
+        self.assertEqual(self.store.rows["i1"]["status"], "applied")
+
+    def test_delete_removes_block_and_history_can_restore_bid(self):
+        victim = bref(self.root, M03_MD, 1)
+        victim_bid = BID_RE.search(_paragraphs(open(
+            os.path.join(self.root, M03_MD), encoding="utf-8").read())[1]).group(1)
+        self._add_op("d1", victim, "delete")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        after = self._md()
+        self.assertNotIn(victim_bid, after)
+        self.assertNotIn("paid in full", after)
+        # history retains it: reverting the applied commit restores the EXACT bid
+        _git(["revert", "--no-edit", "HEAD"], self.root)
+        self.assertIn(victim_bid, self._md())
+
+    def test_two_inserts_after_one_anchor_read_chronologically(self):
+        anchor = bref(self.root, M03_MD, 0)
+        self._add_op("i1", anchor, "insert_after", new_text="First addition.",
+                     created_at=1000)
+        self._add_op("i2", anchor, "insert_after", new_text="Second addition.",
+                     created_at=2000)
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertEqual({p.suggestion_id for p in res.applied}, {"i1", "i2"})
+        paras = [_strip_markers(p) for p in _paragraphs(self._md())]
+        self.assertIn("First addition.", paras[1])
+        self.assertIn("Second addition.", paras[2])
+
+    def test_move_reorders_without_changing_bids(self):
+        mover = bref(self.root, M03_MD, 0)
+        dest = bref(self.root, M03_MD, 1)
+        before = set(BID_RE.findall(self._md()))
+        self._add_op("m1", mover, "move", op_arg=dest)
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        self.assertEqual(set(BID_RE.findall(self._md())), before)
+        paras = [_strip_markers(p) for p in _paragraphs(self._md())]
+        self.assertIn("paid in full", paras[0])
+        self.assertIn("Intake notes", paras[1])
+
+    def test_split_and_merge_preserve_text_through_engine(self):
+        # split p0 of the json body ("You represent the plaintiff in a negligence action.")
+        ref = bref(self.root, M03_EX, 0, "sections.intro.body_md")
+        self._add_op("s1", ref, "split",
+                     new_text="You represent the plaintiff\n\nin a negligence action.")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertTrue(res.committed)
+        obj = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        body = obj["sections"]["intro"]["body_md"]
+        paras = [_strip_markers(p) for p in _paragraphs(body)]
+        self.assertEqual(paras[0], "You represent the plaintiff")
+        self.assertEqual(paras[1], "in a negligence action.")
+        # now merge them back through the engine
+        self.index = resolve_index(self.root, SPEC)
+        first = bref(self.root, M03_EX, 0, "sections.intro.body_md")
+        second = bref(self.root, M03_EX, 1, "sections.intro.body_md")
+        self._add_op("g1", first, "merge", op_arg=second)
+        res2 = self._run("b2", FakePipeline(SPEC))
+        self.assertTrue(res2.committed)
+        obj2 = json.loads(open(os.path.join(self.root, M03_EX), encoding="utf-8").read())
+        merged = _strip_markers(_paragraphs(obj2["sections"]["intro"]["body_md"])[0])
+        self.assertEqual(merged, "You represent the plaintiff in a negligence action.")
+
+    def test_structural_ambiguity_routes_needs_human(self):
+        # merge of NON-adjacent blocks: p0 + p2 of the json body
+        first = bref(self.root, M03_EX, 0, "sections.intro.body_md")
+        third = bref(self.root, M03_EX, 2, "sections.intro.body_md")
+        before = snapshot_data(self.root)
+        self._add_op("x1", first, "merge", op_arg=third)
+        res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
+        self.assertEqual([r["id"] for r in res.needs_human], ["x1"])
+        self.assertEqual([], res.applied)
+        self.assertEqual(before, snapshot_data(self.root))
+
+    def test_mixed_text_and_structural_on_one_file(self):
+        anchor = bref(self.root, M03_MD, 0)
+        blk = self.index[anchor]
+        self.store.add(id="t1", source_ref=anchor, new_text="Revised intake notes.",
+                       original_hash=blk["original_hash"], original_text=blk["original_text"],
+                       kind="prose", json_path=None, status="accepted")
+        self._add_op("i1", anchor, "insert_after", new_text="Added after the revision.")
+        res = self._run("b1", FakePipeline(SPEC))
+        self.assertEqual({p.suggestion_id for p in res.applied}, {"t1", "i1"})
+        paras = [_strip_markers(p) for p in _paragraphs(self._md())]
+        self.assertEqual(paras[0], "Revised intake notes.")
+        self.assertEqual(paras[1], "Added after the revision.")
+
+    def test_structural_rows_never_propose_companions(self):
+        anchor = bref(self.root, M03_MD, 0)
+        self._add_op("i1", anchor, "insert_after",
+                     new_text="The revised retainer is $9,999 in total.")
+        res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
+        self.assertEqual([p.suggestion_id for p in res.applied], ["i1"])
+        self.assertEqual(res.companions, [])

@@ -58,7 +58,10 @@ if [ "$WANT_BROWSER" = "1" ]; then
     [ -n "$cookie" ] && export XAUTHORITY="$cookie"
   fi
   if xdpyinfo >/dev/null 2>&1; then
-    run "editor client (headful, 43 assertions)" bash -c 'node app/editor/verify-editor.js | tail -1 | grep -q "43/43 PASS"'
+    # verify-editor exits nonzero on any failed assertion and prints an
+    # "N/N PASS" summary — trust the exit code, never a hardcoded count (the
+    # literal "43/43" grep silently turned every added assertion into a FAIL).
+    run "editor client (headful)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
     # a ?t= token — which meant that once the Access door retires those tokens

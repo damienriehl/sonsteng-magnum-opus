@@ -73,6 +73,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import text_norm  # noqa: E402  (the ONE canonical normalization contract)
 import json_surgical  # noqa: E402  (WP5: formatting-preserving scalar splices)
+import structural_ops  # noqa: E402  (U4: insert/delete/split/merge/move by bid)
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS_DIR = os.path.join(REPO_ROOT, "tools")
@@ -436,14 +437,25 @@ class Patch:
     group_id: str
     source_ref: str
     relpath: str
-    kind: str           # "json_scalar" | "prose_md" | "prose_json_body"
-    json_path: str      # scalar path, or body_md path for prose_json_body
+    kind: str           # "json_scalar" | "prose_md" | "prose_json_body" | "structural_md" | "structural_json_body"
+    json_path: str      # scalar path, or body_md path for prose_json_body/structural_json_body
     original_text: str  # RAW source span (map-resolved) for prose; scalar value for json_scalar
     new_text: str
+    op: str = None      # structural operation name (insert_after|delete|split|merge|move), else None
+    op_arg: str = None  # merge's second ref / move's destination ref
+    created_at: int = 0 # store row creation time (orders same-anchor inserts)
 
 
-def classify(source_ref, block):
+# Structural suggestion kinds (U4, KTD3) — mirror of the Worker store's set.
+STRUCTURAL_KINDS = {"insert_after", "delete", "split", "merge", "move"}
+
+
+def classify(source_ref, block, op=None):
     relpath, locator = source_ref.split("#", 1)
+    if op in STRUCTURAL_KINDS:
+        if relpath.endswith(".md"):
+            return "structural_md", ""
+        return "structural_json_body", re.sub(r"\.b[0-9a-f]{8}$", "", locator)
     if block.get("kind") == "json_scalar":
         return "json_scalar", block.get("json_path") or locator
     if relpath.endswith(".md"):
@@ -451,6 +463,84 @@ def classify(source_ref, block):
     # prose living inside a JSON markdown field: locator = "<path>.body_md.b<hex8>"
     body_path = re.sub(r"\.b[0-9a-f]{8}$", "", locator)
     return "prose_json_body", body_path
+
+
+def _bid_of_ref(source_ref):
+    """The trailing durable-ID of a prose ref, or None."""
+    m = re.search(r"(?:\.|#)b([0-9a-f]{8})$", source_ref)
+    return m.group(1) if m else None
+
+
+def corpus_bids(worktree):
+    """Every {#b:} bid present under the worktree's data/ tree — the corpus-wide
+    registry structural mints must never collide with (retired bids included:
+    a bid is never reused even after its block is deleted, because history can
+    restore it)."""
+    import glob as _glob
+    bids = set()
+    for pattern in ("data/**/*.md", "data/**/*.json"):
+        for path in _glob.glob(os.path.join(worktree, pattern), recursive=True):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    bids.update(structural_ops.sb.BID_RE.findall(fh.read()))
+            except OSError:
+                continue
+    return bids
+
+
+def _order_structural(patches):
+    """Deterministic application order for a file's structural ops: created_at
+    ascending — except runs of insert_after sharing one anchor, which apply
+    NEWEST-first so the final page reads in the order the editor added them
+    (each insert lands directly after the same anchor)."""
+    ordered = sorted(patches, key=lambda p: (p.created_at, p.suggestion_id))
+    out = []
+    i = 0
+    while i < len(ordered):
+        p = ordered[i]
+        if p.op == "insert_after":
+            j = i
+            while j < len(ordered) and ordered[j].op == "insert_after" \
+                    and ordered[j].source_ref == p.source_ref:
+                j += 1
+            out.extend(reversed(ordered[i:j]))
+            i = j
+        else:
+            out.append(p)
+            i += 1
+    return out
+
+
+def _apply_structural_to_text(text, patch, existing_bids):
+    """Dispatch one structural op against markdown text. Returns new text.
+    Raises structural_ops.StructuralError on any ambiguity."""
+    bid = _bid_of_ref(patch.source_ref)
+    if not bid:
+        raise structural_ops.StructuralError("ref carries no bid: %r" % patch.source_ref)
+    if patch.op == "insert_after":
+        new_text, _new_bid = structural_ops.op_insert_after(
+            text, bid, patch.new_text or "", existing_bids)
+        return new_text
+    if patch.op == "delete":
+        return structural_ops.op_delete(text, bid)
+    if patch.op == "split":
+        parts = (patch.new_text or "").split("\n\n", 1)
+        if len(parts) != 2:
+            raise structural_ops.StructuralError("split payload must carry two parts")
+        new_text, _new_bid = structural_ops.op_split(
+            text, bid, parts[0], parts[1], existing_bids)
+        return new_text
+    if patch.op == "merge":
+        arg_bid = _bid_of_ref(patch.op_arg or "")
+        if not arg_bid:
+            raise structural_ops.StructuralError("merge target carries no bid")
+        return structural_ops.op_merge(text, bid, arg_bid)
+    if patch.op == "move":
+        arg_bid = _bid_of_ref(patch.op_arg or "")
+        if not arg_bid:
+            raise structural_ops.StructuralError("move destination carries no bid")
+        return structural_ops.op_move(text, bid, arg_bid)
+    raise structural_ops.StructuralError("unknown structural op %r" % patch.op)
 
 
 def _count_and_replace(text, needle, replacement):
@@ -625,13 +715,26 @@ def apply_file_patches(worktree, relpath, patches):
         raw = fh.read()
 
     results = {}
+    text_patches = [p for p in patches if p.op is None]
+    structural = _order_structural([p for p in patches if p.op is not None])
+    # Structural mints must avoid EVERY bid in the corpus (worktree-wide).
+    existing_bids = corpus_bids(worktree) if any(
+        p.op in ("insert_after", "split") for p in structural) else set()
+
     if relpath.endswith(".md"):
-        # prose_md only. Apply position-DESCENDING so offsets never shift.
-        ordered = sorted(patches, key=lambda p: raw.find(p.original_text), reverse=True)
+        # prose_md text edits first (position-DESCENDING so offsets never
+        # shift), then structural ops (bid-anchored — robust to line shifts).
+        ordered = sorted(text_patches, key=lambda p: raw.find(p.original_text), reverse=True)
         new_raw = raw
         for p in ordered:
             new_raw, n = _count_and_replace(new_raw, p.original_text, p.new_text)
             results[p.suggestion_id] = True if n == 1 else OUT_NEEDS_HUMAN
+        for p in structural:
+            try:
+                new_raw = _apply_structural_to_text(new_raw, p, existing_bids)
+                results[p.suggestion_id] = True
+            except structural_ops.StructuralError:
+                results[p.suggestion_id] = OUT_NEEDS_HUMAN
         if OUT_NEEDS_HUMAN in results.values():
             return results  # ambiguity: abandon the whole-file write
         with open(abspath, "w", encoding="utf-8") as fh:
@@ -653,13 +756,22 @@ def apply_file_patches(worktree, relpath, patches):
     # whole-file parse->set->serialize path. Either way the logical object is
     # identical; only the diff minimality differs.
     obj = json.loads(raw)
-    edits = []  # [(json_path, new_value)] in patch order
-    for p in patches:
+    # body values evolve as patches apply (text edits, then structural ops),
+    # so track the CURRENT value per body path and emit one edit per path.
+    body_values = {}
+
+    def _body(path):
+        if path not in body_values:
+            body_values[path] = json_get(obj, path)
+        return body_values[path]
+
+    edits = []  # [(json_path, new_value)] for scalars, in patch order
+    for p in text_patches:
         if p.kind == "json_scalar":
             edits.append((p.json_path, p.new_text))
             results[p.suggestion_id] = True
         else:  # prose_json_body
-            body = json_get(obj, p.json_path)
+            body = _body(p.json_path)
             if not isinstance(body, str):
                 results[p.suggestion_id] = OUT_NEEDS_HUMAN
                 continue
@@ -667,10 +779,24 @@ def apply_file_patches(worktree, relpath, patches):
             if n != 1:
                 results[p.suggestion_id] = OUT_NEEDS_HUMAN
                 continue
-            edits.append((p.json_path, new_body))
+            body_values[p.json_path] = new_body
             results[p.suggestion_id] = True
+    for p in structural:
+        body = _body(p.json_path)
+        if not isinstance(body, str):
+            results[p.suggestion_id] = OUT_NEEDS_HUMAN
+            continue
+        try:
+            body_values[p.json_path] = _apply_structural_to_text(
+                body, p, existing_bids)
+            results[p.suggestion_id] = True
+        except structural_ops.StructuralError:
+            results[p.suggestion_id] = OUT_NEEDS_HUMAN
     if OUT_NEEDS_HUMAN in results.values():
         return results  # ambiguity: abandon the whole-file write
+    for path, value in body_values.items():
+        if value != json_get(obj, path):
+            edits.append((path, value))
 
     new_raw = write_json_edits(raw, edits)
     with open(abspath, "w", encoding="utf-8") as fh:
@@ -763,6 +889,8 @@ def propose_value_sync(worktree, applied_patches, source_index, client, batch_id
     companion payloads proposed (also useful for the digest/tests)."""
     proposed = []
     for patch in applied_patches:
+        if patch.op is not None:
+            continue  # structural ops never syndicate value companions (U4)
         if patch.kind == "json_scalar":
             continue  # json_scalar syndicates via regenerate — not a companion case
         matter = matter_of(patch.source_ref)
@@ -1145,6 +1273,30 @@ def _gate_group(members, source_index, worktree):
             return OUT_DRIFT, []
         original_text = block.get("original_text") or r.get("original_text") or ""
         new_text = r.get("new_text") or ""
+        # Structural operation (U4): the row's kind IS the op. The drift gate
+        # above already proved the anchor still matches; op_arg (merge/move)
+        # must also still resolve in the fresh map or the row drifts.
+        row_kind = r.get("kind")
+        if row_kind in STRUCTURAL_KINDS:
+            op_arg = r.get("op_arg") or None
+            if row_kind in ("merge", "move"):
+                if not op_arg or op_arg not in source_index:
+                    return OUT_DRIFT, []
+            kind, json_path = classify(source_ref, block, op=row_kind)
+            patches.append(Patch(
+                suggestion_id=r["id"],
+                group_id=r.get("group_id") or ("solo:" + r["id"]),
+                source_ref=source_ref,
+                relpath=source_ref.split("#", 1)[0],
+                kind=kind,
+                json_path=json_path,
+                original_text=original_text,
+                new_text=r.get("new_text") or "",
+                op=row_kind,
+                op_arg=op_arg,
+                created_at=r.get("created_at") or 0,
+            ))
+            continue
         # FORMATTING gate (v1.1, WP7): try a span-splice that preserves the raw
         # markup when every formatted span is unchanged in-order; only decline to
         # needs_human when the splice can't be proven safe. Soundness cross-check:

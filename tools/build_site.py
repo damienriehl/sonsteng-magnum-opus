@@ -320,8 +320,9 @@ def markdown(md, src=None, spans=None):
     registered) and is counted in EDMAP.unmarked.
 
     `spans`, when given, is a list this render appends one record per emitted
-    block to: {"tag", "end_line" (0-based index of the block's LAST source
-    line), "bid" (or None), "raw" (marker-stripped source span)}. It is how
+    block to: {"tag", "start_line"/"end_line" (0-based indices of the block's
+    first/last source lines), "bid" (or None), "raw" (marker-stripped source
+    span)}. It is how
     tools/stamp_block_ids.py finds exactly the blocks this renderer emits,
     with zero drift between the stamper's parse and this one."""
     lines = md.replace("\r\n", "\n").split("\n")
@@ -332,6 +333,7 @@ def markdown(md, src=None, spans=None):
     rec = EDMAP.enabled and src is not None
     blk = [0]        # 0-based editable-block ordinal within this render
     ctx = [""]       # nearest preceding heading text -> block context
+    start_line = [0] # 0-based source-line index of the current block's first line
     end_line = [0]   # 0-based source-line index of the current block's last line
 
     def _emit(tag, source_span, attrs=""):
@@ -342,8 +344,8 @@ def markdown(md, src=None, spans=None):
         inner_html = _inline(clean)
         open_attrs = (" " + attrs) if attrs else ""
         if spans is not None:
-            spans.append({"tag": tag, "end_line": end_line[0],
-                          "bid": bid, "raw": clean})
+            spans.append({"tag": tag, "start_line": start_line[0],
+                          "end_line": end_line[0], "bid": bid, "raw": clean})
         if not rec:
             return "<{t}{a}>{i}</{t}>".format(t=tag, a=open_attrs, i=inner_html)
         blk[0] += 1
@@ -358,11 +360,13 @@ def markdown(md, src=None, spans=None):
         return "<{t}{a} data-ebsrc=\"{r}\">{i}</{t}>".format(
             t=tag, a=open_attrs, r=esc(source_ref), i=inner_html)
 
-    para_end = [0]   # source-line index of the last line buffered into `para`
+    para_start = [0]  # source-line index of the first line buffered into `para`
+    para_end = [0]    # source-line index of the last line buffered into `para`
 
     def flush_para(buf):
         if buf:
             raw = " ".join(buf).strip()
+            start_line[0] = para_start[0]
             end_line[0] = para_end[0]
             out.append(_emit("p", raw))
             buf.clear()
@@ -391,7 +395,7 @@ def markdown(md, src=None, spans=None):
             flush_para(para)
             level = min(len(h.group(1)) + 1, 6)  # demote so page h1 stays unique
             htext = h.group(2).strip()
-            end_line[0] = i
+            start_line[0] = end_line[0] = i
             out.append(_emit("h%d" % level, htext))
             # this heading becomes the context for following blocks (marker-free)
             ctx[0] = _BID_MARKER_RE.sub("", htext)
@@ -423,6 +427,7 @@ def markdown(md, src=None, spans=None):
         # blockquote
         if stripped.startswith(">"):
             flush_para(para)
+            start_line[0] = i
             buf = []
             while i < n and lines[i].strip().startswith(">"):
                 buf.append(lines[i].strip()[1:].strip())
@@ -438,7 +443,7 @@ def markdown(md, src=None, spans=None):
             items = []
             while i < n and re.match(r"^[-*+]\s+", lines[i].strip()):
                 itemraw = re.sub(r"^[-*+]\s+", "", lines[i].strip())
-                end_line[0] = i
+                start_line[0] = end_line[0] = i
                 items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ul>" + "".join(items) + "</ul>")
@@ -450,13 +455,15 @@ def markdown(md, src=None, spans=None):
             items = []
             while i < n and re.match(r"^\d+\.\s+", lines[i].strip()):
                 itemraw = re.sub(r"^\d+\.\s+", "", lines[i].strip())
-                end_line[0] = i
+                start_line[0] = end_line[0] = i
                 items.append(_emit("li", itemraw))
                 i += 1
             out.append("<ol>" + "".join(items) + "</ol>")
             continue
 
         # paragraph text
+        if not para:
+            para_start[0] = i
         para.append(stripped)
         para_end[0] = i
         i += 1
@@ -1570,6 +1577,21 @@ def build_skills(corpus):
     for t in corpus["tasks"]["tasks"]:
         tasks_by_skill[t["skill_id"]].append(t)
 
+    # U3 (editable coverage): task names and descriptions are authored prose and
+    # register as json_scalar blocks. The json_path is positional into the
+    # tasks.json list ("tasks.<i>.name") — the only dotted path json_get can
+    # address a list entry by. That identity holds because taxonomy files are
+    # never reordered by any editor operation; a manual insert/reorder of
+    # tasks.json entries would require regenerating the map in the same change.
+    # READ-ONLY by design: skill/task/subtask IDs, Bloom levels, module chips,
+    # FOLIO crosswalk chips and "no FOLIO equivalent" flags (join keys other
+    # pages resolve against), skill names (rendered in <summary>, which is not
+    # a walker candidate — Tier B, a deliberate decision point), alt_name and
+    # subtask <li>s (their candidate elements mix generated framing or IDs
+    # with more than one authored field).
+    tasks_rel = data_relpath(DATA, "taxonomy", "tasks.json")
+    task_pos = {t["id"]: i for i, t in enumerate(corpus["tasks"]["tasks"])}
+
     def render_skill(s, open_first=False):
         sid = s["id"]
         ts = tasks_by_skill.get(sid, [])
@@ -1593,15 +1615,25 @@ def build_skills(corpus):
                     n=esc(st["name"]), d=esc(st.get("description", "")), i=esc(st["id"]))
                 for st in (t.get("subtasks") or []))
             tf = folio_chip(t.get("folio"), t.get("no_folio_equivalent"))
+            # The editable element must contain ONLY the authored string (KTD3):
+            # the ID + Bloom chips move into the read-only chips row so the name
+            # <p> and description <p> — both already walker candidates — carry
+            # exactly one JSON scalar each. Candidate count is unchanged.
+            name_path = "tasks.{i}.name".format(i=task_pos[t["id"]])
+            desc_path = "tasks.{i}.description".format(i=task_pos[t["id"]])
+            name_eb = _eb_scalar_attr(tasks_rel + "#" + name_path,
+                                      t["name"], name_path, s["name"])
+            desc_eb = _eb_scalar_attr(tasks_rel + "#" + desc_path,
+                                      t.get("description", ""), desc_path, s["name"])
             task_html.append("""
       <div class="task-block">
-        <p style="margin:0"><span class="task-name">{name}</span>
-          <span class="skill-id">{tid}</span> <span class="bloom">BLOOM · {bloom} · {mod}</span></p>
-        <p class="subtask" style="margin:.2rem 0 .4rem">{desc}</p>
-        <div class="chips">{tf} {chips}</div>
+        <p style="margin:0"{name_eb}><span class="task-name">{name}</span></p>
+        <p class="subtask" style="margin:.2rem 0 .4rem"{desc_eb}>{desc}</p>
+        <div class="chips"><span class="skill-id">{tid}</span> <span class="bloom">BLOOM · {bloom} · {mod}</span> {tf} {chips}</div>
         <ul style="margin:.4rem 0 0">{subs}</ul>
       </div>""".format(name=esc(t["name"]), tid=esc(t["id"]), bloom=esc(t.get("bloom_level", "")),
                        mod=esc(t.get("module", "")), desc=esc(t.get("description", "")),
+                       name_eb=name_eb, desc_eb=desc_eb,
                        tf=tf, chips=chips, subs=subs))
         alt = ('<p class="subtask" style="margin:.2rem 0 0">Survey phrasing also recorded as: '
                '<em>{a}</em></p>'.format(a=esc(s["alt_name"]))) if s.get("alt_name") else ""
@@ -2663,13 +2695,26 @@ def build_firm_dashboard(corpus):
             n=esc(name), l=esc(name.replace(".csv", "").replace("-", " ").upper() + " CSV")))
 
     ident = firm["identity"]
+    # U3 (editable coverage): the firm name and letterhead note are the page's
+    # authored prose — register them as json_scalar blocks on elements that are
+    # already walker candidates. The generated data-provenance sentence moves to
+    # its own NON-candidate <div> (styled to match a paragraph) so the lede <p>
+    # contains ONLY the authored note; candidate count is unchanged. Everything
+    # else on this page is derived from firm.json figures and stays read-only.
+    firm_rel = data_relpath(DATA, "firm", "firm.json")
+    fname_eb = _eb_scalar_attr(firm_rel + "#identity.name", ident.get("name", ""),
+                               "identity.name", "firm identity")
+    fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
+                               ident.get("letterhead_note", ""),
+                               "identity.letterhead_note", "firm identity")
     body = """
 <section class="reveal">
   <p class="eyebrow">THE PRACTICE LEDGER · AS OF {asof}</p>
-  <h1>{name}</h1>
-  <p class="lede">{note} Every figure below is generated from the same open dataset the
-  matters use — <span class="mono">data/firm/firm.json</span> — so the money on this page
-  reconciles with the billing statements inside each packet.</p>
+  <h1{fname_eb}>{name}</h1>
+  <p class="lede"{fnote_eb}>{note}</p>
+  <div class="lede" style="margin:0 0 var(--space)">Every figure below is generated from the same
+  open dataset the matters use — <span class="mono">data/firm/firm.json</span> — so the money on
+  this page reconciles with the billing statements inside each packet.</div>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2703,6 +2748,7 @@ def build_firm_dashboard(corpus):
 
 <div id="viz-tip" class="viz-tip" aria-hidden="true" hidden><span class="viz-tip__sw" aria-hidden="true"></span><span class="viz-tip__v"></span><span class="viz-tip__l"></span></div>
 """.format(asof=esc(firm["as_of_date"]), name=esc(ident["name"]),
+           fname_eb=fname_eb, fnote_eb=fnote_eb,
            note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis), defs=_pattern_defs(),
            c1=chart1, c2=chart2, c3=chart3, c4=chart4, c5=chart5, c6=chart6, c7=chart7,
            dls="".join(dls))

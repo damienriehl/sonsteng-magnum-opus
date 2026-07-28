@@ -17,6 +17,17 @@
 
 import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-status.js";
 
+// Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
+// rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
+// fast path (the plan's execution note: a structural op is single-block, and
+// the gate is risk, not scope), and they never supersede (two inserts after
+// one anchor are two distinct intents, not a re-edit).
+export const STRUCTURAL_KINDS = new Set([
+  "insert_after", "delete", "split", "merge", "move",
+]);
+// The ONLY kinds DIRECT_APPLY may auto-accept at suggest time.
+export const AUTO_APPLY_KINDS = new Set(["prose", "json_scalar"]);
+
 // Ceilings (docs/research/editor-apply-spec.md §Ceilings). Overridable per call.
 export const CEILINGS = {
   perEditorPending: 200,
@@ -45,6 +56,7 @@ export const SCHEMA_SQL = `
     map_version TEXT,
     group_id TEXT,
     supersedes TEXT,
+    op_arg TEXT,
     status TEXT NOT NULL,
     decision_note TEXT,
     apply_batch_id TEXT,
@@ -121,7 +133,7 @@ const REVERT_TERMINAL = new Set([REVERT_STATUS.DONE, REVERT_STATUS.FAILED]);
 const SELECT_COLS =
   "id, editor, scope, origin, kind, page, block_anchor, source_ref, json_path, " +
   "original_text, original_hash, new_text, comment, context, map_version, " +
-  "group_id, supersedes, status, decision_note, apply_batch_id, lease_expires_at, " +
+  "group_id, supersedes, op_arg, status, decision_note, apply_batch_id, lease_expires_at, " +
   "created_at, updated_at";
 
 export class EditorStoreCore {
@@ -138,6 +150,8 @@ export class EditorStoreCore {
     // gets the column added once. Portable across the DO's sql.exec and the
     // node:sqlite test adapter (both throw a catchable error on duplicate).
     this._ensureColumn("suggestions", "client_fp", "TEXT");
+    // Structural-operation operand (merge's second ref / move's destination).
+    this._ensureColumn("suggestions", "op_arg", "TEXT");
   }
 
   _ensureColumn(table, col, type) {
@@ -209,6 +223,7 @@ export class EditorStoreCore {
     const {
       id, editor, scope, origin, kind, page, block_anchor, source_ref, json_path,
       original_text, original_hash, new_text, comment, context, map_version, group_id,
+      op_arg,
     } = input;
     const effKind = kind || "prose";
     const effOrigin = origin || "human";
@@ -264,22 +279,25 @@ export class EditorStoreCore {
     // yet claimed by the daemon) — supersede that too so the daemon never applies
     // stale intent (an in_flight/leased row is left alone; the machine forbids it).
     // Companion/ai_rewrite suggestions never supersede (they are group members).
-    if (effOrigin === "human") {
+    const structuralNames = [...STRUCTURAL_KINDS].map((k) => `'${k}'`).join(",");
+    if (effOrigin === "human" && !STRUCTURAL_KINDS.has(effKind)) {
       const priors = this._all(
-        "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human'",
+        "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human' " +
+          `AND kind NOT IN (${structuralNames})`,
         editor, source_ref, STATUS.PENDING
       );
       for (const p of priors) this._transition(p.id, STATUS.SUPERSEDED);
       if (directApply) {
         const accs = this._all(
-          "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human'",
+          "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human' " +
+            `AND kind NOT IN (${structuralNames})`,
           editor, source_ref, STATUS.ACCEPTED
         );
         for (const a of accs) this._transition(a.id, STATUS.SUPERSEDED);
       }
     }
 
-    const supersedes = effOrigin === "human"
+    const supersedes = effOrigin === "human" && !STRUCTURAL_KINDS.has(effKind)
       ? (this._one(
           "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? ORDER BY updated_at DESC LIMIT 1",
           editor, source_ref, STATUS.SUPERSEDED
@@ -290,15 +308,15 @@ export class EditorStoreCore {
       `INSERT INTO suggestions
        (id, editor, scope, origin, kind, page, block_anchor, source_ref, json_path,
         original_text, original_hash, new_text, comment, context, map_version,
-        group_id, supersedes, status, decision_note, apply_batch_id, lease_expires_at,
+        group_id, supersedes, op_arg, status, decision_note, apply_batch_id, lease_expires_at,
         client_fp, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?)`,
       id, editor, scope || "edit", effOrigin, effKind,
       page || null, block_anchor || null, source_ref, json_path || null,
       original_text != null ? original_text : null, original_hash || null,
       new_text != null ? new_text : null, comment != null ? comment : null,
       context || null, map_version || null, group_id || null, supersedes,
-      STATUS.PENDING, fp, now, now
+      op_arg || null, STATUS.PENDING, fp, now, now
     );
 
     this.sql.exec(
@@ -311,7 +329,7 @@ export class EditorStoreCore {
     // then claims + applies it. Comments and system origins (companion/ai_rewrite)
     // are NEVER auto-accepted; they stay pending for the admin decide gate. The
     // client never clears optimistically — this server-written status is the truth.
-    if (directApply && effOrigin === "human" && effKind !== "comment") {
+    if (directApply && effOrigin === "human" && AUTO_APPLY_KINDS.has(effKind)) {
       this._transition(id, STATUS.ACCEPTED);
     }
 
