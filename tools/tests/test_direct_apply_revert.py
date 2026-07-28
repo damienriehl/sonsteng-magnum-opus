@@ -57,6 +57,14 @@ class RevertRecorder:
         self.calls.append(("deploy", branch))
         return self.deploy_ok, "deploy-tail"
 
+    def deploy_worker(self):
+        self.calls.append("deploy_worker")
+        return self.deploy_ok, "wrangler-tail"
+
+    def rebuild(self):
+        self.calls.append("rebuild")
+        return True, ""
+
     def revert_resolve(self, rid, status):
         self.calls.append(("resolve", rid, status))
         self.resolved.append((rid, status))
@@ -78,10 +86,10 @@ def _run_reverts(rec, **kw):
             api_base="https://x/edit/v1", token="tok", branch="feat/canonical-docs",
             now=NOW, state_path=sp, out=io.StringIO(),
             fetch=_empty_review,                       # no accepted suggestions
-            do_rebuild=lambda: (True, ""), do_deploy=rec.deploy,
+            do_rebuild=rec.rebuild, do_deploy=rec.deploy,
             heartbeat=rec.heartbeat, notify=rec.notify,
             fetch_reverts=rec.fetch_reverts, revert_exec=rec.revert_exec,
-            revert_resolve=rec.revert_resolve,
+            revert_resolve=rec.revert_resolve, do_deploy_worker=rec.deploy_worker,
         )
         defaults.update(kw)
         return dad.run(**defaults)
@@ -93,7 +101,12 @@ class TestRevertOrchestration(unittest.TestCase):
         res = _run_reverts(rec)
         self.assertEqual(res.reason, "no_accepted")  # no suggestions this tick
         self.assertIn(("revert_exec", "rq1"), rec.calls)
+        self.assertIn("rebuild", rec.calls)   # map regenerates BEFORE any deploy
         self.assertIn(("deploy", "feat/canonical-docs"), rec.calls)
+        # The WORKER must redeploy too: a revert changes the editable-block map
+        # (a restored block re-enters the allowlist), and a stale worker bundle
+        # rejects edits against it — caught live on 2026-07-28 (U4 cycle).
+        self.assertIn("deploy_worker", rec.calls)
         self.assertIn(("rq1", "done"), rec.resolved)
         self.assertEqual(rec.heartbeats[0], {"ok": True, "applied": 0})
         self.assertEqual(rec.notified, [])
@@ -107,6 +120,7 @@ class TestRevertOrchestration(unittest.TestCase):
         self.assertEqual(rec.notified, [["rq2"]])
         # A failed revert never triggers the deploy step.
         self.assertNotIn(("deploy", "feat/canonical-docs"), rec.calls)
+        self.assertNotIn("deploy_worker", rec.calls)
 
     def test_deploy_failure_after_revert_marks_failed_and_alerts(self):
         rec = RevertRecorder([{"id": "rq3", "doc": "d", "run_first": "aa", "run_last": "bb"}],

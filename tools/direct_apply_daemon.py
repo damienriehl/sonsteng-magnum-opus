@@ -238,6 +238,21 @@ def deploy_dev(branch, repo_root=REPO_ROOT, timeout=900):
     return proc.returncode == 0, (proc.stdout or "")[-2000:]
 
 
+def deploy_worker(repo_root=REPO_ROOT, timeout=900):
+    """Redeploy the Worker (wrangler) so its BUNDLED editor map matches the
+    checkout. The APPLY path already gets this via the apply engine's own
+    deploy; the REVERT path must do it explicitly — a revert changes the map
+    (a restored block re-enters the allowlist), and a stale worker bundle
+    rejects edits against restored blocks (caught live 2026-07-28: an undone
+    delete's paragraph answered "That block is not editable"). Returns
+    (ok, tail)."""
+    proc = subprocess.run(
+        ["npx", "--yes", "wrangler@latest", "deploy"],
+        cwd=os.path.join(repo_root, "app", "worker"), check=False, shell=False,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
+    return proc.returncode == 0, (proc.stdout or "")[-2000:]
+
+
 # --------------------------------------------------------------------------- #
 # History bundle regeneration — wired into the rebuild step so the redline
 # History browser tracks every applied revision. Regenerates build/history-
@@ -512,7 +527,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         fetch=None, apply_engine=None, do_rebuild=None, do_deploy=None,
         heartbeat=None, notify=None, editorial=None, out=None,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
-        clean_site=None):
+        clean_site=None, do_deploy_worker=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -529,6 +544,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         lambda bid: run_apply_engine(bid, api_base=api_base, token=token))
     do_rebuild = do_rebuild or (lambda: rebuild())
     do_deploy = do_deploy or (lambda b: deploy_dev(b))
+    do_deploy_worker = do_deploy_worker or (lambda: deploy_worker())
     heartbeat = heartbeat or (
         lambda ok, applied: post_heartbeat(api_base, token, ok=ok, applied=applied, ts=ts))
     notify = notify or notify_failure
@@ -551,7 +567,18 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
             ok, detail = revert_exec(req)
             steps.append(("revert", {"id": rid, "ok": ok, "detail": detail}))
             if ok:
+                # REBUILD FIRST: the revert commit restores the TRACKED trees
+                # (data/, site/) but build/ artifacts — the editor map above
+                # all — are generated and still describe the pre-revert corpus.
+                # Deploying without a rebuild ships a worker whose allowlist
+                # rejects every restored block (caught live 2026-07-28).
+                rok, _ = do_rebuild()
                 dok, _ = do_deploy(branch)
+                # The worker must follow: its bundled map now differs (restored
+                # blocks re-entered the allowlist). Rebuild + site + worker
+                # together are the publish; any failing marks the revert failed.
+                wok, _ = do_deploy_worker()
+                dok = rok and dok and wok
                 if revert_resolve:
                     revert_resolve(rid, "done" if dok else "failed")
                 heartbeat(dok, 0)
