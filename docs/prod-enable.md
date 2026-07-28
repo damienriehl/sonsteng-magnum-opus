@@ -164,10 +164,20 @@ both:
    Preview URLs only — using it would put a login screen in front of the *fallback* door and
    leave the custom domain ungated, which is the exact inverse of the intent.
 
-3. **Map the addresses to slots:**
+3. **Map the addresses to slots.** ✅ **DONE 2026-07-27** — `EDIT_ACCESS_EMAILS` is set on
+   `sonsteng-chat` (confirmed by `wrangler secret list`). It was piped via stdin, so the addresses
+   never touched a file, the repo, or shell history. To change it later:
 
        npx wrangler@4 secret put EDIT_ACCESS_EMAILS
-       # {"john@…":"john","roger@…":"roger","damien@…":"damienadmin"}
+       # {"<john>":"john","<roger>":"roger","<damien>":"damienadmin"}
+
+   …or set it in the dashboard: **Workers & Pages → sonsteng-chat → Settings → Variables and
+   Secrets**. Secrets are not touched by deploys, so either sticks. Lowercase the keys —
+   `lookupAccessSlot` lowercases the JWT's `email` claim before lookup.
+
+   ⚠ **Never put this in `wrangler.jsonc`.** `tools/tests/test_no_committed_pii.py` gates it, and
+   also sweeps `app/worker/`, `docs/` and `tools/` for any real address. (`data/` and `site/` are
+   exempt — they are the practicum's own fictional client correspondence.)
 
    Lowercase keys. `damienadmin` is the Access-only slot carrying edit+instructor+admin with
    **no** `EDIT_TOKEN_DAMIENADMIN` secret — that is what lets one identity hold admin scope and
