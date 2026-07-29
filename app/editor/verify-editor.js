@@ -633,11 +633,16 @@ async function run() {
       afFirst && afRetry.last.id === afFirst.id && afRetry.server.count === 1,
       'first=' + String(afFirst && afFirst.id).slice(0, 8) +
       ' retry=' + String(afRetry.last && afRetry.last.id).slice(0, 8));
-    assert('AF3 schema-valid new key is accepted and lands even when prose mentions are declined',
+    assert('AF3 submits the json_add matter/key/value, reports Added, and does not render the submitted value as prose',
+      afRetry.last.op === 'json_add' &&
+      afRetry.last.matter === 'm05-dwi-meridian' &&
       afRetry.last.fact_key === 'response-window' &&
+      afRetry.last.new_text === 'The drafted prose mention may be declined.' &&
       /Added/.test(afRetry.status) &&
       afRetry.rendered.indexOf('The drafted prose mention may be declined.') === -1,
-      'key=' + afRetry.last.fact_key + ' where-used=0');
+      'op=' + afRetry.last.op + ' matter=' + afRetry.last.matter +
+      ' key=' + afRetry.last.fact_key + ' value=' + JSON.stringify(afRetry.last.new_text) +
+      ' status=' + JSON.stringify(afRetry.status) + ' prose-rendered=false');
 
     const callsBeforeInvalid = afRetry.server.calls;
     await page.type('.eb-addfact__name', '!!!');
