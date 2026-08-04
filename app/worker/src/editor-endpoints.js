@@ -11,13 +11,7 @@ import {
   enumerateScope, EDITOR_MAP_FACTS,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
-<<<<<<< Updated upstream
-import {
-  mintScopedConfirmationToken, verifyScopedConfirmationToken,
-} from "./scoped-confirmation.js";
-=======
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
->>>>>>> Stashed changes
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -559,26 +553,6 @@ export async function scopedRequestEndpoint(request, env, auth) {
 
   const n = parseInt(env.EDIT_SCOPED_CEILING, 10);
   const ceiling = n > 0 ? n : SCOPED_CEILING_DEFAULT;
-<<<<<<< Updated upstream
-  const confirmationRequest = {
-    level: body.level,
-    matter: typeof body.matter === "string" ? body.matter : null,
-    part: typeof body.part === "string" ? body.part : null,
-    module: typeof body.module === "string" ? body.module : null,
-    instruction,
-    radius,
-  };
-  const overCeiling = radius.blocks > ceiling;
-  const confirmed = overCeiling && body.confirmed === true &&
-    await verifyScopedConfirmationToken(
-      env.SESSION_SIGNING_KEY, body.confirmation_token, confirmationRequest
-    );
-  if (overCeiling && !confirmed) {
-    // 409 carries the radius so the client can show the blast radius and ask
-    // the editor to confirm — the refusal IS the feature (KD2).
-    const confirmationToken = await mintScopedConfirmationToken(
-      env.SESSION_SIGNING_KEY, confirmationRequest
-=======
   const confirmed = body.confirmed === true;
   const confirmationContext = {
     editor: auth.editor,
@@ -605,7 +579,6 @@ export async function scopedRequestEndpoint(request, env, auth) {
     // editor, scope, radius, and wording; a stale/missing proof is re-challenged.
     const confirmationToken = await mintScopedConfirmation(
       env.SESSION_SIGNING_KEY, confirmationContext
->>>>>>> Stashed changes
     );
     return new Response(JSON.stringify({
       ok: false,
