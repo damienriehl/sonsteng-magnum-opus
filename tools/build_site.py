@@ -841,7 +841,10 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
   padding:.6em 1em;border:var(--rule-bold) solid var(--claret);z-index:100}
 .skip-link:focus{left:.5rem;top:.5rem}
 
-.masthead__inner{gap:var(--sp-3)}
+.masthead__inner{gap:var(--sp-6)}
+.masthead__brand{font-family:var(--font-display);font-size:var(--fs-md);font-weight:900;
+  letter-spacing:-.02em;color:var(--ink)}
+.masthead__docket{margin-left:auto}
 .type-toggle{margin-left:var(--sp-6);appearance:none;cursor:pointer;background:transparent;
   /* The large-type control is the page's own accessibility affordance — it has
      no business being the smallest target on the masthead. 44px (WCAG 2.5.5). */
@@ -853,12 +856,14 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 
 /* ---- generic layout ---- */
 .lede{font-size:var(--fs-md);color:var(--ink-soft);max-width:var(--maxw-read)}
-.section-head{margin:var(--sp-12) 0 var(--sp-6)}
+.section-head{margin:var(--sp-16) 0 var(--sp-6);padding-top:var(--sp-3);
+  border-top:var(--rule-bold) solid var(--border-strong)}
+.section-head .editorial-label{font-size:var(--fs-editorial-label)}
 .grid{display:grid;gap:var(--sp-6)}
 .grid--3{grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
 .grid--2{grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
-.eyebrow{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
-  letter-spacing:.14em;color:var(--brass-text);margin:0 0 var(--sp-2)}
+.eyebrow{font-family:var(--font-mono);font-size:var(--fs-editorial-label);font-weight:700;
+  text-transform:uppercase;letter-spacing:.075em;color:var(--claret-strong);margin:0 0 var(--sp-3)}
 .chips{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .card h3{margin-bottom:var(--sp-2)}
 .card__meta{font-family:var(--font-mono);font-size:var(--fs-mono-xs);text-transform:uppercase;
@@ -867,14 +872,16 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .arrow-link::after{content:" →"}
 
 /* ---- home hero ---- */
-.hero{padding:var(--sp-8) 0 var(--sp-6)}
-.hero h1{font-size:var(--fs-display);max-width:16ch}
+.hero{padding:var(--sp-16) 0 var(--sp-8);display:grid;gap:var(--sp-3)}
+.hero__proposition{font-size:var(--fs-display);max-width:14ch}
+.hero .lede{font-size:var(--fs-md);line-height:1.6;max-width:62ch}
 .volumes{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
 .volume{position:relative;overflow:hidden}
 .volume__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);line-height:1;
   color:var(--brass-text);letter-spacing:-.02em}
 .volume--claret .volume__num{color:var(--claret)}
 .volume--green .volume__num{color:var(--green)}
+.volume.card--featured{background:var(--surface-featured);border-color:var(--claret)}
 .entry-cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
 
 /* ---- module pages ---- */
@@ -1020,7 +1027,7 @@ details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:
 .viz-tip{position:fixed;left:0;top:0;z-index:80;pointer-events:none;max-width:min(24rem,86vw);
   display:flex;align-items:baseline;gap:.5em;background:var(--ink);color:var(--ink-invert);
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);line-height:1.35;
-  padding:.45em .6em;border-radius:var(--radius);box-shadow:0 6px 20px rgba(0,0,0,.30)}
+  padding:.45em .6em;border-radius:var(--radius);box-shadow:var(--shadow)}
 .viz-tip[hidden]{display:none}
 .viz-tip__sw{flex:none;width:.78em;height:.78em;border-radius:2px;align-self:center}
 .viz-tip__v{font-weight:700;white-space:nowrap}
@@ -1325,7 +1332,7 @@ def build_home(corpus):
         # edit to silently change another page.
         title, title_eb = module["title"], ""
         thesis, thesis_eb = module["thesis"], ""
-        acc = {"brass": "", "claret": " volume--claret", "green": " volume--green"}[meta["accent"]]
+        acc = {"brass": "", "claret": " volume--claret card--featured", "green": " volume--green"}[meta["accent"]]
         vols.append("""
     <a class="card volume{acc}" href="modules/{lo}.html">
       <div class="volume__num" aria-hidden="true">{code}</div>
@@ -1365,21 +1372,21 @@ def build_home(corpus):
 
     body = """
 <section class="hero reveal">
-  <p class="eyebrow"{hero_eyebrow_eb}>{hero_eyebrow}</p>
-  <h1{hero_heading_eb}>{hero_heading}</h1>
+  <p class="editorial-label"{hero_eyebrow_eb}>{hero_eyebrow}</p>
+  <h1 class="hero__proposition"{hero_heading_eb}>{hero_heading}</h1>
   <p class="lede"{hero_lede_eb}>{hero_lede}</p>
 </section>
 
 <div class="brass-rule" role="presentation"></div>
 
 <section aria-labelledby="volumes-h">
-  <div class="section-head"><p class="eyebrow"{volumes_eyebrow_eb}>{volumes_eyebrow}</p>
+  <div class="section-head"><p class="editorial-label"{volumes_eyebrow_eb}>{volumes_eyebrow}</p>
   <h2 id="volumes-h"{volumes_heading_eb}>{volumes_heading}</h2></div>
   <div class="volumes stagger">{vols}</div>
 </section>
 
 <section aria-labelledby="explore-h">
-  <div class="section-head"><p class="eyebrow"{explore_eyebrow_eb}>{explore_eyebrow}</p>
+  <div class="section-head"><p class="editorial-label"{explore_eyebrow_eb}>{explore_eyebrow}</p>
   <h2 id="explore-h"{explore_heading_eb}>{explore_heading}</h2></div>
   <div class="entry-cards stagger">
     <a class="card" href="{sample}">

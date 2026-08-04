@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 THEME = ROOT / "site/platform/assets/theme.css"
 PREVIEW = ROOT / "site/platform/assets/preview.html"
+GENERATOR = ROOT / "tools/build_site.py"
+PLATFORM_CSS = ROOT / "site/platform/platform.css"
 
 
 def css() -> str:
@@ -66,3 +68,38 @@ def test_preview_uses_only_local_stylesheets_and_exercises_hierarchy():
     assert all("http://" not in line and "https://" not in line for line in stylesheet_tags)
     assert 'class="editorial-label"' in preview
     assert 'class="card card--featured"' in preview
+
+
+def test_generated_shell_uses_the_radical_casebook_hierarchy():
+    source = GENERATOR.read_text(encoding="utf-8")
+    for contract in (
+        'class="masthead__brand"',
+        'class="hero__proposition"',
+        'class="editorial-label"',
+        'class="section-head"',
+        'class="card volume',
+        'card--featured',
+        'class="doc-card"',
+        'class="viz-card"',
+    ):
+        assert contract in source
+
+
+def test_generated_layout_preserves_visual_rank_and_distinct_surfaces():
+    generated = PLATFORM_CSS.read_text(encoding="utf-8")
+    assert ".hero__proposition{" in generated
+    assert "font-size:var(--fs-display)" in generated
+    assert ".hero .lede{" in generated
+    assert "font-size:var(--fs-md)" in generated
+    assert ".section-head .editorial-label{" in generated
+    assert "font-size:var(--fs-editorial-label)" in generated
+    assert ".volume.card--featured{" in generated
+    assert "background:var(--surface-featured)" in generated
+
+
+def test_page_level_css_uses_shared_palette_tokens_only():
+    source = GENERATOR.read_text(encoding="utf-8")
+    platform_css = source.split('PLATFORM_CSS = r"""', 1)[1].split('"""', 1)[0]
+    assert "#" not in platform_css
+    for forbidden in ("rgb(", "rgba(", "hsl(", "hsla("):
+        assert forbidden not in platform_css
