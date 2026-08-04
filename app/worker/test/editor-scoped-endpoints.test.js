@@ -10,6 +10,7 @@ import {
 } from "../src/editor-endpoints.js";
 import { resolveAuth } from "../src/editor-auth.js";
 import { enumerateScope } from "../src/editor-map.js";
+import { mintScopedConfirmation } from "../src/scoped-confirmation.js";
 
 const ENV_BASE = {
   SESSION_SIGNING_KEY: "test-signing-key-abc",
@@ -78,7 +79,7 @@ test("a small-radius request files with the server-enumerated radius", async () 
   assert.equal(data.radius.blocks, expect.blocks);
 });
 
-test("over-ceiling refuses without confirmation (409 + radius), files WITH it", async () => {
+test("over-ceiling challenge carries a token and matching confirmed retry files", async () => {
   const cap = {};
   const refuse = await postReq(envWith(cap), {
     level: "course",
@@ -88,15 +89,86 @@ test("over-ceiling refuses without confirmation (409 + radius), files WITH it", 
   const rdata = await refuse.json();
   assert.equal(rdata.error.code, "ceiling_confirmation_required");
   assert.ok(rdata.radius.blocks > 100);
+  assert.equal(typeof rdata.confirmation_token, "string");
   assert.equal(cap.filed, undefined, "nothing may be filed on refusal");
 
   const okRes = await postReq(envWith(cap), {
     level: "course",
     instruction: "Modernize the tone throughout the whole course.",
     confirmed: true,
+    confirmation_token: rdata.confirmation_token,
   });
   assert.equal(okRes.status, 200);
   assert.equal(cap.filed.confirmed, true);
+});
+
+test("confirmation for a part scope cannot be laundered into a course-wide request", async () => {
+  const cap = {};
+  const challenged = await postReq(envWith(cap), {
+    level: "part", matter: SLUG, part: "case-file",
+    instruction: "Modernize the tone throughout this case file.",
+  });
+  assert.equal(challenged.status, 409);
+  const challenge = await challenged.json();
+  assert.equal(challenge.radius.blocks, 122);
+
+  const laundered = await postReq(envWith(cap), {
+    level: "course",
+    instruction: "Delete every paragraph course-wide",
+    confirmed: true,
+    confirmation_token: challenge.confirmation_token,
+  });
+  assert.equal(laundered.status, 409,
+    "a token issued for 122 blocks must not authorize a course-wide request");
+  assert.equal(cap.filed, undefined, "the laundered request must not be filed");
+});
+
+test("an expired confirmation token is refused and replaced", async () => {
+  const cap = {};
+  const body = {
+    level: "course",
+    instruction: "Modernize the tone throughout the whole course.",
+  };
+  const radius = enumerateScope({ level: "course" });
+  const expired = await mintScopedConfirmation(ENV_BASE.SESSION_SIGNING_KEY, {
+    editor: "slot:john",
+    scope: { level: "course", matter: null, part: null, module: null },
+    radius: { blocks: radius.blocks, files: radius.files, matters: radius.matters.length },
+    instruction: body.instruction,
+  }, Date.now() - 1);
+
+  const res = await postReq(envWith(cap), {
+    ...body, confirmed: true, confirmation_token: expired,
+  });
+  assert.equal(res.status, 409);
+  const data = await res.json();
+  assert.equal(typeof data.confirmation_token, "string");
+  assert.notEqual(data.confirmation_token, expired);
+  assert.equal(cap.filed, undefined);
+});
+
+test("changing the wording after confirmation is refused", async () => {
+  const cap = {};
+  const challenged = await postReq(envWith(cap), {
+    level: "course", instruction: "Modernize the tone throughout the whole course.",
+  });
+  const challenge = await challenged.json();
+  const changed = await postReq(envWith(cap), {
+    level: "course", instruction: "Delete every paragraph course-wide",
+    confirmed: true, confirmation_token: challenge.confirmation_token,
+  });
+  assert.equal(changed.status, 409);
+  assert.equal(cap.filed, undefined);
+});
+
+test("a bare confirmation boolean is refused", async () => {
+  const cap = {};
+  const res = await postReq(envWith(cap), {
+    level: "course", instruction: "Modernize the tone throughout the whole course.",
+    confirmed: true,
+  });
+  assert.equal(res.status, 409);
+  assert.equal(cap.filed, undefined);
 });
 
 test("invalid scope, empty instruction, and reserved bytes are rejected", async () => {

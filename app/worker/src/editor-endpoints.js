@@ -11,6 +11,7 @@ import {
   enumerateScope, EDITOR_MAP_FACTS,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
+import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -553,9 +554,32 @@ export async function scopedRequestEndpoint(request, env, auth) {
   const n = parseInt(env.EDIT_SCOPED_CEILING, 10);
   const ceiling = n > 0 ? n : SCOPED_CEILING_DEFAULT;
   const confirmed = body.confirmed === true;
-  if (radius.blocks > ceiling && !confirmed) {
+  const confirmationContext = {
+    editor: auth.editor,
+    scope: {
+      level: body.level,
+      matter: typeof body.matter === "string" ? body.matter : null,
+      part: typeof body.part === "string" ? body.part : null,
+      module: typeof body.module === "string" ? body.module : null,
+    },
+    radius: {
+      blocks: radius.blocks,
+      files: radius.files,
+      matters: radius.matters.length,
+    },
+    instruction,
+  };
+  const confirmationValid = radius.blocks > ceiling && confirmed &&
+    await verifyScopedConfirmation(
+      env.SESSION_SIGNING_KEY, body.confirmation_token, confirmationContext
+    );
+  if (radius.blocks > ceiling && !confirmationValid) {
     // 409 carries the radius so the client can show the blast radius and ask
-    // the editor to confirm — the refusal IS the feature (KD2).
+    // the editor to confirm. A retry must return the signed proof for this exact
+    // editor, scope, radius, and wording; a stale/missing proof is re-challenged.
+    const confirmationToken = await mintScopedConfirmation(
+      env.SESSION_SIGNING_KEY, confirmationContext
+    );
     return new Response(JSON.stringify({
       ok: false,
       error: { code: "ceiling_confirmation_required",
@@ -563,6 +587,7 @@ export async function scopedRequestEndpoint(request, env, auth) {
                         " paragraphs. Please confirm you mean it that widely." },
       radius: { blocks: radius.blocks, files: radius.files,
                 matters: radius.matters.length },
+      confirmation_token: confirmationToken,
     }), { status: 409, headers: { "content-type": "application/json" } });
   }
 
@@ -577,7 +602,7 @@ export async function scopedRequestEndpoint(request, env, auth) {
     radius_blocks: radius.blocks,        // SERVER-enumerated
     radius_files: radius.files,
     radius_matters: radius.matters.length,
-    confirmed,
+    confirmed: confirmationValid,
   });
   if (!result.ok) return editError(result.reason || "validation_error", "Could not file the request.", 400);
   return json({ ok: true, id: result.request.id, status: result.request.status,

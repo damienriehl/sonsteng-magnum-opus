@@ -166,6 +166,8 @@
       status: 'accepted', kind: 'comment', preview: 'Please soften "marshal" to "gather".' }
   ];
 
+  var scopedConfirmationSequence = 0;
+  var scopedConfirmationToken = null;
   window.__EDITOR_MOCK__ = function (req) {
     var path = req.path, method = req.method, body = req.body || {};
     log('-> ' + method + ' ' + path + (body.id ? ' id=' + String(body.id).slice(0, 8) : ''));
@@ -186,12 +188,16 @@
 
       if (path.indexOf('/scoped-request') === 0) {
         ctrl.server.last = body;
-        // first send of an over-wide scope asks for confirmation, mirroring the
-        // Worker's 409; a confirmed resend files.
-        if (body.level === 'course' && !body.confirmed) {
+        // An over-wide scope requires the exact opaque token from the most
+        // recent challenge; confirmed:true alone must never file the request.
+        if (body.level === 'course' &&
+            (!body.confirmed || !scopedConfirmationToken ||
+             body.confirmation_token !== scopedConfirmationToken)) {
+          scopedConfirmationToken = 'harness-confirmation-' + (++scopedConfirmationSequence);
           return { ok: false, status: 409, data: { ok: false,
             error: { code: 'ceiling_confirmation_required' },
-            radius: { blocks: 3692, files: 282, matters: 20 } } };
+            radius: { blocks: 3692, files: 282, matters: 20 },
+            confirmation_token: scopedConfirmationToken } };
         }
         return { ok: true, status: 200, data: { ok: true, id: body.id, status: 'requested' } };
       }
