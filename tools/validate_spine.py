@@ -141,6 +141,7 @@ SCHEMA_FILES = {
     "firm": "firm.schema.json",
     "debrief_scorecard": "debrief.scorecard.schema.json",
     "critique_scorecard": "critique.scorecard.schema.json",
+    "page_copy": "page-copy.schema.json",
 }
 
 # Depth-floor minimums (docs/content-style-guide.md §3).
@@ -308,6 +309,8 @@ def classify(obj):
         return None
     if obj.get("type") == "matter_manifest" or "matters" in obj and "shape_keys" in obj:
         return "matter_manifest"
+    if obj.get("type") == "page_copy":
+        return "page_copy"
     _id = obj.get("id")
     if _id == "FIRM":
         return "firm"
@@ -374,6 +377,7 @@ class World:
         self.firm: Loaded | None = None
         self.skills: dict[str, Loaded] = {}
         self.tasks: dict[str, Loaded] = {}
+        self.page_copies: list[Loaded] = []
         self.matters: dict[str, MatterBundle] = {}
         self.meridian_reserved: set[str] = set()  # surnames of judges/counties/cities
         self.load_errors: list[tuple[Path, str]] = []
@@ -467,6 +471,8 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             loaded = Loaded(fpath, obj, etype)
             if etype == "firm":
                 world.firm = loaded
+            elif etype == "page_copy":
+                world.page_copies.append(loaded)
             elif etype == "skill":
                 world.skills[obj["id"]] = loaded
             elif etype == "task":
@@ -734,6 +740,7 @@ class Validator:
             loaded.append(self.world.firm)
         loaded.extend(self.world.skills.values())
         loaded.extend(self.world.tasks.values())
+        loaded.extend(self.world.page_copies)
         for b in self.world.matters.values():
             loaded.extend([x for x in (b.matter, b.rubric, b.exercise, b.business) if x])
             loaded.extend(b.personas.values())

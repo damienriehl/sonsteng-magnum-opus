@@ -12,6 +12,7 @@
     "task": "1.0.0",
     "firm": "1.1.0",
     "debrief_scorecard": "1.0.0",
-    "critique_scorecard": "1.0.0"
+    "critique_scorecard": "1.0.0",
+    "page_copy": "1.0.0"
   }
 }
