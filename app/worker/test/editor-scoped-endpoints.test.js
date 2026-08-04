@@ -10,7 +10,11 @@ import {
 } from "../src/editor-endpoints.js";
 import { resolveAuth } from "../src/editor-auth.js";
 import { enumerateScope } from "../src/editor-map.js";
+<<<<<<< Updated upstream
 import { mintScopedConfirmationToken } from "../src/scoped-confirmation.js";
+=======
+import { mintScopedConfirmation } from "../src/scoped-confirmation.js";
+>>>>>>> Stashed changes
 
 const ENV_BASE = {
   SESSION_SIGNING_KEY: "test-signing-key-abc",
@@ -90,7 +94,10 @@ test("over-ceiling challenge carries a token and matching confirmed retry files"
   assert.equal(rdata.error.code, "ceiling_confirmation_required");
   assert.ok(rdata.radius.blocks > 100);
   assert.equal(typeof rdata.confirmation_token, "string");
+<<<<<<< Updated upstream
   assert.ok(rdata.confirmation_token.length > 40);
+=======
+>>>>>>> Stashed changes
   assert.equal(cap.filed, undefined, "nothing may be filed on refusal");
 
   const okRes = await postReq(envWith(cap), {
@@ -103,6 +110,7 @@ test("over-ceiling challenge carries a token and matching confirmed retry files"
   assert.equal(cap.filed.confirmed, true);
 });
 
+<<<<<<< Updated upstream
 test("part-scope confirmation cannot be laundered into a course-wide request", async () => {
   const cap = {};
   const challenged = await postReq(envWith(cap), {
@@ -111,6 +119,17 @@ test("part-scope confirmation cannot be laundered into a course-wide request", a
   });
   assert.equal(challenged.status, 409);
   const challenge = await challenged.json();
+=======
+test("confirmation for a part scope cannot be laundered into a course-wide request", async () => {
+  const cap = {};
+  const challenged = await postReq(envWith(cap), {
+    level: "part", matter: SLUG, part: "case-file",
+    instruction: "Modernize the tone throughout this case file.",
+  });
+  assert.equal(challenged.status, 409);
+  const challenge = await challenged.json();
+  assert.equal(challenge.radius.blocks, 122);
+>>>>>>> Stashed changes
 
   const laundered = await postReq(envWith(cap), {
     level: "course",
@@ -118,11 +137,44 @@ test("part-scope confirmation cannot be laundered into a course-wide request", a
     confirmed: true,
     confirmation_token: challenge.confirmation_token,
   });
+<<<<<<< Updated upstream
   assert.equal(laundered.status, 409);
   assert.equal(cap.filed, undefined, "a changed scope must not be filed");
 });
 
 test("changing the wording invalidates an otherwise matching confirmation", async () => {
+=======
+  assert.equal(laundered.status, 409,
+    "a token issued for 122 blocks must not authorize a course-wide request");
+  assert.equal(cap.filed, undefined, "the laundered request must not be filed");
+});
+
+test("an expired confirmation token is refused and replaced", async () => {
+  const cap = {};
+  const body = {
+    level: "course",
+    instruction: "Modernize the tone throughout the whole course.",
+  };
+  const radius = enumerateScope({ level: "course" });
+  const expired = await mintScopedConfirmation(ENV_BASE.SESSION_SIGNING_KEY, {
+    editor: "slot:john",
+    scope: { level: "course", matter: null, part: null, module: null },
+    radius: { blocks: radius.blocks, files: radius.files, matters: radius.matters.length },
+    instruction: body.instruction,
+  }, Date.now() - 1);
+
+  const res = await postReq(envWith(cap), {
+    ...body, confirmed: true, confirmation_token: expired,
+  });
+  assert.equal(res.status, 409);
+  const data = await res.json();
+  assert.equal(typeof data.confirmation_token, "string");
+  assert.notEqual(data.confirmation_token, expired);
+  assert.equal(cap.filed, undefined);
+});
+
+test("changing the wording after confirmation is refused", async () => {
+>>>>>>> Stashed changes
   const cap = {};
   const challenged = await postReq(envWith(cap), {
     level: "course", instruction: "Modernize the tone throughout the whole course.",
@@ -136,6 +188,7 @@ test("changing the wording invalidates an otherwise matching confirmation", asyn
   assert.equal(cap.filed, undefined);
 });
 
+<<<<<<< Updated upstream
 test("an expired confirmation token is refused and freshly challenged", async () => {
   const cap = {};
   const radius = enumerateScope({ level: "course" });
@@ -159,6 +212,15 @@ test("a bare confirmed boolean is refused above the ceiling", async () => {
     level: "course", instruction: "Modernize the entire course.", confirmed: true,
   });
   assert.equal(refused.status, 409);
+=======
+test("a bare confirmation boolean is refused", async () => {
+  const cap = {};
+  const res = await postReq(envWith(cap), {
+    level: "course", instruction: "Modernize the tone throughout the whole course.",
+    confirmed: true,
+  });
+  assert.equal(res.status, 409);
+>>>>>>> Stashed changes
   assert.equal(cap.filed, undefined);
 });
 
