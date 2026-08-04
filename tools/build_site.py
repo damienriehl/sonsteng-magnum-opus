@@ -515,10 +515,10 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <meta name="description" content="Sonsteng Practicum — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
 <meta name="spine-build" content="{spine_build}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f4efe4'/%3E%3Crect y='1' width='16' height='2' fill='%23a9822f'/%3E%3Crect y='12' width='16' height='1' fill='%23a9822f'/%3E%3Crect x='2' y='6' width='3' height='4' fill='%237c1e2b'/%3E%3C/svg%3E">
+<script src="{up}assets/type-preference.js"></script>
 <link rel="stylesheet" href="{up}assets/fonts.css">
 <link rel="stylesheet" href="{up}assets/theme.css">
 <link rel="stylesheet" href="{up}platform.css">
-<script>try{{if(localStorage.getItem('sonsteng-type-lg')==='1')document.documentElement.classList.add('type-lg');}}catch(e){{}}</script>
 </head>
 <body class="{bodyclass}">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -830,6 +830,8 @@ def copy_chat_app():
 def write_platform_assets():
     write_file("platform.css", PLATFORM_CSS)
     write_file("platform.js", PLATFORM_JS)
+    with open(os.path.join(APP_CHAT, "type-preference.js"), "rb") as fh:
+        write_file(os.path.join("assets", "type-preference.js"), fh.read())
 
 # --------------------------------------------------------------------------- #
 # Shared owned stylesheet (layout only; all tokens come from theme.css)
@@ -1067,11 +1069,13 @@ PLATFORM_JS = r"""/* platform.js — progressive enhancement for the Practicum P
   syncTT();
   if (tt){
     tt.addEventListener('click', function(){
-      var on = document.documentElement.classList.toggle('type-lg');
-      try{ localStorage.setItem('sonsteng-type-lg', on ? '1':'0'); }catch(e){}
+      var on = !document.documentElement.classList.contains('type-lg');
+      if (window.SonstengTypePreference) window.SonstengTypePreference.set(on);
+      else document.documentElement.classList.toggle('type-lg', on);
       syncTT();
     });
   }
+  if (window.SonstengTypePreference) window.SonstengTypePreference.subscribe(syncTT);
 
   /* ---- matter-library tier toggle ---- */
   var seg = document.querySelector('[data-tier-toggle]');

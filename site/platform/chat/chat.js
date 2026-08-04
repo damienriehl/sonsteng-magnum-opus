@@ -452,12 +452,16 @@
 
   function setOpening() { refs.opening.textContent = '“' + OPENINGS[openingIdx] + '”'; }
 
-  /* ---------- large-type toggle (persisted) -------------------------------- */
+  /* ---------- large-type toggle (shared and persisted) --------------------- */
   function setTypeLg(on) {
-    document.documentElement.classList.toggle('type-lg', on);
+    if (window.SonstengTypePreference) window.SonstengTypePreference.set(on);
+    else document.documentElement.classList.toggle('type-lg', on);
+    syncTypeControls(on);
+  }
+
+  function syncTypeControls(on) {
     refs.typeLg.setAttribute('aria-pressed', on ? 'true' : 'false');
     refs.typeStd.setAttribute('aria-pressed', on ? 'false' : 'true');
-    LS.set('sonsteng_type_lg', on ? '1' : '0');
   }
 
   /* ============================================================================
@@ -1290,10 +1294,12 @@
 
   function boot() {
     injectStyle();
-    // restore prefs
-    if (LS.get('sonsteng_type_lg') === '1') document.documentElement.classList.add('type-lg');
     build();
-    if (LS.get('sonsteng_type_lg') === '1') { refs.typeLg.setAttribute('aria-pressed', 'true'); refs.typeStd.setAttribute('aria-pressed', 'false'); }
+    if (window.SonstengTypePreference) {
+      window.SonstengTypePreference.subscribe(syncTypeControls);
+    } else {
+      syncTypeControls(document.documentElement.classList.contains('type-lg'));
+    }
 
     if (cfg.sample) { setupSample(); return; }   // replay demo: no session, no transport
 
