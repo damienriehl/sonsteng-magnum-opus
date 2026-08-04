@@ -3,7 +3,11 @@
   "type": "page_copy",
   "page": "firm",
   "hero": {
-    "provenance": "Every figure below is generated from the same\n  open dataset the matters use — data/firm/firm.json — so the money on\n  this page reconciles with the billing statements inside each packet."
+    "provenance_before_path": "Every figure below is generated from the same open dataset the matters use — ",
+    "provenance_after_path": " — so the money on this page reconciles with the billing statements inside each packet."
+  },
+  "filters": {
+    "snapshot_note": "The dataset is a single trailing-12-month snapshot — one reporting period of the firm's book of business."
   },
   "kpis": {
     "fees_collected": {"label": "Fees collected · trailing 12 mo", "lesson": "The number the firm lives on."},

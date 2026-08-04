@@ -1767,8 +1767,10 @@ def build_matter_library(corpus):
 
     rows = []
     for shape, pair in by_shape.items():
-        label, label_eb = _copy_scalar("matters", copy, "shape_labels." + shape,
-                                      "matter library · practice shapes")
+        # These labels are shared with the generated packet-header framing below.
+        # Keep them read-only until the editor contract can represent one shared
+        # scalar inside generated framing without registering the whole lede.
+        label = shape_labels[shape]
         cards = []
         for tier in ("meridian", "real"):
             m = pair[tier]
@@ -1778,10 +1780,10 @@ def build_matter_library(corpus):
   <div class="shape-row">
     <div>
       <p class="eyebrow">SHAPE</p>
-      <h2 class="shape-row__label" style="font-size:var(--fs-lg)"{label_eb}>{label}</h2>
+      <h2 class="shape-row__label" style="font-size:var(--fs-lg)">{label}</h2>
     </div>
     <div class="shape-row__cards">{cards}</div>
-  </div>""".format(label=esc(label), label_eb=label_eb, cards="".join(cards)))
+  </div>""".format(label=esc(label), cards="".join(cards)))
 
     hero = {}
     hero_eb = {}
@@ -2731,7 +2733,9 @@ def build_firm_dashboard(corpus):
     fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
                                ident.get("letterhead_note", ""),
                                "identity.letterhead_note", "firm identity")
-    provenance, provenance_eb = copy_pair("hero.provenance", "hero")
+    provenance_before, provenance_before_eb = copy_pair("hero.provenance_before_path", "hero")
+    provenance_after, provenance_after_eb = copy_pair("hero.provenance_after_path", "hero")
+    snapshot_note, snapshot_note_eb = copy_pair("filters.snapshot_note", "reporting filters")
     downloads_eyebrow, downloads_eyebrow_eb = copy_pair("downloads.eyebrow", "downloads")
     downloads_heading, downloads_heading_eb = copy_pair("downloads.heading", "downloads")
     body = """
@@ -2739,7 +2743,8 @@ def build_firm_dashboard(corpus):
   <p class="eyebrow">THE PRACTICE LEDGER · AS OF {asof}</p>
   <h1{fname_eb}>{name}</h1>
   <p class="lede"{fnote_eb}>{note}</p>
-  <p class="lede" style="margin:0 0 var(--space)"{provenance_eb}>{provenance}</p>
+  <div class="lede" style="margin:0 0 var(--space)"><p style="display:inline;margin:0"{provenance_before_eb}>{provenance_before}</p>
+  <span class="mono">data/firm/firm.json</span><p style="display:inline;margin:0"{provenance_after_eb}>{provenance_after}</p></div>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2747,7 +2752,7 @@ def build_firm_dashboard(corpus):
   <span><span class="label">TIMEKEEPER</span> <span class="chip">ALL</span></span>
   <span><span class="label">STATUS</span> <span class="chip">ALL MATTERS</span></span>
   <button type="button" class="viz-toggle mono" id="viz-patterns" aria-pressed="false" title="Overlay line patterns on chart fills (accessibility / print)">PATTERNS</button>
-  <span class="viz-note">The dataset is a single trailing-12-month snapshot — one reporting period of the firm's book of business.</span>
+  <p class="viz-note" style="margin:0"{snapshot_note_eb}>{snapshot_note}</p>
 </div>
 {defs}
 
@@ -2774,7 +2779,9 @@ def build_firm_dashboard(corpus):
 <div id="viz-tip" class="viz-tip" aria-hidden="true" hidden><span class="viz-tip__sw" aria-hidden="true"></span><span class="viz-tip__v"></span><span class="viz-tip__l"></span></div>
 """.format(asof=esc(firm["as_of_date"]), name=esc(ident["name"]),
            fname_eb=fname_eb, fnote_eb=fnote_eb,
-           provenance=esc(provenance), provenance_eb=provenance_eb,
+           provenance_before=esc(provenance_before), provenance_before_eb=provenance_before_eb,
+           provenance_after=esc(provenance_after), provenance_after_eb=provenance_after_eb,
+           snapshot_note=esc(snapshot_note), snapshot_note_eb=snapshot_note_eb,
            downloads_eyebrow=esc(downloads_eyebrow), downloads_eyebrow_eb=downloads_eyebrow_eb,
            downloads_heading=esc(downloads_heading), downloads_heading_eb=downloads_heading_eb,
            note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis), defs=_pattern_defs(),

@@ -32,7 +32,6 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -40,9 +39,8 @@ TOOLS = os.path.dirname(HERE)
 REPO = os.path.dirname(TOOLS)
 sys.path.insert(0, TOOLS)
 
-import build_site as bs   # noqa: E402
-import spine_stamp        # noqa: E402
 import text_norm          # noqa: E402
+from fresh_site_build import build_fresh_site  # noqa: E402
 
 COMMITTED_MAP = os.path.join(REPO, "build", "editor-map.generated.json")
 
@@ -56,47 +54,13 @@ _FRESH = {}   # module-level cache: one in-process site build for the whole file
 def _build_fresh_map():
     """Run the full generator into a temp dir and return the map bundle.
 
-    Mirrors build_site.main()'s build phase with OUT/BUILD_DIR redirected, so
+    Calls build_site.main() with OUT/BUILD_DIR redirected, so
     the repo's site/ and build/ trees stay untouched. Cached per test run."""
     if "bundle" in _FRESH:
         return _FRESH["bundle"]
 
-    tmp = tempfile.mkdtemp(prefix="edcov-")
-    saved = {k: getattr(bs, k) for k in
-             ("OUT", "BUILD_DIR", "EDITOR_MAP_PATH", "SPINE_BUILD_ID")}
-    bs.OUT = os.path.join(tmp, "site", "platform")
-    bs.BUILD_DIR = os.path.join(tmp, "build")
-    bs.EDITOR_MAP_PATH = os.path.join(bs.BUILD_DIR, "editor-map.generated.json")
-    try:
-        bs.SPINE_BUILD_ID = spine_stamp.compute(bs.DATA)
-        bs.EDMAP.reset()
-        bs.EDMAP.enabled = True
-        corpus = bs.load_corpus()
-        bs.SKILLS_BY_ID.update({s["id"]: s for s in corpus["skills"]["skills"]})
-        bs.TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})
-        bs.clean_output()
-        bs.write_platform_assets()
-        bs.copy_chat_app()
-        bs.build_home(corpus)
-        bs.build_modules(corpus)
-        bs.build_templates(corpus)
-        bs.build_skills(corpus)
-        bs.build_matter_library(corpus)
-        bs.build_packet_pages(corpus)
-        bs.build_facts_pages(corpus)
-        bs.build_law_pages(corpus)
-        bs.build_firm_dashboard(corpus)
-        bs.build_third_party()
-        bs.build_data_catalog(corpus)
-        bs.write_build_stamp(bs.SPINE_BUILD_ID)
-        bs.build_editor_map(bs.SPINE_BUILD_ID)
-        with open(bs.EDITOR_MAP_PATH, encoding="utf-8") as fh:
-            bundle = json.load(fh)
-    finally:
-        bs.EDMAP.reset()
-        for k, v in saved.items():
-            setattr(bs, k, v)
-        shutil.rmtree(tmp, ignore_errors=True)
+    tmp, _site_out, bundle = build_fresh_site("edcov-")
+    shutil.rmtree(tmp, ignore_errors=True)
 
     _FRESH["bundle"] = bundle
     _FRESH["corpus_tasks"] = json.load(
@@ -157,8 +121,8 @@ class NewCoverageTest(unittest.TestCase):
     # ---- R1: the landing pages carry their authored copy ----------------- #
     def test_authored_page_copy_counts(self):
         self.assertEqual(len(self.pages["index.html"]), 29)
-        self.assertEqual(len(self.pages["matters/index.html"]), 13)
-        self.assertEqual(len(self.pages["firm/index.html"]), 31)
+        self.assertEqual(len(self.pages["matters/index.html"]), 3)
+        self.assertEqual(len(self.pages["firm/index.html"]), 33)
 
     def test_page_copy_sources_are_page_local(self):
         expected = {
@@ -188,7 +152,7 @@ class NewCoverageTest(unittest.TestCase):
             "data/firm/firm.json#identity.name",
             "data/firm/firm.json#identity.letterhead_note",
         }.issubset(refs))
-        self.assertEqual(len(blocks), 31)
+        self.assertEqual(len(blocks), 33)
 
     # ---- new blocks are well-formed json_scalars ------------------------- #
     def test_new_blocks_are_json_scalars_with_matching_paths(self):

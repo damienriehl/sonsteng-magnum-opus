@@ -13,16 +13,68 @@
     "^(?!schema_version$|type$|page$).+": {"$ref": "#/$defs/copyNode"}
   },
   "additionalProperties": false,
+  "allOf": [
+    {"if": {"properties": {"page": {"const": "home"}}}, "then": {"$ref": "#/$defs/home"}},
+    {"if": {"properties": {"page": {"const": "matters"}}}, "then": {"$ref": "#/$defs/matters"}},
+    {"if": {"properties": {"page": {"const": "firm"}}}, "then": {"$ref": "#/$defs/firm"}}
+  ],
   "$defs": {
-    "copyNode": {
-      "oneOf": [
-        {"type": "string", "minLength": 1},
-        {
-          "type": "object",
-          "minProperties": 1,
-          "additionalProperties": {"$ref": "#/$defs/copyNode"}
-        }
-      ]
-    }
+    "scalar": {"type": "string", "minLength": 1},
+    "hero": {"type": "object", "required": ["eyebrow", "heading", "lede"], "properties": {"eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"}, "lede": {"$ref": "#/$defs/scalar"}}},
+    "module": {"type": "object", "required": ["title", "thesis"], "properties": {"title": {"$ref": "#/$defs/scalar"}, "thesis": {"$ref": "#/$defs/scalar"}}},
+    "fullCard": {"type": "object", "required": ["meta", "title", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "title": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},
+    "shortCard": {"type": "object", "required": ["meta", "title"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "title": {"$ref": "#/$defs/scalar"}}},
+    "metaDescriptionCard": {"type": "object", "required": ["meta", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},
+    "home": {
+      "type": "object", "required": ["hero", "volumes", "explore"],
+      "properties": {
+        "hero": {"$ref": "#/$defs/hero"},
+        "volumes": {"type": "object", "required": ["eyebrow", "heading", "modules"], "properties": {
+          "eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"},
+          "modules": {"type": "object", "required": ["M1", "M2", "M3"], "properties": {"M1": {"$ref": "#/$defs/module"}, "M2": {"$ref": "#/$defs/module"}, "M3": {"$ref": "#/$defs/module"}}}
+        }},
+        "explore": {"type": "object", "required": ["eyebrow", "heading", "cards"], "properties": {
+          "eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"},
+          "cards": {"type": "object", "required": ["sample", "skills", "matters", "firm", "templates", "centaur"], "properties": {
+            "sample": {"$ref": "#/$defs/fullCard"}, "skills": {"$ref": "#/$defs/shortCard"}, "matters": {"$ref": "#/$defs/metaDescriptionCard"},
+            "firm": {"$ref": "#/$defs/fullCard"}, "templates": {"$ref": "#/$defs/fullCard"}, "centaur": {"$ref": "#/$defs/fullCard"}
+          }}
+        }}
+      }
+    },
+    "shapeLabels": {
+      "type": "object",
+      "required": ["employment_arbitration", "attorney_discipline", "auto_negligence", "real_estate_negotiation", "criminal_dwi", "noncompete_trade_secret", "ucc_sale_of_goods", "juvenile_delinquency", "marriage_dissolution", "wills_probate"],
+      "properties": {
+        "employment_arbitration": {"$ref": "#/$defs/scalar"}, "attorney_discipline": {"$ref": "#/$defs/scalar"},
+        "auto_negligence": {"$ref": "#/$defs/scalar"}, "real_estate_negotiation": {"$ref": "#/$defs/scalar"},
+        "criminal_dwi": {"$ref": "#/$defs/scalar"}, "noncompete_trade_secret": {"$ref": "#/$defs/scalar"},
+        "ucc_sale_of_goods": {"$ref": "#/$defs/scalar"}, "juvenile_delinquency": {"$ref": "#/$defs/scalar"},
+        "marriage_dissolution": {"$ref": "#/$defs/scalar"}, "wills_probate": {"$ref": "#/$defs/scalar"}
+      }
+    },
+    "matters": {
+      "type": "object", "required": ["hero", "shape_labels"],
+      "properties": {"hero": {"$ref": "#/$defs/hero"}, "shape_labels": {"$ref": "#/$defs/shapeLabels"}}
+    },
+    "kpi": {"type": "object", "required": ["label", "lesson"], "properties": {"label": {"$ref": "#/$defs/scalar"}, "lesson": {"$ref": "#/$defs/scalar"}}},
+    "chart": {"type": "object", "required": ["title", "blurb"], "properties": {"title": {"$ref": "#/$defs/scalar"}, "blurb": {"$ref": "#/$defs/scalar"}}},
+    "firm": {"type": "object", "required": ["hero", "filters", "kpis", "charts", "downloads"], "properties": {
+      "hero": {"type": "object", "required": ["provenance_before_path", "provenance_after_path"], "properties": {"provenance_before_path": {"$ref": "#/$defs/scalar"}, "provenance_after_path": {"$ref": "#/$defs/scalar"}}},
+      "filters": {"type": "object", "required": ["snapshot_note"], "properties": {"snapshot_note": {"$ref": "#/$defs/scalar"}}},
+      "kpis": {"type": "object", "required": ["fees_collected", "realization", "collection", "ar_over_90", "trust_balance", "fee_revenue_vs_plan"], "properties": {
+        "fees_collected": {"$ref": "#/$defs/kpi"}, "realization": {"$ref": "#/$defs/kpi"}, "collection": {"$ref": "#/$defs/kpi"}, "ar_over_90": {"$ref": "#/$defs/kpi"},
+        "trust_balance": {"$ref": "#/$defs/kpi"}, "fee_revenue_vs_plan": {"$ref": "#/$defs/kpi"}
+      }},
+      "charts": {"type": "object", "required": ["book_of_business", "fee_mix", "utilization", "realization_funnel", "ar_aging", "trust_balances", "budget_vs_actual"], "properties": {
+        "book_of_business": {"$ref": "#/$defs/chart"}, "fee_mix": {"$ref": "#/$defs/chart"}, "utilization": {"$ref": "#/$defs/chart"},
+        "realization_funnel": {"$ref": "#/$defs/chart"}, "ar_aging": {"$ref": "#/$defs/chart"}, "trust_balances": {"$ref": "#/$defs/chart"}, "budget_vs_actual": {"$ref": "#/$defs/chart"}
+      }},
+      "downloads": {"type": "object", "required": ["eyebrow", "heading"], "properties": {"eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"}}}
+    }},
+    "copyNode": {"oneOf": [
+      {"$ref": "#/$defs/scalar"},
+      {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/copyNode"}}
+    ]}
   }
 }
