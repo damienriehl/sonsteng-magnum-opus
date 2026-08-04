@@ -20,9 +20,8 @@ so an edit states its true reach before John commits it.
 **Product authority.** Damien, in the 2026-08-04 brainstorm. The roles model, the AI
 Editor, and the D2/D8 editor-ceiling work are not active scope here.
 
-**Open blockers.** One: for each class of computed value, which surface edits its
-source data, and what the editor does when no such surface exists (see Outstanding
-Questions).
+**Open blockers.** None. The last one — what the editor does for a computed value
+whose source has no editing surface — is settled by R12.
 
 ## Product Contract
 
@@ -261,14 +260,11 @@ fails.
 
 ### Outstanding Questions
 
-**Resolve Before Planning**
-
-- For each class of computed value (matter captions, jurisdiction canon, task
-  metadata, KPI figures), which surface edits its source data? R11 states the intent;
-  the per-class mapping is unresolved, and some classes may have no surface at all.
-
 **Deferred to Planning**
 
+- Which surface edits the source of each class of computed value — matter captions,
+  jurisdiction canon, task metadata, firm KPI figures. Settled against the code, per
+  R11; a class with no surface falls to R12 rather than blocking.
 - Where a surface-owned override is stored in `data/`, and how it is addressed.
 - How occurrences are keyed on a block so the record survives a rebuild that moves a
   block's index.
