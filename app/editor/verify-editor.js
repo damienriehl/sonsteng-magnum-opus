@@ -45,6 +45,14 @@ async function installRadiusMock(page) {
   await page.evaluate(() => {
     const base = window.__EDITOR_MOCK__;
     const ceiling = 100;
+    let confirmationSequence = 0;
+    let confirmationToken = null;
+    let scopedDecision = { accepted: null, status: null, issuedToken: null };
+    window.__MOCK_CTRL__.scopedDecision = () => ({
+      accepted: scopedDecision.accepted,
+      status: scopedDecision.status,
+      issuedToken: scopedDecision.issuedToken
+    });
     const radii = {
       course: { blocks: 3692, files: 282, matters: 20 },
       module: {
@@ -64,10 +72,16 @@ async function installRadiusMock(page) {
       // Let the stock harness record the request, but derive the response from
       // the enumerated fixture radius rather than the scope's name.
       return Promise.resolve(base(req)).then(() => {
-        if (radius && radius.blocks > ceiling && !body.confirmed) {
+        if (radius && radius.blocks > ceiling &&
+            (!body.confirmed || !confirmationToken ||
+             body.confirmation_token !== confirmationToken)) {
+          confirmationToken = 'verify-editor-confirmation-' + (++confirmationSequence);
+          scopedDecision = { accepted: false, status: 409, issuedToken: confirmationToken };
           return { ok: false, status: 409, data: { ok: false,
-            error: { code: 'ceiling_confirmation_required' }, radius } };
+            error: { code: 'ceiling_confirmation_required' }, radius,
+            confirmation_token: confirmationToken } };
         }
+        scopedDecision = { accepted: true, status: 200, issuedToken: confirmationToken };
         return { ok: true, status: 200,
           data: { ok: true, id: body.id, status: 'requested' } };
       });
@@ -585,15 +599,41 @@ async function run() {
        pass green (it shipped in the sibling add-fact composer). */
     await page.click('.eb-scoped__send');
     await sleep(600);
-    const scLast = await page.evaluate(() => window.__MOCK_CTRL__.last());
-    assert('SC5 confirmed resend files with the SAME id (idempotent)',
+    const scResend = await page.evaluate(() => ({
+      body: window.__MOCK_CTRL__.last(),
+      decision: window.__MOCK_CTRL__.scopedDecision()
+    }));
+    const scLast = scResend.body;
+    assert('SC5 confirmed resend echoes the issued token, is accepted, and keeps the SAME id (idempotent)',
+      scResend.decision.accepted === true && scResend.decision.status === 200 &&
+      typeof scLast.confirmation_token === 'string' &&
+      scLast.confirmation_token.length > 0 &&
+      scLast.confirmation_token === scResend.decision.issuedToken &&
       scLast.confirmed === true && scLast.id === scSecondId &&
       scLast.instruction === 'Modernize the tone throughout.',
-      'resend=' + String(scLast.id).slice(0, 8) + ' confirmed=' + scLast.confirmed);
+      'resend=' + String(scLast.id).slice(0, 8) + ' confirmed=' + scLast.confirmed +
+      ' accepted=' + scResend.decision.accepted +
+      ' token=' + String(scLast.confirmation_token || 'missing'));
+
+    const scLaundered = await page.evaluate(() => window.__EDITOR_MOCK__({
+      path: '/scoped-request', method: 'POST',
+      headers: { 'X-Edit-Request': '1' },
+      body: { id: 'laundered-confirmation', level: 'course',
+        instruction: 'Modernize the tone throughout.', confirmed: true,
+        confirmation_token: 'stale-confirmation-token' }
+    }));
+    assert('SC6 mock gate re-challenges a stale confirmation token, not filed',
+      scLaundered.status === 409 &&
+      scLaundered.data.error.code === 'ceiling_confirmation_required' &&
+      !!scLaundered.data.confirmation_token,
+      'status=' + scLaundered.status);
 
     await page.evaluate(() => {
       const d = document.querySelector('.eb-scoped');
       if (d) d.parentNode.removeChild(d);
+      Object.keys(sessionStorage).forEach(k => {
+        if (k.indexOf('scoped-request|') !== -1) sessionStorage.removeItem(k);
+      });
     });
 
     // The fixture proves the boundary is computed, not synonymous with course:
@@ -607,7 +647,7 @@ async function run() {
     await page.click('.eb-scoped__send');
     await sleep(150);
     const scPartStatus = await page.$eval('.eb-scoped__status', el => el.textContent);
-    assert('SC6 a non-course part with radius 122 also crosses the computed ceiling',
+    assert('SC7 a non-course part with radius 122 also crosses the computed ceiling',
       /122 paragraphs/.test(scPartStatus), '"' + scPartStatus + '"');
 
     await page.screenshot({ path: path.join(OUT, 'editor-desktop.png'), fullPage: false });

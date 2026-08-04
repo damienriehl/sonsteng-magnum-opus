@@ -518,6 +518,7 @@
     var draft = loadDialogDraft(SCOPED_DRAFT_KEY);
     var reqId = draft && draft.id ? draft.id : uuid();
     var confirmed = false;
+    var confirmationToken = null;
     if (draft) {
       ta.value = draft.instruction || '';
       if (/^\d+$/.test(String(draft.scope_index)) &&
@@ -535,8 +536,9 @@
     // or the wording and that number is stale — carrying confirmed:true across
     // the edit would file a course-wide change on a module-sized "yes".
     var resetConfirmation = function () {
-      if (!confirmed) return;
+      if (!confirmed && !confirmationToken) return;
       confirmed = false;
+      confirmationToken = null;
       reqId = uuid();
       send.textContent = 'Send to Damien';
       status.textContent = '';
@@ -562,7 +564,10 @@
       if (o.matter) body.matter = o.matter;
       if (o.part) body.part = o.part;
       if (o.module) body.module = o.module;
-      if (confirmed) body.confirmed = true;
+      if (confirmed) {
+        body.confirmed = true;
+        if (confirmationToken) body.confirmation_token = confirmationToken;
+      }
       send.disabled = true;
       status.textContent = 'Sending\u2026';
       api('/scoped-request', { body: body }).then(function (out) {
@@ -578,6 +583,7 @@
         if (code === 'ceiling_confirmation_required') {
           var r = data.radius || {};
           confirmed = true;
+          confirmationToken = data.confirmation_token || null;
           send.disabled = false;
           send.textContent = 'Yes \u2014 that wide. Send it';
           status.textContent = 'That change would touch ' + (r.blocks || '?') +
