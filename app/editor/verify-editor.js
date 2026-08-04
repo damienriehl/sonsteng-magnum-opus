@@ -13,6 +13,7 @@
    ============================================================================ */
 const puppeteer = require('/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer');
 const path = require('path');
+const fs = require('fs');
 const { execFileSync } = require('child_process');
 
 const DIR = __dirname;                              // app/editor
@@ -36,6 +37,61 @@ async function boot(browser, w, h) {
   await page.setViewport({ width: w, height: h });
   await page.goto(HARNESS, { waitUntil: 'load' });
   await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+  await installRadiusMock(page);
+  return page;
+}
+
+async function installRadiusMock(page) {
+  await page.evaluate(() => {
+    const base = window.__EDITOR_MOCK__;
+    const ceiling = 100;
+    const radii = {
+      course: { blocks: 3692, files: 282, matters: 20 },
+      module: {
+        M1: { blocks: 460, files: 40, matters: 20 },
+        M2: { blocks: 492, files: 42, matters: 20 },
+        M3: { blocks: 371, files: 36, matters: 20 }
+      },
+      matter: { blocks: 206, files: 14, matters: 1 },
+      part: { blocks: 122, files: 8, matters: 1 }
+    };
+    window.__EDITOR_MOCK__ = function (req) {
+      if (req.path.indexOf('/scoped-request') !== 0) return base(req);
+      const body = req.body || {};
+      const radius = body.level === 'course' ? radii.course
+        : body.level === 'module' ? radii.module[body.module]
+        : radii[body.level];
+      // Let the stock harness record the request, but derive the response from
+      // the enumerated fixture radius rather than the scope's name.
+      return Promise.resolve(base(req)).then(() => {
+        if (radius && radius.blocks > ceiling && !body.confirmed) {
+          return { ok: false, status: 409, data: { ok: false,
+            error: { code: 'ceiling_confirmation_required' }, radius } };
+        }
+        return { ok: true, status: 200,
+          data: { ok: true, id: body.id, status: 'requested' } };
+      });
+    };
+  });
+}
+
+async function bootFacts(browser, w, h) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: w, height: h });
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    if (req.isNavigationRequest() && req.frame() === page.mainFrame()) {
+      const html = fs.readFileSync(path.join(DIR, 'test-harness.html'), 'utf8')
+        .replace('"page": "matters/m05-dwi-meridian/index.html"',
+                 '"page": "matters/m05-dwi-meridian/facts/index.html"');
+      req.respond({ status: 200, contentType: 'text/html', body: html });
+    } else {
+      req.continue();
+    }
+  });
+  await page.goto(HARNESS, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+  await installRadiusMock(page);
   return page;
 }
 
@@ -414,6 +470,36 @@ async function run() {
     const scCopy = await page.$eval('.eb-scoped__lede', el => el.textContent);
     assert('SC1 dialog states plainly that Damien approves before anything changes',
       /Damien approves/.test(scCopy), '"' + scCopy.slice(0, 60) + '"');
+    // Reload round-trip: text, scope, and the idempotency id travel together.
+    const scDraftBefore = await page.evaluate(() => {
+      const sel = document.querySelector('.eb-scoped__scope');
+      sel.value = '3';
+      sel.dispatchEvent(new Event('change'));
+      const ta = document.querySelector('.eb-scoped__text');
+      ta.value = 'Keep this carefully drafted paragraph through reload.';
+      ta.dispatchEvent(new Event('input'));
+      const key = Object.keys(sessionStorage).find(k => k.indexOf('scoped-request|') !== -1);
+      return { key, rec: JSON.parse(sessionStorage.getItem(key)) };
+    });
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+    await installRadiusMock(page);
+    await page.click('.editor-banner__bigger');
+    const scReload = await page.evaluate((key) => ({
+      text: document.querySelector('.eb-scoped__text').value,
+      scope: document.querySelector('.eb-scoped__scope').value,
+      rec: JSON.parse(sessionStorage.getItem(key)),
+      label: document.querySelector('.eb-scoped__send').textContent,
+      status: document.querySelector('.eb-scoped__status').textContent
+    }), scDraftBefore.key);
+    assert('SCR reload restores scoped wording, scope, and the SAME id without stale confirmation',
+      scReload.text === scDraftBefore.rec.instruction &&
+      scReload.scope === scDraftBefore.rec.scope_index &&
+      scReload.rec.id === scDraftBefore.rec.id &&
+      /Send to Damien/.test(scReload.label) && scReload.status === '',
+      'id=' + String(scReload.rec.id).slice(0, 8) + ' scope=' + scReload.scope);
+    await page.click('.eb-scoped__cancel');
+    await page.click('.editor-banner__bigger');
     await page.evaluate(() => {
       const sel = document.querySelector('.eb-scoped__scope');
       sel.value = String(sel.options.length - 1);          // "The whole course"
@@ -441,10 +527,14 @@ async function run() {
     const scRevoked = await page.evaluate(() => ({
       label: document.querySelector('.eb-scoped__send').textContent,
       status: document.querySelector('.eb-scoped__status').textContent,
+      draftId: JSON.parse(sessionStorage.getItem(
+        Object.keys(sessionStorage).find(k => k.indexOf('scoped-request|') !== -1)
+      )).id
     }));
-    assert('SC3 changing scope after the ceiling prompt revokes the confirmation',
-      /Send to Damien/.test(scRevoked.label) && scRevoked.status === '',
-      'label="' + scRevoked.label + '"');
+    assert('SC3 changing scope after the ceiling prompt revokes confirmation and rotates id',
+      /Send to Damien/.test(scRevoked.label) && scRevoked.status === '' &&
+      scRevoked.draftId !== scFirstId,
+      'label="' + scRevoked.label + '" id=' + String(scRevoked.draftId).slice(0, 8));
 
     /* SC4: back to the wide scope -> a FRESH 409 under a rotated id (the
        revoked confirmation did not carry over). */
@@ -476,11 +566,93 @@ async function run() {
       if (d) d.parentNode.removeChild(d);
     });
 
+    // The fixture proves the boundary is computed, not synonymous with course:
+    // this matter's ~122-block case-file part also exceeds the 100-block ceiling.
+    await page.click('.editor-banner__bigger');
+    await page.evaluate(() => {
+      const ta = document.querySelector('.eb-scoped__text');
+      ta.value = 'Update this case-file part.';
+      ta.dispatchEvent(new Event('input'));
+    });
+    await page.click('.eb-scoped__send');
+    await sleep(150);
+    const scPartStatus = await page.$eval('.eb-scoped__status', el => el.textContent);
+    assert('SC6 a non-course part with radius 122 also crosses the computed ceiling',
+      /122 paragraphs/.test(scPartStatus), '"' + scPartStatus + '"');
+
     await page.screenshot({ path: path.join(OUT, 'editor-desktop.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-desktop.png'));
     // large-type screenshot for visual QA
     await page.screenshot({ path: path.join(OUT, 'editor-largetype.png'), fullPage: false });
     console.log('   [screenshot] ' + path.join(OUT, 'editor-largetype.png'));
+    await page.close();
+  }
+
+  /* ======================= FACTS PAGE (add-a-fact U8) ===================== */
+  {
+    const page = await bootFacts(browser, 1280, 1100);
+
+    // A composed fact survives reload with the id that names that one intent.
+    const afDraftBefore = await page.evaluate(() => {
+      const name = document.querySelector('.eb-addfact__name');
+      const text = document.querySelector('.eb-composer__text');
+      name.value = 'response-window';
+      name.dispatchEvent(new Event('input'));
+      text.value = 'The drafted prose mention may be declined.';
+      text.dispatchEvent(new Event('input'));
+      const key = Object.keys(sessionStorage).find(k => k.indexOf('add-fact|') !== -1);
+      return { key, rec: JSON.parse(sessionStorage.getItem(key)) };
+    });
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForSelector('.eb-composer', { timeout: 3000 });
+    const afReload = await page.evaluate((key) => ({
+      name: document.querySelector('.eb-addfact__name').value,
+      text: document.querySelector('.eb-composer__text').value,
+      rec: JSON.parse(sessionStorage.getItem(key))
+    }), afDraftBefore.key);
+    assert('AF1 reload restores add-a-fact key, text, and the SAME id',
+      afReload.name === afDraftBefore.rec.name &&
+      afReload.text === afDraftBefore.rec.text &&
+      afReload.rec.id === afDraftBefore.rec.id,
+      'id=' + String(afReload.rec.id).slice(0, 8));
+
+    // First send fails; retry must replay the exact id, then land once.
+    await page.evaluate(() => window.__MOCK_CTRL__.forceOnce('network'));
+    await page.click('.eb-composer__send');
+    await sleep(150);
+    const afFirst = await page.evaluate(() => window.__MOCK_CTRL__.last());
+    await page.click('.eb-composer__send');
+    await sleep(150);
+    const afRetry = await page.evaluate(() => ({
+      last: window.__MOCK_CTRL__.last(),
+      server: window.__MOCK_CTRL__.server(),
+      status: document.querySelector('.eb-composer__row .eb-scoped__status').textContent,
+      rendered: document.querySelector('main').textContent
+    }));
+    assert('AF2 retry after a failed send compares and reuses the SAME id',
+      afFirst && afRetry.last.id === afFirst.id && afRetry.server.count === 1,
+      'first=' + String(afFirst && afFirst.id).slice(0, 8) +
+      ' retry=' + String(afRetry.last && afRetry.last.id).slice(0, 8));
+    assert('AF3 submits the json_add matter/key/value, reports Added, and does not render the submitted value as prose',
+      afRetry.last.op === 'json_add' &&
+      afRetry.last.matter === 'm05-dwi-meridian' &&
+      afRetry.last.fact_key === 'response-window' &&
+      afRetry.last.new_text === 'The drafted prose mention may be declined.' &&
+      /Added/.test(afRetry.status) &&
+      afRetry.rendered.indexOf('The drafted prose mention may be declined.') === -1,
+      'op=' + afRetry.last.op + ' matter=' + afRetry.last.matter +
+      ' key=' + afRetry.last.fact_key + ' value=' + JSON.stringify(afRetry.last.new_text) +
+      ' status=' + JSON.stringify(afRetry.status) + ' prose-rendered=false');
+
+    const callsBeforeInvalid = afRetry.server.calls;
+    await page.type('.eb-addfact__name', '!!!');
+    await page.type('.eb-composer__text', 'Invalid key must not be sent.');
+    await page.click('.eb-composer__send');
+    await sleep(100);
+    const callsAfterInvalid = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    assert('AF4 schema-invalid new key is rejected before send',
+      callsAfterInvalid === callsBeforeInvalid,
+      'calls before=' + callsBeforeInvalid + ' after=' + callsAfterInvalid);
     await page.close();
   }
 

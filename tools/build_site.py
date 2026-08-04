@@ -3063,15 +3063,10 @@ def build_facts_pages(corpus):
         editable_paths = []
         for relpath, path, value in rows:
             sval = str(value)
-            # STRINGS ONLY. The editor's json_scalar write path stores whatever
-            # the editor typed as a string; a schema-typed number (rate,
-            # retainer_amount, contingency_pct, flat_fee) would then fail
-            # validate_spine and take its WHOLE apply batch down with it —
-            # including other people's edits riding along. Offering a control
-            # that can never apply is worse than not offering it, so numeric
-            # facts render read-only until the write path coerces types.
-            # (U5b's Law page already had this guard; the Facts page did not.)
-            editable = isinstance(value, str)
+            # Scalar strings and numbers round-trip through the apply engine,
+            # which coerces editor text to the leaf's schema-declared type.
+            editable = (isinstance(value, (str, int, float))
+                        and not isinstance(value, bool))
             eb = (_eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
                                   "fact: " + _fact_label(path))
                   if editable else "")
@@ -3136,9 +3131,8 @@ LAW_DENY_KEYS = ("schema_version", "@id", "id", "type", "code", "tier")
 def _law_rows(node, prefix=""):
     """Depth-first [(json_path, value)] over a jurisdiction file's scalar
     leaves, in file order. Deny-listed identifier keys are skipped entirely.
-    STRING leaves are the editable candidates; numeric leaves still render,
-    but only ever read-only (their raw JSON value is not its rendered text,
-    so they can never satisfy the value-only hash contract)."""
+    String and numeric leaves are editable candidates; identifier fields remain
+    excluded by the deny list."""
     rows = []
     if isinstance(node, dict):
         for k, v in node.items():
@@ -3182,7 +3176,7 @@ def _law_source_for(m):
 def build_law_pages(corpus):
     """One Law page per matter (U5b/R11): the matter's governing law rendered
     with the Facts-panel idiom. Meridian (fictional) law registers each string
-    leaf as an editable json_scalar block; real-jurisdiction law renders the
+    or numeric leaf as an editable json_scalar block; real-jurisdiction law renders the
     same rows read-only — no data-ebsrc anywhere on the page — under a plainly
     visible 'actual law' marking."""
     for m in corpus["matters"]:
@@ -3197,7 +3191,8 @@ def build_law_pages(corpus):
         for path, value in _law_rows(juris):
             sval = str(value)
             eb = ""
-            if editable and isinstance(value, str):
+            if (editable and isinstance(value, (str, int, float))
+                    and not isinstance(value, bool)):
                 eb = _eb_scalar_attr("%s#%s" % (relpath, path), sval, path,
                                      "law: " + _law_label(path))
             cards.append("""

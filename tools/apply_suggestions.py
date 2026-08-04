@@ -62,6 +62,7 @@ import datetime
 import decimal
 import fcntl
 import json
+import math
 import os
 import re
 import subprocess
@@ -101,6 +102,19 @@ OUT_APPLIED = "applied"
 OUT_ACCEPTED_BLOCKED = "accepted_blocked"
 OUT_NEEDS_HUMAN = "needs_human"
 OUT_DRIFT = "drift"
+OUT_VALIDATION_ERROR = "validation_error"
+
+# Numeric editor inputs model legal-matter fees, rates, and percentages, not
+# arbitrary-precision scientific data. Bound Decimal before int/float conversion:
+# this prevents pathological allocations and values JSON consumers cannot
+# represent usefully.
+MAX_NUMERIC_SIGNIFICANT_DIGITS = 18
+MAX_NUMERIC_ABS_EXPONENT = 100
+MAX_NUMERIC_ADJUSTED_EXPONENT = 12
+_JSON_INTEGER_RE = re.compile(r"-?(?:0|[1-9][0-9]*)")
+_JSON_NUMBER_RE = re.compile(
+    r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
+)
 
 
 class ApplyError(RuntimeError):
@@ -473,6 +487,113 @@ def classify(source_ref, block, op=None):
     return "prose_json_body", body_path
 
 
+SCHEMA_BY_BASENAME = {
+    "matter.json": "matter.schema.json",
+    "business.json": "business.schema.json",
+    "exercise.json": "exercise.schema.json",
+    "rubric.json": "rubric.schema.json",
+    "firm.json": "firm.schema.json",
+    "skills.json": "skill.schema.json",
+    "tasks.json": "task.schema.json",
+}
+
+
+def _schema_leaf(worktree, relpath, json_path):
+    """Return the JSON-Schema node declaring ``json_path``, when available."""
+    schema_name = SCHEMA_BY_BASENAME.get(os.path.basename(relpath))
+    if not schema_name:
+        return None
+    schema_path = os.path.join(worktree, "data", "schemas", schema_name)
+    try:
+        with open(schema_path, encoding="utf-8") as fh:
+            root = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    node = root
+    for part in json_path.split("."):
+        while "$ref" in node:
+            ref = node["$ref"]
+            if not ref.startswith("#/"):
+                return None
+            node = root
+            for token in ref[2:].split("/"):
+                node = node[token.replace("~1", "/").replace("~0", "~")]
+        if part.isdigit():
+            node = node.get("items", {})
+        else:
+            node = node.get("properties", {}).get(part, {})
+        if not node:
+            return None
+    while "$ref" in node:
+        ref = node["$ref"]
+        if not ref.startswith("#/"):
+            return None
+        node = root
+        for token in ref[2:].split("/"):
+            node = node[token.replace("~1", "/").replace("~0", "~")]
+    return node
+
+
+def coerce_json_scalar(worktree, relpath, json_path, incoming, current):
+    """Coerce editor text to the schema-declared scalar type.
+
+    Schema-less legacy fixtures fall back to the existing leaf's JSON type;
+    production spine files resolve through ``data/schemas``.
+    """
+    node = _schema_leaf(worktree, relpath, json_path) or {}
+    declared = node.get("type")
+    if isinstance(declared, list):
+        declared = next((t for t in declared if t != "null"), None)
+    if not declared:
+        if isinstance(current, bool):
+            declared = "boolean"
+        elif isinstance(current, int):
+            declared = "integer"
+        elif isinstance(current, float):
+            declared = "number"
+        elif isinstance(current, str):
+            declared = "string"
+    text = incoming if isinstance(incoming, str) else str(incoming)
+    if declared == "string":
+        return text
+    if declared == "boolean":
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        raise ValueError("expected boolean")
+    if declared == "integer":
+        if not _JSON_INTEGER_RE.fullmatch(text):
+            raise ValueError("expected integer")
+        return int(text)
+    if declared == "number":
+        # Use JSON's ASCII number grammar consistently with integer fields:
+        # leading "+" and Unicode decimal digits are both rejected.
+        if not _JSON_NUMBER_RE.fullmatch(text):
+            raise ValueError("expected number")
+        try:
+            value = decimal.Decimal(text)
+        except decimal.InvalidOperation as exc:
+            raise ValueError("expected number") from exc
+        if not value.is_finite():
+            raise ValueError("expected finite number")
+        digits = value.as_tuple().digits
+        exponent = value.as_tuple().exponent
+        if (
+            len(digits) > MAX_NUMERIC_SIGNIFICANT_DIGITS
+            or abs(exponent) > MAX_NUMERIC_ABS_EXPONENT
+            or (value and abs(value.adjusted()) > MAX_NUMERIC_ADJUSTED_EXPONENT)
+        ):
+            raise ValueError("number outside supported corpus range")
+        if value == value.to_integral_value():
+            return int(value)
+        converted = float(value)
+        if not math.isfinite(converted):
+            raise ValueError("number outside finite float range")
+        return converted
+    raise ValueError("unsupported scalar schema type")
+
+
 def _bid_of_ref(source_ref):
     """The trailing durable-ID of a prose ref, or None."""
     m = re.search(r"(?:\.|#)b([0-9a-f]{8})$", source_ref)
@@ -796,7 +917,14 @@ def apply_file_patches(worktree, relpath, patches):
             results[p.suggestion_id] = True
             continue
         if p.kind == "json_scalar":
-            edits.append((p.json_path, p.new_text))
+            try:
+                value = coerce_json_scalar(
+                    worktree, relpath, p.json_path, p.new_text,
+                    json_get(obj, p.json_path))
+            except (ValueError, KeyError, IndexError):
+                results[p.suggestion_id] = OUT_VALIDATION_ERROR
+                continue
+            edits.append((p.json_path, value))
             results[p.suggestion_id] = True
         else:  # prose_json_body
             body = _body(p.json_path)
@@ -1104,6 +1232,8 @@ def build_digest(batch_id, base_sha, applied, drift, needs_human, blocked,
                 ref = p.source_ref if isinstance(p, Patch) else p.get("source_ref", "?")
                 sid = p.suggestion_id if isinstance(p, Patch) else p.get("id", "?")
                 lines.append("- `%s` (`%s`)" % (ref, sid))
+                if isinstance(p, dict) and p.get("outcome_reason"):
+                    lines.append("  - reason: `%s`" % p["outcome_reason"])
     if companions:
         lines.append("")
         lines.append("## Value-sync companions PROPOSED (pending — not applied) (%d)"
@@ -1187,7 +1317,9 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
             if group_status == OUT_DRIFT:
                 drift.extend(members)
             elif group_status == OUT_NEEDS_HUMAN:
-                needs_human.extend(members)
+                needs_human.extend(
+                    _row_with_reason(r, "gate_needs_human") for r in members
+                )
             else:
                 candidate_patches.extend(group_patches)
 
@@ -1199,27 +1331,77 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         for relpath, patches in patch_by_file.items():
             file_results.update(apply_file_patches(wt, relpath, patches))
 
-        # Ambiguity discovered at splice time -> whole group -> needs_human.
-        blocked_by_ambiguity = {sid for sid, ok in file_results.items()
-                                if ok == OUT_NEEDS_HUMAN}
-        if blocked_by_ambiguity:
-            # Roll the ambiguous groups (and their file co-tenants) out of applied.
-            ambiguous_groups = {p.group_id for p in candidate_patches
-                                if p.suggestion_id in blocked_by_ambiguity}
+        # Failures discovered at splice time -> whole group -> needs_human.
+        rollout_failures = {
+            sid for sid, outcome in file_results.items()
+            if outcome in (OUT_NEEDS_HUMAN, OUT_VALIDATION_ERROR)
+        }
+        if rollout_failures:
+            # Roll the failed groups (and their file co-tenants) out of applied.
+            failed_groups = {
+                p.group_id for p in candidate_patches
+                if p.suggestion_id in rollout_failures
+            }
+            triggers_by_group = {
+                group_id: sorted(
+                    p.suggestion_id for p in candidate_patches
+                    if p.group_id == group_id
+                    and p.suggestion_id in rollout_failures
+                )
+                for group_id in failed_groups
+            }
             kept = []
             for p in candidate_patches:
-                if p.group_id in ambiguous_groups:
-                    needs_human.append(_row_of(rows, p.suggestion_id))
+                if p.group_id in failed_groups:
+                    triggers = triggers_by_group[p.group_id]
+                    if p.suggestion_id in rollout_failures:
+                        reason = file_results[p.suggestion_id]
+                    else:
+                        reason = "group_rollback_due_to:%s" % ",".join(triggers)
+                    needs_human.append(
+                        _row_with_reason(_row_of(rows, p.suggestion_id), reason)
+                    )
                 else:
                     kept.append(p)
-            # Re-derive the worktree from scratch to drop the partial ambiguous writes.
+            # Re-derive the worktree from scratch to drop all partial group writes.
             git(["checkout", "--", "."], wt)
             candidate_patches = []
             patch_by_file = {}
             for p in kept:
                 patch_by_file.setdefault(p.relpath, []).append(p)
+            replay_results = {}
             for relpath, patches in patch_by_file.items():
-                apply_file_patches(wt, relpath, patches)
+                replay_results.update(apply_file_patches(wt, relpath, patches))
+            replay_failures = {
+                sid for sid, outcome in replay_results.items()
+                if outcome in (OUT_NEEDS_HUMAN, OUT_VALIDATION_ERROR)
+            }
+            if replay_failures:
+                # One bounded replay is the only retry. If the supposedly clean
+                # retained set changes outcome, conservatively reject that whole
+                # retained set rather than trusting a third application.
+                for p in kept:
+                    reason = (
+                        "rollout_replay_failed:%s" % replay_results[p.suggestion_id]
+                        if p.suggestion_id in replay_failures
+                        else "rollout_replay_batch_rollback"
+                    )
+                    needs_human.append(
+                        _row_with_reason(_row_of(rows, p.suggestion_id), reason)
+                    )
+                client.finalize(
+                    batch_id,
+                    phase=PHASE_ROLLED_BACK,
+                    needs_human=[_id(r) for r in needs_human],
+                    drift=[_id(r) for r in drift],
+                )
+                digest = build_digest(
+                    batch_id, base_sha, [], drift, needs_human, [], [], {}
+                )
+                return ApplyResult(
+                    batch_id, base_sha, [], drift, needs_human, [], [], {},
+                    digest, False, reason="rollout_replay_failed",
+                )
             candidate_patches = kept
 
         applied_patches = candidate_patches
@@ -1421,6 +1603,12 @@ def _row_of(rows, sid):
         if r["id"] == sid:
             return r
     return {"id": sid, "source_ref": "?"}
+
+
+def _row_with_reason(row, reason):
+    annotated = dict(row)
+    annotated["outcome_reason"] = reason
+    return annotated
 
 
 def _id(r):

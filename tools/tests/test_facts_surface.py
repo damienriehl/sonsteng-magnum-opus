@@ -125,6 +125,17 @@ class TestFactsPage(unittest.TestCase):
                      "jurisdiction", "client_id", "fee_type", "matter_id"):
             self.assertNotIn(deny, paths)
 
+    def test_numeric_facts_are_editable_but_identifiers_and_enums_are_not(self):
+        f = _build_fresh()
+        page = "matters/%s/facts/index.html" % SLUG
+        blocks = f["bundle"]["pages"][page]
+        paths = {b.get("json_path"): b for b in blocks}
+        self.assertIn("engagement.contingency_pct", paths)
+        self.assertEqual(paths["engagement.contingency_pct"]["original_text"], "33.34")
+        for denied in ("id", "@id", "client_id", "matter_id",
+                       "engagement.fee_type", "tier", "shape"):
+            self.assertNotIn(denied, paths)
+
     def test_where_used_counts_are_present_and_honest(self):
         f = _build_fresh()
         html = f["page_html"]
