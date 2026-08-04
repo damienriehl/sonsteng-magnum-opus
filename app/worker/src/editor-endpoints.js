@@ -11,6 +11,9 @@ import {
   enumerateScope, EDITOR_MAP_FACTS,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
+import {
+  mintScopedConfirmationToken, verifyScopedConfirmationToken,
+} from "./scoped-confirmation.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -552,10 +555,25 @@ export async function scopedRequestEndpoint(request, env, auth) {
 
   const n = parseInt(env.EDIT_SCOPED_CEILING, 10);
   const ceiling = n > 0 ? n : SCOPED_CEILING_DEFAULT;
-  const confirmed = body.confirmed === true;
-  if (radius.blocks > ceiling && !confirmed) {
+  const confirmationRequest = {
+    level: body.level,
+    matter: typeof body.matter === "string" ? body.matter : null,
+    part: typeof body.part === "string" ? body.part : null,
+    module: typeof body.module === "string" ? body.module : null,
+    instruction,
+    radius,
+  };
+  const overCeiling = radius.blocks > ceiling;
+  const confirmed = overCeiling && body.confirmed === true &&
+    await verifyScopedConfirmationToken(
+      env.SESSION_SIGNING_KEY, body.confirmation_token, confirmationRequest
+    );
+  if (overCeiling && !confirmed) {
     // 409 carries the radius so the client can show the blast radius and ask
     // the editor to confirm — the refusal IS the feature (KD2).
+    const confirmationToken = await mintScopedConfirmationToken(
+      env.SESSION_SIGNING_KEY, confirmationRequest
+    );
     return new Response(JSON.stringify({
       ok: false,
       error: { code: "ceiling_confirmation_required",
@@ -563,6 +581,7 @@ export async function scopedRequestEndpoint(request, env, auth) {
                         " paragraphs. Please confirm you mean it that widely." },
       radius: { blocks: radius.blocks, files: radius.files,
                 matters: radius.matters.length },
+      confirmation_token: confirmationToken,
     }), { status: 409, headers: { "content-type": "application/json" } });
   }
 

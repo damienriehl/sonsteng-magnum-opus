@@ -10,6 +10,7 @@ import {
 } from "../src/editor-endpoints.js";
 import { resolveAuth } from "../src/editor-auth.js";
 import { enumerateScope } from "../src/editor-map.js";
+import { mintScopedConfirmationToken } from "../src/scoped-confirmation.js";
 
 const ENV_BASE = {
   SESSION_SIGNING_KEY: "test-signing-key-abc",
@@ -78,7 +79,7 @@ test("a small-radius request files with the server-enumerated radius", async () 
   assert.equal(data.radius.blocks, expect.blocks);
 });
 
-test("over-ceiling refuses without confirmation (409 + radius), files WITH it", async () => {
+test("over-ceiling challenge carries a token and matching confirmed retry files", async () => {
   const cap = {};
   const refuse = await postReq(envWith(cap), {
     level: "course",
@@ -88,15 +89,77 @@ test("over-ceiling refuses without confirmation (409 + radius), files WITH it", 
   const rdata = await refuse.json();
   assert.equal(rdata.error.code, "ceiling_confirmation_required");
   assert.ok(rdata.radius.blocks > 100);
+  assert.equal(typeof rdata.confirmation_token, "string");
+  assert.ok(rdata.confirmation_token.length > 40);
   assert.equal(cap.filed, undefined, "nothing may be filed on refusal");
 
   const okRes = await postReq(envWith(cap), {
     level: "course",
     instruction: "Modernize the tone throughout the whole course.",
     confirmed: true,
+    confirmation_token: rdata.confirmation_token,
   });
   assert.equal(okRes.status, 200);
   assert.equal(cap.filed.confirmed, true);
+});
+
+test("part-scope confirmation cannot be laundered into a course-wide request", async () => {
+  const cap = {};
+  const challenged = await postReq(envWith(cap), {
+    level: "part", matter: SLUG, part: "case-file",
+    instruction: "Update this case file.",
+  });
+  assert.equal(challenged.status, 409);
+  const challenge = await challenged.json();
+
+  const laundered = await postReq(envWith(cap), {
+    level: "course",
+    instruction: "Delete every paragraph course-wide",
+    confirmed: true,
+    confirmation_token: challenge.confirmation_token,
+  });
+  assert.equal(laundered.status, 409);
+  assert.equal(cap.filed, undefined, "a changed scope must not be filed");
+});
+
+test("changing the wording invalidates an otherwise matching confirmation", async () => {
+  const cap = {};
+  const challenged = await postReq(envWith(cap), {
+    level: "course", instruction: "Modernize the tone throughout the whole course.",
+  });
+  const challenge = await challenged.json();
+  const changed = await postReq(envWith(cap), {
+    level: "course", instruction: "Delete every paragraph course-wide",
+    confirmed: true, confirmation_token: challenge.confirmation_token,
+  });
+  assert.equal(changed.status, 409);
+  assert.equal(cap.filed, undefined);
+});
+
+test("an expired confirmation token is refused and freshly challenged", async () => {
+  const cap = {};
+  const radius = enumerateScope({ level: "course" });
+  const instruction = "Modernize the tone throughout the whole course.";
+  const expired = await mintScopedConfirmationToken(ENV_BASE.SESSION_SIGNING_KEY, {
+    level: "course", matter: null, part: null, module: null, instruction, radius,
+  }, { expiresAt: Date.now() - 1 });
+  const refused = await postReq(envWith(cap), {
+    level: "course", instruction, confirmed: true, confirmation_token: expired,
+  });
+  assert.equal(refused.status, 409);
+  const challenge = await refused.json();
+  assert.equal(typeof challenge.confirmation_token, "string");
+  assert.notEqual(challenge.confirmation_token, expired);
+  assert.equal(cap.filed, undefined);
+});
+
+test("a bare confirmed boolean is refused above the ceiling", async () => {
+  const cap = {};
+  const refused = await postReq(envWith(cap), {
+    level: "course", instruction: "Modernize the entire course.", confirmed: true,
+  });
+  assert.equal(refused.status, 409);
+  assert.equal(cap.filed, undefined);
 });
 
 test("invalid scope, empty instruction, and reserved bytes are rejected", async () => {
