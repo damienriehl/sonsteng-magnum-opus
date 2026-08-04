@@ -32,11 +32,12 @@ async function inspect(page, hierarchy) {
     const overlaps = (a,b) => a.l < b.r-1 && a.r > b.l+1 && a.t < b.b-1 && a.b > b.t+1;
     const headings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].filter(visible);
     let prior=0; const jumps=[]; headings.forEach((h)=>{const level=+h.tagName[1];if(prior&&level>prior+1)jumps.push(`h${prior}->h${level}: ${(h.textContent||'').trim().slice(0,50)}`);prior=level;});
-    const regions=[...document.querySelectorAll('.masthead,nav,.card,.doc-card,.viz-card,main button,main input,main textarea,main select')].filter(visible);
+    const regions=[...document.querySelectorAll('.masthead,nav,.card,.doc-card,.viz-card,main button,main input,main textarea,main select')]
+      .filter(visible).map((el)=>({el,box:box(el)}));
     const collisions=[];
     for(let i=0;i<regions.length;i++) for(let j=i+1;j<regions.length;j++) {
-      const a=regions[i],b=regions[j]; if(a.contains(b)||b.contains(a))continue;
-      if(overlaps(box(a),box(b))) collisions.push(`${a.className||a.tagName} <> ${b.className||b.tagName}`);
+      const a=regions[i],b=regions[j]; if(a.el.contains(b.el)||b.el.contains(a.el))continue;
+      if(overlaps(a.box,b.box)) collisions.push(`${a.el.className||a.el.tagName} <> ${b.el.className||b.el.tagName}`);
       if(collisions.length>=8)break;
     }
     const metrics={};

@@ -221,7 +221,7 @@ const AUDIT = function () {
     try {
       await page.evaluateOnNewDocument((large) => localStorage.setItem('sonsteng-type-lg', large ? '1' : '0'), mode === 'large');
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      await new Promise((r) => setTimeout(r, 350));
+      await page.evaluate(() => document.fonts ? document.fonts.ready : Promise.resolve());
       const findings = await page.evaluate(AUDIT);
       const f = findings.filter((x) => x.level === 'FAIL');
       const w = findings.filter((x) => x.level === 'WARN');

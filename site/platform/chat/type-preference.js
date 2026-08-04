@@ -37,7 +37,7 @@
     return apply(enabled, true);
   }
 
-  var initial = apply(readAndMigrate(), false);
+  apply(readAndMigrate(), false);
   window.addEventListener('storage', function (event) {
     if (event.key === CANONICAL_KEY || event.key === LEGACY_KEY || event.key === null) {
       apply(readAndMigrate(), true);
@@ -51,7 +51,6 @@
       listeners.push(listener);
       listener(document.documentElement.classList.contains('type-lg'));
       return function () { listeners = listeners.filter(function (item) { return item !== listener; }); };
-    },
-    initial: initial
+    }
   };
 })();
