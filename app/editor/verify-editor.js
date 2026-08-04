@@ -157,6 +157,18 @@ async function run() {
       b2 && b2.editable === true && b2.commentOnly === false, 'kind=' + (b2 && b2.kind) + ' editable=' + (b2 && b2.editable));
     assert('C2 inline-formatted block IS editable (WP7 span-splice, needs_human on ambiguity)',
       b3 && b3.editable === true && b3.commentOnly === false, 'kind=' + (b3 && b3.kind) + ' editable=' + (b3 && b3.editable));
+    const collision3 = await page.evaluate(() => {
+      const tools = document.querySelector('.eb-tools[data-eb-for="3"]');
+      return {
+        text: window.SonstengEditor.blockText(3),
+        pills: Array.from(tools ? tools.querySelectorAll('.eb-status') : []).map(el => el.textContent)
+      };
+    });
+    assert('C2A applied prose and a pending structural insert at the same block index are both represented',
+      /marshal the facts/.test(collision3.text) &&
+      collision3.pills.some(p => /Live/.test(p)) &&
+      collision3.pills.some(p => /New paragraph.*waiting for review/i.test(p)),
+      'text="' + collision3.text.slice(0, 45) + '" pills=' + JSON.stringify(collision3.pills));
     // A formatted block must enter a real edit session and carry a suggestion id.
     await page.evaluate(() => window.SonstengEditor.typeInto(3, 'A formatted line, now genuinely editable.'));
     const b3after = await page.evaluate(() => window.SonstengEditor.block(3));
