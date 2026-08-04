@@ -120,9 +120,23 @@ class NewCoverageTest(unittest.TestCase):
 
     # ---- R1: the landing pages carry their authored copy ----------------- #
     def test_authored_page_copy_counts(self):
-        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["index.html"]), 21)
         self.assertEqual(len(self.pages["matters/index.html"]), 3)
         self.assertEqual(len(self.pages["firm/index.html"]), 33)
+
+    def test_multi_surface_copy_is_read_only(self):
+        refs = {b["source_ref"] for b in self.pages["index.html"]}
+        read_only_refs = {
+            "data/copy/home.json#explore.cards.skills.title",
+            "data/copy/home.json#explore.cards.templates.title",
+        }
+        for code in ("M1", "M2", "M3"):
+            for field in ("title", "thesis"):
+                read_only_refs.add(
+                    "data/copy/home.json#volumes.modules.%s.%s" % (code, field))
+        for ref in sorted(read_only_refs):
+            with self.subTest(ref=ref):
+                self.assertNotIn(ref, refs)
 
     def test_page_copy_sources_are_page_local(self):
         expected = {

@@ -1319,10 +1319,12 @@ def build_home(corpus):
             mod_counts[t.get("module")].add(ref.split(".")[0])
     for code, meta in MODULE_META.items():
         module = copy["volumes"]["modules"][code]
-        title, title_eb = _copy_scalar("home", copy, "volumes.modules.%s.title" % code,
-                                      "home · curriculum modules")
-        thesis, thesis_eb = _copy_scalar("home", copy, "volumes.modules.%s.thesis" % code,
-                                        "home · curriculum modules")
+        # Module titles and theses also render on the module-cover pages. Until
+        # the editor has an explicit shared-scalar contract, keep these shared
+        # leaves read-only on every surface rather than allowing a home-page
+        # edit to silently change another page.
+        title, title_eb = module["title"], ""
+        thesis, thesis_eb = module["thesis"], ""
         acc = {"brass": "", "claret": " volume--claret", "green": " volume--green"}[meta["accent"]]
         vols.append("""
     <a class="card volume{acc}" href="modules/{lo}.html">
@@ -1351,7 +1353,15 @@ def build_home(corpus):
             fields = ["meta", "description"]
         for field in fields:
             path = "explore.cards.%s.%s" % (card, field)
-            values[path], attrs[path] = _copy_scalar("home", copy, path, "home · %s card" % card)
+            value = copy["explore"]["cards"][card][field]
+            # These headings also render as authored headings on their target
+            # pages. Keep duplicate rendered values read-only until edits have
+            # an explicit cross-surface contract.
+            if path in ("explore.cards.skills.title", "explore.cards.templates.title"):
+                values[path], attrs[path] = value, ""
+            else:
+                values[path], attrs[path] = _copy_scalar(
+                    "home", copy, path, "home · %s card" % card)
 
     body = """
 <section class="hero reveal">

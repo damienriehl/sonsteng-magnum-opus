@@ -78,7 +78,7 @@ class EditorMapReachabilityTest(unittest.TestCase):
                               f"{page} is linked from the site nav; /edit must resolve it")
 
     def test_authored_landing_pages_are_editable(self):
-        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["index.html"]), 21)
         self.assertEqual(len(self.pages["matters/index.html"]), 3)
         self.assertEqual(len(self.pages["firm/index.html"]), 33)
 
