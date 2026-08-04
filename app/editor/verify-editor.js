@@ -470,6 +470,36 @@ async function run() {
     const scCopy = await page.$eval('.eb-scoped__lede', el => el.textContent);
     assert('SC1 dialog states plainly that Damien approves before anything changes',
       /Damien approves/.test(scCopy), '"' + scCopy.slice(0, 60) + '"');
+    const scBusinessOption = await page.evaluate(() => {
+      const sel = document.querySelector('.eb-scoped__scope');
+      const option = Array.from(sel.options).find(o => o.textContent === 'This matter\u2019s business arrangements');
+      if (!option) return null;
+      sel.value = option.value;
+      document.querySelector('.eb-scoped__text').value = 'Update the fee arrangement.';
+      return option.textContent;
+    });
+    await page.click('.eb-scoped__send');
+    await page.waitForFunction(() => {
+      const l = window.__MOCK_CTRL__.last();
+      return l && l.instruction === 'Update the fee arrangement.';
+    }, { timeout: 4000 });
+    await page.waitForFunction(() => {
+      const send = document.querySelector('.eb-scoped__send');
+      return send && send.disabled === false;
+    }, { timeout: 4000 });
+    const scBusinessPayload = await page.evaluate(() => {
+      const l = window.__MOCK_CTRL__.last();
+      return { level: l.level, matter: l.matter, part: l.part };
+    });
+    const scExpectedBusinessPayload = {
+      level: 'part', matter: 'm05-dwi-meridian', part: 'business'
+    };
+    assert('SC1B business arrangements is offered and sends the exact business part scope',
+      scBusinessOption === 'This matter\u2019s business arrangements' &&
+      JSON.stringify(scBusinessPayload) === JSON.stringify(scExpectedBusinessPayload),
+      'scope=' + JSON.stringify(scBusinessPayload));
+    await page.click('.eb-scoped__cancel');
+    await page.click('.editor-banner__bigger');
     // Reload round-trip: text, scope, and the idempotency id travel together.
     const scDraftBefore = await page.evaluate(() => {
       const sel = document.querySelector('.eb-scoped__scope');

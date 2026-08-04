@@ -60,6 +60,9 @@ header.hero{padding:clamp(56px,10vh,120px) 0 clamp(40px,7vh,80px);position:relat
 .hero .lede{font-size:clamp(1.15rem,2.1vw,1.5rem);max-width:40ch;color:var(--ink-soft);margin-top:22px;font-weight:500}
 .hero .by{margin-top:34px;font-size:.82rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);font-family:'Fraunces',serif;font-weight:600}
 .hero .by b{color:var(--ink)}
+.hero-cta{display:inline-block;margin-top:28px;font-family:'Fraunces',serif;font-weight:700;letter-spacing:.04em;text-decoration:none;background:var(--claret);color:#f5ece0;padding:13px 24px;border-radius:100px;transition:transform .15s,background .2s}
+.hero-cta:hover{background:var(--claret-deep);transform:translateY(-1px)}
+.hero-cta:focus-visible{outline:3px solid var(--brass);outline-offset:3px}
 .seal{position:absolute;right:clamp(16px,4vw,48px);top:clamp(40px,8vh,90px);width:clamp(96px,13vw,168px);height:clamp(96px,13vw,168px);opacity:.9;animation:spin 90s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:720px){.seal{display:none}}
@@ -70,6 +73,7 @@ header.hero{padding:clamp(56px,10vh,120px) 0 clamp(40px,7vh,80px);position:relat
 .stag>*{opacity:0;transform:translateY(20px);animation:rise .9s cubic-bezier(.2,.7,.2,1) forwards}
 .stag>*:nth-child(1){animation-delay:.05s}.stag>*:nth-child(2){animation-delay:.18s}
 .stag>*:nth-child(3){animation-delay:.32s}.stag>*:nth-child(4){animation-delay:.46s}.stag>*:nth-child(5){animation-delay:.6s}
+.stag>*:nth-child(6){animation-delay:.74s}
 @keyframes rise{to{opacity:1;transform:none}}
 
 /* ---------- SECTIONS ---------- */
@@ -265,6 +269,7 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
   <div class="kicker"><span class="eyebrow">A Magnum Opus · Est. 2026</span><hr class="rule"></div>
   <h1>Training the next generation<br>of <span class="em">advocates.</span></h1>
   <p class="lede">One professor's life work — consolidated into a living practicum where a human&nbsp;+&nbsp;AI apprenticeship teaches lawyers to be the finest advocates they can be.</p>
+  <a class="hero-cta" href="/platform/">Enter the Practicum — Explore the Scenarios</a>
   <p class="by">The work of <b>John&nbsp;O.&nbsp;Sonsteng</b> · with <b>Roger&nbsp;S.&nbsp;Haydock</b> · open &amp; MIT-licensed</p>
 </div></header>
 

@@ -18,29 +18,19 @@ TWO FLAG CLASSES, visibly distinct in the comment text:
                         degrades gracefully (CLI missing/timeout -> log, never
                         crash) exactly like editorial_pass.
 
-THE DETERMINISTIC PASS (exact rules):
-  With --since <git range> ("BASE..HEAD" or a base rev):
+THE DETERMINISTIC PASS (requires --since <git range>, either "BASE..HEAD" or
+a base rev):
     1. Load the matter's fact rows (mirror of build_site._fact_rows: matter.json
        top-level scalars off the deny list, custom_facts, and business.json
        intake/conflicts_check/engagement scalar leaves) at BASE (git show) and
        at the worktree.
-    2. A fact whose value CHANGED (same json_path, old != new, len(old) >= 4,
-       and old is not a substring of new) is a candidate.
+    2. A fact whose value CHANGED (same json_path, old != new) is a candidate
+       when its old value is at least four characters, or is a short numeric
+       value that can be matched with disambiguating context.
     3. Every PROSE block of the same matter (editor map blocks whose source_ref
        starts data/matters/<slug>/, kind == "prose", deduped by source_ref)
-       whose original_text still contains the OLD literal -> one STALE-VALUE
-       flag on that block.
-  Without --since (internally-consistent fallback; dates + money ONLY):
-    1. Only facts whose whole value is date-shaped (YYYY-MM-DD) or
-       money-shaped ($1,234.56) participate.
-    2. A prose block is flagged for a fact only when the correspondence is
-       unambiguous: the fact's label has AT LEAST TWO distinctive words (>= 3
-       chars, from the json_path leaf, e.g. intake_date -> "intake", "date";
-       a generic one-word label like as_of_date -> "date" never participates),
-       ALL of those words appear in the block, the block contains EXACTLY ONE
-       distinct literal of the same shape, that literal differs from the
-       fact's value, and NO OTHER same-shape fact of the matter also has all
-       its label words in the block.
+       whose original_text still contains the OLD value (including written
+       dates and comma/currency-formatted numbers) -> one STALE-VALUE flag.
   Conservative by design: an untouched matter yields ZERO flags (the plan's
   verification), because prose that restates the CURRENT value never differs.
 
@@ -52,7 +42,7 @@ NOT WIRED into the direct-apply daemon tick — that wiring lands with U8's
 polish. Runnable standalone:
 
     python3 tools/editor_consistency.py --matter m03-tort-meridian \
-        [--since BASE..HEAD] [--dry-run] [--no-model]
+        --since BASE..HEAD [--dry-run] [--no-model]
 
 Python 3, stdlib only. The git reads, map load, facts load, CLI call and flag
 filing are all injectable (see tools/tests/test_editor_consistency.py).
@@ -92,21 +82,6 @@ FACTS_DENY = {"id", "@id", "@context", "schema_version", "slug", "shape",
               "letter_md"}
 FACTS_BUSINESS_SECTIONS = ("intake", "conflicts_check", "engagement")
 
-# Mechanical "shapes" for the fallback check — dates and money ONLY.
-SHAPE_RES = {
-    # Dates appear in TWO forms and both must be seen. The facts carry ISO
-    # ("2025-02-13"); the prose almost always restates them the way a lawyer
-    # writes them ("February 13, 2025" — 359 blocks in the corpus). An
-    # ISO-only pattern made this checker structurally incapable of a true
-    # flag: an adversarial pass perturbed all 80 participating facts and got
-    # ZERO flags. Matching both forms is what makes the check real.
-    "date": re.compile(
-        r"\b\d{4}-\d{2}-\d{2}\b"
-        r"|\b(?:January|February|March|April|May|June|July|August|September|"
-        r"October|November|December)\s+\d{1,2},\s+\d{4}\b"),
-    "money": re.compile(r"\$\d[\d,]*(?:\.\d{2})?"),
-}
-
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December")
 
@@ -123,22 +98,10 @@ def date_forms(value):
     return forms
 
 
-def literal_matches_fact(literal, fact_value, shape):
-    """Does a literal found in prose denote this fact's value? Dates compare
-    across written forms; everything else is exact."""
-    if shape == "date":
-        return literal in date_forms(fact_value)
-    return literal == str(fact_value)
-
-
 def _fact_label(path):
     """Human label from a dotted path: 'intake.intake_date' -> 'Intake date'."""
     leaf = path.split(".")[-1]
     return leaf.replace("_", " ").strip().capitalize()
-
-
-def _label_words(path):
-    return [w for w in _fact_label(path).lower().split() if len(w) >= 3]
 
 
 # --------------------------------------------------------------------------- #
@@ -242,12 +205,21 @@ def base_rev(since):
     return since
 
 
+def _numeric_parts(value):
+    """Return (number, currency, percent) for a scalar numeric literal."""
+    match = re.fullmatch(r"\s*(\$)?(-?\d+(?:\.\d+)?)(%)?\s*", str(value))
+    if not match:
+        return None
+    return match.group(2), bool(match.group(1)), bool(match.group(3))
+
+
 def diff_fact_rows(old_rows, new_rows, min_len=4):
     """Changed fact values old -> new. Pure. Returns
     [{fact_path: 'relpath#json_path', label, old, new}] for paths present in
-    BOTH revisions whose stringified values differ, where len(old) >= min_len
-    and old is NOT a substring of new (a containing block would then match both
-    and the stale test would false-flag prose carrying the new value)."""
+    BOTH revisions whose stringified values differ. Values shorter than
+    min_len remain excluded except for numeric values of at least three digits
+    or values carrying an explicit currency/percent marker; stale_value_flags
+    requires safe context before matching short numerics."""
     old_by = {("%s#%s" % (r, p)): (p, str(v)) for r, p, v in old_rows}
     changed = []
     for r, p, v in new_rows:
@@ -256,7 +228,12 @@ def diff_fact_rows(old_rows, new_rows, min_len=4):
             continue
         old = old_by[key][1]
         new = str(v)
-        if old == new or len(old) < min_len or old in new:
+        numeric = _numeric_parts(old)
+        numeric_digits = (len(numeric[0].replace("-", "").replace(".", ""))
+                          if numeric else 0)
+        short_numeric_safe = bool(
+            numeric and (numeric_digits >= 3 or numeric[1] or numeric[2]))
+        if old == new or (len(old) < min_len and not short_numeric_safe):
             continue
         changed.append({"fact_path": key, "label": _fact_label(p),
                         "old": old, "new": new})
@@ -294,83 +271,93 @@ def blocks_for_matter(bundle, slug):
 # 3) Deterministic pass — stale values (pure)
 # --------------------------------------------------------------------------- #
 def stale_value_flags(changed, blocks):
-    """--since mode: prose blocks still carrying a CHANGED fact's OLD literal."""
+    """--since mode: prose blocks still carrying a changed fact's old value.
+
+    Matching widens only through deterministic equivalent spellings. Numeric
+    matches have digit boundaries, and an occurrence contained in the new
+    value is ignored, which makes substring renames safe.
+    """
     flags = []
     for ch in changed:
         for b in blocks:
             text = b.get("original_text") or ""
-            if ch["old"] not in text:
+            literal = _stale_literal_in_text(ch, text)
+            if literal is None:
                 continue
             msg = ('%sthis paragraph still says "%s", but the Fact \'%s\' is '
                    'now "%s". %s'
-                   % (FACT_PREFIX, ch["old"], ch["label"], ch["new"],
+                   % (FACT_PREFIX, literal, ch["label"], ch["new"],
                       REPAIR_ROUTES))
             flags.append({"source_ref": b["source_ref"],
                           "fact_path": ch["fact_path"],
-                          "old_literal": ch["old"],
+                          "old_literal": literal,
                           "severity": "consistency",
                           "message": msg})
     return flags
 
 
-def value_shape(sval):
-    for name, rx in SHAPE_RES.items():
-        if rx.fullmatch(sval):
-            return name
+def _value_forms(value):
+    """Deterministic prose spellings for dates and scalar numbers."""
+    forms = set(date_forms(value))
+    numeric = _numeric_parts(value)
+    if not numeric:
+        return forms
+    number, had_currency, had_percent = numeric
+    integer, dot, fraction = number.partition(".")
+    grouped = format(int(integer), ",") + (dot + fraction if dot else "")
+    numeric_forms = {number, grouped}
+    if had_percent:
+        numeric_forms = {form + "%" for form in numeric_forms}
+    # Dollar-prefixed prose is an unambiguous rendering of a numeric fact even
+    # when JSON stores the amount without its presentation symbol.
+    numeric_forms |= {"$" + form for form in numeric_forms}
+    return forms | numeric_forms
+
+
+def _form_spans(text, forms):
+    """Yield longest-first exact form matches outside larger alphanumerics."""
+    alternatives = []
+    for form in sorted(forms, key=lambda item: (-len(item), item)):
+        suffix = r"(?![\w])"
+        # A complete numeric spelling cannot stop immediately before another
+        # decimal/grouping digit: 2,500 must not match the prefix of 2,500.50.
+        if form and form[-1].isdigit():
+            suffix = r"(?![\w]|[.,]\d)"
+        alternatives.append(re.escape(form) + suffix)
+    pattern = "|".join(alternatives)
+    if not pattern:
+        return []
+    return list(re.finditer(r"(?<![\w])(?:%s)" % pattern, text))
+
+
+def _short_numeric_match_is_safe(ch, text, match):
+    numeric = _numeric_parts(ch["old"])
+    if not numeric or len(ch["old"]) >= 4:
+        return True
+    literal = match.group(0)
+    if literal.startswith("$") or literal.endswith("%"):
+        return True
+    after = text[match.end():match.end() + 16]
+    if re.match(r"\s*(?:dollars?|percent|years?|months?|days?|hours?)\b", after,
+                re.IGNORECASE):
+        return True
+    words = [word for word in ch["label"].lower().split() if len(word) >= 3]
+    nearby = text[max(0, match.start() - 48):match.end() + 48].lower()
+    return bool(words) and all(re.search(r"\b%s\b" % re.escape(word), nearby)
+                               for word in words)
+
+
+def _stale_literal_in_text(ch, text):
+    old_matches = _form_spans(text, _value_forms(ch["old"]))
+    new_spans = [(m.start(), m.end()) for m in
+                 _form_spans(text, _value_forms(ch["new"]))]
+    for match in old_matches:
+        if any(start <= match.start() and match.end() <= end
+               for start, end in new_spans):
+            continue
+        if _short_numeric_match_is_safe(ch, text, match):
+            return match.group(0)
     return None
-
-
-def fallback_mismatch_flags(fact_rows, blocks):
-    """No-history mode: dates + money only, unambiguous correspondence only
-    (exact rules in the module docstring). Conservative: zero false flags on an
-    untouched matter beats coverage.
-
-    KNOW ITS CEILING — measured, not assumed. Correspondence here rests on the
-    fact's LABEL words appearing in the same paragraph as the literal, and
-    real prose does not write that way: it says "On February 13, 2025, I met
-    with the client", never "intake date". Perturbing every participating fact
-    in the live corpus yields ZERO flags. So this mode is a floor, not a
-    check: it exists to be silent-and-safe when no history is available, and
-    run() says so out loud rather than printing a clean report that reads like
-    an all-clear. The mode with real catch power is --since, which compares
-    the OLD literal against the prose and needs no label correspondence."""
-    shaped = []
-    for relpath, path, value in fact_rows:
-        sval = str(value)
-        shape = value_shape(sval)
-        # A one-word label ("date") is generic enough to match unrelated prose
-        # (an untouched exhibit mentioning any other date would false-flag) —
-        # only facts with a distinctive multi-word label participate.
-        if shape and len(_label_words(path)) >= 2:
-            shaped.append({"fact_path": "%s#%s" % (relpath, path),
-                           "label": _fact_label(path),
-                           "words": _label_words(path),
-                           "shape": shape, "value": sval})
-    flags = []
-    for b in blocks:
-        text = b.get("original_text") or ""
-        low = text.lower()
-        for shape, rx in SHAPE_RES.items():
-            literals = sorted(set(rx.findall(text)))
-            if len(literals) != 1:
-                continue  # none, or ambiguous which literal maps to which fact
-            lit = literals[0]
-            matching = [f for f in shaped if f["shape"] == shape
-                        and f["words"] and all(w in low for w in f["words"])]
-            if len(matching) != 1:
-                continue  # no labelled fact here, or more than one -> ambiguous
-            f = matching[0]
-            if literal_matches_fact(lit, f["value"], shape):
-                continue  # prose agrees with the current fact (any written form)
-            msg = ('%sthis paragraph says "%s" where the Fact \'%s\' says '
-                   '"%s". %s'
-                   % (FACT_PREFIX, lit, f["label"], f["value"], REPAIR_ROUTES))
-            flags.append({"source_ref": b["source_ref"],
-                          "fact_path": f["fact_path"],
-                          "old_literal": lit,
-                          "severity": "consistency",
-                          "message": msg})
-    return flags
 
 
 # --------------------------------------------------------------------------- #
@@ -488,10 +475,13 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
     facts_loader = facts_loader or (lambda slug: load_fact_rows(repo_root, slug))
     flag_filer = flag_filer or (lambda payload: ep.file_flag(api_base, token, payload))
     base = base_rev(since)
+    if not since:
+        print("[consistency] this checker requires --since <rev>; refusing to "
+              "run without fact history.", file=out)
+        return ConsistencyResult([], [], [], 0, "missing_since", [])
     # A --since that cannot be honoured must fail LOUDLY. Falling through to
-    # the (much weaker) no-history mode printed a clean report for a typo'd
-    # base — the worst failure this tool can have, because "clean" is exactly
-    # what it says when everything is fine. Only checked when the real git
+    # any other behavior could print a misleading clean report. Only checked
+    # when the real git
     # loader will run (an injected loader owns its own revisions).
     if since and old_facts_loader is None:
         if not base:
@@ -513,13 +503,6 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
               file=out)
         return ConsistencyResult([], [], [], 0, "", [])
 
-    if not since:
-        print("[consistency] NO --since: running the limited no-history check. "
-              "It can only see a date/money literal in a paragraph that also "
-              "names the fact's label, which real prose rarely does — treat a "
-              "clean result here as 'not checked', NOT as 'consistent'. Pass "
-              "--since <rev> for the real check.", file=out)
-
     slugs = [matter] if matter else sorted(
         {(b.get("source_ref") or "").split("/")[2]
          for blocks in (bundle.get("pages") or {}).values() for b in blocks or []
@@ -531,11 +514,8 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
         if not blocks:
             continue
         facts = facts_loader(slug)
-        if base:
-            changed = diff_fact_rows(old_facts_loader(slug), facts)
-            stale.extend(stale_value_flags(changed, blocks))
-        else:
-            stale.extend(fallback_mismatch_flags(facts, blocks))
+        changed = diff_fact_rows(old_facts_loader(slug), facts)
+        stale.extend(stale_value_flags(changed, blocks))
         if not no_model:
             mf, reason = model_contradiction_flags(slug, facts, blocks,
                                                    cli_runner=cli_runner)
@@ -591,9 +571,12 @@ def main(argv=None):
         print("[consistency] %s unset — running as --dry-run." % ep.ENV_API_BASE)
         args.dry_run = True
 
-    run(api_base=api_base, token=token, matter=args.matter, since=args.since,
-        dry_run=args.dry_run, no_model=args.no_model)
-    return 0  # degradation is a clean, non-fatal exit (same discipline as editorial)
+    result = run(api_base=api_base, token=token, matter=args.matter,
+                 since=args.since, dry_run=args.dry_run,
+                 no_model=args.no_model)
+    if result.model_degraded in {"missing_since", "bad_since"}:
+        return 2
+    return 0  # model degradation remains non-fatal (same discipline as editorial)
 
 
 if __name__ == "__main__":

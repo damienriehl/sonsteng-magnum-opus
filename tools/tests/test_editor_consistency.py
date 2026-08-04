@@ -7,7 +7,7 @@ Pinned here:
   * a changed fact (old -> new) with prose still carrying OLD -> exactly one
     stale-value flag, comment begins "Fact check — ", names BOTH repair routes,
     targets the right source_ref;
-  * a clean (untouched) matter yields ZERO flags in both modes — the plan's
+  * a clean (untouched) matter yields ZERO flags — the plan's
     zero-false-flags verification;
   * model flags parse from the CLI JSON envelope and begin "AI guess — ";
     malformed model output degrades to zero model flags, no crash;
@@ -92,17 +92,83 @@ class TestStaleValue(unittest.TestCase):
         changed = ec.diff_fact_rows(self.NEW, self.NEW)
         self.assertEqual(changed, [])
 
-    def test_old_substring_of_new_is_skipped(self):
-        # containing new implies containing old -> would false-flag; skipped.
+    def test_substring_rename_flags_old_but_not_new(self):
         changed = ec.diff_fact_rows(
-            [(MATTER_REL, "caption", "Osgard v. Freight")],
-            [(MATTER_REL, "caption", "Osgard v. Freight Lines")])
-        self.assertEqual(changed, [])
+            [(MATTER_REL, "client_name", "Marceline Osgard")],
+            [(MATTER_REL, "client_name", "Marceline Osgard-Smith")])
+        flags = ec.stale_value_flags(changed, [
+            _block("old.md#b:aaaa", "Marceline Osgard signed the affidavit."),
+            _block("new.md#b:bbbb", "Marceline Osgard-Smith signed the affidavit."),
+        ])
+        self.assertEqual([f["source_ref"] for f in flags], [
+            "data/matters/%s/old.md#b:aaaa" % SLUG])
 
     def test_short_old_values_skipped(self):
         changed = ec.diff_fact_rows([(MATTER_REL, "n", "42")],
                                     [(MATTER_REL, "n", "43")])
         self.assertEqual(changed, [])
+
+    def test_short_numeric_currency_is_safe_but_bare_number_is_not(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "filing_fee", "250")],
+                                    [(MATTER_REL, "filing_fee", "275")])
+        flags = ec.stale_value_flags(changed, [
+            _block("currency.md#b:aaaa", "The filing fee is $250."),
+            _block("bare.md#b:bbbb", "There were 250 pages in the record."),
+        ])
+        self.assertEqual(len(flags), 1)
+        self.assertTrue(flags[0]["source_ref"].endswith("currency.md#b:aaaa"))
+
+    def test_short_percentage_with_explicit_marker_is_safe(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "interest_rate", "25%")],
+                                    [(MATTER_REL, "interest_rate", "30%")])
+        flags = ec.stale_value_flags(
+            changed, [_block("rate.md#b:aaaa", "Interest accrued at 25%.")])
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]["old_literal"], "25%")
+
+    def test_short_bare_numeric_requires_nearby_label_or_unit(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "filing_fee", "250")],
+                                    [(MATTER_REL, "filing_fee", "275")])
+        flags = ec.stale_value_flags(changed, [
+            _block("label.md#b:aaaa", "The filing fee remains 250."),
+            _block("unit.md#b:bbbb", "The charge remains 250 dollars."),
+            _block("far.md#b:cccc", "Filing fee. " + ("x" * 60) +
+                                     " The record has 250 pages."),
+        ])
+        self.assertEqual({f["old_literal"] for f in flags}, {"250"})
+        self.assertEqual(len(flags), 2)
+
+    def test_short_numeric_with_full_label_is_safe(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "filing_fee", "250")],
+                                    [(MATTER_REL, "filing_fee", "275")])
+        flags = ec.stale_value_flags(
+            changed, [_block("fee.md#b:aaaa", "The filing fee remains 250.")])
+        self.assertEqual(len(flags), 1)
+
+    def test_written_date_matches_changed_iso_fact(self):
+        changed = ec.diff_fact_rows(
+            [(MATTER_REL, "hearing_date", "2026-02-16")],
+            [(MATTER_REL, "hearing_date", "2026-03-02")])
+        flags = ec.stale_value_flags(
+            changed, [_block("memo.md#b:date", "Hearing: February 16, 2026.")])
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]["old_literal"], "February 16, 2026")
+
+    def test_formatted_integer_and_currency_match_numeric_fact(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "fee", 2500)],
+                                    [(MATTER_REL, "fee", 2750)])
+        flags = ec.stale_value_flags(changed, [
+            _block("plain.md#b:aaaa", "The fee remains 2,500 dollars."),
+            _block("money.md#b:bbbb", "The fee remains $2,500."),
+        ])
+        self.assertEqual({f["old_literal"] for f in flags}, {"2,500", "$2,500"})
+
+    def test_integer_does_not_match_prefix_of_decimal(self):
+        changed = ec.diff_fact_rows([(MATTER_REL, "fee", 2500)],
+                                    [(MATTER_REL, "fee", 2750)])
+        flags = ec.stale_value_flags(
+            changed, [_block("money.md#b:bbbb", "The amount is $2,500.50.")])
+        self.assertEqual(flags, [])
 
     def test_json_scalar_blocks_excluded(self):
         # the facts page's own value blocks are the facts, not restatements
@@ -112,58 +178,19 @@ class TestStaleValue(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
-# Fallback (no --since): dates + money, unambiguous only
+# --since is mandatory
 # --------------------------------------------------------------------------- #
-class TestFallbackMismatch(unittest.TestCase):
-    FACTS = [(BIZ_REL, "intake.intake_date", "2025-02-13"),
-             (BIZ_REL, "engagement.engagement_date", "2025-02-14")]
+class TestSinceRequired(unittest.TestCase):
+    def test_no_since_refuses_without_loading_map(self):
+        called = []
+        buf = io.StringIO()
+        res = _run(map_loader=lambda: called.append(True), out=buf)
+        self.assertEqual(res.model_degraded, "missing_since")
+        self.assertEqual(called, [])
+        self.assertIn("requires --since", buf.getvalue())
 
-    def test_labelled_wrong_date_flagged(self):
-        blocks = [_block("notes.md#b:aaaa",
-                         "The intake date recorded was 2025-03-01.")]
-        flags = ec.fallback_mismatch_flags(self.FACTS, blocks)
-        self.assertEqual(len(flags), 1)
-        self.assertTrue(flags[0]["message"].startswith("Fact check — "))
-        self.assertIn("2025-03-01", flags[0]["message"])
-        self.assertIn("2025-02-13", flags[0]["message"])
-
-    def test_matching_date_not_flagged(self):
-        blocks = [_block("notes.md#b:aaaa",
-                         "The intake date recorded was 2025-02-13.")]
-        self.assertEqual(ec.fallback_mismatch_flags(self.FACTS, blocks), [])
-
-    def test_two_literals_ambiguous_not_flagged(self):
-        blocks = [_block("notes.md#b:aaaa",
-                         "Intake date 2025-03-01 or maybe 2025-03-02.")]
-        self.assertEqual(ec.fallback_mismatch_flags(self.FACTS, blocks), [])
-
-    def test_generic_one_word_label_never_participates(self):
-        # as_of_date -> distinctive words {"date"} only: too generic — an
-        # untouched exhibit mentioning any other date must NOT be flagged
-        # (this exact false flag fired on m01's repair logs before the guard).
-        facts = [(MATTER_REL, "as_of_date", "2026-06-30")]
-        blocks = [_block("case-file/exh-004.md#b:aaaa",
-                         "Repair log date of service: 2025-09-22.")]
-        self.assertEqual(ec.fallback_mismatch_flags(facts, blocks), [])
-
-    def test_no_label_words_not_flagged(self):
-        blocks = [_block("notes.md#b:aaaa",
-                         "Some unrelated deadline is 2025-03-01.")]
-        self.assertEqual(ec.fallback_mismatch_flags(self.FACTS, blocks), [])
-
-    def test_clean_matter_zero_flags_end_to_end(self):
-        # the plan's verification: an untouched matter files NOTHING
-        blocks = [
-            _block("notes.md#b:aaaa", "The intake date was 2025-02-13, as filed."),
-            _block("notes.md#b:bbbb", "Plain narrative with no literals at all."),
-        ]
-        filed = []
-        res = _run(map_loader=lambda: _bundle(blocks),
-                   facts_loader=lambda slug: self.FACTS,
-                   flag_filer=lambda p: (filed.append(p) or (True, 200)))
-        self.assertEqual(res.stale_flags, [])
-        self.assertEqual(res.model_flags, [])
-        self.assertEqual(filed, [])
+    def test_main_without_since_exits_nonzero(self):
+        self.assertNotEqual(ec.main(["--dry-run", "--no-model"]), 0)
 
 
 # --------------------------------------------------------------------------- #
@@ -320,10 +347,8 @@ if __name__ == "__main__":
 
 class TestCatchPowerCanary(unittest.TestCase):
     """The check that would have caught the shipped-inert checker: perturb a
-    fact that IS restated in prose and assert the --since path flags it.
-    An adversarial review measured the no-history fallback at a 0% catch rate
-    over the whole corpus; these pin the real mode's power and the loud
-    limitation notice on the weak one."""
+    fact that IS restated in prose and assert the required --since path flags
+    it, while an invalid base refuses with a failing process status."""
 
     def _blocks(self, *texts):
         return [{"source_ref": "data/matters/m03-tort-meridian/case-file/a.md#b0000000%d" % i,
@@ -340,14 +365,7 @@ class TestCatchPowerCanary(unittest.TestCase):
     def test_long_form_dates_are_recognized_as_the_same_date(self):
         # the corpus writes dates as prose; an ISO-only matcher was blind to it
         self.assertIn("February 13, 2025", ec.date_forms("2025-02-13"))
-        self.assertTrue(ec.literal_matches_fact("February 13, 2025", "2025-02-13", "date"))
-        self.assertFalse(ec.literal_matches_fact("February 14, 2025", "2025-02-13", "date"))
-
-    def test_no_since_run_states_its_limitation_out_loud(self):
-        import io
-        buf = io.StringIO()
-        ec.run(map_loader=lambda: {"pages": {}}, dry_run=True, no_model=True, out=buf)
-        self.assertIn("NOT as 'consistent'", buf.getvalue())
+        self.assertNotIn("February 14, 2025", ec.date_forms("2025-02-13"))
 
     def test_unresolvable_since_refuses_instead_of_reporting_clean(self):
         import io
@@ -356,3 +374,8 @@ class TestCatchPowerCanary(unittest.TestCase):
                      dry_run=True, no_model=True, out=buf)
         self.assertEqual(res.model_degraded, "bad_since")
         self.assertIn("refusing to run", buf.getvalue())
+
+    def test_unresolvable_since_exits_nonzero(self):
+        self.assertNotEqual(
+            ec.main(["--since", "no-such-rev-xyz..HEAD", "--dry-run", "--no-model"]),
+            0)
