@@ -900,12 +900,14 @@
     (s._tools || toolsEl(s)).appendChild(p);
     s._status = p; return p;
   }
-  function setLocalStatus(s, msg, cls, longMsg) {
-    var p = statusPill(s);
+  function setStatusPill(p, msg, cls, longMsg) {
     p.textContent = msg || '';
     p.className = 'eb-status' + (cls ? ' eb-status--' + cls : '');
     if (longMsg) p.setAttribute('title', longMsg); else p.removeAttribute('title');
     scheduleRailLayout();          // the pill just changed the rail's width
+  }
+  function setLocalStatus(s, msg, cls, longMsg) {
+    setStatusPill(statusPill(s), msg, cls, longMsg);
   }
 
   /* ---------- re-auth affordance (401, never a raw 4xx) -------------------- */
@@ -1632,7 +1634,7 @@
     if (item.map_version && MAP_ISLAND.version && item.map_version !== MAP_ISLAND.version) return false;
     return true;
   }
-  function paintHydration(s, item, label, tone) {
+  function paintHydration(s, item, label, tone, pill) {
     s.el.textContent = item.new_text;                 // textContent ONLY (XSS-safe)
     s.el.classList.add('eb--pending');
     s.el.setAttribute('data-eb-pending', '1');
@@ -1644,8 +1646,8 @@
     if (unmask) s.el.setAttribute('data-eb-warn', '1'); else s.el.removeAttribute('data-eb-warn');
     s._hydrated = true;
     s._attr = item.attribution || '';
-    setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
-    if (item.preview) statusPill(s).setAttribute('title', item.preview);
+    setStatusPill(pill, label + (item.attribution ? ' · ' + item.attribution : ''), tone);
+    if (item.preview) pill.setAttribute('title', item.preview);
   }
   // Revert a block we hydrated earlier this session back to its canonical
   // original (e.g. the suggestion was declined/superseded between polls). Never
@@ -1663,6 +1665,14 @@
   function renderPending(items) {
     clearMargins();
     items = items || [];
+    Object.keys(byIndex).forEach(function (idx) {
+      var s = byIndex[idx];
+      (s._pendingStatuses || []).forEach(function (p) {
+        if (p.parentNode) p.parentNode.removeChild(p);
+        if (s._status === p) s._status = null;
+      });
+      s._pendingStatuses = [];
+    });
     // Reconcile hydration first: any block we hydrated before but that is no
     // longer hydratable this pass reverts to its original text.
     var willHydrate = {};
@@ -1701,14 +1711,21 @@
         s.el.classList.add('eb--has-margin');
         marginBubbles.push(b);
       } else {
+        var pill = s._pendingStatuses.length ? el('span', 'eb-status') : statusPill(s);
+        if (s._pendingStatuses.length) {
+          pill.setAttribute('aria-live', 'polite');
+          (s._tools || toolsEl(s)).appendChild(pill);
+        }
+        s._pendingStatuses.push(pill);
+        s._status = pill;
         // prose/json_scalar suggestion — paint the new_text into the block
         // (WYSIWYG) when it's safe, else fall back to the pill-only status
         // (today's behavior). Attribution rides on the pill either way.
         if (canHydrate(s, item)) {
-          paintHydration(s, item, label, tone);
+          paintHydration(s, item, label, tone, pill);
         } else {
-          setLocalStatus(s, label + (item.attribution ? ' · ' + item.attribution : ''), tone,
-                         labelLong + (item.preview ? ' — “' + item.preview + '”' : ''));
+          setStatusPill(pill, label + (item.attribution ? ' · ' + item.attribution : ''), tone,
+                        labelLong + (item.preview ? ' — “' + item.preview + '”' : ''));
         }
         if (item.note) { showNote(s, 'Damien: ' + item.note); }
       }
