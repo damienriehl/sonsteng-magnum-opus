@@ -39,6 +39,13 @@ def test_both_interactive_surfaces_use_shared_large_type_control():
     assert "sonsteng_type_lg" not in chat
 
 
+def test_interactive_heading_sequences_start_with_h1_then_h2():
+    chat = read("chat.js")
+    critique = read("critique.js")
+    assert "el('h2', null, 'Take your transcript with you')" in chat
+    assert "el('h2', 'crit-card__name'" in critique
+
+
 def test_generated_shell_uses_the_same_prepaint_loader():
     generator = (ROOT / "tools" / "build_site.py").read_text(encoding="utf-8")
     generated = (ROOT / "site" / "platform" / "index.html").read_text(encoding="utf-8")

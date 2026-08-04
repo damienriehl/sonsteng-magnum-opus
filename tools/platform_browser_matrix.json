@@ -1,0 +1,27 @@
+{
+  "viewports": [
+    {"name": "desktop", "width": 1280, "height": 900},
+    {"name": "wide-breakpoint", "width": 960, "height": 900},
+    {"name": "wide-breakpoint-minus-one", "width": 959, "height": 900},
+    {"name": "narrow-breakpoint", "width": 672, "height": 900},
+    {"name": "narrow-breakpoint-minus-one", "width": 671, "height": 900},
+    {"name": "phone", "width": 390, "height": 844}
+  ],
+  "typeModes": ["baseline", "large"],
+  "requiredFamilies": ["home", "module", "skills", "matter-library", "packet", "facts", "law", "firm", "templates", "interview", "critique"],
+  "pages": [
+    {"family": "home", "path": "index.html", "hierarchy": {"primary": ".hero__proposition", "support": ".hero .lede", "section": ".section-head h2", "metadata": ".editorial-label"}},
+    {"family": "module", "path": "modules/m1.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".section-head h2", "metadata": ".card__meta"}},
+    {"family": "skills", "path": "skills/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".section-head h2", "metadata": ".eyebrow"}},
+    {"family": "matter-library", "path": "matters/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".shape-row__label", "metadata": ".card__meta"}},
+    {"family": "packet", "path": "matters/m03-tort-meridian/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".part__head h2", "metadata": ".doc-card__meta,.card__meta"}, "print": true},
+    {"family": "facts", "path": "matters/m03-tort-meridian/facts/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": "main h2", "metadata": ".fact-label"}, "print": true},
+    {"family": "law", "path": "matters/m03-tort-meridian/law/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": "main h2", "metadata": ".fact-label"}, "print": true},
+    {"family": "firm", "path": "firm/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".section-head h2", "metadata": ".card__meta,.eyebrow"}},
+    {"family": "templates", "path": "templates/index.html", "hierarchy": {"primary": "main h1", "support": ".lede", "section": ".section-head h2,main h2", "metadata": ".card__meta,.eyebrow"}, "print": true},
+    {"family": "interview", "path": "chat/test.html?view=chat&matter=m05&persona=m05.per.halvard&title=State%20v.%20Halvard&client=Devon%20Halvard&scenario=normal", "interactive": true},
+    {"family": "critique", "path": "chat/test.html?view=critique&matter=m05&title=Suppression%20Memo%20Critique", "interactive": true}
+  ],
+  "generatedCorpus": {"include": ["**/*.html"], "exclude": ["assets/preview.html", "about/third-party.html", "chat/index.html", "chat/critique.html"]},
+  "screenshots": ["home", "module", "packet", "facts", "interview", "critique"]
+}

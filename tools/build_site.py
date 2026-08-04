@@ -846,8 +846,8 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .masthead__inner{gap:var(--sp-6)}
 .masthead__brand{font-family:var(--font-display);font-size:var(--fs-md);font-weight:900;
   letter-spacing:-.02em;color:var(--ink)}
-.masthead__docket{margin-left:auto}
-.type-toggle{margin-left:var(--sp-6);appearance:none;cursor:pointer;background:transparent;
+.masthead__docket{margin-left:auto;overflow-wrap:anywhere}
+.type-toggle{margin-left:var(--sp-6);appearance:none;cursor:pointer;background:transparent;flex:none;
   /* The large-type control is the page's own accessibility affordance — it has
      no business being the smallest target on the masthead. 44px (WCAG 2.5.5). */
   display:inline-flex;align-items:center;min-height:44px;
@@ -862,8 +862,8 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
   border-top:var(--rule-bold) solid var(--border-strong)}
 .section-head .editorial-label{font-size:var(--fs-editorial-label)}
 .grid{display:grid;gap:var(--sp-6)}
-.grid--3{grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
-.grid--2{grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
+.grid--3{grid-template-columns:repeat(auto-fit,minmax(min(15rem,100%),1fr))}
+.grid--2{grid-template-columns:repeat(auto-fit,minmax(min(18rem,100%),1fr))}
 .eyebrow{font-family:var(--font-mono);font-size:var(--fs-editorial-label);font-weight:700;
   text-transform:uppercase;letter-spacing:.075em;color:var(--claret-strong);margin:0 0 var(--sp-3)}
 .chips{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
@@ -877,14 +877,14 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .hero{padding:var(--sp-16) 0 var(--sp-8);display:grid;gap:var(--sp-3)}
 .hero__proposition{font-size:var(--fs-display);max-width:14ch}
 .hero .lede{font-size:var(--fs-md);line-height:1.6;max-width:62ch}
-.volumes{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
+.volumes{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(min(15rem,100%),1fr))}
 .volume{position:relative;overflow:hidden}
 .volume__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);line-height:1;
   color:var(--brass-text);letter-spacing:-.02em}
 .volume--claret .volume__num{color:var(--claret)}
 .volume--green .volume__num{color:var(--green)}
 .volume.card--featured{background:var(--surface-featured);border-color:var(--claret)}
-.entry-cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
+.entry-cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(min(16rem,100%),1fr))}
 
 /* ---- module pages ---- */
 .module-numeral{font-family:var(--font-display);font-weight:900;
@@ -909,11 +909,11 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .template-doc .part__head p.eyebrow{margin-bottom:.15rem}
 
 .index-rows{border-top:var(--rule) solid var(--line)}
-.index-row{display:flex;gap:var(--sp-6);align-items:baseline;justify-content:space-between;
+.index-row{display:flex;flex-wrap:wrap;gap:var(--sp-3) var(--sp-6);align-items:baseline;justify-content:space-between;
   padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
-.index-row__main{flex:1}
+.index-row__main{flex:1 1 16rem;min-width:0}
 .index-row__code{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint-text);
-  letter-spacing:.08em;text-transform:uppercase}
+  letter-spacing:.08em;text-transform:uppercase;overflow-wrap:anywhere}
 
 /* ---- skills browser ---- */
 .skill-card{margin:var(--sp-3) 0;scroll-margin-top:5rem}
@@ -923,8 +923,8 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .skill-card summary::before{content:"▸";color:var(--brass-text);font-family:var(--font-mono);
   transition:transform var(--dur) var(--ease);display:inline-block}
 .skill-card[open] summary::before{transform:rotate(90deg)}
-.skill-card__name{font-family:var(--font-display);font-size:var(--fs-md);font-weight:600;flex:1;min-width:12rem}
-.skill-id{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint-text);letter-spacing:.08em}
+.skill-card__name{font-family:var(--font-display);font-size:var(--fs-md);font-weight:600;flex:1 1 12rem;min-width:0;overflow-wrap:anywhere}
+.skill-id{font-family:var(--font-mono);font-size:var(--fs-mono-xs);color:var(--ink-faint-text);letter-spacing:.08em;overflow-wrap:anywhere}
 .task-block{margin:var(--sp-3) 0 var(--sp-3) var(--sp-6);padding-left:var(--sp-3);
   border-left:var(--rule) solid var(--line)}
 .task-name{font-weight:600}
@@ -946,7 +946,7 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .shape-row{display:grid;grid-template-columns:1fr;gap:var(--sp-6);margin:var(--sp-6) 0;
   padding-top:var(--sp-6);border-top:var(--rule) solid var(--line)}
 .shape-row__label{font-family:var(--font-display);font-weight:600;font-size:var(--fs-lg)}
-.shape-row__cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(17rem,1fr))}
+.shape-row__cards{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(min(17rem,100%),1fr))}
 .matter-card__caption{font-family:var(--font-display);font-weight:600;font-size:var(--fs-md);margin:var(--sp-2) 0}
 .matter-card__premise{font-size:var(--fs-sm);color:var(--ink-soft)}
 .tier-hidden{display:none !important}
@@ -959,7 +959,7 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .part{margin:var(--sp-12) 0;scroll-margin-top:5rem}
 .part__num{font-family:var(--font-display);font-weight:900;font-size:var(--fs-2xl);color:var(--brass-text);
   line-height:1;letter-spacing:-.02em}
-.part__head{display:flex;gap:var(--sp-3);align-items:baseline;margin-bottom:var(--sp-3)}
+.part__head{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:baseline;margin-bottom:var(--sp-3)}
 .doc-card{margin:var(--sp-6) 0}
 .doc-card h3,.doc-card h4,.doc-card h5{font-family:var(--font-display)}
 .instructor-note{color:var(--ink-faint-text);font-style:italic;border-left:var(--rule) solid var(--line);
@@ -974,7 +974,7 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .persona-line{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center;
   padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
 .persona-line__name{font-weight:600;min-width:12rem}
-.tablewrap{overflow-x:auto}
+.tablewrap{overflow-x:auto;max-width:100%;min-width:0}
 .md-table td,.md-table th{white-space:nowrap}
 .md-quote{border-left:var(--rule-bold) solid var(--brass);padding-left:var(--sp-6);
   color:var(--ink-soft);font-style:italic;margin:var(--sp-6) 0}
@@ -982,6 +982,20 @@ details.side-conf{margin:var(--sp-3) 0;border:var(--rule) solid var(--line);bord
   padding:var(--sp-3) var(--sp-6);background:var(--paper-3)}
 details.side-conf summary{cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-mono-xs);
   text-transform:uppercase;letter-spacing:.08em;color:var(--claret)}
+
+/* Facts/law rows contain IDs, captions, and source values that may be long.
+   They wrap inside the page rather than making the document itself scroll. */
+.facts-panel{min-width:0}
+.fact-row{display:grid;grid-template-columns:minmax(10rem,16rem) minmax(0,1fr);gap:var(--sp-3) var(--sp-6);
+  padding:var(--sp-3) 0;border-bottom:var(--rule) solid var(--line-soft)}
+.fact-label{font-family:var(--font-mono);font-size:var(--fs-mono-xs);overflow-wrap:anywhere}
+.fact-uses{display:block;color:var(--ink-faint-text);margin-top:var(--sp-2)}
+.fact-value{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:42rem){
+  .masthead__docket{margin-left:0}.type-toggle{margin-left:0}
+  .task-block,.subtask{margin-left:0}
+  .facts-panel .fact-row{grid-template-columns:minmax(0,1fr)}
+}
 
 /* ---- firm dashboard / viz ---- */
 .viz-filter{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;margin:var(--sp-6) 0;
@@ -1502,7 +1516,7 @@ def build_modules(corpus):
         if volume_md.strip():
             prose_section = """
 <section class="volume-prose reveal" aria-label="The volume">
-  <p class="eyebrow">THE VOLUME · HOW THIS MODULE TEACHES</p>
+  <h2 class="eyebrow">THE VOLUME · HOW THIS MODULE TEACHES</h2>
   <div class="prose">{prose}</div>
 </section>
 <div class="brass-rule" role="presentation"></div>
@@ -1526,7 +1540,7 @@ def build_modules(corpus):
 <div class="brass-rule" role="presentation"></div>
 {prose_section}
 <section aria-label="Tasks in this module">
-  <p class="eyebrow">RULED INDEX · TASKS BY SKILL</p>
+  <h2 class="eyebrow">RULED INDEX · TASKS BY SKILL</h2>
   {rows}
 </section>
 <section aria-labelledby="mod-matters-h">
@@ -3148,8 +3162,8 @@ def build_facts_pages(corpus):
         rel = os.path.join("matters", slug, "facts", "index.html")
         body = """
 <section class="reveal">
-  <p class="eyebrow">THE FACTS OF THE SCENARIO</p>
   <h1>Facts — {caption}</h1>
+  <h2 class="eyebrow">THE FACTS OF THE SCENARIO</h2>
   <p class="lede">Every labelled fact below is the single source the pages are
   generated from. Change a value here and everything <em>rendered from it</em>
   follows on the next publish; passages that <em>restate</em> it in prose are
@@ -3269,8 +3283,8 @@ def build_law_pages(corpus):
         rel = os.path.join("matters", slug, "law", "index.html")
         body = """
 <section class="reveal">
-  <p class="eyebrow">THE GOVERNING LAW</p>
   <h1>Law — {caption}</h1>
+  <h2 class="eyebrow">THE GOVERNING LAW</h2>
   {banner}
   <p class="lede">{lede}</p>
 </section>

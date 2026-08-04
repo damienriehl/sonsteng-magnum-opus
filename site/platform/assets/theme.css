@@ -92,7 +92,7 @@ html.type-lg{
 
 /* ---------- 4. Reset + body washes + paper grain ---------- */
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;max-width:100%;overflow-x:clip}
 body{
   margin:0;
   min-height:100vh;
@@ -102,6 +102,7 @@ body{
   line-height:1.65;
   font-synthesis:none;
   -webkit-font-smoothing:antialiased;
+  max-width:100%;overflow-x:clip;
   /* two fixed radial washes: brass top-right, claret top-left */
   background:
     radial-gradient(58rem 40rem at 108% -8%, var(--brass-wash), transparent 60%),
@@ -133,6 +134,9 @@ h2{font-size:var(--fs-xl);font-weight:800;letter-spacing:-.025em;line-height:1}
 h3{font-size:var(--fs-lg);font-weight:700;line-height:1.05}
 h4{font-size:var(--fs-md)}
 p{margin:0 0 var(--space)}
+.wrap,main,section,article,div,header,footer,nav{min-width:0}
+.wrap,main,.card,.doc-card,.viz-card,.fact-row,.prose{overflow-wrap:anywhere}
+pre{max-width:100%;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .prose{max-width:var(--maxw-read)}
 .prose p,.measure{max-width:68ch}         /* prose measure ≤68ch */
 strong,b{font-weight:600}
@@ -370,11 +374,10 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 }
 .toc-rail a{
   color:var(--ink-faint-text);
-  /* 24px floor: these are the packet's navigation, and at .2em padding they
-     measured 23.6px tall — under WCAG 2.5.8 by a third of a pixel. */
+  /* Project target: generous navigation for readers using touch or Large Type. */
   display:flex;
   align-items:center;
-  min-height:24px;
+  min-height:44px;
   padding:.3em 0 .3em var(--sp-2);
   margin-left:calc(-1 * var(--sp-3) - var(--rule));
   border-left:var(--rule-bold) solid transparent;
@@ -468,7 +471,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   color:var(--ink-soft);
   background:transparent;border:0;
   border-radius:var(--radius);
-  padding:.5em .9em;min-height:2.4em;
+  padding:.5em .9em;min-height:44px;
   transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .segmented-toggle button[aria-pressed="true"],
@@ -492,7 +495,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 .masthead__inner{
   max-width:var(--maxw);margin:0 auto;
   padding:var(--sp-3) var(--gutter);
-  display:flex;align-items:center;gap:var(--sp-6);
+  display:flex;align-items:center;gap:var(--sp-6);flex-wrap:wrap;
 }
 .masthead__brand{
   font-family:var(--font-display);
@@ -512,6 +515,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   padding:var(--sp-3) var(--gutter);
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
   text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint-text);
+  overflow-wrap:anywhere;
 }
 .breadcrumb a{color:var(--brass-text)}
 .breadcrumb .sep{color:var(--line);margin:0 .5em}
@@ -534,6 +538,12 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 
 /* layout helper */
 .wrap{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}
+
+@media (max-width:42rem){
+  .masthead__inner{gap:var(--sp-2) var(--sp-3)}
+  .masthead__brand{flex:1 1 auto;overflow-wrap:anywhere}
+  .masthead__docket{order:3;flex:1 0 100%;margin-left:0}
+}
 
 /* ---------- 18. Motion ---------- */
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

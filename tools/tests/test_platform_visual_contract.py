@@ -103,3 +103,10 @@ def test_page_level_css_uses_shared_palette_tokens_only():
     assert "#" not in platform_css
     for forbidden in ("rgb(", "rgba(", "hsl(", "hsla("):
         assert forbidden not in platform_css
+
+
+def test_shared_navigation_and_segmented_controls_keep_large_targets():
+    source = css()
+    assert ".toc-rail a{" in source
+    assert ".segmented-toggle button{" in source
+    assert source.count("min-height:44px") >= 3

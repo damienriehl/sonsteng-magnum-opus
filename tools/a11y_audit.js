@@ -32,16 +32,8 @@ const fs = require('fs');
 
 const REPO = path.resolve(__dirname, '..');
 const SITE = path.join(REPO, 'site', 'platform');
-
-const DEFAULT_PAGES = [
-  'index.html',
-  'matters/index.html',
-  'matters/m03-tort-meridian/index.html',
-  'modules/m1.html',
-  'skills/index.html',
-  'firm/index.html',
-  'templates/index.html',
-];
+const MATRIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'platform_browser_matrix.json'), 'utf8'));
+const DEFAULT_PAGES = MATRIX.pages.filter((p) => !p.interactive).map((p) => p.path);
 
 const AUDIT = function () {
   /* ---- colour helpers (run INSIDE the page) ---- */
@@ -214,16 +206,20 @@ const AUDIT = function () {
 
 (async () => {
   const args = process.argv.slice(2);
-  const targets = args.length ? args : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p));
+  const explicitTargets = args.length > 0;
+  const targets = explicitTargets ? args : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p));
   const browser = await puppeteer.launch({
-    headless: false, args: ['--no-sandbox', '--window-size=1280,900'],
-    executablePath: '/snap/bin/chromium', defaultViewport: { width: 1280, height: 900 },
+    headless: process.env.HEADLESS === '1', args: ['--no-sandbox', '--window-size=1280,900'],
+    executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium', defaultViewport: { width: 1280, height: 900 },
+    userDataDir: path.join('/tmp', `sonsteng-a11y-${process.pid}`),
   });
   let fails = 0, warns = 0;
   const report = [];
-  for (const url of targets) {
+  const cases = targets.flatMap((url) => explicitTargets ? [{url, mode:'baseline'}] : MATRIX.typeModes.map((mode) => ({url, mode})));
+  for (const {url, mode} of cases) {
     const page = await browser.newPage();
     try {
+      await page.evaluateOnNewDocument((large) => localStorage.setItem('sonsteng-type-lg', large ? '1' : '0'), mode === 'large');
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
       await new Promise((r) => setTimeout(r, 350));
       const findings = await page.evaluate(AUDIT);
@@ -232,8 +228,8 @@ const AUDIT = function () {
       // NOTE-level entries are reasoned exceptions, printed but never counted.
       fails += f.length; warns += w.length;
       const short = url.replace('file://' + SITE + '/', '').replace(/^https?:\/\//, '');
-      report.push({ url: short, findings });
-      console.log(`\n=== ${short} — ${f.length} FAIL, ${w.length} WARN`);
+      report.push({ url: short, mode, findings });
+      console.log(`\n=== ${short} [${mode}] — ${f.length} FAIL, ${w.length} WARN`);
       const shown = new Set();
       findings.forEach((x) => {
         const k = x.check + '|' + x.detail;
@@ -247,7 +243,7 @@ const AUDIT = function () {
     }
     await page.close();
   }
-  console.log(`\n===== A11Y AUDIT: ${fails} FAIL, ${warns} WARN across ${targets.length} page(s) =====`);
+  console.log(`\n===== A11Y AUDIT: ${fails} FAIL, ${warns} WARN across ${cases.length} page/mode case(s) =====`);
   fs.writeFileSync(path.join(REPO, 'build', 'a11y-audit.json'), JSON.stringify(report, null, 2));
   await browser.close();
   process.exit(fails ? 1 : 0);

@@ -411,7 +411,7 @@
     /* export card */
     var exp = el('div', 'export card');
     exp.appendChild(el('div', 'export__meta', 'TRANSCRIPT · BROWSER-ONLY'));
-    exp.appendChild(el('h3', null, 'Take your transcript with you'));
+    exp.appendChild(el('h2', null, 'Take your transcript with you'));
     exp.appendChild(el('p', null, 'Your conversation lives only in this browser tab. Copy or download it before you close the window.'));
     var erow = el('div', 'tools__row');
     var copyBtn = el('button', 'btn btn--ghost', 'Copy transcript'); copyBtn.type = 'button';
