@@ -48,7 +48,7 @@ COMMITTED_MAP = os.path.join(REPO, "build", "editor-map.generated.json")
 
 # The trees U3 brings into the map. A block whose source file lives under one
 # of these is a "new-coverage" block and carries U3's extra guarantees.
-NEW_TREES = ("data/taxonomy/", "data/firm/", "data/jurisdictions/")
+NEW_TREES = ("data/taxonomy/", "data/firm/", "data/jurisdictions/", "data/copy/")
 
 _FRESH = {}   # module-level cache: one in-process site build for the whole file
 
@@ -154,7 +154,25 @@ class NewCoverageTest(unittest.TestCase):
         cls.bundle = _build_fresh_map()
         cls.pages = cls.bundle["pages"]
 
-    # ---- R1: the zero-block pages move off zero -------------------------- #
+    # ---- R1: the landing pages carry their authored copy ----------------- #
+    def test_authored_page_copy_counts(self):
+        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["matters/index.html"]), 13)
+        self.assertEqual(len(self.pages["firm/index.html"]), 31)
+
+    def test_page_copy_sources_are_page_local(self):
+        expected = {
+            "index.html": "data/copy/home.json#",
+            "matters/index.html": "data/copy/matters.json#",
+            "firm/index.html": "data/copy/firm.json#",
+        }
+        for page, prefix in expected.items():
+            refs = [b["source_ref"] for b in self.pages[page]
+                    if b["source_ref"].startswith("data/copy/")]
+            with self.subTest(page=page):
+                self.assertTrue(refs)
+                self.assertTrue(all(ref.startswith(prefix) for ref in refs))
+
     def test_skills_page_moves_off_zero(self):
         blocks = self.pages["skills/index.html"]
         tasks = json.load(open(os.path.join(REPO, "data", "taxonomy", "tasks.json"),
@@ -166,10 +184,11 @@ class NewCoverageTest(unittest.TestCase):
     def test_firm_page_moves_off_zero(self):
         blocks = self.pages["firm/index.html"]
         refs = {b["source_ref"] for b in blocks}
-        self.assertEqual(refs, {
+        self.assertTrue({
             "data/firm/firm.json#identity.name",
             "data/firm/firm.json#identity.letterhead_note",
-        })
+        }.issubset(refs))
+        self.assertEqual(len(blocks), 31)
 
     # ---- new blocks are well-formed json_scalars ------------------------- #
     def test_new_blocks_are_json_scalars_with_matching_paths(self):

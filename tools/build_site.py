@@ -287,6 +287,15 @@ def _eb_scalar_attr(source_ref, original_text, json_path, context):
     return ' data-ebsrc="{r}"'.format(r=esc(source_ref))
 
 
+def _copy_scalar(page, copy, json_path, context):
+    """Return one page-copy leaf and its json_scalar registration attribute."""
+    value = copy
+    for key in json_path.split("."):
+        value = value[key]
+    rel = data_relpath(DATA, "copy", page + ".json")
+    return value, _eb_scalar_attr(rel + "#" + json_path, value, json_path, context)
+
+
 def data_relpath(*parts):
     """POSIX repo-relative path for a source file, for use as a source_ref base."""
     return os.path.relpath(os.path.join(*parts), ROOT).replace(os.sep, "/")
@@ -568,22 +577,10 @@ def folio_chip(folio, no_equiv):
 # --------------------------------------------------------------------------- #
 # Data loading
 # --------------------------------------------------------------------------- #
-SHAPE_LABELS = {
-    "employment_arbitration": "Employment arbitration",
-    "attorney_discipline": "Attorney discipline",
-    "auto_negligence": "Auto-negligence jury trial",
-    "real_estate_negotiation": "Real-estate purchase negotiation",
-    "criminal_dwi": "Criminal DWI",
-    "noncompete_trade_secret": "Non-compete / trade secrets",
-    "ucc_sale_of_goods": "UCC sale-of-goods dispute",
-    "juvenile_delinquency": "Juvenile delinquency",
-    "marriage_dissolution": "Marriage dissolution",
-    "wills_probate": "Wills & probate contest",
-}
 MODULE_META = OrderedDict([
-    ("M1", {"code": "M1", "title": "Foundational", "thesis": "The groundwork — how to think, read, and carry yourself as a lawyer before the substance arrives.", "accent": "brass"}),
-    ("M2", {"code": "M2", "title": "Substantive + Skills", "thesis": "The trades of lawyering, learned on real-shaped matters across ten practice areas.", "accent": "claret"}),
-    ("M3", {"code": "M3", "title": "Transition to Practice", "thesis": "The business of law and the professional judgment that turns a graduate into a practitioner.", "accent": "green"}),
+    ("M1", {"code": "M1", "accent": "brass"}),
+    ("M2", {"code": "M2", "accent": "claret"}),
+    ("M3", {"code": "M3", "accent": "green"}),
 ])
 
 def load_jurisdictions():
@@ -641,11 +638,13 @@ def load_corpus():
     skills = load_json(os.path.join(DATA, "taxonomy", "skills.json"))
     tasks = load_json(os.path.join(DATA, "taxonomy", "tasks.json"))
     firm = load_json(os.path.join(DATA, "firm", "firm.json"))
+    copy = {page: load_json(os.path.join(DATA, "copy", page + ".json"))
+            for page in ("home", "matters", "firm")}
     curriculum = load_curriculum()
     return {
         "manifest": manifest, "matters": matters, "by_id": by_id,
         "juris": juris, "skills": skills, "tasks": tasks, "firm": firm,
-        "curriculum": curriculum,
+        "curriculum": curriculum, "copy": copy,
     }
 
 # --------------------------------------------------------------------------- #
@@ -778,18 +777,20 @@ def _pattern_defs():
     return ('<svg class="viz-defs" width="0" height="0" aria-hidden="true" focusable="false" '
             'style="position:absolute;width:0;height:0"><defs>' + pats + '</defs></svg>')
 
-def chart_card(cid, title, caption, svg, table_html, story=""):
+def chart_card(cid, title, caption, svg, table_html, story="",
+               title_eb="", caption_eb=""):
     return """
 <section class="viz-card" aria-labelledby="{cid}-t">
   <div class="viz-card__head">
-    <h2 id="{cid}-t" class="viz-card__title">{title}</h2>
+    <h2 id="{cid}-t" class="viz-card__title"{title_eb}>{title}</h2>
     <button type="button" class="viz-toggle mono" data-target="{cid}-tbl" aria-expanded="false">TABLE</button>
   </div>
-  <p class="viz-card__caption">{caption}</p>
+  <p class="viz-card__caption"{caption_eb}>{caption}</p>
   {story}
   <div class="viz-chart">{svg}</div>
   <div class="viz-table" id="{cid}-tbl" hidden>{table}</div>
 </section>""".format(cid=esc(cid), title=esc(title), caption=esc(caption),
+                     title_eb=title_eb, caption_eb=caption_eb,
                      story=story, svg=svg, table=table_html)
 
 def _table(caption, headers, rows, num_cols=None):
@@ -1301,16 +1302,9 @@ def sample_href(relpath):
 # --------------------------------------------------------------------------- #
 # Page — platform home
 # --------------------------------------------------------------------------- #
-CENTAUR_BLURB = (
-    "Every exercise here ships with a machine-readable rubric and a revise-and-repeat loop — "
-    "the two halves of a human+AI (“centaur”) pedagogy. AI gives the first-pass rubric "
-    "critique and unlimited reps; scarce faculty time is reserved for the high-value coaching "
-    "only a human can give. The simulated client interviews, the rubric critiques, and the firm "
-    "dashboard below are that layer, live."
-)
-
 def build_home(corpus):
     rel = "index.html"
+    copy = corpus["copy"]["home"]
     n_matters = len(corpus["matters"])
     skills = corpus["skills"]["skills"]
     n_surveyed = sum(1 for s in skills if not s.get("extension"))
@@ -1324,80 +1318,95 @@ def build_home(corpus):
         for ref in t.get("exercise_refs") or []:
             mod_counts[t.get("module")].add(ref.split(".")[0])
     for code, meta in MODULE_META.items():
+        module = copy["volumes"]["modules"][code]
+        title, title_eb = _copy_scalar("home", copy, "volumes.modules.%s.title" % code,
+                                      "home · curriculum modules")
+        thesis, thesis_eb = _copy_scalar("home", copy, "volumes.modules.%s.thesis" % code,
+                                        "home · curriculum modules")
         acc = {"brass": "", "claret": " volume--claret", "green": " volume--green"}[meta["accent"]]
         vols.append("""
     <a class="card volume{acc}" href="modules/{lo}.html">
       <div class="volume__num" aria-hidden="true">{code}</div>
-      <h3>{title}</h3>
-      <p class="matter-card__premise">{thesis}</p>
+      <h3{title_eb}>{title}</h3>
+      <p class="matter-card__premise"{thesis_eb}>{thesis}</p>
       <p class="card__meta">{nt} TASKS · {nm} LINKED MATTERS</p>
       <span class="arrow-link">Open volume</span>
-    </a>""".format(acc=acc, lo=code.lower(), code=esc(code), title=esc(meta["title"]),
-                   thesis=esc(meta["thesis"]), nt=task_by_module.get(code, 0),
+    </a>""".format(acc=acc, lo=code.lower(), code=esc(code), title=esc(title),
+                   title_eb=title_eb, thesis=esc(thesis), thesis_eb=thesis_eb,
+                   nt=task_by_module.get(code, 0),
                    nm=len(mod_counts.get(code, ()))))
+
+    values = {}
+    attrs = {}
+    for path in (
+        "hero.eyebrow", "hero.heading", "hero.lede", "volumes.eyebrow", "volumes.heading",
+        "explore.eyebrow", "explore.heading",
+    ):
+        values[path], attrs[path] = _copy_scalar("home", copy, path, "home")
+    for card in ("sample", "skills", "matters", "firm", "templates", "centaur"):
+        fields = ["meta", "title", "description"]
+        if card == "skills":
+            fields = ["meta", "title"]
+        elif card == "matters":
+            fields = ["meta", "description"]
+        for field in fields:
+            path = "explore.cards.%s.%s" % (card, field)
+            values[path], attrs[path] = _copy_scalar("home", copy, path, "home · %s card" % card)
 
     body = """
 <section class="hero reveal">
-  <p class="eyebrow">A LIVING CASEBOOK · 50 YEARS OF METHOD</p>
-  <h1>The practicum, rendered as a working law firm.</h1>
-  <p class="lede">Twenty deep simulated matters across ten practice shapes and two jurisdiction
-  tiers, a surveyed skills taxonomy mapped to FOLIO, simulated client interviews, and the complete
-  business of a two-lawyer firm — every page generated from one open data spine.</p>
+  <p class="eyebrow"{hero_eyebrow_eb}>{hero_eyebrow}</p>
+  <h1{hero_heading_eb}>{hero_heading}</h1>
+  <p class="lede"{hero_lede_eb}>{hero_lede}</p>
 </section>
 
 <div class="brass-rule" role="presentation"></div>
 
 <section aria-labelledby="volumes-h">
-  <div class="section-head"><p class="eyebrow">THE THREE VOLUMES</p>
-  <h2 id="volumes-h">Curriculum modules</h2></div>
+  <div class="section-head"><p class="eyebrow"{volumes_eyebrow_eb}>{volumes_eyebrow}</p>
+  <h2 id="volumes-h"{volumes_heading_eb}>{volumes_heading}</h2></div>
   <div class="volumes stagger">{vols}</div>
 </section>
 
 <section aria-labelledby="explore-h">
-  <div class="section-head"><p class="eyebrow">THE APPARATUS</p>
-  <h2 id="explore-h">Explore the practicum</h2></div>
+  <div class="section-head"><p class="eyebrow"{explore_eyebrow_eb}>{explore_eyebrow}</p>
+  <h2 id="explore-h"{explore_heading_eb}>{explore_heading}</h2></div>
   <div class="entry-cards stagger">
     <a class="card" href="{sample}">
-      <p class="card__meta">NO KEY REQUIRED</p>
-      <h3>Watch a sample consultation ▸</h3>
-      <p class="matter-card__premise">A recorded client interview — Devon Halvard, charged with DWI —
-      played back turn by turn, then graded. See the consultation room and the debrief in action
-      before you bring your own key. Scripted sample, not a live AI client.</p>
+      <p class="card__meta"{sample_meta_eb}>{sample_meta}</p>
+      <h3{sample_title_eb}>{sample_title}</h3>
+      <p class="matter-card__premise"{sample_description_eb}>{sample_description}</p>
       <span class="arrow-link">Play the sample</span>
     </a>
     <a class="card" href="skills/index.html">
-      <p class="card__meta">TAXONOMY</p>
-      <h3>Skills browser</h3>
+      <p class="card__meta"{skills_meta_eb}>{skills_meta}</p>
+      <h3{skills_title_eb}>{skills_title}</h3>
       <p class="matter-card__premise">{ns} surveyed lawyering skills — {nt} tasks with subtasks,
       FOLIO mappings, and the matters that exercise each.</p>
       <span class="arrow-link">Browse skills</span>
     </a>
     <a class="card" href="matters/index.html">
-      <p class="card__meta">MATTER LIBRARY</p>
+      <p class="card__meta"{matters_meta_eb}>{matters_meta}</p>
       <h3>{nm} simulated matters</h3>
-      <p class="matter-card__premise">Ten practice shapes, each in the fictional State of Meridian
-      and again in a real jurisdiction. Full packets, case files, rubrics, and interviews.</p>
+      <p class="matter-card__premise"{matters_description_eb}>{matters_description}</p>
       <span class="arrow-link">Open the library</span>
     </a>
     <a class="card" href="firm/index.html">
-      <p class="card__meta">BUSINESS OF LAW</p>
-      <h3>Firm dashboard</h3>
-      <p class="matter-card__premise">Ellingboe &amp; Ravndal LLP — the two-lawyer practicum firm.
-      Fees, realization, AR aging, trust accounting, and budget, charted and taught.</p>
+      <p class="card__meta"{firm_meta_eb}>{firm_meta}</p>
+      <h3{firm_title_eb}>{firm_title}</h3>
+      <p class="matter-card__premise"{firm_description_eb}>{firm_description}</p>
       <span class="arrow-link">Open the ledger</span>
     </a>
     <a class="card" href="templates/index.html">
-      <p class="card__meta">COURSE DELIVERABLES</p>
-      <h3>Deliverable templates</h3>
-      <p class="matter-card__premise">The six recurring course handouts — time sheet, engagement
-      letter, interview plan, settlement plan, portfolio, and reflective report — each with its
-      grading note. Print-ready.</p>
+      <p class="card__meta"{templates_meta_eb}>{templates_meta}</p>
+      <h3{templates_title_eb}>{templates_title}</h3>
+      <p class="matter-card__premise"{templates_description_eb}>{templates_description}</p>
       <span class="arrow-link">Open the templates</span>
     </a>
     <div class="card">
-      <p class="card__meta">ABOUT THE METHOD</p>
-      <h3>The centaur layer</h3>
-      <p class="matter-card__premise">{blurb}</p>
+      <p class="card__meta"{centaur_meta_eb}>{centaur_meta}</p>
+      <h3{centaur_title_eb}>{centaur_title}</h3>
+      <p class="matter-card__premise"{centaur_description_eb}>{centaur_description}</p>
       <div class="chips" style="margin-top:var(--sp-3)">
         <span class="chip chip--coming-soon">FACULTY PORTAL · COMING SOON</span>
         <span class="chip chip--coming-soon">ACCOUNTS · COMING SOON</span>
@@ -1406,7 +1415,11 @@ def build_home(corpus):
   </div>
 </section>
 """.format(vols="".join(vols), ns=n_surveyed, nt=n_tasks, nm=n_matters,
-           blurb=esc(CENTAUR_BLURB), sample=esc(sample_href(rel)))
+           sample=esc(sample_href(rel)),
+           **{("_".join(path.split(".")[2:]) if path.startswith("explore.cards.")
+               else path.replace(".", "_")): esc(value) for path, value in values.items()},
+           **{("_".join(path.split(".")[2:]) if path.startswith("explore.cards.")
+               else path.replace(".", "_")) + "_eb": attr for path, attr in attrs.items()})
     write_file(rel, page_shell(rel, "Platform Home", "PLATFORM · HOME", [], body))
 
 # --------------------------------------------------------------------------- #
@@ -1414,8 +1427,10 @@ def build_home(corpus):
 # --------------------------------------------------------------------------- #
 def build_modules(corpus):
     tasks = corpus["tasks"]["tasks"]
+    home_copy = corpus["copy"]["home"]
     skills_by_id = {s["id"]: s for s in corpus["skills"]["skills"]}
     for code, meta in MODULE_META.items():
+        module_meta = home_copy["volumes"]["modules"][code]
         rel = "modules/{lo}.html".format(lo=code.lower())
         mod_tasks = [t for t in tasks if t.get("module") == code]
         # group by skill
@@ -1499,11 +1514,11 @@ def build_modules(corpus):
 </section>
 </div>
 """.format(accent=("brass" if meta["accent"] == "brass" else meta["accent"]),
-           code=esc(code), n=code[1], title=esc(meta["title"]), thesis=esc(meta["thesis"]),
+           code=esc(code), n=code[1], title=esc(module_meta["title"]), thesis=esc(module_meta["thesis"]),
            ntasks=len(mod_tasks), nsk=len(by_skill), nm=len(linked),
            prose_section=prose_section, rows="".join(rows), mcards=matter_cards)
         write_file(rel, page_shell(
-            rel, "Module {c} — {t}".format(c=code, t=meta["title"]),
+            rel, "Module {c} — {t}".format(c=code, t=module_meta["title"]),
             "{c} · MODULES".format(c=code),
             [("Home", "../index.html"), ("Modules", None), (code, None)],
             body, body_class="module--" + meta["accent"]))
@@ -1716,8 +1731,10 @@ def build_third_party():
 # --------------------------------------------------------------------------- #
 def build_matter_library(corpus):
     rel = "matters/index.html"
+    copy = corpus["copy"]["matters"]
+    shape_labels = copy["shape_labels"]
     man_by_id = {m["id"]: m for m in corpus["manifest"]["matters"]}
-    by_shape = OrderedDict((k, {"meridian": None, "real": None}) for k in SHAPE_LABELS)
+    by_shape = OrderedDict((k, {"meridian": None, "real": None}) for k in shape_labels)
     for m in corpus["matters"]:
         tier = "meridian" if m.get("tier") == "meridian" else "real"
         if m.get("shape") in by_shape:
@@ -1750,6 +1767,8 @@ def build_matter_library(corpus):
 
     rows = []
     for shape, pair in by_shape.items():
+        label, label_eb = _copy_scalar("matters", copy, "shape_labels." + shape,
+                                      "matter library · practice shapes")
         cards = []
         for tier in ("meridian", "real"):
             m = pair[tier]
@@ -1759,18 +1778,22 @@ def build_matter_library(corpus):
   <div class="shape-row">
     <div>
       <p class="eyebrow">SHAPE</p>
-      <h2 class="shape-row__label" style="font-size:var(--fs-lg)">{label}</h2>
+      <h2 class="shape-row__label" style="font-size:var(--fs-lg)"{label_eb}>{label}</h2>
     </div>
     <div class="shape-row__cards">{cards}</div>
-  </div>""".format(label=esc(SHAPE_LABELS[shape]), cards="".join(cards)))
+  </div>""".format(label=esc(label), label_eb=label_eb, cards="".join(cards)))
+
+    hero = {}
+    hero_eb = {}
+    for field in ("eyebrow", "heading", "lede"):
+        hero[field], hero_eb[field] = _copy_scalar(
+            "matters", copy, "hero." + field, "matter library · hero")
 
     body = """
 <section class="reveal">
-  <p class="eyebrow">THE MATTER LIBRARY · 10 SHAPES × 2 TIERS</p>
-  <h1>Simulated matters</h1>
-  <p class="lede">Every practice shape appears twice: once in the fictional State of Meridian —
-  a complete canon with its own courts and citation scheme — and once in a real jurisdiction,
-  where finding the governing law is part of the exercise.</p>
+  <p class="eyebrow"{hero_eyebrow_eb}>{hero_eyebrow}</p>
+  <h1{hero_heading_eb}>{hero_heading}</h1>
+  <p class="lede"{hero_lede_eb}>{hero_lede}</p>
 </section>
 
 <div class="lib-toolbar">
@@ -1786,7 +1809,9 @@ def build_matter_library(corpus):
 <div data-tier-active="all">
 {rows}
 </div>
-""".format(rows="".join(rows))
+""".format(rows="".join(rows),
+           **{"hero_" + k: esc(v) for k, v in hero.items()},
+           **{"hero_" + k + "_eb": v for k, v in hero_eb.items()})
     write_file(rel, page_shell(rel, "Matter Library", "MATTERS · LIBRARY",
                                [("Home", "../index.html"), ("Matters", None)], body))
 
@@ -1977,6 +2002,7 @@ def render_case_file_cards(m, files):
     return cards
 
 def build_one_packet(corpus, m, man):
+    shape_labels = corpus["copy"]["matters"]["shape_labels"]
     slug = m["_slug"]
     rel = "matters/{s}/index.html".format(s=slug)
     up = up_prefix(rel)
@@ -2130,7 +2156,7 @@ def build_one_packet(corpus, m, man):
   <div class="chips" aria-label="Skills exercised">{skills}</div>
 </header>""".format(tc=tier_chip(tier, m.get("jurisdiction")), fee=esc((m.get("fee_type") or "").upper()),
                     mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")), cap_eb=cap_eb,
-                    shape=esc(SHAPE_LABELS.get(m.get("shape"), m.get("shape", ""))),
+                    shape=esc(shape_labels.get(m.get("shape"), m.get("shape", ""))),
                     jname=esc(jname), skills=skill_chips)
 
     instructor_note = """
@@ -2251,22 +2277,40 @@ def csv_bytes(headers, rows):
         w.writerow(r)
     return buf.getvalue().encode("utf-8")
 
-def kpi_tile(label, value, delta_html="", chip_html="", hero=False, lesson=""):
+def kpi_tile(label, value, delta_html="", chip_html="", hero=False, lesson="",
+             label_eb="", lesson_eb=""):
     return """
   <div class="kpi-tile{h}">
-    <p class="kpi-tile__label">{label}</p>
+    <p class="kpi-tile__label"{label_eb}>{label}</p>
     <p class="kpi-tile__value">{value}</p>
     {delta}{chip}
-    <p class="viz-note" style="margin:.4rem 0 0">{lesson}</p>
+    <p class="viz-note" style="margin:.4rem 0 0"{lesson_eb}>{lesson}</p>
   </div>""".format(h=" kpi-hero" if hero else "", label=esc(label), value=esc(value),
-                   delta=delta_html, chip=chip_html, lesson=esc(lesson))
+                   delta=delta_html, chip=chip_html, lesson=esc(lesson),
+                   label_eb=label_eb, lesson_eb=lesson_eb)
 
 def build_firm_dashboard(corpus):
     rel = "firm/index.html"
     firm = corpus["firm"]
+    copy = corpus["copy"]["firm"]
     matters = corpus["matters"]
     man_by_id = {m["id"]: m for m in corpus["manifest"]["matters"]}
     client_names = {c["id"]: c["name"] for c in firm.get("clients", [])}
+
+    def copy_pair(path, context):
+        return _copy_scalar("firm", copy, path, "firm dashboard · " + context)
+
+    def copy_kpi(key, value, **kwargs):
+        label, label_eb = copy_pair("kpis.%s.label" % key, "KPIs")
+        lesson, lesson_eb = copy_pair("kpis.%s.lesson" % key, "KPI teaching lessons")
+        return kpi_tile(label, value, lesson=lesson, label_eb=label_eb,
+                        lesson_eb=lesson_eb, **kwargs)
+
+    def copy_chart(cid, key, svg, table_html):
+        title, title_eb = copy_pair("charts.%s.title" % key, "charts")
+        blurb, blurb_eb = copy_pair("charts.%s.blurb" % key, "chart explanatory blurbs")
+        return chart_card(cid, title, blurb, svg, table_html,
+                          title_eb=title_eb, caption_eb=blurb_eb)
 
     # ---------- derived figures ----------
     funnel = firm["funnel"]
@@ -2360,36 +2404,36 @@ def build_firm_dashboard(corpus):
 
     # ---------- KPI row ----------
     kpis = []
-    kpis.append(kpi_tile("Fees collected · trailing 12 mo", money_compact(collected),
+    kpis.append(copy_kpi("fees_collected", money_compact(collected),
                          delta_html='<p class="kpi-tile__delta">PERIOD ENDS {d}</p>'.format(d=esc(firm["as_of_date"])),
-                         hero=True, lesson="The number the firm lives on."))
-    kpis.append(kpi_tile("Realization rate", "{:.1f}%".format(realization * 100),
+                         hero=True))
+    kpis.append(copy_kpi("realization", "{:.1f}%".format(realization * 100),
                          delta_html='<p class="kpi-tile__delta">TARGET {t:.0f}%</p>'.format(t=firm["realization_target"] * 100)
                          if realization >= firm["realization_target"] else
                          '<p class="kpi-tile__delta is-down">TARGET {t:.0f}% · BELOW</p>'.format(t=firm["realization_target"] * 100),
-                         lesson="Write-downs erode worked value."))
-    kpis.append(kpi_tile("Collection rate", "{:.1f}%".format(collection * 100),
+                         ))
+    kpis.append(copy_kpi("collection", "{:.1f}%".format(collection * 100),
                          delta_html='<p class="kpi-tile__delta">TARGET {t:.0f}%</p>'.format(t=firm["collection_target"] * 100)
                          if collection >= firm["collection_target"] else
                          '<p class="kpi-tile__delta is-down">TARGET {t:.0f}% · BELOW</p>'.format(t=firm["collection_target"] * 100),
-                         lesson="Billing is not cash."))
+                         ))
     over_chip = ('<span class="kpi-tile__chip is-warn">⚠ OVER 10% OF AR</span>'
                  if ar_over90_pct > 0.10 else
                  '<span class="kpi-tile__chip">✓ UNDER 10% OF AR</span>')
-    kpis.append(kpi_tile("AR over 90 days", money_compact(ar_over90),
+    kpis.append(copy_kpi("ar_over_90", money_compact(ar_over90),
                          delta_html='<p class="kpi-tile__delta">{p:.1f}% OF {t}</p>'.format(
                              p=ar_over90_pct * 100, t=money_compact(ar_total)),
-                         chip_html=over_chip, lesson="Old AR rarely collects."))
+                         chip_html=over_chip))
     rec_chip = ('<span class="kpi-tile__chip">✓ RECONCILED {d}</span>'.format(d=esc(trust["last_reconciled"]))
                 if trust["three_way_reconciled"] else
                 '<span class="kpi-tile__chip is-warn">⚠ DISCREPANCY</span>')
-    kpis.append(kpi_tile("Trust balance", money_compact(trust["balance"]),
-                         chip_html=rec_chip, lesson="Client money is never firm money."))
+    kpis.append(copy_kpi("trust_balance", money_compact(trust["balance"]),
+                         chip_html=rec_chip))
     var_cls = "is-down" if budget_var < 0 else "is-up"
-    kpis.append(kpi_tile("Fee-revenue vs plan", "{:+.1f}%".format(budget_var * 100),
+    kpis.append(copy_kpi("fee_revenue_vs_plan", "{:+.1f}%".format(budget_var * 100),
                          delta_html='<p class="kpi-tile__delta {c}">VS BUDGET {b}</p>'.format(
                              c=var_cls, b=money_compact(fee_rev["budget"])),
-                         lesson="Plan versus reality is the discipline."))
+                         ))
 
     # ---------- Chart 1: book of business ----------
     W, LBL, BARMAX = 640, 168, 640 - 168 - 76
@@ -2422,10 +2466,7 @@ def build_firm_dashboard(corpus):
                   [[r["matter_id"].upper(), r["client"], r["fee_type"],
                     money(r["fees"]), "{:.1f}%".format(r["cum_pct"] * 100)] for r in fees_rows],
                   num_cols={3, 4})
-    chart1 = chart_card("viz1", "Book of business — fees by matter",
-                        "Revenue concentration: a handful of matters carry the book. Fees shown are "
-                        "billed-to-date (worked value on contingency matters).",
-                        svg1, tbl1)
+    chart1 = copy_chart("viz1", "book_of_business", svg1, tbl1)
 
     # ---------- Chart 2: fee-arrangement mix ----------
     W2, H2, LBL2 = 640, 120, 120
@@ -2471,10 +2512,7 @@ def build_firm_dashboard(corpus):
                   [[ft, fee_mix[ft]["count"], money(fee_mix[ft]["fees"]),
                     "{:.1f}%".format(fee_mix[ft]["fees"] / fees_total * 100)] for ft in fee_order],
                   num_cols={1, 2, 3})
-    chart2 = chart_card("viz2", "Fee-arrangement mix",
-                        "How you are paid shapes risk and cash timing: hourly bills monthly, "
-                        "contingency pays at the end or never, flat and retainer pay up front.",
-                        svg2 + legend2, tbl2)
+    chart2 = copy_chart("viz2", "fee_mix", svg2 + legend2, tbl2)
 
     # ---------- Chart 3: utilization ----------
     W3, H3, PAD3 = 640, 220, 40
@@ -2526,9 +2564,7 @@ def build_firm_dashboard(corpus):
                     util_by.get((mo, "FIRM-TK-01"), 0) + util_by.get((mo, "FIRM-TK-02"), 0),
                     "{:.0f}%".format((util_by.get((mo, "FIRM-TK-01"), 0) + util_by.get((mo, "FIRM-TK-02"), 0)) / (2 * target_h) * 100)]
                    for mo in months], num_cols={1, 2, 3, 4})
-    chart3 = chart_card("viz3", "Utilization — billable hours vs target",
-                        "Time is inventory: hours not worked this month are never sold later.",
-                        svg3 + legend3, tbl3)
+    chart3 = copy_chart("viz3", "utilization", svg3 + legend3, tbl3)
 
     # ---------- Chart 4: realization funnel ----------
     W4, H4, LBL4 = 640, 190, 110
@@ -2562,9 +2598,7 @@ def build_firm_dashboard(corpus):
                    ["Collected", money(collected), "{:.1f}%".format(collected / worked * 100),
                     money(writeoffs), "{:.1f}%".format(collection * 100)]],
                   num_cols={1, 2, 3, 4})
-    chart4 = chart_card("viz4", "Realization funnel: worked → billed → collected",
-                        "The crown lesson: every dollar leaks twice — once when you bill it, "
-                        "again when you try to collect it.", svg4, tbl4)
+    chart4 = copy_chart("viz4", "realization_funnel", svg4, tbl4)
 
     # ---------- Chart 5: AR aging ----------
     ar_display = [{"label": "FIRM TOTAL", "buckets": {
@@ -2604,10 +2638,7 @@ def build_firm_dashboard(corpus):
                   [[r["label"], money(r["buckets"].get("b0_30", 0)), money(r["buckets"].get("b31_60", 0)),
                     money(r["buckets"].get("b61_90", 0)), money(r["buckets"].get("b90_plus", 0)),
                     money(r["total"])] for r in ar_display], num_cols={1, 2, 3, 4, 5})
-    chart5 = chart_card("viz5", "AR aging",
-                        "Old invoices don't pay: past 90 days, collection odds fall off a cliff. "
-                        "Every bucket keeps its icon and label — never color alone.",
-                        svg5 + legend5, tbl5)
+    chart5 = copy_chart("viz5", "ar_aging", svg5 + legend5, tbl5)
 
     # ---------- Chart 6: trust balances ----------
     holdings = trust["holdings"]
@@ -2641,10 +2672,7 @@ def build_firm_dashboard(corpus):
                     h["kind"], money(h["amount"]),
                     "✓ yes" if trust["three_way_reconciled"] else "⚠ no",
                     trust["last_reconciled"]] for h in holdings], num_cols={3})
-    chart6 = chart_card("viz6", "Trust balances & reconciliation",
-                        "To-the-penny or it's an ethics violation: client funds reconcile "
-                        "three ways — ledger, bank, and per-client — every month.",
-                        banner + svg6, tbl6)
+    chart6 = copy_chart("viz6", "trust_balances", banner + svg6, tbl6)
 
     # ---------- Chart 7: budget vs actual ----------
     W7, LBL7 = 640, 210
@@ -2686,10 +2714,7 @@ def build_firm_dashboard(corpus):
                     "{:+.1f}%".format((b["actual"] - b["budget"]) / b["budget"] * 100),
                     "✓ yes" if b["variance_is_good"] else "⚠ no"] for b in budget],
                   num_cols={1, 2, 3, 4})
-    chart7 = chart_card("viz7", "Budget vs actual",
-                        "Watching divergence is the discipline: variance is colored by whether "
-                        "it is favorable, not by its sign — over on revenue is good; over on "
-                        "expense is bad.", svg7 + legend7, tbl7)
+    chart7 = copy_chart("viz7", "budget_vs_actual", svg7 + legend7, tbl7)
 
     # ---------- downloads ----------
     dls = ['<a class="dl-chip" href="../data/firm.json" download>RAW FIRM.JSON</a>']
@@ -2698,26 +2723,23 @@ def build_firm_dashboard(corpus):
             n=esc(name), l=esc(name.replace(".csv", "").replace("-", " ").upper() + " CSV")))
 
     ident = firm["identity"]
-    # U3 (editable coverage): the firm name and letterhead note are the page's
-    # authored prose — register them as json_scalar blocks on elements that are
-    # already walker candidates. The generated data-provenance sentence moves to
-    # its own NON-candidate <div> (styled to match a paragraph) so the lede <p>
-    # contains ONLY the authored note; candidate count is unchanged. Everything
-    # else on this page is derived from firm.json figures and stays read-only.
+    # Numeric values, tables, marks, and statuses remain derived. Authored teaching
+    # copy is registered separately so every editable candidate contains one leaf.
     firm_rel = data_relpath(DATA, "firm", "firm.json")
     fname_eb = _eb_scalar_attr(firm_rel + "#identity.name", ident.get("name", ""),
                                "identity.name", "firm identity")
     fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
                                ident.get("letterhead_note", ""),
                                "identity.letterhead_note", "firm identity")
+    provenance, provenance_eb = copy_pair("hero.provenance", "hero")
+    downloads_eyebrow, downloads_eyebrow_eb = copy_pair("downloads.eyebrow", "downloads")
+    downloads_heading, downloads_heading_eb = copy_pair("downloads.heading", "downloads")
     body = """
 <section class="reveal">
   <p class="eyebrow">THE PRACTICE LEDGER · AS OF {asof}</p>
   <h1{fname_eb}>{name}</h1>
   <p class="lede"{fnote_eb}>{note}</p>
-  <div class="lede" style="margin:0 0 var(--space)">Every figure below is generated from the same
-  open dataset the matters use — <span class="mono">data/firm/firm.json</span> — so the money on
-  this page reconciles with the billing statements inside each packet.</div>
+  <p class="lede" style="margin:0 0 var(--space)"{provenance_eb}>{provenance}</p>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2744,14 +2766,17 @@ def build_firm_dashboard(corpus):
 </div>
 
 <section class="no-print" aria-labelledby="dl-h" style="margin-top:var(--sp-8)">
-  <div class="section-head"><p class="eyebrow">TAKE THE DATA WITH YOU</p>
-  <h2 id="dl-h">Downloads</h2></div>
+  <div class="section-head"><p class="eyebrow"{downloads_eyebrow_eb}>{downloads_eyebrow}</p>
+  <h2 id="dl-h"{downloads_heading_eb}>{downloads_heading}</h2></div>
   <div class="downloads">{dls}</div>
 </section>
 
 <div id="viz-tip" class="viz-tip" aria-hidden="true" hidden><span class="viz-tip__sw" aria-hidden="true"></span><span class="viz-tip__v"></span><span class="viz-tip__l"></span></div>
 """.format(asof=esc(firm["as_of_date"]), name=esc(ident["name"]),
            fname_eb=fname_eb, fnote_eb=fnote_eb,
+           provenance=esc(provenance), provenance_eb=provenance_eb,
+           downloads_eyebrow=esc(downloads_eyebrow), downloads_eyebrow_eb=downloads_eyebrow_eb,
+           downloads_heading=esc(downloads_heading), downloads_heading_eb=downloads_heading_eb,
            note=esc(ident.get("letterhead_note", "")), kpis="".join(kpis), defs=_pattern_defs(),
            c1=chart1, c2=chart2, c3=chart3, c4=chart4, c5=chart5, c6=chart6, c7=chart7,
            dls="".join(dls))

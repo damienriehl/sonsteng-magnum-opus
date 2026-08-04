@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "type": "page_copy",
+  "page": "home",
+  "hero": {
+    "eyebrow": "A LIVING CASEBOOK · 50 YEARS OF METHOD",
+    "heading": "The practicum, rendered as a working law firm.",
+    "lede": "Twenty deep simulated matters across ten practice shapes and two jurisdiction\n  tiers, a surveyed skills taxonomy mapped to FOLIO, simulated client interviews, and the complete\n  business of a two-lawyer firm — every page generated from one open data spine."
+  },
+  "volumes": {
+    "eyebrow": "THE THREE VOLUMES",
+    "heading": "Curriculum modules",
+    "modules": {
+      "M1": {
+        "title": "Foundational",
+        "thesis": "The groundwork — how to think, read, and carry yourself as a lawyer before the substance arrives."
+      },
+      "M2": {
+        "title": "Substantive + Skills",
+        "thesis": "The trades of lawyering, learned on real-shaped matters across ten practice areas."
+      },
+      "M3": {
+        "title": "Transition to Practice",
+        "thesis": "The business of law and the professional judgment that turns a graduate into a practitioner."
+      }
+    }
+  },
+  "explore": {
+    "eyebrow": "THE APPARATUS",
+    "heading": "Explore the practicum",
+    "cards": {
+      "sample": {
+        "meta": "NO KEY REQUIRED",
+        "title": "Watch a sample consultation ▸",
+        "description": "A recorded client interview — Devon Halvard, charged with DWI —\n      played back turn by turn, then graded. See the consultation room and the debrief in action\n      before you bring your own key. Scripted sample, not a live AI client."
+      },
+      "skills": {
+        "meta": "TAXONOMY",
+        "title": "Skills browser"
+      },
+      "matters": {
+        "meta": "MATTER LIBRARY",
+        "description": "Ten practice shapes, each in the fictional State of Meridian\n      and again in a real jurisdiction. Full packets, case files, rubrics, and interviews."
+      },
+      "firm": {
+        "meta": "BUSINESS OF LAW",
+        "title": "Firm dashboard",
+        "description": "Ellingboe & Ravndal LLP — the two-lawyer practicum firm.\n      Fees, realization, AR aging, trust accounting, and budget, charted and taught."
+      },
+      "templates": {
+        "meta": "COURSE DELIVERABLES",
+        "title": "Deliverable templates",
+        "description": "The six recurring course handouts — time sheet, engagement\n      letter, interview plan, settlement plan, portfolio, and reflective report — each with its\n      grading note. Print-ready."
+      },
+      "centaur": {
+        "meta": "ABOUT THE METHOD",
+        "title": "The centaur layer",
+        "description": "Every exercise here ships with a machine-readable rubric and a revise-and-repeat loop — the two halves of a human+AI (“centaur”) pedagogy. AI gives the first-pass rubric critique and unlimited reps; scarce faculty time is reserved for the high-value coaching only a human can give. The simulated client interviews, the rubric critiques, and the firm dashboard below are that layer, live."
+      }
+    }
+  }
+}

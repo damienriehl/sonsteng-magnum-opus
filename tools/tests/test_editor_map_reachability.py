@@ -5,8 +5,7 @@ r"""The editor map is TWO allowlists at once, and the second one used to be wron
 suggestion may target) *and* the PAGE allowlist the /edit proxy resolves request
 paths against (`resolvePagePath` in app/worker/src/editor-map.js). The generator
 originally registered a page only when it carried at least one editable block —
-which silently made the platform home, the matter library, the skills browser and
-the firm dashboard unreachable inside /edit, even though the injector rewrites
+which silently made block-free pages unreachable inside /edit, even though the injector rewrites
 every same-origin link into /edit space. A reviewer who clicked "Matter Library"
 from a matter packet got a uniform 404.
 
@@ -14,7 +13,8 @@ These tests pin the contract that fixes it:
   * every built page is registered, block-carrying or not;
   * the chat surfaces are deliberately NOT registered (the injector strips a
     wrapped page's own scripts, so the simulator would render inert);
-  * registering empty pages does not invent editable blocks.
+  * registering empty pages does not invent editable blocks;
+  * the three authored-copy landing pages expose their expected blocks.
 
 Run:  python3 -m pytest tools/tests/test_editor_map_reachability.py -q
 """
@@ -79,6 +79,11 @@ class EditorMapReachabilityTest(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertIn(page, self.pages,
                               f"{page} is linked from the site nav; /edit must resolve it")
+
+    def test_authored_landing_pages_are_editable(self):
+        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["matters/index.html"]), 13)
+        self.assertEqual(len(self.pages["firm/index.html"]), 31)
 
     def test_chat_surfaces_are_excluded(self):
         self.assertIn("chat/", bs.EDITOR_MAP_EXCLUDE_PREFIXES)

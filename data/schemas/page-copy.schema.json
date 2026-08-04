@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/page-copy.schema.json",
+  "title": "Authored page copy",
+  "type": "object",
+  "required": ["schema_version", "type", "page"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "type": {"const": "page_copy"},
+    "page": {"enum": ["home", "matters", "firm"]}
+  },
+  "patternProperties": {
+    "^(?!schema_version$|type$|page$).+": {"$ref": "#/$defs/copyNode"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "copyNode": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/copyNode"}
+        }
+      ]
+    }
+  }
+}

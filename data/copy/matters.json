@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "type": "page_copy",
+  "page": "matters",
+  "hero": {
+    "eyebrow": "THE MATTER LIBRARY · 10 SHAPES × 2 TIERS",
+    "heading": "Simulated matters",
+    "lede": "Every practice shape appears twice: once in the fictional State of Meridian —\n  a complete canon with its own courts and citation scheme — and once in a real jurisdiction,\n  where finding the governing law is part of the exercise."
+  },
+  "shape_labels": {
+    "employment_arbitration": "Employment arbitration",
+    "attorney_discipline": "Attorney discipline",
+    "auto_negligence": "Auto-negligence jury trial",
+    "real_estate_negotiation": "Real-estate purchase negotiation",
+    "criminal_dwi": "Criminal DWI",
+    "noncompete_trade_secret": "Non-compete / trade secrets",
+    "ucc_sale_of_goods": "UCC sale-of-goods dispute",
+    "juvenile_delinquency": "Juvenile delinquency",
+    "marriage_dissolution": "Marriage dissolution",
+    "wills_probate": "Wills & probate contest"
+  }
+}
