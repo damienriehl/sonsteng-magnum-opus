@@ -5,8 +5,7 @@ r"""The editor map is TWO allowlists at once, and the second one used to be wron
 suggestion may target) *and* the PAGE allowlist the /edit proxy resolves request
 paths against (`resolvePagePath` in app/worker/src/editor-map.js). The generator
 originally registered a page only when it carried at least one editable block —
-which silently made the platform home, the matter library, the skills browser and
-the firm dashboard unreachable inside /edit, even though the injector rewrites
+which silently made block-free pages unreachable inside /edit, even though the injector rewrites
 every same-origin link into /edit space. A reviewer who clicked "Matter Library"
 from a matter packet got a uniform 404.
 
@@ -14,27 +13,25 @@ These tests pin the contract that fixes it:
   * every built page is registered, block-carrying or not;
   * the chat surfaces are deliberately NOT registered (the injector strips a
     wrapped page's own scripts, so the simulator would render inert);
-  * registering empty pages does not invent editable blocks.
+  * registering empty pages does not invent editable blocks;
+  * the three authored-copy landing pages expose their expected blocks.
 
 Run:  python3 -m pytest tools/tests/test_editor_map_reachability.py -q
 """
 
 from __future__ import annotations
 
-import json
 import os
+import shutil
 import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
-REPO = os.path.dirname(TOOLS)
 sys.path.insert(0, TOOLS)
 
 import build_site as bs  # noqa: E402
-
-MAP_PATH = os.path.join(REPO, "build", "editor-map.generated.json")
-SITE_OUT = os.path.join(REPO, "site", "platform")
+from fresh_site_build import build_fresh_site  # noqa: E402
 
 # Pages with no editable prose that a reviewer still has to be able to reach,
 # because the site's own navigation links to them.
@@ -46,14 +43,14 @@ NAVIGATIONAL_PAGES = (
 )
 
 
-def _built_pages():
+def _built_pages(site_out):
     """Every generated HTML page, site-relative, in the generator's own terms."""
     out = []
-    for root, _dirs, files in os.walk(SITE_OUT):
+    for root, _dirs, files in os.walk(site_out):
         for name in files:
             if not name.endswith(".html"):
                 continue
-            rel = os.path.relpath(os.path.join(root, name), SITE_OUT)
+            rel = os.path.relpath(os.path.join(root, name), site_out)
             out.append(rel.replace(os.sep, "/"))
     return sorted(out)
 
@@ -61,15 +58,15 @@ def _built_pages():
 class EditorMapReachabilityTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not os.path.exists(MAP_PATH):
-            raise unittest.SkipTest(
-                "build/editor-map.generated.json absent — run tools/build_site.py first")
-        with open(MAP_PATH, encoding="utf-8") as fh:
-            cls.bundle = json.load(fh)
+        cls.tmp, cls.site_out, cls.bundle = build_fresh_site("edreach-")
         cls.pages = cls.bundle["pages"]
 
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
     def test_every_built_page_is_registered_except_the_exclusions(self):
-        expected = [p for p in _built_pages()
+        expected = [p for p in _built_pages(self.site_out)
                     if not p.startswith(bs.EDITOR_MAP_EXCLUDE_PREFIXES)]
         self.assertEqual(sorted(self.pages), expected,
                          "the page allowlist must cover every hostable built page")
@@ -79,6 +76,11 @@ class EditorMapReachabilityTest(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertIn(page, self.pages,
                               f"{page} is linked from the site nav; /edit must resolve it")
+
+    def test_authored_landing_pages_are_editable(self):
+        self.assertEqual(len(self.pages["index.html"]), 21)
+        self.assertEqual(len(self.pages["matters/index.html"]), 3)
+        self.assertEqual(len(self.pages["firm/index.html"]), 33)
 
     def test_chat_surfaces_are_excluded(self):
         self.assertIn("chat/", bs.EDITOR_MAP_EXCLUDE_PREFIXES)
