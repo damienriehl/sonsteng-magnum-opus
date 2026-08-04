@@ -97,15 +97,21 @@ async function exerciseCritique(page) {
   }
 }
 
-async function verifyLargeType(page) {
-  const found = await page.evaluate(() => {
-    const button = [...document.querySelectorAll('button')]
-      .find((candidate) => candidate.textContent.trim() === 'LARGE TYPE');
-    if (!button) return false;
-    button.click();
-    return button.getAttribute('aria-pressed') === 'true';
-  });
-  if (!found) throw new Error('Large Type control missing or aria-pressed did not update');
+async function verifyLargeType(page, initialLarge) {
+  const found = await page.evaluate((startsLarge) => {
+    const buttons = [...document.querySelectorAll('button')];
+    const largeButton = buttons.find((candidate) => candidate.textContent.trim() === 'LARGE TYPE');
+    const standardButton = buttons.find((candidate) => candidate.textContent.trim() === 'STANDARD');
+    if (!largeButton || !standardButton) return false;
+    const active = () => document.documentElement.classList.contains('type-lg');
+    const pressed = () => largeButton.getAttribute('aria-pressed') === 'true';
+    if (active() !== startsLarge || pressed() !== startsLarge) return false;
+    (startsLarge ? standardButton : largeButton).click();
+    if (active() === startsLarge || pressed() === startsLarge) return false;
+    if (!active()) largeButton.click();
+    return active() && pressed();
+  }, initialLarge);
+  if (!found) throw new Error('Large Type control missing or mode transition did not update');
 }
 
 function assertLayout(layout) {
@@ -129,7 +135,7 @@ async function runCase(browser, viewport, large, surface) {
     await page.waitForSelector(surface === 'interview' ? '#composer-input' : '#deliverable', {timeout: 10000});
     if (surface === 'interview') await exerciseInterview(page);
     else await exerciseCritique(page);
-    await verifyLargeType(page);
+    await verifyLargeType(page, large);
     assertLayout(await inspectLayout(page));
     console.log(`PASS ${surface} ${viewport.name} ${large ? 'large-start' : 'baseline-start'}`);
     return true;

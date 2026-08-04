@@ -47,7 +47,7 @@ async function inspect(page, hierarchy) {
     if(metrics.section&&metrics.metadata&&metrics.section.fontSize<=metrics.metadata.fontSize)hierarchyErrors.push(`section ${metrics.section.fontSize}px <= metadata ${metrics.metadata.fontSize}px`);
     const focusables=[...document.querySelectorAll('a[href],button,input,textarea,select')].filter(visible);
     const inaccessible=focusables.filter((el)=>!(el.getAttribute('aria-label')||el.getAttribute('title')||(el.textContent||'').trim()||el.labels&&el.labels.length)).slice(0,8).map((el)=>el.outerHTML.slice(0,100));
-    return {title:document.title,h1:headings.filter((h)=>h.tagName==='H1').length,jumps,overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,collisions,metrics,hierarchyErrors,inaccessible};
+    return {title:document.title,large:document.documentElement.classList.contains('type-lg'),h1:headings.filter((h)=>h.tagName==='H1').length,jumps,overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,collisions,metrics,hierarchyErrors,inaccessible};
   }, hierarchy || {});
 }
 async function run() {
@@ -62,6 +62,7 @@ async function run() {
     const page=await browser.newPage(); await page.setViewport(vp); await setMode(page,mode);
     try { await page.goto(relUrl(spec.path),{waitUntil:'networkidle0',timeout:30000}); if(printOnly)await page.emulateMediaType('print');
       const got=await inspect(page,spec.hierarchy); const errors=[];
+      if(got.large!==(mode==='large'))errors.push(`type mode mismatch: expected ${mode}, class type-lg=${got.large}`);
       if(got.h1!==1)errors.push(`visible H1 count ${got.h1}`); if(got.jumps.length)errors.push(`heading jumps ${got.jumps.join(', ')}`);
       for(const role of Object.keys(spec.hierarchy||{}))if(!got.metrics[role])errors.push(`hierarchy role not rendered: ${role} (${spec.hierarchy[role]})`);
       if(got.overflow>1)errors.push(`horizontal overflow ${got.overflow}px`); if(got.collisions.length)errors.push(`overlap ${got.collisions.join('; ')}`);
@@ -74,7 +75,7 @@ async function run() {
   if(!printOnly){
     const corpus=walk(SITE).filter((p)=>p.endsWith('.html')).filter((p)=>{const rel=path.relative(SITE,p).replaceAll(path.sep,'/');return !m.generatedCorpus.exclude.includes(rel)&&!rel.startsWith('chat/');});
     const vp=m.viewports.find((v)=>v.width===390);
-    for(const file of corpus) for(const mode of m.typeModes){const page=await browser.newPage();await page.setViewport(vp);await setMode(page,mode);const rel=path.relative(SITE,file).replaceAll(path.sep,'/');try{await page.goto('file://'+file,{waitUntil:'networkidle0',timeout:30000});const n=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);checks++;if(n>1){fails++;console.error(`FAIL corpus-overflow ${rel} ${mode} — ${n}px`);}}catch(e){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${e.message}`);}finally{await page.close();}}
+    for(const file of corpus) for(const mode of m.typeModes){const page=await browser.newPage();await page.setViewport(vp);await setMode(page,mode);const rel=path.relative(SITE,file).replaceAll(path.sep,'/');try{await page.goto('file://'+file,{waitUntil:'networkidle0',timeout:30000});const state=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,large:document.documentElement.classList.contains('type-lg')}));const errors=[];if(state.large!==(mode==='large'))errors.push(`type mode mismatch: expected ${mode}, class type-lg=${state.large}`);if(state.overflow>1)errors.push(`corpus-overflow ${state.overflow}px`);checks++;if(errors.length){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${errors.join(' | ')}`);}}catch(e){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${e.message}`);}finally{await page.close();}}
     console.log(`CORPUS ${corpus.length} generated pages × ${m.typeModes.length} modes checked at 390px`);
   }
   fs.mkdirSync(path.join(REPO,'build'),{recursive:true});fs.writeFileSync(path.join(REPO,'build',printOnly?'platform-print-report.json':'platform-layout-report.json'),JSON.stringify(report,null,2));

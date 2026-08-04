@@ -222,6 +222,10 @@ const AUDIT = function () {
       await page.evaluateOnNewDocument((large) => localStorage.setItem('sonsteng-type-lg', large ? '1' : '0'), mode === 'large');
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
       await page.evaluate(() => document.fonts ? document.fonts.ready : Promise.resolve());
+      const largeActive = await page.evaluate(() => document.documentElement.classList.contains('type-lg'));
+      if (largeActive !== (mode === 'large')) {
+        throw new Error(`type mode mismatch: expected ${mode}, class type-lg=${largeActive}`);
+      }
       const findings = await page.evaluate(AUDIT);
       const f = findings.filter((x) => x.level === 'FAIL');
       const w = findings.filter((x) => x.level === 'WARN');

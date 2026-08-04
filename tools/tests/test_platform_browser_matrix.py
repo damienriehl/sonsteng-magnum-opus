@@ -46,6 +46,17 @@ def test_full_generated_corpus_overflow_check_is_not_only_curated_pages():
     assert "generated pages" in source
 
 
+def test_browser_gates_assert_the_requested_large_type_mode_is_active():
+    layout = (TOOLS / "verify_platform_layout.js").read_text()
+    a11y = (TOOLS / "a11y_audit.js").read_text()
+    interactive = (TOOLS / "verify_chat_critique.js").read_text()
+    assert "got.large!==(mode==='large')" in layout
+    assert "state.large!==(mode==='large')" in layout
+    assert "largeActive !== (mode === 'large')" in a11y
+    assert "active() !== startsLarge" in interactive
+    assert "if (!active()) largeButton.click()" in interactive
+
+
 def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     generator = (ROOT / "tools" / "build_site.py").read_text()
     for heading in (
