@@ -239,5 +239,61 @@ class StabilityTest(unittest.TestCase):
                     len(self.fresh["pages"].get(page, [])), len(blocks))
 
 
+class OccurrencesTest(unittest.TestCase):
+    """U1: every rendered location is indexed without changing page blocks."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bundle = _build_fresh_map()
+        cls.occurrences = cls.bundle["occurrences"]
+
+    def test_single_page_leaf_has_one_occurrence(self):
+        ref = "data/firm/firm.json#identity.name"
+        self.assertEqual(
+            self.occurrences[ref],
+            [{"page": "firm/index.html", "index": 1}],
+        )
+
+    def test_meridian_canon_leaf_has_ten_distinct_page_occurrences(self):
+        ref = "data/jurisdictions/meridian.json#name"
+        occurrences = self.occurrences[ref]
+        self.assertEqual(len(occurrences), 10)
+        self.assertEqual(len({item["page"] for item in occurrences}), 10)
+
+    def test_matter_caption_has_two_occurrences(self):
+        ref = "data/matters/m01-arbitration-meridian/matter.json#caption"
+        self.assertEqual(len(self.occurrences[ref]), 2)
+
+    def test_source_metadata_stays_single_valued_across_occurrences(self):
+        ref = "data/jurisdictions/meridian.json#name"
+        blocks = [
+            block
+            for page_blocks in self.bundle["pages"].values()
+            for block in page_blocks
+            if block["source_ref"] == ref
+        ]
+        self.assertEqual(len(blocks), 10)
+        self.assertEqual(len({block["original_text"] for block in blocks}), 1)
+        self.assertEqual(len({block["json_path"] for block in blocks}), 1)
+        self.assertEqual(
+            set(self.occurrences[ref][0]), {"page", "index"},
+            "occurrences must not duplicate source metadata",
+        )
+
+    def test_total_block_count_is_unchanged(self):
+        self.assertEqual(self.bundle["counts"]["_total"], 5917)
+
+    def test_occurrences_are_the_exact_page_block_projection(self):
+        expected = {}
+        for page, blocks in self.bundle["pages"].items():
+            for block in blocks:
+                expected.setdefault(block["source_ref"], []).append({
+                    "page": page,
+                    "index": block["index"],
+                })
+        self.assertEqual(self.bundle["schema_version"], "1.1.0")
+        self.assertEqual(self.occurrences, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

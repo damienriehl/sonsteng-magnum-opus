@@ -3352,8 +3352,16 @@ def build_editor_map(spine_build_id, scope_index=None):
         total += len(entries)
 
     os.makedirs(BUILD_DIR, exist_ok=True)
+    occurrences = {}
+    for rel, entries in pages.items():
+        for entry in entries:
+            occurrences.setdefault(entry["source_ref"], []).append({
+                "page": rel,
+                "index": entry["index"],
+            })
+
     bundle = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "generated_by": "tools/build_site.py",
         "note": ("EDITABLE-BLOCK ALLOWLIST — server-only. The Worker bundles this "
                  "to validate every source_ref/json_path at suggest AND apply time. "
@@ -3370,6 +3378,7 @@ def build_editor_map(spine_build_id, scope_index=None):
         "counts": {},
         "scopes": scope_index or {},
         "facts": dict(FACTS_INDEX),
+        "occurrences": occurrences,
         "pages": pages,
     }
     for rel, entries in pages.items():
