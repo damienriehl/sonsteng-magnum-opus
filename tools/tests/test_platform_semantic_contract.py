@@ -39,6 +39,15 @@ class TestPlatformSemanticContract(unittest.TestCase):
     def test_clean_fresh_production_build_matches_baseline(self):
         self.assertEqual(contract.compare_snapshots(self.baseline, self.actual), [])
 
+    def test_authored_assets_and_interactive_pages_are_excluded(self):
+        pages = self.actual["pages"]
+        self.assertNotIn("assets/preview.html", pages)
+        self.assertNotIn("chat/index.html", pages)
+        self.assertNotIn("chat/critique.html", pages)
+        self.assertIn("index.html", pages)
+        self.assertIn("firm/index.html", pages)
+        self.assertIn("modules/m1.html", pages)
+
     def test_authored_text_canary_fires(self):
         values = list(self.actual["pages"]["index.html"]["text"])
         values[0] += " MUTATED"

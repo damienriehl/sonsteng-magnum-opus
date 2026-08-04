@@ -18,6 +18,7 @@ import sys
 
 _SPACE_RE = re.compile(r"\s+")
 _PRESENTATIONAL_TEXT = {"→", "←", "↗", "▸", "•"}
+_STATIC_EXCLUDED_PREFIXES = ("assets/", "chat/")
 
 
 def _normalize(value):
@@ -85,6 +86,10 @@ def capture_site(site_dir, editor_map):
                 continue
             path = os.path.join(root, filename)
             rel = os.path.relpath(path, site_dir).replace(os.sep, "/")
+            # Authored design assets and JavaScript-driven chat/critique have
+            # separate contracts. This snapshot covers generated static pages.
+            if rel.startswith(_STATIC_EXCLUDED_PREFIXES):
+                continue
             parser = _SemanticHTMLParser()
             with open(path, encoding="utf-8") as fh:
                 parser.feed(fh.read())

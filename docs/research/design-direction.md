@@ -1,98 +1,86 @@
-# Design Direction — "The Practicum Press"
+# Design Direction — Radical Casebook
 
-*Produced 2026-07-17 by the deepen-plan pass (frontend-design skill applied against the existing pitch page). This is the binding aesthetic contract for every page, the chat app, and the critique view. The convergence contract (§10) is what keeps ~20 agents producing one volume.*
+*Adopted 2026-08-04. This document is the binding visual contract for generated Platform pages, the interview, and the critique view. It supersedes “The Practicum Press” direction while preserving the shared-asset, accessibility, editor-identity, and generated-source boundaries.*
 
 ## 1. Aesthetic direction
 
-**"The Practicum Press" — Letterpress Chambers meets the Machine Spine.** A 50-year legacy rendered as a *living casebook*: warm letterpressed law-review authority (deckled cream stock, brass hairline rules, claret running heads, forest-green cloth binding) — with the machine spine (FOLIO IRIs, disclosure-tier meters, turn counters, rubric point-weights, ledger math) rendered in a precise technical mono that reads as *legal machinery in the margins*. The legacy is the page; the AI future is the apparatus around the page.
+**Radical Casebook** is a bold contemporary editorial system: warm casebook stock, dark ink, deep desaturated claret, differentiated paper surfaces, decisive Fraunces display type, readable Spectral prose, and restrained Fragment Mono instrumentation.
 
-**The one unforgettable thing:** the **brass hairline rule + running head** system — every page/card bound by thin brass rules with a small-caps mono running head (module code, matter slug, IRI, turn count) sitting *in* the rule, like a printed brief's header.
+The hierarchy is the memorable feature. A primary proposition must dominate its supporting paragraph; section landmarks must read as editorial signposts rather than incidental metadata; card titles must outrank their descriptions. Claret supports emphasis without resembling an alert. Large saturated-red content fields are not part of the ordinary vocabulary.
 
-**Tone by surface:** platform site = editorial law-review; chat app = hushed consultation room (in-fiction moments as italic *stage directions* in brass-ruled inserts); critique view = editor's marked-up galley proof with a grader's ledger margin.
+## 2. Typography
 
-## 2. Typography (all OFL, all embedded, zero external requests)
+All fonts are embedded and same-origin through `site/platform/assets/fonts.css`.
 
-| Role | Face | Notes |
+| Role | Face | Treatment |
 |---|---|---|
-| Display/headings | **Fraunces** (already embedded in `site/index.html`) | variable; `opsz` high, `wght` 500–900; `letter-spacing:-0.02em` large |
-| Body | **Spectral** (already embedded) | 400/500/600/700 + italic for stage directions & witness quotes |
-| Instrument/mono | **Fragment Mono** (NEW — download woff2, OFL, log in THIRD-PARTY.md; fallback face if unavailable: Spline Sans Mono, never a system mono) | uppercase labels `letter-spacing:.08em`; `font-variant-numeric:tabular-nums` for all numbers/money |
+| Proposition, page title, section and component headings | Fraunces | Bold to black; tight tracking; compact leading |
+| Body, explanatory copy, quotations | Spectral | Comfortable baseline; generous leading; readable measure |
+| Metadata, codes, counts, actions | Fragment Mono | Uppercase where appropriate; tabular numerals |
+| Editorial label | Fragment Mono | Promoted above micro-metadata, bold, claret, never tiny |
 
-Extract the six existing `@font-face` blocks into shared **`site/platform/assets/fonts.css`**; add Fragment Mono there. Fallback stacks: Fraunces/Spectral → `Georgia, serif`; Fragment Mono → `ui-monospace, Menlo, Consolas, monospace`. **Never** Inter/Roboto/Arial/system-ui.
+The shared scale lives in `theme.css`. Its relationship is binding: proposition/page title → section landmark → component title → body copy → metadata. The default is readable without assistance. `html.type-lg` overrides every hierarchy-bearing scale variable and remains visibly larger without flattening those relationships.
 
-Type scale (rem, fluid): `--fs-mono-xs:.72rem; --fs-xs:.82rem; --fs-sm:.92rem; --fs-base:1.06rem; --fs-md:1.2rem; --fs-lg:1.45rem; --fs-xl:clamp(1.7rem,1.2rem+2vw,2.3rem); --fs-2xl:clamp(2.2rem,1.4rem+3.5vw,3.4rem); --fs-display:clamp(2.8rem,1.6rem+5vw,5rem)`. Body line-height 1.65; headings 1.12; prose measure ≤68ch (62ch in chat).
+## 3. Palette and surfaces
 
-## 3. Palette (CSS variables — extends the pitch page; do not alter inherited hexes)
+The named tokens are authoritative:
 
 ```css
-:root{
-  /* inherited */
-  --paper:#f4efe4; --ink:#1d1a16; --ink-soft:#544d43; --ink-faint:#8a7f6d;
-  --brass:#a9822f; --brass-lite:#c19a44; --claret:#7c1e2b; --claret-deep:#5c141d;
-  --green:#2c4636; --line:rgba(29,26,22,.16); --line-soft:rgba(29,26,22,.09);
-  --shadow:0 22px 60px -28px rgba(40,20,10,.55);
-  /* platform extensions */
-  --paper-2:#efe8d9; --paper-3:#e8dfcc; --paper-edge:#dcd0b8;
-  --brass-wash:rgba(169,130,47,.10); --claret-wash:rgba(124,30,43,.07); --green-wash:rgba(44,70,54,.09);
-  /* semantic */
-  --tier-volunteered:#2c4636; --tier-revealed:#a9822f; --tier-rapport:#7c1e2b;
-  --tier-concealed:#544d43; --tier-unknown:#8a7f6d; --flag-ethics:#7c1e2b;
-  --meter-track:rgba(29,26,22,.10);
-  --ok:#2c4636; --warn:#a9822f; --stop:#7c1e2b; --ink-invert:#f4efe4;
+:root {
+  --paper: #f3ead5;
+  --paper-deep: #e1cfa9;
+  --surface-card: #fffaf0;
+  --surface-featured: #ede0c7;
+  --surface-inset: #eadcbe;
+  --ink: #281e18;
+  --ink-soft: #5f5046;
+  --claret: #78363e;
+  --claret-strong: #642b33;
+  --brass: #9a7131;
+  --green: #30483a;
+  --border-strong: #3a2920;
 }
 ```
 
-- **Real vs fictional tier signal:** Meridian = brass family + mono "⌘ MERIDIAN" chip; real-state = forest green + postal chip (`MN`, `NY`…). Never color alone — always the chip label.
-- **Contrast pre-verified:** `--ink`/`--paper` ≈13:1; `--ink-soft` ≈7:1; **brass is decorative/large-text only** (≈3.3:1 — small colored text uses claret/ink); `--ink-invert` on green/claret-deep ≥7:1.
+- Page and cards must not collapse into an identical field: ordinary cards use `--surface-card`, inset documents use `--surface-inset`, and offset shadows use `--paper-deep`.
+- Claret is a quiet editorial accent. `--claret-strong` is for accessible text and focus; broad saturated red surfaces are reserved for genuine status or safety meaning.
+- Brass supports rules and secondary accents. Green communicates success and real-jurisdiction state. Meaning never depends on color alone.
+- Borders may be unapologetically printed and structural. Corners remain crisp; avoid pills, glass, blur, neon, and ornamental gradients.
 
-## 4. Shared tokens & texture
+## 4. Shared primitives
 
-```css
-:root{
-  --space:1rem; --sp-2:.5rem; --sp-3:.75rem; --sp-6:1.5rem; --sp-8:2rem; --sp-12:3rem; --sp-16:4rem;
-  --maxw:72rem; --maxw-read:44rem; --gutter:clamp(1.1rem,3vw,2.5rem);
-  --radius:3px; --radius-card:5px;      /* print-crisp, never pill */
-  --rule:1px; --rule-bold:2.5px;
-  --ease:cubic-bezier(.2,.7,.2,1); --dur-fast:140ms; --dur:260ms; --dur-slow:520ms;
-}
-```
+`site/platform/assets/theme.css` is the single token and global-primitive authority. Consumers compose `.editorial-label`, `.brass-rule`, `.running-head`, `.card`, `.card--featured`, `.doc-card`, chips, meters, stage directions, ethics flags, TOC rails, KPI tiles, ledgers, segmented controls, and shared chrome. Page-specific layout remains with the generator or owning interface.
 
-- Page base: `--paper` + the pitch page's two fixed radial washes (brass top-right, claret top-left).
-- Paper grain: inline-SVG `feTurbulence` noise (data-URI), opacity .03, `mix-blend-mode:multiply`, on `body::before`.
-- Brass rules: 1px brass dividers with a 2px claret left tick; cards = 1px `--line` + `--paper-edge` inner hairline bevel; data wells = `--paper-3` inset.
-- **No** glassmorphism, blur, neon, text drop-shadows, flat solid fills.
+A featured card may use a warmer contrasting paper and claret border, but it must remain quieter than its heading and must not resemble an alert. Actions use mono instrument voice; substantive prose does not.
 
-## 5. Layout per deliverable
+## 5. Surface application
 
-- **Global chrome:** sticky masthead (brass top rule; "SONSTENG PRACTICUM" left; mono docket-code running head right, e.g., `M2 · MATTERS · REAGAN-V-JACOBSON`); mono brass breadcrumbs; forest-green cloth footer (MIT + "no platform fees; bring your own key" + THIRD-PARTY link). 12-col grid `--maxw`; prose `--maxw-read`; headings hang into the left gutter with claret ticks; mono metadata in a right rail.
-- **Module pages (M1/M2/M3):** oversized Fraunces module numeral bleeding off-margin; one-line italic thesis; ruled index rows of skills/matters. Volume accents: M1 brass, M2 claret, M3 green.
-- **Skills browser:** table-of-authorities feel; per-skill brass-ruled card with mono FOLIO chip + `mapping_confidence` badge (`EXACT`/`NEAR`/`PARENT`/`NO-FOLIO` in green/brass/faint/claret); expand → tasks → subtasks as nested ruled rows. **Extension set visually quarantined** under a claret-ruled "EXTENSION" header. Bidirectional skill↔matter chips.
-- **Matter library:** shape-first rows; **Meridian ⇄ real-state segmented toggle** top-right (accent family brass↔green, cross-fade `--dur`, no layout shift); matter cards with side chips, skill chips, "OPEN PACKET →"; two-sided matters show a split rule + per-side lock icons.
-- **8-part packets:** single long page, `--maxw-read`, sticky mono TOC rail (the 8 canonical parts, scroll-spied); Fraunces part numerals `01`–`08` hanging in the gutter; case-file sub-docs as inset `--paper-2` document cards. Instructor notes NEVER on this page — one muted "Instructor materials →" link. **Print CSS required:** strip chrome/washes, black-on-white, URLs after links, `break-inside:avoid` on document cards, page-break per part, instructor notes never in print output.
-- **Firm dashboard:** "practice ledger" broadsheet — firm identity card + KPI tiles (Fraunces big numbers, mono deltas, tabular-nums); charts per `firm-dashboard-viz-spec.md` **mapped to this palette** (see reconciliation note there); ledger tables mono right-aligned; JSON/CSV download chips.
+- **Home and modules:** oversized propositions, promoted section labels, strong section headings, differentiated volume cards, and clear apparatus separation.
+- **Skills and matters:** editorial index rhythm, visible scanning landmarks, shape and taxonomy metadata kept subordinate.
+- **Packets and documents:** restrained reading column, strong part landmarks, inset case-file surfaces, print-safe reading order.
+- **Firm views:** broadsheet ledger structure, typographic KPI hierarchy, and tabular machine data.
+- **Interview:** a quiet consultation room with readable dialogue, clear speaker hierarchy, accessible controls, and editorial stage directions.
+- **Critique:** a manuscript and grader-ledger relationship that stacks cleanly at narrow widths.
 
-## 6. Chat app (consultation room)
+Existing authored wording, data, destinations, curriculum, information architecture, and editor identity are not visual-design material and must remain unchanged.
 
-Centered column ≤52rem, base type ≥`--fs-md`. Brass-ruled case header with matter title, persona name/role, and the **turn counter `03 / 20` living in the rule**. No bubble tails: lawyer = right, `--paper-2` card, brass left rule; client = left, `--paper`, claret name label, slightly larger Spectral. First load = a tappable "chambers card" suggested opening (*"You may wish to begin: 'Thank you for coming in…'"*) + "suggest another" mono link — never an empty box. Input: tall brass-ruled textarea, ≥18px, ≥48px targets. Turn ~15 warning + turn-20 wrap-up + connection errors all render as *stage directions* (`--paper-3` well, italic, claret tick): "[The client glances at their watch.]" **Rule 4.2 flag:** in-line claret-bound "PROFESSIONAL RESPONSIBILITY — RULE 4.2 · NO CONTACT" insert with a two-sentence teaching note + mono "LOGGED TO DEBRIEF" tag (claret reserved for this + real errors). Transcript export card: **Copy (execCommand fallback mandatory)** + Download .txt/.md; privacy note always visible. **Debrief view:** post-interview memo on paper — tier sections (Elicited = green ✓ chips / Askable-never-asked = brass / Rapport-gated-never-earned = claret with the needed trigger in mono), Rule 4.2 claret box, Axis-B relational scores, encouraging "graded return" tone.
+## 6. Accessibility and modes
 
-## 7. Critique view (galley proof)
+WCAG 2.1 AA is a floor. Preserve one visible `h1`, ordered headings, semantic landmarks and controls, non-color labels, 48px touch targets, 16px inputs, visible focus, reduced motion, increased contrast, and 200% zoom without horizontal scrolling.
 
-Two-column desktop / stacked mobile: left = pasted memo on `--paper`, manuscript feel; right = grader's ledger — per-criterion brass-ruled cards (Fraunces criterion name, mono `7 / 10 PTS` + slim brass meter, Spectral feedback; weak = claret tick, strong = green), total card up top. Closing green-bound "Revise & resubmit" insert (Sonsteng re-write loop). Oversize rejection = calm brass insert, never a raw error. Small mono spend/turn note consistent with chat.
+Large Type is a first-class persistent mode shared by generated pages, interview, and critique. It enlarges the readable baseline while maintaining clear hierarchy and usable controls. Apply the mode before paint when possible to prevent a flash at the wrong size.
 
-## 8. Motion
+## 7. Responsive, motion, and print
 
-Print-inspired, restrained: staggered page reveal (opacity + 8px rise, 60ms steps); brass rules **draw in** (`scaleX 0→1`, `--dur-slow`); link underlines wipe left→right; cards lift 2px on hover; client messages fade+rise; claret ruled-tick "considering" indicator (not bouncing dots); meters animate width on first view. **`prefers-reduced-motion: reduce` disables all transforms/staggers — required on every surface.**
+Layouts preserve reading order as columns collapse. Text must not clip or overlap. Motion is restrained to short rule, underline, reveal, and lift transitions; `prefers-reduced-motion` removes transforms and nonessential animation.
 
-## 9. Accessibility (WCAG 2.1 AA — hard requirements)
+Print removes interactive chrome, texture and decorative washes; uses dark ink on white; preserves document order; avoids breaking cards where practical; and never exposes instructor-only material in learner packets.
 
-Contrast per §3 pairings; never color-alone (chips/icons/labels accompany every hue signal); visible 2px claret focus ring on everything interactive; real landmarks + one h1 + ordered headings; `<table>` for ledgers; `<button>` for actions; `aria-current` on TOC/nav; `aria-live="polite"` on chat stream, turn counter, cap banners; ethics flag `role="status"`. Touch ≥48px; inputs ≥16px (iOS zoom); 200% zoom without horizontal scroll. **Large-type mode (first-class, for John & Roger):** persistent toggle setting `.type-lg` on `<html>` (`--fs-base:1.28rem` etc.), persisted in localStorage. Respect `prefers-contrast` (darken brass→ink/claret for text).
+## 8. Convergence and source boundaries
 
-## 10. Convergence contract (binding on every implementing agent)
-
-1. One tokens partial: **`site/platform/assets/theme.css`** (variables, fonts import, grain/washes, base type, rule/running-head/card primitives, chips, meters, focus rings, reduced-motion, `.type-lg`). Compose from primitives; never invent per-page palettes/fonts/radii/shadows.
-2. Named primitives (identical class names everywhere): `.brass-rule`, `.running-head`, `.card`, `.doc-card`, `.chip` (+ `.chip--folio/--tier-*/--state/--meridian/--coming-soon`), `.meter`, `.stage-direction`, `.ethics-flag`, `.toc-rail`, `.kpi-tile`, `.ledger`, `.segmented-toggle`.
-3. Self-contained: zero external network requests (fonts local, SVG textures data-URIs); clipboard = execCommand fallback.
-4. Mono voice only for machine content (codes, IRIs, counts, money, timestamps, tags) — never prose.
-5. Accent discipline: brass = primary/interactive; claret = emphasis/in-fiction errors/Rule 4.2 (reserve it); green = success/real-tier/binding. Backgrounds always textured.
-
-*Note on the "self-contained" ethos (performance-review reconciliation): "no external requests" means no third-party/CDN. Shared **same-origin** assets (`theme.css`, `fonts.css`) are required — with ~150 generated pages, per-page embedded CSS re-downloads ~30–50KB on every navigation. Packet page budget: target ≤150KB, ceiling 250KB HTML+CSS; split oversized case files into linked sub-pages.*
+1. Reuse the three local font roles and the shared theme; introduce no third-party runtime requests.
+2. Put tokens and reusable primitives in `theme.css`; do not invent per-page palettes, fonts, radii, or shadows.
+3. Edit generator templates and authored assets, then regenerate. Generated Platform HTML and generated `platform.css`/`platform.js` are derived state.
+4. Preserve durable editor identity: stable block IDs and source references identify content; positional order is only a placement diagnostic.
+5. Keep substantive copy intact. Casing, wrapping, grouping, and placement may change only as presentation without changing words or meaning.
+6. Verify representative desktop, narrow, default, Large Type, contrast, reduced-motion, and print presentations before release.

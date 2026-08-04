@@ -2,9 +2,6 @@
   "schema_version": "1.0.0-digests",
   "page_ids": [
     "about/third-party.html",
-    "assets/preview.html",
-    "chat/critique.html",
-    "chat/index.html",
     "firm/index.html",
     "index.html",
     "matters/index.html",
@@ -75,10 +72,10 @@
     "templates/index.html"
   ],
   "fields": {
-    "text": "2ad508a6975695a6aaa5d52216663375601546823ce177dc848e60707ba1a5b4",
-    "headings": "90a29988784810c99e47b1eec4563929050e03d7ea2a9f2c2c5e78c77d625ff7",
-    "links": "afc3dacad5262246be9cff05eb8743acefd5277cd17e00a0125da592a5839ef2",
-    "editor_blocks": "14ee3bf0bfd4aa1f5c5a3a2a3c03cb0fe424836b9452467b229e412217b871d9",
-    "reading_order": "eb5a37071fbd8b49e38329ae413a0298819ef895dea8f116e32ca557b23749bf"
+    "text": "87b9e3ad72b8f69f422d096e7ea62afd32617844d1461ffe6d0c73ab25e928d4",
+    "headings": "91403d5c9d138d2277df2dabb0523ab208a4483deb855344df315ef675896866",
+    "links": "7be8890c7a50456787215dff01b35c92844a0ac613648cbb8512272f992309e7",
+    "editor_blocks": "9b169b283c7316fe7bc24fe6bce00649b3667cbd62538f6e526f460c6cba28e9",
+    "reading_order": "94516e22ccf427575bafce1954b9938d6887ed8998251deca8fc6781d9ae7dfc"
   }
 }
