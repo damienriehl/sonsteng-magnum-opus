@@ -1,15 +1,15 @@
 ---
-title: "Shared and Embedded Authored Scalars - Plan"
+title: "Shared and Computed Text - Plan"
 type: feat
 date: 2026-08-04
-topic: shared-embedded-scalar-contract
+topic: shared-and-computed-text
 artifact_contract: ce-unified-plan/v1
 artifact_readiness: requirements-only
 product_contract_source: ce-brainstorm
 execution: code
 ---
 
-# Shared and Embedded Authored Scalars - Plan
+# Shared and Computed Text - Plan
 
 ## Goal Capsule
 
@@ -27,10 +27,14 @@ whose source has no editing surface — is settled by R12.
 
 ### Summary
 
-Teach the editor map that an authored leaf can render in more than one place, and
-that an element can hold an authored fragment beside a computed one. Shared text is
-marked before it is clicked, an edit names every surface it will change, and John may
-apply it everywhere or to one surface only.
+Teach the editor that one piece of John's writing can appear on more than one page,
+and that a sentence can hold his words beside a computed value. Shared text is marked
+before he clicks it, an edit names every page it will change, and he may apply it
+everywhere or to just the page he is on.
+
+Two shapes, named once for the rest of this document. **Shared text** is one piece of
+writing that renders on more than one page. **Computed text** is a value the builder
+calculates, sitting inside a sentence John partly wrote.
 
 ### Problem Frame
 
