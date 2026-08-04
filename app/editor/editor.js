@@ -471,6 +471,7 @@
       var slug = m[1];
       opts.push({ label: 'This matter\u2019s case file', level: 'part', matter: slug, part: 'case-file' });
       opts.push({ label: 'This matter\u2019s exercise', level: 'part', matter: slug, part: 'exercise' });
+      opts.push({ label: 'This matter\u2019s business arrangements', level: 'part', matter: slug, part: 'business' });
       opts.push({ label: 'This whole matter', level: 'matter', matter: slug });
     }
     ['M1', 'M2', 'M3'].forEach(function (mod) {
