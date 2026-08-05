@@ -120,3 +120,12 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
   materials.
 
 *Questions? Text Damien. He sees everything you suggest.*
+
+# PROD rollout status
+
+PROD automatic promotion is not enabled. Saves continue through the documented
+editor flow, but U7 is in the `disabled` phase while its real calibration sample,
+supervised canary, and rollback proof are pending. A preview or favorable AI
+review is not permission to publish. If a PROD rollout status is shown, treat
+`no_go`, `paused`, or missing evidence as a hard stop and contact the assigned
+operator; DEV remains independent.

@@ -33,6 +33,54 @@ Before any PROD mutation, record all of these observations together:
 
 Any missing or stale item keeps `PROD_PROMOTION_ENABLED=0` and the timer disabled.
 
+### U7 rollout receipt — pending, not evidence
+
+The rollout policy is `prod-rollout-v1`; its immutable configuration hash and
+each decision's evidence hash are produced by `tools/prod_promotion.py`. A
+receipt is valid only for the exact policy configuration and evidence window
+recorded in it. Changing a threshold, AI cap, risk-policy version, model,
+prompt, or evidence window invalidates the old receipt. Record a new attributed
+policy version before collecting a new sample.
+
+Current auditable receipt template (intentionally incomplete):
+
+    decision: no_go
+    current_phase: disabled
+    requested_phase: shadow
+    actor: UNASSIGNED
+    rationale: Required measured and operational evidence has not been collected.
+    evidence_window_start: PENDING
+    evidence_window_end: PENDING
+    reviewed_candidates: 0 / 50 minimum
+    observation_days: 0 / 14 minimum
+    admin_agreement: PENDING / 90% minimum
+    hard_gate_escapes: PENDING / exactly 0
+    false_automatic_promotions: PENDING / exactly 0
+    restart_drill: PENDING / pass required
+    restoration_drill: PENDING / pass required
+    automatic_within_five_minutes: PENDING / 95% minimum
+    ai_unavailable_samples: PENDING / every sample must be handled
+    supervised_prod_canary: NOT RUN
+    rollback_drill: NOT RUN
+    prod_promotion_enabled: 0
+    ai_upward_cap: 0
+
+Do not replace `PENDING` with an inference. Evidence must identify its actor,
+window, policy version, and rationale. Before any enabling phase transition,
+the same receipt must also prove a restorable known-good baseline, a fully
+accounted queue, healthy PROD and DEV lanes, no unexplained drift, tested pause
+and AI-kill switches, and an assigned operator. Deterministic-only authority
+additionally requires a supervised canary and rollback drill. AI upward
+authority additionally requires every numeric threshold above and a positive
+configured cap. The independent AI kill switch is read for every next
+evaluation; setting it leaves deterministic scoring and eligible deterministic
+promotion available.
+
+Historical replay may use `replay_shadow_candidates`, which returns only
+content-free score/review records with `mutation_authority=false`. It has no
+ledger, approval, provider-publication, or Git-ref capability and cannot change
+a candidate's lifecycle state.
+
 ## Promotion risk and advisory AI boundary
 
 The PROD promotion policy lives in `tools/prod_promotion.py`. It is a pure,

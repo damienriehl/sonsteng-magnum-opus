@@ -27,6 +27,11 @@ MAX_REASON_CHARS = 240
 MAX_PROVIDER_RETENTION_DAYS = 30
 MAX_POLICY_INPUT_BYTES = 32768
 RELEASE_MANIFEST_SCHEMA_VERSION = "prod-release-v1"
+ROLLOUT_POLICY_VERSION = "prod-rollout-v1"
+
+ROLLOUT_PHASES = (
+    "disabled", "shadow", "supervised_canary", "deterministic_only", "ai_upward",
+)
 
 HARD_GATE_NAMES = (
     "base", "candidate_nonempty", "editor_map", "drift", "path_and_format",
@@ -132,6 +137,136 @@ class AIReview:
 class LaunchReadiness:
     ready: bool
     failed_criteria: tuple
+
+
+@dataclasses.dataclass(frozen=True)
+class RolloutThresholds:
+    """Immutable, versioned launch contract. Changes create a new evidence epoch."""
+    version: str = ROLLOUT_POLICY_VERSION
+    reviewed_candidates: int = 50
+    observation_days: int = 14
+    admin_agreement: float = .90
+    hard_gate_escapes: int = 0
+    false_automatic_promotions: int = 0
+    restart_drill_required: bool = True
+    restoration_drill_required: bool = True
+    automatic_within_five_minutes: float = .95
+    all_ai_unavailable_handled: bool = True
+
+    def __post_init__(self):
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.version or ""):
+            raise ValueError("rollout_policy_version")
+        if (not isinstance(self.reviewed_candidates, int)
+                or isinstance(self.reviewed_candidates, bool)
+                or not isinstance(self.observation_days, int)
+                or isinstance(self.observation_days, bool)):
+            raise ValueError("rollout_sample_type")
+        for value in (self.admin_agreement, self.automatic_within_five_minutes):
+            if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or not math.isfinite(value)):
+                raise ValueError("rollout_ratio_type")
+        for value in (self.hard_gate_escapes, self.false_automatic_promotions):
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError("rollout_incident_type")
+        if self.reviewed_candidates < 50 or self.observation_days < 14:
+            raise ValueError("rollout_minimum_sample")
+        if not .90 <= self.admin_agreement <= 1:
+            raise ValueError("rollout_admin_agreement")
+        if self.hard_gate_escapes != 0 or self.false_automatic_promotions != 0:
+            raise ValueError("rollout_zero_incidents")
+        if not .95 <= self.automatic_within_five_minutes <= 1:
+            raise ValueError("rollout_timing")
+        if not all((self.restart_drill_required, self.restoration_drill_required,
+                    self.all_ai_unavailable_handled)):
+            raise ValueError("rollout_required_proof")
+
+    @property
+    def configuration_hash(self):
+        return _canonical_hash(dataclasses.asdict(self))
+
+
+DEFAULT_ROLLOUT_THRESHOLDS = RolloutThresholds()
+
+
+@dataclasses.dataclass(frozen=True)
+class RolloutPrerequisites:
+    restorable_baseline: bool = False
+    queue_accounted: bool = False
+    prod_healthy: bool = False
+    dev_healthy: bool = False
+    no_drift: bool = False
+    pause_switch_tested: bool = False
+    kill_switch_tested: bool = False
+    operator_assigned: bool = False
+    supervised_canary_passed: bool = False
+    rollback_drill_passed: bool = False
+
+
+@dataclasses.dataclass(frozen=True)
+class RolloutPolicy:
+    """Binds thresholds and reviewer authority; no version is reusable after a change."""
+    version: str = ROLLOUT_POLICY_VERSION
+    thresholds: RolloutThresholds = dataclasses.field(default_factory=RolloutThresholds)
+    risk_policy_version: str = POLICY_VERSION
+    ai_upward_cap: float = 0.0
+    ai_model: str = "disabled"
+    ai_prompt_version: str = "disabled"
+
+    def __post_init__(self):
+        if self.version != self.thresholds.version:
+            raise ValueError("rollout_version_binding")
+        if (not isinstance(self.ai_upward_cap, (int, float))
+                or isinstance(self.ai_upward_cap, bool)
+                or not math.isfinite(self.ai_upward_cap)
+                or not 0 <= self.ai_upward_cap <= 10):
+            raise ValueError("rollout_ai_cap")
+        for value in (self.risk_policy_version, self.ai_model, self.ai_prompt_version):
+            if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,128}", value or ""):
+                raise ValueError("rollout_binding")
+
+    @property
+    def configuration_hash(self):
+        value = dataclasses.asdict(self)
+        return _canonical_hash(value)
+
+    @property
+    def policy_id(self):
+        """Effective version changes for every threshold/cap/model/prompt change."""
+        return "%s:%s" % (self.version, self.configuration_hash[:16])
+
+
+DEFAULT_ROLLOUT_POLICY = RolloutPolicy()
+
+
+@dataclasses.dataclass(frozen=True)
+class RolloutReceipt:
+    decision: str
+    requested_phase: str
+    current_phase: str
+    actor: str
+    rationale: str
+    evidence_window_start: str
+    evidence_window_end: str
+    policy_version: str
+    policy_hash: str
+    risk_policy_version: str
+    ai_model: str
+    ai_prompt_version: str
+    failed_criteria: tuple
+    evidence_hash: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ShadowReplayRecord:
+    candidate_id: str
+    policy_version: str
+    evidence_hash: str
+    deterministic_score: float
+    deterministic_disposition: str
+    ai_status: str
+    ai_adjustment: float
+    admin_agreed: bool | None
+    mutation_authority: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
@@ -374,18 +509,184 @@ def review_with_ai(result, context, provider, config, policy=DEFAULT_POLICY):
         return _hold(result, config, "review_unavailable")
 
 
-def ai_upward_launch_ready(metrics):
+def _at_least(value, minimum):
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value >= minimum)
+
+
+def _exact_count(value, expected):
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value == expected)
+
+
+def ai_upward_launch_ready(metrics, thresholds=DEFAULT_ROLLOUT_THRESHOLDS):
     """KTD13's measured, non-adaptive authority unlock contract."""
+    metrics = metrics if isinstance(metrics, dict) else {}
     checks = {
-        "reviewed_candidates": metrics.get("reviewed_candidates", 0) >= 50,
-        "observation_days": metrics.get("observation_days", 0) >= 14,
-        "admin_agreement": metrics.get("admin_agreement", 0) >= .90,
-        "hard_gate_escapes": metrics.get("hard_gate_escapes") == 0,
-        "false_automatic_promotions": metrics.get("false_automatic_promotions") == 0,
+        "reviewed_candidates": _at_least(metrics.get("reviewed_candidates"), thresholds.reviewed_candidates),
+        "observation_days": _at_least(metrics.get("observation_days"), thresholds.observation_days),
+        "admin_agreement": _at_least(metrics.get("admin_agreement"), thresholds.admin_agreement),
+        "hard_gate_escapes": _exact_count(metrics.get("hard_gate_escapes"), thresholds.hard_gate_escapes),
+        "false_automatic_promotions": _exact_count(
+            metrics.get("false_automatic_promotions"),
+            thresholds.false_automatic_promotions),
         "restart_drill_passed": metrics.get("restart_drill_passed") is True,
         "restoration_drill_passed": metrics.get("restoration_drill_passed") is True,
-        "automatic_within_five_minutes": metrics.get("automatic_within_five_minutes", 0) >= .95,
+        "automatic_within_five_minutes": _at_least(
+            metrics.get("automatic_within_five_minutes"),
+            thresholds.automatic_within_five_minutes),
         "ai_unavailable_samples_handled": metrics.get("ai_unavailable_samples_handled") is True,
     }
     failed = tuple(name for name, passed in checks.items() if not passed)
     return LaunchReadiness(not failed, failed)
+
+
+def replay_shadow_candidates(candidates, provider=None, config=None,
+                             risk_policy=DEFAULT_POLICY):
+    """Replay content-free historical evidence with permanently zero authority.
+
+    This pure projection has no coordinator or ledger handle. It cannot approve,
+    deploy, move a ref, or change candidate state.
+    """
+    records = []
+    for sample in candidates:
+        if not isinstance(sample, dict):
+            raise ValueError("shadow_sample")
+        candidate_id = _opaque_id(sample.get("candidate_id", ""))
+        if not candidate_id:
+            raise ValueError("shadow_candidate_id")
+        result = evaluate_risk(sample.get("risk_inputs", {}), risk_policy)
+        review = None
+        if provider is not None and config is not None:
+            review = review_with_ai(
+                result,
+                {"candidate_id": candidate_id,
+                 "attempt_id": _opaque_id(sample.get("attempt_id", ""))},
+                provider, config, risk_policy)
+        records.append(ShadowReplayRecord(
+            candidate_id=candidate_id,
+            policy_version=result.policy_version,
+            evidence_hash=result.evidence_hash,
+            deterministic_score=result.score,
+            deterministic_disposition=result.disposition,
+            ai_status=review.status if review else "not_configured",
+            ai_adjustment=review.adjustment if review else 0.0,
+            admin_agreed=(sample.get("admin_agreed")
+                          if sample.get("admin_agreed") in (True, False) else None),
+        ))
+    return tuple(records)
+
+
+def _rollout_prerequisite_failures(prerequisites, requested_phase):
+    common = (
+        "restorable_baseline", "queue_accounted", "prod_healthy", "dev_healthy",
+        "no_drift", "pause_switch_tested", "kill_switch_tested", "operator_assigned",
+    )
+    failed = [name for name in common if getattr(prerequisites, name) is not True]
+    if requested_phase in ("deterministic_only", "ai_upward"):
+        for name in ("supervised_canary_passed", "rollback_drill_passed"):
+            if getattr(prerequisites, name) is not True:
+                failed.append(name)
+    return failed
+
+
+def evaluate_rollout_transition(current_phase, requested_phase, prerequisites,
+                                metrics, actor, rationale,
+                                evidence_window_start, evidence_window_end,
+                                policy=DEFAULT_ROLLOUT_POLICY,
+                                ai_kill_switch=False):
+    """Return an immutable go/no-go receipt; never performs the transition."""
+    if current_phase not in ROLLOUT_PHASES or requested_phase not in ROLLOUT_PHASES:
+        raise ValueError("rollout_phase")
+    if not isinstance(prerequisites, RolloutPrerequisites):
+        raise ValueError("rollout_prerequisites")
+    if not _opaque_id(actor):
+        raise ValueError("rollout_actor")
+    if not isinstance(rationale, str) or not rationale.strip() or len(rationale) > 500:
+        raise ValueError("rollout_rationale")
+    for value in (evidence_window_start, evidence_window_end):
+        if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:T[^\s]{1,40})?", value):
+            raise ValueError("rollout_evidence_window")
+    failures = []
+    if requested_phase == "disabled":
+        # An emergency pause is always available and cannot depend on AI.
+        pass
+    else:
+        expected_index = ROLLOUT_PHASES.index(current_phase) + 1
+        if expected_index >= len(ROLLOUT_PHASES) or ROLLOUT_PHASES[expected_index] != requested_phase:
+            failures.append("phase_sequence")
+        failures.extend(_rollout_prerequisite_failures(prerequisites, requested_phase))
+        if requested_phase == "deterministic_only" and policy.ai_upward_cap != 0:
+            failures.append("ai_upward_must_be_zero")
+        if requested_phase == "ai_upward":
+            failures.extend(ai_upward_launch_ready(metrics, policy.thresholds).failed_criteria)
+            if policy.ai_upward_cap <= 0:
+                failures.append("ai_upward_cap_disabled")
+            if ai_kill_switch:
+                failures.append("ai_kill_switch_active")
+    failures = tuple(dict.fromkeys(failures))
+    evidence = {
+        "current_phase": current_phase,
+        "requested_phase": requested_phase,
+        "actor": actor,
+        "rationale": rationale.strip(),
+        "evidence_window_start": evidence_window_start,
+        "evidence_window_end": evidence_window_end,
+        "policy_version": policy.policy_id,
+        "policy_hash": policy.configuration_hash,
+        "risk_policy_version": policy.risk_policy_version,
+        "ai_model": policy.ai_model,
+        "ai_prompt_version": policy.ai_prompt_version,
+        "prerequisites": dataclasses.asdict(prerequisites),
+        "metrics": metrics if isinstance(metrics, dict) else {},
+        "failed_criteria": failures,
+    }
+    return RolloutReceipt(
+        decision="go" if not failures else "no_go",
+        requested_phase=requested_phase,
+        current_phase=current_phase,
+        actor=actor,
+        rationale=rationale.strip(),
+        evidence_window_start=evidence_window_start,
+        evidence_window_end=evidence_window_end,
+        policy_version=policy.policy_id,
+        policy_hash=policy.configuration_hash,
+        risk_policy_version=policy.risk_policy_version,
+        ai_model=policy.ai_model,
+        ai_prompt_version=policy.ai_prompt_version,
+        failed_criteria=failures,
+        evidence_hash=_canonical_hash(evidence),
+    )
+
+
+def authority_for_next_evaluation(phase, risk_policy=DEFAULT_POLICY,
+                                  ai_kill_switch=False, receipt=None,
+                                  rollout_policy=DEFAULT_ROLLOUT_POLICY,
+                                  window_start="", window_end=""):
+    """Resolve authority at evaluation time so the AI kill switch is immediate."""
+    if phase not in ROLLOUT_PHASES:
+        raise ValueError("rollout_phase")
+    receipt_valid = (receipt_matches_evaluation(
+        receipt, rollout_policy, window_start, window_end)
+        and receipt.requested_phase == phase
+        and rollout_policy.risk_policy_version == risk_policy.version)
+    deterministic = receipt_valid and phase in ("deterministic_only", "ai_upward")
+    ai_upward = (deterministic and phase == "ai_upward" and not ai_kill_switch
+                 and rollout_policy.ai_upward_cap > 0
+                 and risk_policy.ai_upward_cap == rollout_policy.ai_upward_cap)
+    effective = risk_policy if ai_upward else risk_policy.with_ai_upward_cap(0)
+    return MappingProxyType({
+        "deterministic_promotion": deterministic,
+        "ai_upward": ai_upward,
+        "risk_policy": effective,
+    })
+
+
+def receipt_matches_evaluation(receipt, policy, window_start, window_end):
+    """Prevent evidence from authorizing a changed policy or another window."""
+    return (isinstance(receipt, RolloutReceipt)
+            and receipt.decision == "go"
+            and receipt.policy_version == policy.policy_id
+            and receipt.policy_hash == policy.configuration_hash
+            and receipt.evidence_window_start == window_start
+            and receipt.evidence_window_end == window_end)
