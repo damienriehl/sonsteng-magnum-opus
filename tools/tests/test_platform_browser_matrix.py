@@ -39,6 +39,18 @@ def test_browser_gates_are_wired_into_preflight_and_never_soft_pass_launch_error
         assert "BROWSER GATE ERROR" in source
 
 
+def test_accessibility_audit_resolves_puppeteer_portably():
+    source = (TOOLS / "a11y_audit.js").read_text()
+    env_candidate = "process.env.PUP_DIR"
+    package_candidate = "'puppeteer'"
+    legacy_candidate = "'/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer'"
+
+    assert "function loadPuppeteer()" in source
+    assert source.index(env_candidate) < source.index(package_candidate) < source.index(legacy_candidate)
+    assert "const puppeteer = loadPuppeteer();" in source
+    assert "Puppeteer unavailable (set PUP_DIR or install puppeteer)" in source
+
+
 def test_full_generated_corpus_overflow_check_is_not_only_curated_pages():
     source = (TOOLS / "verify_platform_layout.js").read_text()
     assert "walk(SITE)" in source

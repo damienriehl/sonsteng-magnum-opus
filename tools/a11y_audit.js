@@ -26,9 +26,24 @@
    With no arguments it sweeps the local built site over file://.
    Exit code is 1 if any FAIL-level finding survives, so it can gate a build.
    ============================================================================ */
-const puppeteer = require('/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer');
 const path = require('path');
 const fs = require('fs');
+
+function loadPuppeteer() {
+  const candidates = [
+    process.env.PUP_DIR,
+    'puppeteer',
+    '/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer'
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      return require(candidate);
+    } catch (_) {}
+  }
+  throw new Error('Puppeteer unavailable (set PUP_DIR or install puppeteer)');
+}
+
+const puppeteer = loadPuppeteer();
 
 const REPO = path.resolve(__dirname, '..');
 const SITE = path.join(REPO, 'site', 'platform');
