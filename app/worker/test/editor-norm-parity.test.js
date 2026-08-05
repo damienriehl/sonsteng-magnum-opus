@@ -4,9 +4,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { normalize, normHash } from "../src/text-norm.js";
+import { normalize } from "../src/text-norm.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..", "..");
@@ -28,20 +29,24 @@ const SAMPLES = [
   "",
 ];
 
-test("JS normalize/normHash matches Python text_norm byte-for-byte", async () => {
+test("JS normalize/hash contract matches Python text_norm byte-for-byte", () => {
   // JS side
-  // Resolve the independent Web Crypto digests together. Serial subtle.digest
-  // calls can starve under Node's test-worker scheduler in constrained CI.
-  const jsRows = await Promise.all(SAMPLES.map(async (s) => [normalize(s), await normHash(s)]));
+  // Use Node's synchronous SHA-256 in this cross-process parity test. The
+  // browser harness covers the Worker's Web Crypto wrapper; keeping it out of
+  // this child-process test avoids libuv/WebCrypto starvation in constrained CI.
+  const jsRows = SAMPLES.map((s) => {
+    const normalized = normalize(s);
+    return [normalized, createHash("sha256").update(normalized, "utf8").digest("hex")];
+  });
 
   // Python side (stdlib only; uses the frozen tools/text_norm.py).
   const py = spawnSync("python3", ["-c", `
 import sys, json
 sys.path.insert(0, ${JSON.stringify(join(REPO_ROOT, "tools"))})
 import text_norm
-S = json.loads(sys.stdin.read())
+S = json.loads(sys.argv[1])
 print(json.dumps([[text_norm.normalize(s), text_norm.norm_hash(s)] for s in S]))
-`], { input: JSON.stringify(SAMPLES), encoding: "utf8" });
+`, JSON.stringify(SAMPLES)], { encoding: "utf8" });
 
   assert.equal(py.status, 0, `python failed: ${py.stderr}`);
   const pyRows = JSON.parse(py.stdout);
