@@ -32,6 +32,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -453,6 +454,42 @@ class EditorContractGuardTest(unittest.TestCase):
         ]}
         build_site.validate_editor_contract(
             pages, declared, {}, recorded_occurrences=declared)
+
+    def _build_passive_seam(self, declared_page, emitted_page="one.html"):
+        """Exercise declaration-vs-DOM comparison through build_editor_map."""
+        ref = self.PURE_REF
+        with tempfile.TemporaryDirectory(prefix="passive-guard-") as tmp:
+            old = (build_site.OUT, build_site.BUILD_DIR,
+                   build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES)
+            try:
+                build_site.OUT = os.path.join(tmp, "site")
+                build_site.BUILD_DIR = os.path.join(tmp, "build")
+                build_site.EDITOR_MAP_PATH = os.path.join(
+                    build_site.BUILD_DIR, "editor-map.generated.json")
+                build_site.PASSIVE_OCCURRENCES = {
+                    ref: [{"page": declared_page, "index": None}],
+                }
+                path = os.path.join(build_site.OUT, emitted_page)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write('<main><p data-ebrender="%s">Authored</p></main>' % ref)
+                build_site.build_editor_map("test-build")
+                with open(build_site.EDITOR_MAP_PATH, encoding="utf-8") as fh:
+                    return json.load(fh)
+            finally:
+                (build_site.OUT, build_site.BUILD_DIR,
+                 build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES) = old
+
+    def test_mismatched_passive_declaration_fails_at_build_seam(self):
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 1 surfaces.*records 1"):
+            self._build_passive_seam("wrong.html")
+
+    def test_matching_passive_declaration_passes_at_build_seam(self):
+        bundle = self._build_passive_seam("one.html")
+        self.assertEqual(bundle["occurrences"][self.PURE_REF], [
+            {"page": "one.html", "index": None},
+        ])
 
 
     def test_allowlisted_violation_passes(self):

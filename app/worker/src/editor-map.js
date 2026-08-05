@@ -122,11 +122,8 @@ for (const doc of INSTRUCTOR_BUNDLE.docs || []) {
 // json_path) or null. This is the server-side gate — the client's proposed
 // source_ref/json_path never bypass it.
 export function lookupBlock(source_ref, scope) {
-  const map = scope === "instructor" ? INSTR_BLOCK_BY_SRCREF : BLOCK_BY_SRCREF;
-  const indexed = map.get(source_ref);
-  const block = Array.isArray(indexed) ? indexed[0] : indexed;
-  if (!block) return null;
-  return block;
+  const blocks = lookupBlocks(source_ref, scope);
+  return blocks ? blocks[0] : null;
 }
 
 // Return every public render-site descriptor for a source_ref. Instructor docs

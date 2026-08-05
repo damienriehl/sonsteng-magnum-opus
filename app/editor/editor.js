@@ -1218,17 +1218,6 @@
     barDisable(true);
     setLocalStatus(s, 'Saving this page’s copy…', 'sending');
     setBarStatus('Creating a page-only authored copy…');
-    var detail = {
-      source_ref: s.ref, page: PAGE, new_text: s.snapshot,
-      original_hash: s.originalHash, json_path: s.jsonPath,
-      occurrences: s.occurrences.slice()
-    };
-    // U5 consumes either the callback (for async implementation) or the event
-    // (for loose coupling/tests). U4 deliberately performs no storage mutation.
-    if (typeof window.SonstengEditorPageOverride === 'function') {
-      window.SonstengEditorPageOverride(detail);
-    }
-    window.dispatchEvent(new CustomEvent('sonsteng:page-override-requested', { detail: detail }));
     var id = s.suggestionId || (s.suggestionId = uuid());
     api('/suggest', { body: {
       id: id, source_ref: s.ref, new_text: s.snapshot,

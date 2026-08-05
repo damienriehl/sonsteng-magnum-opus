@@ -444,13 +444,15 @@ def index_map(bundle):
     """Flatten editor-map.generated.json {pages: {page: [blocks]}} into
     {source_ref: block(+page)}. source_ref is unique per (file, block)."""
     idx = {}
+    occurrences = bundle.get("occurrences") or {}
     for page, blocks in (bundle.get("pages") or {}).items():
         for block in blocks:
+            source_ref = block["source_ref"]
             b = dict(block)
             b["page"] = page
-            b["occurrences"] = list(
-                (bundle.get("occurrences") or {}).get(b["source_ref"]) or [])
-            idx[b["source_ref"]] = b
+            idx[source_ref] = b
+    for source_ref, block in idx.items():
+        block["occurrences"] = occurrences.get(source_ref) or []
     return idx
 
 
@@ -1063,8 +1065,9 @@ def write_json_edits(raw, edits, create_paths=(), delete_paths=()):
         return json_surgical.splice_scalars(raw, edits)
     except json_surgical.SurgicalError:
         obj = json.loads(raw)
+        create_paths = set(create_paths)
         for path, value in edits:
-            json_set(obj, path, value, create=path in set(create_paths))
+            json_set(obj, path, value, create=path in create_paths)
         for path in delete_paths:
             delete_json_path(obj, path)
         return dump_json_like(obj, raw)
@@ -1592,6 +1595,7 @@ def _gate_group(members, source_index, worktree):
     """Return (group_status, [Patch]). group_status in
     {OUT_DRIFT, OUT_NEEDS_HUMAN, ""}. "" => all members cleanly patchable."""
     patches = []
+    shared_json = {}
     for r in members:
         source_ref = r["source_ref"]
         if r.get("kind") == "page_override_revert":
@@ -1640,8 +1644,10 @@ def _gate_group(members, source_index, worktree):
                 if block.get("kind") == "json_scalar":
                     shared_relpath = source_ref.split("#", 1)[0]
                     shared_path = block.get("json_path") or source_ref.split("#", 1)[1]
-                    with open(safe_data_path(worktree, shared_relpath), encoding="utf-8") as fh:
-                        shared_obj = json.load(fh)
+                    if shared_relpath not in shared_json:
+                        with open(safe_data_path(worktree, shared_relpath), encoding="utf-8") as fh:
+                            shared_json[shared_relpath] = json.load(fh)
+                    shared_obj = shared_json[shared_relpath]
                     current = json_get(shared_obj, shared_path)
                     value = coerce_page_override_value(r.get("new_text") or "", current)
                 else:

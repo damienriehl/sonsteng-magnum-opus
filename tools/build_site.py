@@ -263,6 +263,7 @@ class _EditorMap:
 
 EDMAP = _EditorMap()
 PAGE_OVERRIDES = {}
+PASSIVE_OCCURRENCES = {}
 
 
 _OVERRIDE_ELEMENT_RE = re.compile(
@@ -313,7 +314,7 @@ def _eb_scalar_attr(source_ref, original_text, json_path, context, mixed=False):
     return ' data-ebsrc="{r}"'.format(r=esc(source_ref))
 
 
-def _eb_render_attr(source_ref):
+def _eb_render_attr(source_ref, page):
     """Mark a read-only render of an authored leaf for the occurrence guard.
 
     This is deliberately not data-ebsrc: it records that the leaf renders on
@@ -321,6 +322,10 @@ def _eb_render_attr(source_ref):
     """
     if not EDMAP.enabled:
         return ""
+    occurrence = {"page": page, "index": None}
+    registered = PASSIVE_OCCURRENCES.setdefault(source_ref, [])
+    if occurrence not in registered:
+        registered.append(occurrence)
     return ' data-ebrender="{r}"'.format(r=esc(source_ref))
 
 
@@ -1518,7 +1523,7 @@ def build_modules(corpus):
                     '<span class="index-row__code">{tid}</span></div>'.format(
                         name=esc(t["name"]),
                         name_render=_eb_render_attr(
-                            tasks_rel + "#tasks.{i}.name".format(i=task_pos[t["id"]])),
+                            tasks_rel + "#tasks.{i}.name".format(i=task_pos[t["id"]]), rel),
                         bloom=esc(t.get("bloom_level", "")),
                         chips=chips, tid=esc(t["id"])))
             rows.append("""
@@ -1579,9 +1584,9 @@ def build_modules(corpus):
 """.format(accent=("brass" if meta["accent"] == "brass" else meta["accent"]),
            code=esc(code), n=code[1], title=esc(module_meta["title"]), thesis=esc(module_meta["thesis"]),
            title_render=_eb_render_attr(
-               "data/copy/home.json#volumes.modules.%s.title" % code),
+               "data/copy/home.json#volumes.modules.%s.title" % code, rel),
            thesis_render=_eb_render_attr(
-               "data/copy/home.json#volumes.modules.%s.thesis" % code),
+               "data/copy/home.json#volumes.modules.%s.thesis" % code, rel),
            ntasks=len(mod_tasks), nsk=len(by_skill), nm=len(linked),
            prose_section=prose_section, rows="".join(rows), mcards=matter_cards)
         write_file(rel, page_shell(
@@ -1632,7 +1637,7 @@ def build_templates(corpus):
     <a class="chip chip--matter" href="../modules/m2.html">M2 · SUBSTANTIVE + SKILLS</a>
     <a class="chip chip--matter" href="../modules/m3.html">M3 · TRANSITION</a>
   </div>
-</header>""".format(title_render=_eb_render_attr(title_ref))
+</header>""".format(title_render=_eb_render_attr(title_ref, rel))
 
     body = """
 {header}
@@ -1769,7 +1774,7 @@ def build_skills(corpus):
   </div>
   {ext}
 </section>
-""".format(n=len(lp) + len(pm), title_render=_eb_render_attr(title_ref),
+""".format(n=len(lp) + len(pm), title_render=_eb_render_attr(title_ref, rel),
            lp="".join(render_skill(s, open_first=(i == 0)) for i, s in enumerate(lp)),
            pm="".join(render_skill(s) for s in pm),
            ext="".join(render_skill(s) for s in ext))
@@ -3535,21 +3540,28 @@ def build_editor_map(spine_build_id, scope_index=None):
         total += len(entries)
 
     os.makedirs(BUILD_DIR, exist_ok=True)
-    occurrences = {}
+    editable_occurrences = {}
     for rel, entries in pages.items():
         for entry in entries:
-            occurrences.setdefault(entry["source_ref"], []).append({
+            editable_occurrences.setdefault(entry["source_ref"], []).append({
                 "page": rel,
                 "index": entry["index"],
             })
-    for ref, items in occurrences.items():
+    for ref, items in editable_occurrences.items():
         rendered_occurrences.setdefault(ref, []).extend(items)
 
+    declared_occurrences = {
+        ref: [dict(item) for item in items]
+        for ref, items in PASSIVE_OCCURRENCES.items()
+    }
+    for ref, items in editable_occurrences.items():
+        declared_occurrences.setdefault(ref, []).extend(items)
+
     transition_allowlist = _editor_transition_allowlist(
-        pages, rendered_occurrences)
+        pages, declared_occurrences)
     validate_editor_contract(
         pages, rendered_occurrences, transition_allowlist,
-        recorded_occurrences=rendered_occurrences)
+        recorded_occurrences=declared_occurrences)
 
     bundle = {
         "schema_version": "1.1.0",
@@ -3573,7 +3585,7 @@ def build_editor_map(spine_build_id, scope_index=None):
         # Include read-only render sites as well as editable candidates. A
         # passive occurrence has index=None: it is part of an edit's reach,
         # but is not itself an editable target on that surface.
-        "occurrences": rendered_occurrences,
+        "occurrences": declared_occurrences,
         "editor_contract_transition_allowlist": transition_allowlist,
         "pages": pages,
     }
@@ -3743,9 +3755,10 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
-    global SPINE_BUILD_ID
+    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES
     SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
     EDMAP.reset()
+    PASSIVE_OCCURRENCES = {}
     EDMAP.enabled = True                         # record editable blocks while rendering
 
     corpus = load_corpus()

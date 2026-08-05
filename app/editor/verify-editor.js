@@ -245,8 +245,6 @@ async function run() {
 
     await page.evaluate(() => {
       window.__MOCK_CTRL__.clear();
-      window.__U5_OVERRIDE_REQUESTS__ = [];
-      window.addEventListener('sonsteng:page-override-requested', e => window.__U5_OVERRIDE_REQUESTS__.push(e.detail), { once: true });
       window.SonstengEditor.typeInto(4, 'Only this page should receive this wording.');
       window.SonstengEditor.clickSave(4);
       window.SonstengEditor.chooseSharedThisPage();
@@ -256,18 +254,16 @@ async function run() {
     const thisPage = await page.evaluate(() => ({
       calls: window.__MOCK_CTRL__.server().calls,
       last: window.__MOCK_CTRL__.last(),
-      requests: window.__U5_OVERRIDE_REQUESTS__,
       block: window.SonstengEditor.block(4),
       expectedRef: window.__HARNESS_MAP__[3].source_ref,
       expectedPage: window.SonstengEditor.page()
     }));
-    assert('SH5 this-page-only routes to the U5 override seam without editing the shared leaf',
-      thisPage.calls === 1 && thisPage.requests.length === 1 &&
+    assert('SH5 this-page-only sends one authoritative page-override suggestion',
+      thisPage.calls === 1 &&
       thisPage.last.op === 'page_override' && thisPage.last.page === thisPage.expectedPage &&
       !Object.prototype.hasOwnProperty.call(thisPage.last, 'json_path') &&
-      thisPage.requests[0].source_ref === thisPage.expectedRef &&
-      thisPage.requests[0].page === thisPage.expectedPage,
-      'calls=' + thisPage.calls + ' requests=' + thisPage.requests.length + ' op=' + (thisPage.last && thisPage.last.op));
+      thisPage.last.source_ref === thisPage.expectedRef,
+      'calls=' + thisPage.calls + ' op=' + (thisPage.last && thisPage.last.op));
 
     const visibleOverride = await page.evaluate(() => ({
       rows: document.querySelectorAll('.eb-overrides__row').length,
