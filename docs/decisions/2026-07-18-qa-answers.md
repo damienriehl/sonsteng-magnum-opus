@@ -26,6 +26,10 @@ main after buildout, keeping main linear. **main tip = editor tip.**
 
 ## q3 — PROD deploy now or hold
 
+> **Superseded 2026-08-04:** Damien authorized routine PROD deployment of
+> merged, release-green engineering changes without a separate confirmation.
+> The answer below remains the historical decision for the July walkthrough.
+
 **HOLD until after the John & Roger walkthrough.** PROD (`sonsteng.damienriehl.com`)
 continues to serve only the original pitch. Everything demoed runs on DEV. The weekend
 work may *build* the PROD injector wiring, but the **PROD deploy itself stays held** —

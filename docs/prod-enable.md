@@ -1,9 +1,10 @@
-# PROD injector enable — one-command sequence (HELD; do not run without Damien)
+# PROD injector enable — one-command sequence
 
-**Status:** BUILT, NOT FLIPPED. PROD (`https://sonsteng.damienriehl.com`) currently
-serves ONLY the original pitch. This doc is the exact sequence to turn on the
-Worker-injected `/edit` editor on PROD. Per decision q3 (`docs/decisions/2026-07-18-qa-answers.md`),
-the flip itself always comes back to Damien — nothing here runs as part of routine work.
+**Status:** BUILT, NOT FLIPPED. This doc is the exact sequence to turn on the
+Worker-injected `/edit` editor on PROD. The former per-deploy approval hold was
+superseded on 2026-08-04: merged, release-green engineering changes may proceed
+to PROD without another confirmation. The prerequisites and verification in
+this runbook remain mandatory.
 
 The config is already wired: `app/worker/wrangler.jsonc` defines an `env.production`
 block (a SEPARATE worker `sonsteng-chat-production`) whose only deltas from DEV are
