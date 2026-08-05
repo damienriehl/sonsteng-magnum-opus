@@ -79,6 +79,37 @@ FLAG_ORIGIN = "ai_rewrite"
 VALID_SEVERITIES = ("voice", "consistency", "contradiction", "warn", "note")
 
 
+def parse_strict_json_object(raw, *, max_bytes=65536, max_depth=8):
+    """Parse one bounded JSON object, rejecting trailing text and deep values.
+
+    Promotion review uses this stricter boundary; the legacy editorial parser
+    intentionally remains best-effort because its output only creates comments.
+    """
+    if not isinstance(raw, str) or len(raw.encode("utf-8")) > max_bytes:
+        raise ValueError("json_size")
+    def reject_constant(value):
+        raise ValueError("json_nonfinite:%s" % value)
+
+    value = json.loads(raw, parse_constant=reject_constant)
+    if not isinstance(value, dict):
+        raise ValueError("json_object_required")
+
+    def depth(item, level=0):
+        if level > max_depth:
+            raise ValueError("json_depth")
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    raise ValueError("json_key")
+                depth(child, level + 1)
+        elif isinstance(item, list):
+            for child in item:
+                depth(child, level + 1)
+
+    depth(value)
+    return value
+
+
 # --------------------------------------------------------------------------- #
 # 1) Window selection — which apply commits fall in this pass's window (pure)
 # --------------------------------------------------------------------------- #

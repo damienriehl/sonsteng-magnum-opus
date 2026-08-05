@@ -1,5 +1,33 @@
 # PROD injector enable — one-command sequence
 
+## Promotion risk and advisory AI boundary
+
+The PROD promotion policy lives in `tools/prod_promotion.py`. It is a pure,
+versioned calculation: named preparation gates are absolute, normalized risk
+signals are clamped to `[0, 1]`, their configured weights produce a confidence
+score in `[0, 100]`, and the score selects `automatic`, `awaiting_approval`, or
+`low_confidence`. Missing gates, missing signals, non-finite values, and
+oversized inputs fail closed. Identical inputs replay to the same evidence hash.
+
+AI review is advisory and has no lifecycle, approval, branch, publication, or
+restoration capability. The adapter sends only the allowlisted score envelope;
+raw candidate content, filenames, validator output, credentials, and provider
+errors are excluded. Its dedicated credential must select a provider mode that
+prohibits training and retains requests for no more than 30 days. A response is
+accepted only when its strict schema, evidence hash, model, and prompt version
+match. Malformed, stale, unsafe, timed-out, or unavailable responses create a
+content-light `hold` record with zero adjustment. Hard-failed candidates never
+invoke the provider.
+
+Upward adjustment defaults to zero and its kill switch is independent of
+deterministic automatic promotion. Do not raise the cap until the measured
+launch contract reports all of the following: at least 50 reviewed candidates
+over at least 14 days, at least 90% admin agreement, zero hard-gate escapes,
+zero false automatic promotions, successful restart and restoration drills,
+at least 95% of automatic candidates completing within five minutes, and an
+explicit disposition for every AI-unavailable sample. Reducing the cap back to
+zero does not disable deterministic promotion.
+
 **Status:** BUILT, NOT FLIPPED. This doc is the exact sequence to turn on the
 Worker-injected `/edit` editor on PROD. The former per-deploy approval hold was
 superseded on 2026-08-04: merged, release-green engineering changes may proceed

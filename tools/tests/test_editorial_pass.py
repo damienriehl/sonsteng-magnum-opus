@@ -36,6 +36,13 @@ class TestSelectApplyCommits(unittest.TestCase):
 
 
 class TestParseFlags(unittest.TestCase):
+    def test_strict_parser_rejects_nonstandard_constants_without_changing_legacy(self):
+        raw = '{"flags": [], "score": NaN}'
+        with self.assertRaises(ValueError):
+            ep.parse_strict_json_object(raw)
+        # Editorial comments retain their pre-existing best-effort JSON path.
+        self.assertEqual(ep.parse_flags(raw), [])
+
     def test_bare_object(self):
         raw = '{"flags":[{"source_ref":"data/matters/m03/x.json","severity":"voice","message":"drifty"}]}'
         flags = ep.parse_flags(raw)
