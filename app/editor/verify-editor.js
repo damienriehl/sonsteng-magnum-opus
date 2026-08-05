@@ -112,7 +112,7 @@ async function bootFacts(browser, w, h) {
 async function run() {
   const browser = await puppeteer.launch({
     executablePath: '/snap/bin/chromium',
-    headless: false,
+    headless: process.env.EDITOR_HEADLESS === '1',
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1300,1500']
   });
 
@@ -176,6 +176,83 @@ async function run() {
       b3after.state === 'EDITING' && b3after.dirty === true && !!b3after.suggestionId,
       'state=' + b3after.state + ' dirty=' + b3after.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(3));
+
+    /* --- SH: shared text exposes reach before commit (U4) ---------------- */
+    const sharedAtRest = await page.evaluate(() => ({
+      single: window.SonstengEditor.block(1),
+      shared: window.SonstengEditor.block(4),
+      singleMarked: document.querySelector('[data-eb-index="1"]').classList.contains('eb--shared'),
+      sharedMarked: document.querySelector('[data-eb-index="4"]').classList.contains('eb--shared')
+    }));
+    assert('SH1 a single-occurrence block has no shared mark',
+      sharedAtRest.single.shared === false && sharedAtRest.singleMarked === false);
+    assert('SH2 a three-occurrence block is marked as shared before selection',
+      sharedAtRest.shared.shared === true && sharedAtRest.shared.occurrenceCount === 3 && sharedAtRest.sharedMarked === true,
+      'shared=' + sharedAtRest.shared.shared + ' occurrences=' + sharedAtRest.shared.occurrenceCount);
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.SonstengEditor.typeInto(4, 'A shared edit whose reach John must choose.');
+      window.SonstengEditor.clickSave(4);
+    });
+    const reach = await page.evaluate(() => window.SonstengEditor.sharedDialog());
+    assert('SH3 shared commit names the other two pages before sending',
+      reach && reach.pages.length === 2 &&
+      reach.pages.some(p => /exercise/i.test(p)) && reach.pages.some(p => /module 1/i.test(p)),
+      reach ? JSON.stringify(reach.pages) : 'dialog absent');
+    const beforeEverywhere = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    await page.evaluate(() => window.SonstengEditor.chooseSharedEverywhere());
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
+    const everywhere = await page.evaluate(() => ({ server: window.__MOCK_CTRL__.server(), last: window.__MOCK_CTRL__.last(), expectedRef: window.__HARNESS_MAP__[3].source_ref }));
+    assert('SH4 change-everywhere sends exactly one suggestion against the shared leaf',
+      everywhere.server.calls - beforeEverywhere === 1 &&
+      everywhere.last.source_ref === everywhere.expectedRef,
+      'calls=' + (everywhere.server.calls - beforeEverywhere) + ' ref=' + (everywhere.last && everywhere.last.source_ref));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.__U5_OVERRIDE_REQUESTS__ = [];
+      window.addEventListener('sonsteng:page-override-requested', e => window.__U5_OVERRIDE_REQUESTS__.push(e.detail), { once: true });
+      window.SonstengEditor.typeInto(4, 'Only this page should receive this wording.');
+      window.SonstengEditor.clickSave(4);
+      window.SonstengEditor.chooseSharedThisPage();
+    });
+    const thisPage = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls,
+      requests: window.__U5_OVERRIDE_REQUESTS__,
+      block: window.SonstengEditor.block(4),
+      expectedRef: window.__HARNESS_MAP__[3].source_ref,
+      expectedPage: window.SonstengEditor.page()
+    }));
+    assert('SH5 this-page-only routes to the U5 override seam without editing the shared leaf',
+      thisPage.calls === 0 && thisPage.requests.length === 1 &&
+      thisPage.requests[0].source_ref === thisPage.expectedRef &&
+      thisPage.requests[0].page === thisPage.expectedPage,
+      'calls=' + thisPage.calls + ' requests=' + thisPage.requests.length);
+    await page.evaluate(() => window.SonstengEditor.clickCancel(4));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.SonstengEditor.typeInto(4, 'Dismiss this reach choice.');
+      window.SonstengEditor.clickSave(4);
+      window.SonstengEditor.dismissSharedDialog();
+    });
+    const dismissed = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls,
+      open: window.SonstengEditor.sharedDialog(),
+      block: window.SonstengEditor.block(4),
+      pending: document.querySelector('[data-eb-index="4"]').classList.contains('eb--pending')
+    }));
+    assert('SH6 dismissing reach leaves no suggestion or pending mark',
+      dismissed.calls === 0 && !dismissed.open && dismissed.block.state === 'EDITING' && dismissed.pending === false,
+      'calls=' + dismissed.calls + ' state=' + dismissed.block.state + ' pending=' + dismissed.pending);
+    await page.evaluate(() => window.SonstengEditor.clickCancel(4));
+    // U4 deliberately exercises a successful edit of block 4, which changes
+    // that session's in-memory baseline. Reload so the long-standing hydration
+    // and selection checks below retain their pristine fixture assumptions.
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+    await installRadiusMock(page);
     // C4 (revised 2026-07-27): the explanation used to stand permanently under
     // every formatted block — the same sentence repeated dozens of times down a
     // matter packet. It now travels with the control that can act on it: the
@@ -401,6 +478,7 @@ async function run() {
     ]), HYREF, 'A hydrated starting point for the re-edit.');
     await page.evaluate(() => window.SonstengEditor.typeInto(4, 'A re-edit that starts from the hydrated suggestion text.'));
     await page.evaluate(() => window.SonstengEditor.clickSave(4));
+    await page.evaluate(() => window.SonstengEditor.chooseSharedEverywhere());
     await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
     const last = await page.evaluate(() => window.__MOCK_CTRL__.last());
     assert('HY7 re-edit from a hydrated block saves a valid supersede (canonical original_hash sent, unpoisoned)',

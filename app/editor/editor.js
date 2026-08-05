@@ -274,6 +274,8 @@
       ref: desc.source_ref, index: desc.index, el: elx, kind: desc.kind,
       editable: editable, commentOnly: commentOnly,
       hasFormatting: !!desc.has_inline_formatting, jsonPath: desc.json_path || null,
+      occurrences: Array.isArray(desc.occurrences) ? desc.occurrences.slice() : [],
+      shared: Array.isArray(desc.occurrences) && desc.occurrences.length > 1,
       originalText: desc.original_text != null ? desc.original_text : (elx.textContent || ''),
       originalHash: desc.original_hash || '',
       suggestionId: null, snapshot: null, state: ST.IDLE, dirty: false,
@@ -933,6 +935,11 @@
     eb.classList.add('eb');
     eb.classList.add(s.editable ? 'eb--editable' : 'eb--comment-only');
     eb.setAttribute('data-eb-index', String(s.index));
+    if (s.shared) {
+      eb.classList.add('eb--shared');
+      eb.setAttribute('data-eb-shared', 'true');
+      eb.setAttribute('title', 'Shared text — editing it can change more than one page');
+    }
 
     toolsEl(s);
 
@@ -1042,6 +1049,12 @@
     opts = opts || {};
     if (s.state === ST.SAVING) return;              // in-flight guard (dedupe layer 1)
     if (!s.dirty) { if (!opts.auto) setLocalStatus(s, 'No change to send', null); return; }
+    // A shared leaf remains one edit session and one suggestion. Its reach is a
+    // choice made before the critical section, never client-side fan-out.
+    if (s.shared && !opts.sharedEverywhere) {
+      openSharedReachDialog(s);
+      return;
+    }
     clearTimeout(s._debounce); s._debounce = null;  // a send is happening now
     // ---- synchronous critical section (chat.js §Input; spike R3/R4) ----
     s.state = ST.SAVING;
@@ -1098,6 +1111,73 @@
         handleSendError(s, out, opts);
       }
     });
+  }
+
+  /* ---------- SHARED REACH: one leaf, an explicit scope decision (U4) ----- */
+  var sharedReachDlg = null;
+  function titleWords(value) {
+    return String(value || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+  function pageLabel(page) {
+    var parts = String(page || '').replace(/\/index\.html$/, '').split('/').filter(Boolean);
+    if (parts[0] === 'modules' && parts[1]) return 'Module ' + parts[1].replace(/^m/i, '');
+    if (parts[0] === 'matters' && parts[1]) {
+      var matter = titleWords(parts[1].replace(/^m\d+-/, ''));
+      return matter + (parts[2] ? ' · ' + titleWords(parts.slice(2).join(' · ')) : ' · Overview');
+    }
+    return parts.length ? parts.map(titleWords).join(' · ') : String(page || 'another page');
+  }
+  function otherOccurrences(s) {
+    return s.occurrences.filter(function (o) { return o && o.page && o.page !== PAGE; });
+  }
+  function closeSharedReachDialog() {
+    if (!sharedReachDlg) return;
+    var trigger = sharedReachDlg._trigger;
+    if (sharedReachDlg.parentNode) sharedReachDlg.parentNode.removeChild(sharedReachDlg);
+    sharedReachDlg = null;
+    if (trigger) { try { trigger.focus(); } catch (e) {} }
+  }
+  function requestPageOverride(s) {
+    var detail = {
+      source_ref: s.ref, page: PAGE, new_text: s.snapshot,
+      original_hash: s.originalHash, json_path: s.jsonPath,
+      occurrences: s.occurrences.slice()
+    };
+    // U5 consumes either the callback (for async implementation) or the event
+    // (for loose coupling/tests). U4 deliberately performs no storage mutation.
+    if (typeof window.SonstengEditorPageOverride === 'function') {
+      window.SonstengEditorPageOverride(detail);
+    }
+    window.dispatchEvent(new CustomEvent('sonsteng:page-override-requested', { detail: detail }));
+    saveDraft(s);
+    setLocalStatus(s, 'This-page copy requested — not sent to the shared text', 'draft');
+    setBarStatus('This-page-only is ready for the override step; the shared text was not changed.');
+  }
+  function openSharedReachDialog(s) {
+    if (sharedReachDlg && sharedReachDlg.isConnected) return;
+    var others = otherOccurrences(s);
+    var d = el('div', 'eb-shared-dialog');
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+    d.setAttribute('aria-label', 'Choose where this shared edit applies');
+    var inner = el('div', 'eb-shared-dialog__inner');
+    inner.appendChild(el('h2', 'eb-shared-dialog__title', 'This text appears on more than one page'));
+    inner.appendChild(el('p', 'eb-shared-dialog__lede',
+      'Changing it everywhere will also update ' + (others.length === 1 ? 'this page:' : 'these pages:')));
+    var list = el('ul', 'eb-shared-dialog__pages');
+    others.forEach(function (o) { list.appendChild(el('li', '', pageLabel(o.page))); });
+    inner.appendChild(list);
+    var row = el('div', 'eb-shared-dialog__row');
+    var everywhere = el('button', 'eb-shared-dialog__everywhere', 'Change everywhere'); everywhere.type = 'button';
+    var here = el('button', 'eb-shared-dialog__here', 'Change this page only'); here.type = 'button';
+    var cancel = el('button', 'eb-shared-dialog__cancel', 'Keep editing'); cancel.type = 'button';
+    row.appendChild(everywhere); row.appendChild(here); row.appendChild(cancel);
+    inner.appendChild(row); d.appendChild(inner); document.body.appendChild(d);
+    d._session = s; d._trigger = barSave || s.el; sharedReachDlg = d;
+    everywhere.addEventListener('click', function () { closeSharedReachDialog(); sendSuggestion(s, { sharedEverywhere: true }); });
+    here.addEventListener('click', function () { closeSharedReachDialog(); requestPageOverride(s); });
+    cancel.addEventListener('click', closeSharedReachDialog);
+    d.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSharedReachDialog(); });
+    setTimeout(function () { try { everywhere.focus(); } catch (e) {} }, 0);
   }
 
   function handleSendError(s, out, opts) {
@@ -1951,7 +2031,8 @@
         state: s.state, dirty: s.dirty, suggestionId: s.suggestionId, snapshot: s.snapshot,
         originalHash: s.originalHash, originalText: s.originalText,
         hydrated: !!s._hydrated, attribution: s._attr || '',
-        statusText: s._status ? s._status.textContent : ''
+        statusText: s._status ? s._status.textContent : '',
+        shared: s.shared, occurrenceCount: s.occurrences.length
       };
     },
     // hydration harness hooks: render an arbitrary #edits-data item set (the
@@ -1980,6 +2061,13 @@
     },
     blurBlock: function (index) { var s = byIndex[index]; if (s) s.el.dispatchEvent(new Event('blur')); },
     clickSave: function (index) { var s = byIndex[index]; if (s) sendSuggestion(s); },                 // the guarded send
+    sharedDialog: function () {
+      if (!sharedReachDlg) return null;
+      return { pages: Array.prototype.map.call(sharedReachDlg.querySelectorAll('.eb-shared-dialog__pages li'), function (n) { return n.textContent; }) };
+    },
+    chooseSharedEverywhere: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__everywhere').click(); },
+    chooseSharedThisPage: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__here').click(); },
+    dismissSharedDialog: closeSharedReachDialog,
     tripleClickSave: function (index) { var s = byIndex[index]; if (s) { sendSuggestion(s); sendSuggestion(s); sendSuggestion(s); } },
     openPreview: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; showBar(s); openPreview(); } },
     confirmSend: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; sendSuggestion(s); } },
