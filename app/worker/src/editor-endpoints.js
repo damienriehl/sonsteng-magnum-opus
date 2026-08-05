@@ -12,6 +12,7 @@ import {
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
+import { renderPromotionPreview } from "./editor-review.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -33,6 +34,63 @@ async function sha256Hex(text) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function promotionEpochOk(body, env) {
+  const supplied = body?.manifest_epoch;
+  const live = env?.EDIT_PROD_MANIFEST_EPOCH;
+  return typeof supplied === "string" && supplied.startsWith("live:") &&
+    typeof live === "string" && live.startsWith("live:") && supplied === live;
+}
+
+function staleEpoch() {
+  return editError("stale_manifest_epoch", "Refresh the editor before changing PROD.", 409);
+}
+
+function boundCandidate(candidate, url) {
+  const a = candidate?.attempt;
+  if (!candidate || !a) return null;
+  const wanted = {
+    attempt_id: url.searchParams.get("attempt_id"), base_sha: url.searchParams.get("base_sha"),
+    evidence_hash: url.searchParams.get("evidence_hash"), manifest_hash: url.searchParams.get("manifest_hash"),
+  };
+  if (wanted.attempt_id !== candidate.active_attempt_id || wanted.attempt_id !== a.id ||
+      wanted.base_sha !== a.base_sha || wanted.evidence_hash !== a.evidence_hash ||
+      wanted.manifest_hash !== a.manifest_hash) return null;
+  const gates = Array.isArray(candidate.evidence?.gates) ? candidate.evidence.gates.slice(0, 100).map((gate) => ({
+    name: String(gate?.name || "gate"), status: String(gate?.status || "unknown"),
+    summary: typeof gate?.summary === "string" ? gate.summary : undefined,
+  })) : [];
+  const score = candidate.score && typeof candidate.score === "object" ? {
+    confidence: Number.isFinite(candidate.score.confidence) ? candidate.score.confidence : null,
+    deterministic_score: Number.isFinite(candidate.score.deterministic_score) ? candidate.score.deterministic_score : null,
+    risk_delta: Number.isFinite(candidate.score.risk_delta) ? candidate.score.risk_delta : null,
+  } : null;
+  return {
+    id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    attempt_id: a.id, base_sha: a.base_sha, evidence_hash: a.evidence_hash,
+    manifest_hash: a.manifest_hash,
+    preview_html: typeof candidate.preview_html === "string" ? candidate.preview_html : "",
+    evidence: { gates }, score,
+    ai: candidate.ai && typeof candidate.ai === "object"
+      ? { disposition: candidate.ai.disposition || null,
+          reasons: Array.isArray(candidate.ai.reasons) ? candidate.ai.reasons.map(String).slice(0, 20) : [] }
+      : null,
+  };
+}
+
+function candidateBinding(candidate) {
+  const a = candidate?.attempt;
+  if (!candidate || !a || !a.id) return null;
+  if (!a.base_sha || !a.evidence_hash || !a.manifest_hash) return {
+    id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    attempt_id: a.id, preview_href: null,
+  };
+  const query = new URLSearchParams({ id: candidate.id, attempt_id: a.id, base_sha: a.base_sha,
+    evidence_hash: a.evidence_hash, manifest_hash: a.manifest_hash }).toString();
+  return { id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    attempt_id: a.id, base_sha: a.base_sha, evidence_hash: a.evidence_hash,
+    manifest_hash: a.manifest_hash, preview_href: "/edit/v1/prod/preview?" + query };
+}
+
 // ---- PROD promotion contract ------------------------------------------------
 // These endpoints are intentionally role-scoped façades over the dedicated
 // promotion ledger. The coordinator and later UI use the same resources.
@@ -41,13 +99,14 @@ export async function promotionSaveEndpoint(request, env, auth) {
   if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (!auth.editor || (!auth.scopes.edit.granted && !auth.scopes.instructor.granted)) return uniform404();
   const body = await readJson(request);
+  if (!promotionEpochOk(body, env)) return staleEpoch();
   if (!body || typeof body.candidate_id !== "string" || typeof body.idempotency_key !== "string" ||
       typeof body.source_ref !== "string" || body.content == null)
     return editError("validation_error", "Invalid promotion save.", 400);
   const encoded = JSON.stringify(body.content);
   const result = await editorStub(env).createPromotionCandidate({
     id: body.candidate_id, principal: auth.editor, environment: "production",
-    idempotency_key: body.idempotency_key, request_digest: await sha256Hex(encoded),
+    idempotency_key: body.idempotency_key, request_digest: await sha256Hex(JSON.stringify(body)),
     content_bytes: new TextEncoder().encode(encoded).byteLength, source_ref: body.source_ref,
   }, (() => {
     const c = ceilingsFor(env);
@@ -62,11 +121,38 @@ export async function promotionSaveEndpoint(request, env, auth) {
 
 export async function promotionCandidateEndpoint(request, env, auth) {
   if (!prodPromotionApiOk(env)) return uniform404();
-  const id = new URL(request.url).searchParams.get("id");
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
   if (!id || !auth.editor) return uniform404();
   const candidate = await editorStub(env).getPromotionCandidate(id);
   if (!candidate || (!auth.scopes.admin.granted && candidate.principal !== auth.editor)) return uniform404();
-  return json({ ok: true, candidate });
+  const projection = boundCandidate(candidate, url);
+  if (!projection) return uniform404();
+  return json({ ok: true, candidate: projection });
+}
+
+export async function promotionCandidatesEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env) || !auth.editor) return uniform404();
+  const admin = auth.scopes.admin.granted;
+  if (!admin && !auth.scopes.edit.granted && !auth.scopes.instructor.granted) return uniform404();
+  const stub = editorStub(env);
+  const rows = await stub.listPromotionCandidates(admin ? null : auth.editor);
+  const candidates = [];
+  for (const row of rows || []) {
+    if (!admin && row.principal !== auth.editor) continue;
+    const projected = candidateBinding(await stub.getPromotionCandidate(row.id));
+    if (projected) candidates.push(projected);
+  }
+  return json({ ok: true, candidates });
+}
+
+export async function promotionPreviewEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env) || !auth.editor) return uniform404();
+  const url = new URL(request.url);
+  const candidate = await editorStub(env).getPromotionCandidate(url.searchParams.get("id"));
+  if (!candidate || (!auth.scopes.admin.granted && candidate.principal !== auth.editor)) return uniform404();
+  const projection = boundCandidate(candidate, url);
+  return projection ? renderPromotionPreview(projection) : uniform404();
 }
 
 export async function promotionLaneEndpoint(request, env, auth) {
@@ -81,7 +167,9 @@ export async function promotionDecisionEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
-  const result = await editorStub(env).decidePromotion({ ...body, principal: auth.editor });
+  if (!promotionEpochOk(body, env)) return staleEpoch();
+  const request_digest = await sha256Hex(JSON.stringify(body));
+  const result = await editorStub(env).decidePromotion({ ...body, request_digest, principal: auth.editor });
   return json(result, result.ok ? 200 : 409);
 }
 
@@ -91,7 +179,9 @@ export async function promotionRetryEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
-  const result = await editorStub(env).retryPromotion({ ...body, principal: auth.editor });
+  if (!promotionEpochOk(body, env)) return staleEpoch();
+  const request_digest = await sha256Hex(JSON.stringify(body));
+  const result = await editorStub(env).retryPromotion({ ...body, request_digest, principal: auth.editor });
   return json(result, result.ok ? 200 : 409);
 }
 
@@ -100,6 +190,7 @@ export async function promotionPauseEndpoint(request, env, auth) {
   if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
   const body = await readJson(request);
+  if (!promotionEpochOk(body, env)) return staleEpoch();
   if (!body || typeof body.paused !== "boolean") return editError("validation_error", "Invalid lane update.", 400);
   const result = await editorStub(env).setPromotionLane({ ...body, actor: auth.editor });
   return json(result, result.ok ? 200 : 409);

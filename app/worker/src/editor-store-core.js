@@ -162,6 +162,13 @@ export const SCHEMA_SQL = `
     prior_attempt_id TEXT, base_sha TEXT, evidence_hash TEXT, manifest_hash TEXT,
     created_at INTEGER NOT NULL, UNIQUE(candidate_id, number)
   );
+  CREATE TABLE IF NOT EXISTS promotion_projections (
+    attempt_id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL,
+    base_sha TEXT NOT NULL, evidence_hash TEXT NOT NULL, manifest_hash TEXT NOT NULL,
+    preview_html TEXT NOT NULL, evidence_json TEXT NOT NULL,
+    score_json TEXT, ai_json TEXT, projection_digest TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS promotion_events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL, type TEXT NOT NULL, from_stage TEXT, to_stage TEXT,
@@ -313,8 +320,17 @@ export class EditorStoreCore {
   getPromotionCandidate(id) {
     const candidate = this._promotionCandidate(id);
     if (!candidate) return null;
-    return { ...candidate, attempt: this._promotionAttempt(candidate.active_attempt_id),
-      events: this.listPromotionEvents(id) };
+    const attempt = this._promotionAttempt(candidate.active_attempt_id);
+    const projection = attempt ? this._one("SELECT * FROM promotion_projections WHERE attempt_id=?", attempt.id) : null;
+    const bound = projection && projection.candidate_id === candidate.id &&
+      projection.base_sha === attempt.base_sha && projection.evidence_hash === attempt.evidence_hash &&
+      projection.manifest_hash === attempt.manifest_hash ? {
+        preview_html: projection.preview_html,
+        evidence: JSON.parse(projection.evidence_json),
+        score: projection.score_json ? JSON.parse(projection.score_json) : null,
+        ai: projection.ai_json ? JSON.parse(projection.ai_json) : null,
+      } : {};
+    return { ...candidate, attempt, ...bound, events: this.listPromotionEvents(id) };
   }
 
   listPromotionEvents(id) {
@@ -382,6 +398,62 @@ export class EditorStoreCore {
     this._promotionEvent(c.id, input.attempt_id, "evidence_bound", input.actor, null, null,
       { base_sha: input.base_sha, evidence_hash: input.evidence_hash, manifest_hash: input.manifest_hash });
     return { ok: true, attempt };
+  }
+
+  bindPromotionProjection(input, limits = {}) {
+    const maxBytes = Number.isInteger(limits.maxBytes) ? limits.maxBytes : 512 * 1024;
+    const c = this._promotionCandidate(input?.candidate_id);
+    const a = this._promotionAttempt(input?.attempt_id);
+    if (!c || !a || c.active_attempt_id !== a.id) return { ok: false, reason: "not_found" };
+    if (a.base_sha !== input.base_sha) return { ok: false, reason: "stale_base" };
+    if (a.evidence_hash !== input.evidence_hash) return { ok: false, reason: "stale_evidence" };
+    if (a.manifest_hash !== input.manifest_hash) return { ok: false, reason: "stale_manifest" };
+    if (typeof input.preview_html !== "string") return { ok: false, reason: "validation_error" };
+    // Reject recognizable secret material in the opaque candidate artifact.
+    // Structured evidence below is allowlisted, so unrecognized provider-error
+    // and credential fields are never serialized at all.
+    if (/(?:authorization|api[_-]?key|cookie|secret)\s*[:=]\s*["']?[^\s"'<]{6,}|bearer\s+[a-z0-9._~-]{6,}/i.test(input.preview_html))
+      return { ok: false, reason: "credential_material" };
+    const gates = input.evidence?.gates;
+    const reasons = input.ai?.reasons;
+    if ((gates != null && (!Array.isArray(gates) || gates.length > 100)) ||
+        (reasons != null && (!Array.isArray(reasons) || reasons.length > 20)))
+      return { ok: false, reason: "projection_too_large" };
+    const text = (value, max) => String(value ?? "").slice(0, max)
+      .replace(/bearer\s+[a-z0-9._~-]{6,}/ig, "[redacted]")
+      .replace(/(?:authorization|api[_-]?key|cookie|secret)\s*[:=]\s*[^\s,;]{4,}/ig, "[redacted]");
+    const evidence = { gates: (gates || []).map((gate) => ({
+      name: text(gate?.name || "gate", 200), status: text(gate?.status || "unknown", 40),
+      ...(typeof gate?.summary === "string" ? { summary: text(gate.summary, 1000) } : {}),
+    })) };
+    const score = input.score && typeof input.score === "object" ? {
+      confidence: Number.isFinite(input.score.confidence) ? input.score.confidence : null,
+      deterministic_score: Number.isFinite(input.score.deterministic_score) ? input.score.deterministic_score : null,
+      risk_delta: Number.isFinite(input.score.risk_delta) ? input.score.risk_delta : null,
+    } : null;
+    const ai = input.ai && typeof input.ai === "object" ? {
+      disposition: text(input.ai.disposition || "unavailable", 40),
+      reasons: (reasons || []).map((reason) => text(reason, 1000)),
+    } : null;
+    const normalized = { preview_html: input.preview_html, evidence, score, ai };
+    const serialized = JSON.stringify(normalized);
+    if (new TextEncoder().encode(serialized).byteLength > maxBytes)
+      return { ok: false, reason: "projection_too_large" };
+    const prior = this._one("SELECT * FROM promotion_projections WHERE attempt_id=?", a.id);
+    if (prior) return prior.candidate_id === c.id && prior.base_sha === a.base_sha &&
+      prior.evidence_hash === a.evidence_hash && prior.manifest_hash === a.manifest_hash &&
+      prior.preview_html === normalized.preview_html && prior.evidence_json === JSON.stringify(evidence) &&
+      (prior.score_json || null) === (score ? JSON.stringify(score) : null) &&
+      (prior.ai_json || null) === (ai ? JSON.stringify(ai) : null) ? { ok: true, replay: true } :
+      { ok: false, reason: "immutable_projection" };
+    this.sql.exec(`INSERT INTO promotion_projections
+      (attempt_id,candidate_id,base_sha,evidence_hash,manifest_hash,preview_html,
+       evidence_json,score_json,ai_json,projection_digest,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`, a.id, c.id, a.base_sha, a.evidence_hash, a.manifest_hash,
+      normalized.preview_html, JSON.stringify(evidence), score ? JSON.stringify(score) : null,
+      ai ? JSON.stringify(ai) : null, String(new TextEncoder().encode(serialized).byteLength), this.now());
+    this._promotionEvent(c.id, a.id, "projection_bound", input.actor || "service:prod");
+    return { ok: true };
   }
 
   decidePromotion(input) {

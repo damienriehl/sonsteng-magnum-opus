@@ -54,6 +54,7 @@ export class EditorStore extends DurableObject {
   renewPromotionLease(owner, token, leaseMs) { return this.core.renewPromotionLease(owner, token, leaseMs); }
   transitionPromotion(input) { return this.core.transitionPromotion(input); }
   bindPromotionEvidence(input) { return this.core.bindPromotionEvidence(input); }
+  bindPromotionProjection(input, limits) { return this.core.bindPromotionProjection(input, limits); }
   decidePromotion(input) { return this.core.decidePromotion(input); }
   retryPromotion(input) { return this.core.retryPromotion(input); }
   getPromotionLane() { return this.core.getPromotionLane(); }

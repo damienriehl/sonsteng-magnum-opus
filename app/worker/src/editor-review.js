@@ -10,6 +10,39 @@
 import { escapeJsonIsland, escapeHtml } from "./editor-map.js";
 import { attributionLabel } from "./editor-auth.js";
 
+// Candidate previews are deliberately not the ordinary editor overlay. The
+// candidate artifact is put in a unique-origin iframe with *no* sandbox
+// capabilities; its own CSP denies every fetch and active behavior. Escaping
+// the complete child document for srcdoc preserves the candidate bytes for
+// rendering without letting them become parent-page markup.
+export function renderPromotionPreview(projection) {
+  const childCsp = "default-src 'none'; base-uri 'none'; form-action 'none'; " +
+    "frame-ancestors 'none'; navigate-to 'none'; object-src 'none'";
+  const child = "<!doctype html><html><head><meta charset=\"utf-8\">" +
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"" + escapeHtml(childCsp) + "\">" +
+    "<meta name=\"referrer\" content=\"no-referrer\"></head><body>" +
+    String(projection?.preview_html || "") + "</body></html>";
+  const gates = Array.isArray(projection?.evidence?.gates) ? projection.evidence.gates : [];
+  const reasons = Array.isArray(projection?.ai?.reasons) ? projection.ai.reasons : [];
+  const evidence = gates.map((gate) => "<li>" + escapeHtml(String(gate?.name || "gate")) +
+    ": " + escapeHtml(String(gate?.status || "unknown")) + "</li>").join("");
+  const reasonRows = reasons.map((reason) => "<li>" + escapeHtml(String(reason)) + "</li>").join("");
+  const confidence = projection?.score && Number.isFinite(projection.score.confidence)
+    ? String(projection.score.confidence) : "unavailable";
+  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+    "<meta name=\"referrer\" content=\"no-referrer\"><title>Bound candidate preview</title></head><body>" +
+    "<main><h1>Candidate preview</h1><p>Attempt " + escapeHtml(projection?.attempt_id || "") +
+    "</p><iframe title=\"Candidate content\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"" +
+    escapeHtml(child) + "\"></iframe><section><h2>Validation evidence</h2><ul>" + evidence +
+    "</ul><p>Confidence: " + escapeHtml(confidence) + "</p><h2>AI review reasons</h2><ul>" +
+    reasonRows + "</ul></section></main></body></html>";
+  return new Response(html, { status: 200, headers: {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "private, no-store",
+    "Referrer-Policy": "no-referrer",
+  } });
+}
+
 // Server-rendered revert-request panel (History browser "Request revert"). Rows
 // are server constants (doc paths + hex shas + slot-derived attribution), each
 // escapeHtml'd defense-in-depth. Editors file 'requested'; admin files (and the

@@ -41,7 +41,7 @@ import { json } from "./errors.js";
 export const EDIT_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; " +
-  "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
+  "frame-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 
 // Headers applied to EVERY /edit response (HTML and JSON, success and error).
 export function editSecurityHeaders(extra = {}) {

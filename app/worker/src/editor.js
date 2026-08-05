@@ -23,7 +23,8 @@ import {
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
   promotionSaveEndpoint, promotionCandidateEndpoint, promotionLaneEndpoint,
-  promotionDecisionEndpoint, promotionRetryEndpoint, promotionPauseEndpoint,
+  promotionDecisionEndpoint, promotionRetryEndpoint, promotionPauseEndpoint, promotionPreviewEndpoint,
+  promotionCandidatesEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -192,8 +193,12 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await revertResolveEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/candidates" && request.method === "POST")
     return wrap(await promotionSaveEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/candidates" && request.method === "GET")
+    return wrap(await promotionCandidatesEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/candidate" && request.method === "GET")
     return wrap(await promotionCandidateEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/preview" && request.method === "GET")
+    return wrap(await promotionPreviewEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/lane" && request.method === "GET")
     return wrap(await promotionLaneEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/decision" && request.method === "POST")

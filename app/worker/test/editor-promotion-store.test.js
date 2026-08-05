@@ -82,6 +82,29 @@ test("decision is exact-attempt/evidence/base/manifest bound and attributed", ()
   assert.equal(ok.decision.principal, "slot:admin");
 });
 
+test("prepared preview projection is immutable, bounded, redacted, and returned for the active tuple", () => {
+  const core = makeCore(() => 1000);
+  const made = core.createPromotionCandidate(candidate());
+  const tuple = { candidate_id:"cand-1", attempt_id:made.attempt.id,
+    base_sha:"base", evidence_hash:"ev", manifest_hash:"man" };
+  core.bindPromotionEvidence({ ...tuple, actor:"service:prod" });
+  const projection = { ...tuple, preview_html:"<p>candidate</p>",
+    evidence:{ gates:[{ name:"tests", status:"pass", summary:"all green", internal:"hidden" }] },
+    score:{ confidence:0.93, deterministic_score:0.9, internal:"hidden" },
+    ai:{ disposition:"hold", reasons:["borderline risk"], provider_error:"Bearer secret" } };
+  assert.equal(core.bindPromotionProjection(projection).ok, true);
+  assert.equal(core.bindPromotionProjection(projection).replay, true);
+  const current = core.getPromotionCandidate("cand-1");
+  assert.equal(current.preview_html, "<p>candidate</p>");
+  assert.deepEqual(current.evidence.gates[0], { name:"tests", status:"pass", summary:"all green" });
+  assert.equal(current.score.internal, undefined);
+  assert.equal(current.ai.provider_error, undefined);
+  assert.doesNotMatch(JSON.stringify(current), /Bearer secret|hidden/);
+  assert.equal(core.bindPromotionProjection({ ...projection, preview_html:"<p>changed</p>" }).reason, "immutable_projection");
+  assert.equal(core.bindPromotionProjection({ ...projection, evidence_hash:"other" }).reason, "stale_evidence");
+  assert.equal(core.bindPromotionProjection({ ...projection, preview_html:"x".repeat(600_000) }).reason, "projection_too_large");
+});
+
 test("retry creates a linked immutable attempt", () => {
   const core = makeCore();
   const made = core.createPromotionCandidate(candidate());
