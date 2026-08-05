@@ -13,6 +13,7 @@ import {
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
 import { renderPromotionPreview } from "./editor-review.js";
+import { sha256Hex } from "./text-norm.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -26,12 +27,6 @@ function jsonMutationOk(request, env) {
 // closed. Whether automated promotion is enabled is a separate policy concern.
 function prodPromotionApiOk(env) {
   return env?.EDIT_ENVIRONMENT === "production";
-}
-
-async function sha256Hex(text) {
-  const bytes = new TextEncoder().encode(text);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function promotionEpochOk(body, env) {
@@ -147,12 +142,9 @@ export async function promotionCandidatesEndpoint(request, env, auth) {
   if (!admin && !auth.scopes.edit.granted && !auth.scopes.instructor.granted) return uniform404();
   const stub = editorStub(env);
   const rows = await stub.listPromotionCandidates(admin ? null : auth.editor);
-  const candidates = [];
-  for (const row of rows || []) {
-    if (!admin && row.principal !== auth.editor) continue;
-    const projected = projectPromotionSummary(await stub.getPromotionCandidate(row.id));
-    if (projected) candidates.push(projected);
-  }
+  const visible = (rows || []).filter((row) => admin || row.principal === auth.editor);
+  const candidates = (await Promise.all(visible.map(async (row) =>
+    projectPromotionSummary(await stub.getPromotionCandidate(row.id))))).filter(Boolean);
   return json({ ok: true, candidates });
 }
 

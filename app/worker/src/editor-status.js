@@ -76,11 +76,13 @@ export const PROMOTION_STAGE = Object.freeze({
 });
 
 export const PROMOTION_TRANSITIONS = Object.freeze({
-  saved: new Set(["validating", "failed"]),
-  validating: new Set(["preview_ready", "failed"]),
-  preview_ready: new Set(["awaiting_approval", "publishing", "failed"]),
-  awaiting_approval: new Set(["publishing", "failed"]),
-  publishing: new Set(["published", "failed"]),
-  published: new Set(),
-  failed: new Set(),
+  [PROMOTION_STAGE.SAVED]: new Set([PROMOTION_STAGE.VALIDATING, PROMOTION_STAGE.FAILED]),
+  [PROMOTION_STAGE.VALIDATING]: new Set([PROMOTION_STAGE.PREVIEW_READY, PROMOTION_STAGE.FAILED]),
+  [PROMOTION_STAGE.PREVIEW_READY]: new Set([
+    PROMOTION_STAGE.AWAITING_APPROVAL, PROMOTION_STAGE.PUBLISHING, PROMOTION_STAGE.FAILED,
+  ]),
+  [PROMOTION_STAGE.AWAITING_APPROVAL]: new Set([PROMOTION_STAGE.PUBLISHING, PROMOTION_STAGE.FAILED]),
+  [PROMOTION_STAGE.PUBLISHING]: new Set([PROMOTION_STAGE.PUBLISHED, PROMOTION_STAGE.FAILED]),
+  [PROMOTION_STAGE.PUBLISHED]: new Set(),
+  [PROMOTION_STAGE.FAILED]: new Set(),
 });

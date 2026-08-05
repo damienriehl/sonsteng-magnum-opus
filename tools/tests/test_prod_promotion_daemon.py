@@ -22,7 +22,12 @@ def candidate():
 class FakeLedger:
     def __init__(self):
         self.token = 1; self.events = []; self.final = None; self.health = "healthy"
-        self.known = pd.ReleaseIdentity("old-pages", "old-worker", "a" * 40, "old-manifest")
+        self.known = pd.KnownGoodAttestation(
+            pages_id="old-pages", worker_id="old-worker", commit_sha="a" * 40,
+            manifest_hash="old-manifest", editor_map_id="old-map",
+            build_id="old-build", generated_contract_hashes={"spine": "c" * 64},
+            pages_restorable=True, worker_restorable=True,
+        )
         self.item = candidate(); self.released = False; self.fenced = False; self.active = None
         self.fence_ok = True; self.fence_calls = []
     def reconcile_state(self): return {"health": self.health, "known_good": self.known, "active": self.active}

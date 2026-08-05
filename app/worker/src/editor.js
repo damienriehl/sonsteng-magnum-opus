@@ -282,16 +282,13 @@ export async function editorFetch(request, env, ctx) {
   if (path === "/edit/review") {
     if (request.method !== "GET" || !auth.scopes.admin.granted) return wrap(uniform404());
     const stub = editorStub(env);
-    const items = await stub.listAll();
-    const reverts = await stub.listRevertRequests(null);
-    const promotionRows = await stub.listPromotionCandidates(null);
-    const promotions = [];
-    for (const row of promotionRows || []) {
-      const projected = projectPromotionSummary(await stub.getPromotionCandidate(row.id));
-      if (projected) promotions.push(projected);
-    }
+    const [items, reverts, promotionRows, lane] = await Promise.all([
+      stub.listAll(), stub.listRevertRequests(null),
+      stub.listPromotionCandidates(null), stub.getPromotionLane(),
+    ]);
+    const promotions = (await Promise.all((promotionRows || []).map(async (row) =>
+      projectPromotionSummary(await stub.getPromotionCandidate(row.id))))).filter(Boolean);
     promotions.sort((a, b) => (a.created_at || 0) - (b.created_at || 0) || a.id.localeCompare(b.id));
-    const lane = await stub.getPromotionLane();
     const publicLane = lane && { version: lane.version, paused: !!lane.paused, health: lane.health,
       reason_code: lane.reason_code || null, active_candidate_id: lane.active_candidate_id || null,
       updated_at: lane.updated_at };

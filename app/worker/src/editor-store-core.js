@@ -15,7 +15,10 @@
 //     `in_flight`. finalize()/reconcile() own the apply-time terminal states.
 //   * Status machine + terminal enforcement is centralized in _transition().
 
-import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition, PROMOTION_TRANSITIONS } from "./editor-status.js";
+import {
+  STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition,
+  PROMOTION_STAGE, PROMOTION_TRANSITIONS,
+} from "./editor-status.js";
 
 // Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
 // rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
@@ -166,7 +169,7 @@ export const SCHEMA_SQL = `
     attempt_id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL,
     base_sha TEXT NOT NULL, evidence_hash TEXT NOT NULL, manifest_hash TEXT NOT NULL,
     preview_html TEXT NOT NULL, evidence_json TEXT NOT NULL,
-    score_json TEXT, ai_json TEXT, projection_digest TEXT NOT NULL,
+    score_json TEXT, ai_json TEXT, projection_bytes INTEGER NOT NULL,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS promotion_events (
@@ -305,7 +308,7 @@ export class EditorStoreCore {
       input.source_ref, input.content_bytes, now, attemptId, now, now);
     this.sql.exec(`INSERT INTO promotion_attempts
       (id,candidate_id,number,created_at) VALUES (?,?,1,?)`, attemptId, input.id, now);
-    this._promotionEvent(input.id, attemptId, "saved", input.principal, null, "saved");
+    this._promotionEvent(input.id, attemptId, "saved", input.principal, null, PROMOTION_STAGE.SAVED);
     const response = { ok: true, candidate: this._promotionCandidate(input.id), attempt: this._promotionAttempt(attemptId) };
     this._receipt(identity, response);
     return response;
@@ -345,15 +348,16 @@ export class EditorStoreCore {
     if (lane.paused || lane.health !== "healthy") return { ok: false, reason: "lane_unavailable" };
     if (lane.lease_owner && lane.lease_expires_at > now) return { ok: false, reason: "lease_held" };
     let candidate = lane.active_candidate_id ? this._promotionCandidate(lane.active_candidate_id) : null;
-    if (!candidate || ["published", "failed"].includes(candidate.stage))
+    if (!candidate || [PROMOTION_STAGE.PUBLISHED, PROMOTION_STAGE.FAILED].includes(candidate.stage))
       candidate = this._one("SELECT * FROM promotion_candidates WHERE stage='saved' ORDER BY created_at,id LIMIT 1");
     if (!candidate) return { ok: false, reason: "nothing_to_claim" };
     const token = Number(lane.fencing_token) + 1;
     this.sql.exec(`UPDATE promotion_lane SET lease_owner=?,lease_expires_at=?,fencing_token=?,
       active_candidate_id=?,version=version+1,updated_at=? WHERE id=1`, owner, now + leaseMs, token, candidate.id, now);
-    if (candidate.stage === "saved") {
+    if (candidate.stage === PROMOTION_STAGE.SAVED) {
       this.sql.exec("UPDATE promotion_candidates SET stage='validating',stage_at=?,updated_at=? WHERE id=? AND stage='saved'", now, now, candidate.id);
-      this._promotionEvent(candidate.id, candidate.active_attempt_id, "transition", owner, "saved", "validating");
+      this._promotionEvent(candidate.id, candidate.active_attempt_id, "transition", owner,
+        PROMOTION_STAGE.SAVED, PROMOTION_STAGE.VALIDATING);
     }
     return { ok: true, candidate: this._promotionCandidate(candidate.id),
       attempt: this._promotionAttempt(candidate.active_attempt_id), fencing_token: token,
@@ -436,22 +440,23 @@ export class EditorStoreCore {
       reasons: (reasons || []).map((reason) => text(reason, 1000)),
     } : null;
     const normalized = { preview_html: input.preview_html, evidence, score, ai };
-    const serialized = JSON.stringify(normalized);
-    if (new TextEncoder().encode(serialized).byteLength > maxBytes)
+    const evidenceJson = JSON.stringify(evidence);
+    const scoreJson = score ? JSON.stringify(score) : null;
+    const aiJson = ai ? JSON.stringify(ai) : null;
+    const projectionBytes = new TextEncoder().encode(JSON.stringify(normalized)).byteLength;
+    if (projectionBytes > maxBytes)
       return { ok: false, reason: "projection_too_large" };
     const prior = this._one("SELECT * FROM promotion_projections WHERE attempt_id=?", a.id);
     if (prior) return prior.candidate_id === c.id && prior.base_sha === a.base_sha &&
       prior.evidence_hash === a.evidence_hash && prior.manifest_hash === a.manifest_hash &&
-      prior.preview_html === normalized.preview_html && prior.evidence_json === JSON.stringify(evidence) &&
-      (prior.score_json || null) === (score ? JSON.stringify(score) : null) &&
-      (prior.ai_json || null) === (ai ? JSON.stringify(ai) : null) ? { ok: true, replay: true } :
+      prior.preview_html === normalized.preview_html && prior.evidence_json === evidenceJson &&
+      (prior.score_json || null) === scoreJson && (prior.ai_json || null) === aiJson ? { ok: true, replay: true } :
       { ok: false, reason: "immutable_projection" };
     this.sql.exec(`INSERT INTO promotion_projections
       (attempt_id,candidate_id,base_sha,evidence_hash,manifest_hash,preview_html,
-       evidence_json,score_json,ai_json,projection_digest,created_at)
+      evidence_json,score_json,ai_json,projection_bytes,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`, a.id, c.id, a.base_sha, a.evidence_hash, a.manifest_hash,
-      normalized.preview_html, JSON.stringify(evidence), score ? JSON.stringify(score) : null,
-      ai ? JSON.stringify(ai) : null, String(new TextEncoder().encode(serialized).byteLength), this.now());
+      normalized.preview_html, evidenceJson, scoreJson, aiJson, projectionBytes, this.now());
     this._promotionEvent(c.id, a.id, "projection_bound", input.actor || "service:prod");
     return { ok: true };
   }
@@ -465,7 +470,7 @@ export class EditorStoreCore {
     const c = this._promotionCandidate(input.candidate_id);
     const a = this._promotionAttempt(input.attempt_id);
     if (!c || !a || c.active_attempt_id !== a.id) return { ok: false, reason: "not_found" };
-    if (c.stage !== "awaiting_approval") return { ok: false, reason: "stale_state" };
+    if (c.stage !== PROMOTION_STAGE.AWAITING_APPROVAL) return { ok: false, reason: "stale_state" };
     if (a.base_sha !== input.base_sha) return { ok: false, reason: "stale_base" };
     if (a.evidence_hash !== input.evidence_hash) return { ok: false, reason: "stale_evidence" };
     if (a.manifest_hash !== input.manifest_hash) return { ok: false, reason: "stale_manifest" };
@@ -476,7 +481,7 @@ export class EditorStoreCore {
       VALUES (?,?,?,?,?,?,?,?,?)`, c.id, a.id, input.decision, input.principal,
       input.rationale || null, input.base_sha, input.evidence_hash, input.manifest_hash, now);
     const decision = this._one("SELECT * FROM promotion_decisions WHERE id=last_insert_rowid()");
-    const to = input.decision === "approve" ? "publishing" : "failed";
+    const to = input.decision === "approve" ? PROMOTION_STAGE.PUBLISHING : PROMOTION_STAGE.FAILED;
     this.sql.exec("UPDATE promotion_candidates SET stage=?,stage_at=?,updated_at=? WHERE id=?", to, now, now, c.id);
     this._promotionEvent(c.id, a.id, input.decision === "approve" ? "approved" : "declined", input.principal, c.stage, to,
       { rationale: input.rationale || null, evidence_hash: input.evidence_hash });
@@ -493,7 +498,8 @@ export class EditorStoreCore {
     if (replay) return replay;
     const c = this._promotionCandidate(input.candidate_id);
     const prior = this._promotionAttempt(input.prior_attempt_id);
-    if (!c || !prior || c.active_attempt_id !== prior.id || c.stage !== "failed") return { ok: false, reason: "stale_state" };
+    if (!c || !prior || c.active_attempt_id !== prior.id || c.stage !== PROMOTION_STAGE.FAILED)
+      return { ok: false, reason: "stale_state" };
     const number = Number(prior.number) + 1;
     const id = `${c.id}:${number}`;
     const now = this.now();
@@ -501,7 +507,8 @@ export class EditorStoreCore {
       id, c.id, number, prior.id, now);
     this.sql.exec("UPDATE promotion_candidates SET stage='saved',stage_at=?,active_attempt_id=?,updated_at=? WHERE id=?",
       now, id, now, c.id);
-    this._promotionEvent(c.id, id, "retry_authorized", input.principal, "failed", "saved", { prior_attempt_id: prior.id });
+    this._promotionEvent(c.id, id, "retry_authorized", input.principal,
+      PROMOTION_STAGE.FAILED, PROMOTION_STAGE.SAVED, { prior_attempt_id: prior.id });
     const response = { ok: true, attempt: this._promotionAttempt(id), candidate: this._promotionCandidate(c.id) };
     this._receipt(identity, response);
     return response;

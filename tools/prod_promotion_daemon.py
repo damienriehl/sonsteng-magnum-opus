@@ -177,14 +177,6 @@ class ProviderObservation:
     worker_id: str
 
 
-@dataclasses.dataclass(frozen=True)
-class ReleaseIdentity:
-    pages_id: str
-    worker_id: str
-    commit_sha: str
-    manifest_hash: str
-
-
 class PromotionCoordinator:
     """Serialized publication saga with reconcile-before-effect semantics."""
     def __init__(self, ledger, provider, git, live, *, owner,
