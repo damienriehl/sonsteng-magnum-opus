@@ -177,6 +177,55 @@ class TestStaleValue(unittest.TestCase):
         self.assertEqual(ec.blocks_for_matter(bundle, SLUG), [])
 
 
+class TestDeliberatePageOverrides(unittest.TestCase):
+    FACT_REF = MATTER_REL + "#caption"
+    OVERRIDE_REF = "data/copy/home.json#overrides.aaaaaaaaaaaaaaaa.value"
+    CHANGED = [{"fact_path": FACT_REF, "label": "Caption",
+                "old": "Osgard v. Meridian Freight",
+                "new": "Osgard v. Northland Freight"}]
+    BLOCK = {"source_ref": OVERRIDE_REF, "kind": "json_scalar",
+             "original_text": "Osgard v. Meridian Freight"}
+    RECORD = {"intent": "deliberate_page_override",
+              "page": "matters/m03-tort-meridian/index.html",
+              "shared_source_ref": FACT_REF,
+              "source_ref": OVERRIDE_REF,
+              "value": "Osgard v. Meridian Freight"}
+
+    def test_matching_recorded_override_is_silent(self):
+        flags = ec.stale_value_flags(self.CHANGED, [self.BLOCK], [self.RECORD])
+        self.assertEqual(flags, [])
+
+    def test_map_record_associates_override_block_with_its_matter(self):
+        bundle = {"pages": {self.RECORD["page"]: [self.BLOCK]},
+                  "overrides": [self.RECORD]}
+        self.assertEqual(ec.blocks_for_matter(bundle, SLUG), [self.BLOCK])
+
+    def test_checker_run_consumes_map_record_as_evidence(self):
+        bundle = {"pages": {self.RECORD["page"]: [self.BLOCK]},
+                  "overrides": [self.RECORD]}
+        res = _run(
+            since="BASE..HEAD", map_loader=lambda: bundle,
+            facts_loader=lambda slug: [(MATTER_REL, "caption", self.CHANGED[0]["new"])],
+            old_facts_loader=lambda slug: [(MATTER_REL, "caption", self.CHANGED[0]["old"])],
+            flag_filer=lambda payload: (True, 200))
+        self.assertEqual(res.stale_flags, [])
+
+    def test_same_divergence_without_record_is_reported(self):
+        flags = ec.stale_value_flags(self.CHANGED, [self.BLOCK], [])
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]["source_ref"], self.OVERRIDE_REF)
+
+    def test_record_for_another_leaf_does_not_suppress(self):
+        record = dict(self.RECORD, shared_source_ref=MATTER_REL + "#client_name")
+        self.assertEqual(len(ec.stale_value_flags(
+            self.CHANGED, [self.BLOCK], [record])), 1)
+
+    def test_record_whose_value_does_not_match_does_not_suppress(self):
+        record = dict(self.RECORD, value="Unrelated page text")
+        self.assertEqual(len(ec.stale_value_flags(
+            self.CHANGED, [self.BLOCK], [record])), 1)
+
+
 # --------------------------------------------------------------------------- #
 # --since is mandatory
 # --------------------------------------------------------------------------- #

@@ -250,15 +250,26 @@ def load_map_bundle(path=None):
 
 
 def blocks_for_matter(bundle, slug):
-    """The matter's PROSE blocks, deduped by source_ref (a block can render on
-    several pages — one flag per block, not per page). json_scalar blocks are
-    excluded: they ARE the facts, not restatements of them."""
+    """The matter's prose and page-override blocks, deduped by source_ref.
+
+    Ordinary json_scalar blocks are the facts, not restatements, and remain
+    excluded.  An override scalar is different: it is a surface-owned copy of
+    a fact, identified by the map's data-backed override record.
+    """
     prefix = "data/matters/%s/" % slug
+    override_refs = {
+        record.get("source_ref")
+        for record in (bundle.get("overrides") or [])
+        if record.get("intent") == "deliberate_page_override"
+        and (record.get("shared_source_ref") or "").startswith(prefix)
+        and record.get("source_ref")
+    }
     seen, out = set(), []
     for blocks in (bundle.get("pages") or {}).values():
         for b in blocks or []:
             ref = b.get("source_ref") or ""
-            if not ref.startswith(prefix) or b.get("kind") != "prose":
+            is_prose = ref.startswith(prefix) and b.get("kind") == "prose"
+            if not is_prose and ref not in override_refs:
                 continue
             if ref in seen:
                 continue
@@ -270,19 +281,33 @@ def blocks_for_matter(bundle, slug):
 # --------------------------------------------------------------------------- #
 # 3) Deterministic pass — stale values (pure)
 # --------------------------------------------------------------------------- #
-def stale_value_flags(changed, blocks):
+def stale_value_flags(changed, blocks, overrides=None):
     """--since mode: prose blocks still carrying a changed fact's old value.
 
     Matching widens only through deterministic equivalent spellings. Numeric
     matches have digit boundaries, and an occurrence contained in the new
     value is ignored, which makes substring renames safe.
     """
+    overrides = overrides or []
+    intended = {
+        (record.get("shared_source_ref"), record.get("source_ref"),
+         str(record.get("value")))
+        for record in overrides
+        if record.get("intent") == "deliberate_page_override"
+        and record.get("shared_source_ref") and record.get("source_ref")
+        and "value" in record
+    }
     flags = []
     for ch in changed:
         for b in blocks:
             text = b.get("original_text") or ""
             literal = _stale_literal_in_text(ch, text)
             if literal is None:
+                continue
+            # Suppress only the precise divergence the authored record proves:
+            # same canonical leaf, same surface-owned leaf, same recorded value.
+            # No separate suppression list can drift away from the map data.
+            if (ch["fact_path"], b.get("source_ref"), str(text)) in intended:
                 continue
             msg = ('%sthis paragraph still says "%s", but the Fact \'%s\' is '
                    'now "%s". %s'
@@ -515,9 +540,11 @@ def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,
             continue
         facts = facts_loader(slug)
         changed = diff_fact_rows(old_facts_loader(slug), facts)
-        stale.extend(stale_value_flags(changed, blocks))
+        stale.extend(stale_value_flags(changed, blocks,
+                                       bundle.get("overrides") or []))
         if not no_model:
-            mf, reason = model_contradiction_flags(slug, facts, blocks,
+            prose_blocks = [b for b in blocks if b.get("kind") == "prose"]
+            mf, reason = model_contradiction_flags(slug, facts, prose_blocks,
                                                    cli_runner=cli_runner)
             model_flags.extend(mf)
             if reason:
