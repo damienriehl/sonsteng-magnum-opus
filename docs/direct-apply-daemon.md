@@ -28,13 +28,14 @@ by path from `~/.config/claude-rc/ntfy-topic`. Nothing is inlined in git.
 
 | | path | branch | who writes it |
 |---|---|---|---|
-| **Daemon checkout** | `~/.local/share/sonsteng-daemon/checkout` | `main` | the daemon only |
+| **Daemon checkout** | `~/.local/share/sonsteng-daemon/checkout` | `dev-direct-apply` | the daemon only |
 | **Interactive checkout** | `~/Coding Projects/sonsteng-magnum-opus` | feature branches | you |
 
 The daemon runs **from its own git worktree**, not from an interactive checkout.
 `ExecStart` in both user units points at `<daemon checkout>/tools/…`, and
-`APPLY_DEPLOY_BRANCH=main` — `main` carries the direct-apply/History work as of the
-`merge: canonical direct-apply + redline History + docs` merge.
+`APPLY_DEPLOY_BRANCH=dev-direct-apply`. The DEV lane retains its direct-apply
+behavior and cadence on that long-lived branch; only the PROD promotion lane may
+advance `main` after live verification.
 
 **Amended 2026-07-28 — a revert must also rebuild and redeploy the Worker.**
 `git revert` restores tracked trees (`data/`, `site/`) but cannot restore
@@ -57,14 +58,15 @@ daemon makes is instantly visible to `git log` there and pushable from there —
 exact behavior of the old shared-tree setup, minus the shared working tree. A clone
 would strand the daemon's commits behind a fetch and could diverge from `origin/main`.
 
-**Consequence — `main` is checked out in the daemon worktree**, so an interactive
-checkout can't check it out (git allows a branch in one worktree at a time). Merge
-into `main` from the daemon worktree, under the daemon flock so it can't race a tick:
+**Consequence — `dev-direct-apply` is checked out in the daemon worktree**, so an
+interactive checkout cannot check it out (git allows a branch in one worktree at
+a time). Maintenance merges into that branch must happen in the daemon worktree,
+under the daemon flock so they cannot race a tick:
 
 ```bash
 D=~/.local/share/sonsteng-daemon/checkout
 flock "$D/.locks/daemon.lock" git -C "$D" merge --no-ff feat/your-branch
-git -C "$D" push origin main
+git -C "$D" push origin dev-direct-apply
 ```
 
 Note the flock now lives at `<daemon checkout>/.locks/daemon.lock` — that is the file
@@ -105,7 +107,7 @@ from and cooperating with the engine's `.locks/apply.lock`):
    via `/finalize`, and fast-forward-merges into canonical.
 4. **Authoritative publish**: `build_site.py` rebuild, then
    `deploy/deploy-dev.sh <branch>` with the branch passed **explicitly** (default
-   `feat/canonical-docs`). **DEV only** — `deploy-dev.sh` targets the Hetzner DEV
+   `dev-direct-apply`). **DEV only** — `deploy-dev.sh` targets the Hetzner DEV
    box and can never reach PROD.
 5. `POST {EDIT_API_BASE}/heartbeat` (admin Bearer) `{ok:true, applied:N, ts}`.
    The endpoint is being added by the worker lane; the daemon sends **best-effort
@@ -120,6 +122,27 @@ successful deploy (merge is gated behind deploy). The engine therefore performs 
 DEV deploy of its worktree as the pre-merge gate; the daemon's step-4 deploy is
 the authoritative publish of the merged canonical **branch** (identical content,
 correctly named). Both are DEV-only.
+
+The daemon and installer reject `main`, `master`, `prod`, and `production` as
+`APPLY_DEPLOY_BRANCH` values. Before switching an existing installation, stop the
+timer under its flock, confirm no `in_flight` apply batch or pending revert, create
+`dev-direct-apply` at the checkout's current HEAD, update the 0600 env file, and
+re-run the installer. Roll back by stopping the timer and restoring the prior DEV
+branch only; never point this daemon back at `main` after PROD promotion is enabled.
+
+## PROD candidate preparation boundary
+
+`tools.apply_suggestions.prepare_candidate()` applies authorized candidate rows in
+an isolated worktree, records named drift/path/group/validation/build/parity gates,
+creates an immutable `refs/sonsteng/candidates/<readable-prefix>-<sha256-of-exact-id>`
+ref, and returns a stable
+evidence hash. It performs no deploy, canonical merge, lifecycle finalization, or
+remote update. `prepare_revert_candidate()` creates inverse commits through the
+same validation/build/parity boundary. Production callers must use
+`SandboxedSubprocessPipeline`, which fails closed unless bubblewrap can provide an
+empty-root, credential-free, network-disabled, resource-bounded builder. It mounts
+only required system runtime directories read-only and the isolated candidate
+worktree writable; the host root, home, and coordinator checkout are absent.
 
 ## Crash-safety (inherited from the apply engine)
 

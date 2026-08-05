@@ -22,7 +22,7 @@ EACH RUN (under its own daemon flock, cooperating with the engine's apply.lock):
      FIRST (crash recovery) before it claims — that is where crash-safety is
      inherited (see docs/direct-apply-daemon.md "Crash-safety").
   5. Rebuild (build_site.py) + deploy DEV (deploy/deploy-dev.sh <branch>, branch
-     passed explicitly, default main) — the authoritative publish
+     passed explicitly, default dev-direct-apply) — the authoritative publish
      of the just-merged canonical branch. DEV ONLY, never PROD.
   6. POST {EDIT_API_BASE}/heartbeat (admin Bearer) {ok, applied:N, ts}. The
      endpoint is being added by the worker lane; the daemon sends best-effort and
@@ -70,7 +70,8 @@ ENV_DEPLOY_BRANCH = "APPLY_DEPLOY_BRANCH"  # canonical branch to publish; defaul
 ENV_STATE_FILE = "SONSTENG_APPLY_STATE"   # override the daemon state path
 ENV_IDLE_MIN = "APPLY_EDITORIAL_IDLE_MIN"  # session-end idle threshold (min); default 30
 
-DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
+DEFAULT_DEPLOY_BRANCH = "dev-direct-apply"
+FORBIDDEN_DEV_BRANCHES = frozenset(("main", "master", "prod", "production"))
 DEFAULT_IDLE_MINUTES = 30
 
 # The status the daemon flushes. Auto-accept (worker lane) lands rows here; the
@@ -80,6 +81,17 @@ FLUSH_STATUS = "accepted"
 
 class DaemonError(RuntimeError):
     """A daemon-level fatal (bad config, unreachable review API before any apply)."""
+
+
+def validate_dev_branch(branch):
+    """Fail closed if the DEV-only daemon is pointed at a release-owned branch."""
+    value = (branch or "").strip()
+    if not value or value.lower() in FORBIDDEN_DEV_BRANCHES:
+        raise DaemonError(
+            "APPLY_DEPLOY_BRANCH must be a dedicated DEV branch, not %r" % value)
+    if value.startswith("refs/") or ".." in value or any(c.isspace() for c in value):
+        raise DaemonError("invalid APPLY_DEPLOY_BRANCH: %r" % value)
+    return value
 
 
 # --------------------------------------------------------------------------- #
@@ -549,6 +561,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     do_history / fetch_reverts / revert_exec / revert_resolve / clean_site are
     OPT-IN: when None the corresponding behavior is skipped (keeps the pure
     orchestration tests hermetic). main() wires all five for production."""
+    branch = validate_dev_branch(branch)
     out = out or sys.stdout
     state_path = state_path or default_state_path()
     now = now or datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)

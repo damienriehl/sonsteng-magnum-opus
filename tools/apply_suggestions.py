@@ -71,6 +71,8 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+import resource
+import shutil
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import text_norm  # noqa: E402  (the ONE canonical normalization contract)
@@ -438,6 +440,71 @@ class SubprocessPipeline:
         if rc2 != 0:
             return False, {"step": "wrangler deploy", "stdout": o2, "planned": plan}
         return True, {"planned": plan, "executed": True, "stdout": o1 + o2}
+
+
+class SandboxedSubprocessPipeline(SubprocessPipeline):
+    """Fail-closed builder for PROD candidate-controlled validation.
+
+    The coordinator passes no credentials into this process boundary.  Bubblewrap
+    supplies a private network namespace and a read-only host/toolchain; only the
+    already-isolated candidate worktree is writable.  CPU, address-space, file-size
+    and wall-clock bounds are deliberately fixed rather than candidate-controlled.
+    """
+
+    SAFE_ENV = {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "NO_COLOR": "1",
+    }
+
+    def __init__(self, *, timeout=120, cpu_seconds=90, memory_bytes=1024 ** 3,
+                 file_bytes=256 * 1024 ** 2, bubblewrap=None):
+        self.timeout = timeout
+        self.cpu_seconds = cpu_seconds
+        self.memory_bytes = memory_bytes
+        self.file_bytes = file_bytes
+        self.bubblewrap = bubblewrap or shutil.which("bwrap")
+
+    def _limits(self):
+        resource.setrlimit(resource.RLIMIT_CPU, (self.cpu_seconds, self.cpu_seconds))
+        resource.setrlimit(resource.RLIMIT_AS, (self.memory_bytes, self.memory_bytes))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (self.file_bytes, self.file_bytes))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
+
+    def _run(self, args, cwd):
+        if not self.bubblewrap:
+            return 125, "candidate sandbox unavailable: bwrap is required"
+        root = os.path.realpath(cwd)
+        command = [
+            self.bubblewrap, "--die-with-parent", "--new-session", "--unshare-net",
+            "--tmpfs", "/",
+        ]
+        # Build an empty-root sandbox.  Never bind the host root, home, or the
+        # coordinator checkout.  Only executable/runtime system directories are
+        # visible read-only; the isolated candidate root is the sole writable bind.
+        for system_dir in ("/usr", "/bin", "/lib", "/lib64"):
+            if os.path.exists(system_dir):
+                command.extend(("--ro-bind", system_dir, system_dir))
+        command.extend(("--bind", root, "/workspace", "--tmpfs", "/tmp",
+                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/workspace", "--"))
+        sandbox_args = []
+        for arg in args:
+            if isinstance(arg, str) and os.path.isabs(arg) and (
+                    arg == root or arg.startswith(root + os.sep)):
+                arg = "/workspace" + arg[len(root):]
+            sandbox_args.append(arg)
+        command.extend(sandbox_args)
+        try:
+            proc = subprocess.run(
+                command, cwd=root, check=False, shell=False, env=dict(self.SAFE_ENV),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=self.timeout, preexec_fn=self._limits,
+            )
+            return proc.returncode, proc.stdout
+        except subprocess.TimeoutExpired as exc:
+            return 124, "candidate sandbox timed out: %s" % (exc,)
 
 
 def index_map(bundle):
@@ -1359,6 +1426,229 @@ class ApplyResult:
     digest_md: str
     committed: bool
     reason: str = ""
+
+
+@dataclasses.dataclass
+class CandidatePreparation:
+    candidate_id: str
+    base_sha: str
+    commit_sha: str
+    candidate_ref: str
+    evidence: dict
+    evidence_hash: str
+    promotable: bool
+    reason: str = ""
+
+
+def _candidate_gate(evidence, name, ok, detail=None):
+    record = {"name": name, "status": "pass" if ok else "fail"}
+    if detail is not None:
+        record["detail"] = detail
+    evidence["hard_gates"].append(record)
+    return ok
+
+
+def _candidate_result(candidate_id, base_sha, evidence, *, commit_sha="",
+                      candidate_ref="", reason=""):
+    encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return CandidatePreparation(
+        candidate_id, base_sha, commit_sha, candidate_ref, evidence,
+        hashlib.sha256(encoded).hexdigest(), bool(commit_sha and candidate_ref), reason,
+    )
+
+
+def candidate_ref_for(candidate_id):
+    """Return a readable, non-empty ref whose identity is the exact input bytes."""
+    exact = str(candidate_id)
+    readable = re.sub(r"[^A-Za-z0-9._-]+", "-", exact).strip("-.")[:40]
+    if not readable:
+        readable = "candidate"
+    digest = hashlib.sha256(exact.encode("utf-8")).hexdigest()
+    return "refs/sonsteng/candidates/%s-%s" % (readable, digest)
+
+
+def prepare_candidate(rows, pipeline, candidate_id, *, base_sha=None,
+                      worktree_parent=None, canonical_root=REPO_ROOT, logger=print):
+    """Prepare one immutable candidate without deploy, merge or lifecycle finalization.
+
+    ``rows`` are the durable candidate's already-authorized edits.  The returned
+    evidence names every deterministic gate.  A successful ref is created once
+    with compare-and-set semantics; retries cannot silently replace its bytes.
+    The coordinator checkout remains untouched because all writes occur in a
+    detached worktree which is removed after the immutable ref is established.
+    """
+    assert_clean_tree(canonical_root)
+    actual_base = base_sha or head_sha(canonical_root)
+    if base_sha and head_sha(canonical_root) != base_sha:
+        evidence = {"schema_version": 1, "candidate_id": candidate_id,
+                    "base_sha": base_sha, "hard_gates": []}
+        _candidate_gate(evidence, "base", False, "base_sha_mismatch")
+        return _candidate_result(candidate_id, base_sha, evidence, reason="base_sha_mismatch")
+    evidence = {"schema_version": 1, "candidate_id": candidate_id,
+                "base_sha": actual_base, "hard_gates": []}
+    _candidate_gate(evidence, "base", True)
+    if not _candidate_gate(evidence, "candidate_nonempty", bool(rows)):
+        return _candidate_result(candidate_id, actual_base, evidence, reason="empty_candidate")
+    wt = tempfile.mkdtemp(prefix="candidate-wt-", dir=worktree_parent)
+    try:
+        git(["worktree", "add", "--detach", wt, actual_base], canonical_root)
+        try:
+            source_index = pipeline.regenerate_map(wt)
+        except Exception as exc:
+            _candidate_gate(evidence, "editor_map", False, str(exc)[:500])
+            return _candidate_result(candidate_id, actual_base, evidence, reason="editor_map_failed")
+        _candidate_gate(evidence, "editor_map", True)
+
+        groups = _group_outcomes(rows, source_index)
+        drift, needs_human, patches = [], [], []
+        for members in groups.values():
+            status, group_patches = _gate_group(members, source_index, wt)
+            if status == OUT_DRIFT:
+                drift.extend(_id(r) for r in members)
+            elif status == OUT_NEEDS_HUMAN:
+                needs_human.extend(_id(r) for r in members)
+            else:
+                patches.extend(group_patches)
+        evidence["drift_ids"] = sorted(drift)
+        evidence["needs_human_ids"] = sorted(needs_human)
+        _candidate_gate(evidence, "drift", not drift, {"ids": sorted(drift)})
+        _candidate_gate(evidence, "path_and_format", not needs_human,
+                        {"ids": sorted(needs_human)})
+        if not _candidate_gate(evidence, "group_atomicity", not drift and not needs_human,
+                               {"drift": sorted(drift), "needs_human": sorted(needs_human)}):
+            return _candidate_result(candidate_id, actual_base, evidence, reason="patch_ineligible")
+
+        results = {}
+        by_file = {}
+        for patch in patches:
+            by_file.setdefault(patch.relpath, []).append(patch)
+        for relpath, file_patches in by_file.items():
+            results.update(apply_file_patches(wt, relpath, file_patches))
+        bad = sorted(sid for sid, status in results.items()
+                     if status in (OUT_NEEDS_HUMAN, OUT_VALIDATION_ERROR))
+        if not _candidate_gate(evidence, "group_atomic_patch", not bad, {"failed_ids": bad}):
+            return _candidate_result(candidate_id, actual_base, evidence, reason="patch_failed")
+
+        ok, info = pipeline.validate(wt)
+        if not _candidate_gate(evidence, "validate_spine", ok, info):
+            return _candidate_result(candidate_id, actual_base, evidence, reason="validator_red")
+        ok, info = pipeline.build(wt)
+        if not _candidate_gate(evidence, "build", ok, info):
+            return _candidate_result(candidate_id, actual_base, evidence, reason="build_failed")
+        ok, info = pipeline.parity(wt)
+        if not _candidate_gate(evidence, "parity", ok, info):
+            return _candidate_result(candidate_id, actual_base, evidence, reason="parity_mismatch")
+
+        artifacts = {}
+        for relpath in ("build/editor-map.generated.json",
+                        "build/personas.generated.json",
+                        "build/instructor-bundle.generated.json"):
+            path = os.path.join(wt, relpath)
+            if os.path.isfile(path):
+                with open(path, "rb") as fh:
+                    artifacts[relpath] = hashlib.sha256(fh.read()).hexdigest()
+        evidence["artifact_hashes"] = artifacts
+
+        git(["add", "-A"], wt)
+        git(["-c", "user.name=prod-candidate-builder",
+             "-c", "user.email=builder@sonsteng.local", "commit", "--allow-empty",
+             "-m", "prepare: candidate %s (%d edits)" % (candidate_id, len(patches))], wt)
+        commit_sha = head_sha(wt)
+        candidate_ref = candidate_ref_for(candidate_id)
+        update = git(["update-ref", candidate_ref, commit_sha,
+                      "0000000000000000000000000000000000000000"], canonical_root,
+                     check=False)
+        if update.returncode != 0:
+            _candidate_gate(evidence, "immutable_ref", False, "ref_exists")
+            return _candidate_result(candidate_id, actual_base, evidence, reason="candidate_ref_exists")
+        _candidate_gate(evidence, "immutable_ref", True)
+        evidence["commit_sha"] = commit_sha
+        evidence["candidate_ref"] = candidate_ref
+        evidence["changed_paths"] = sorted(
+            p for p in git(["diff", "--name-only", actual_base, commit_sha], wt).stdout.splitlines()
+            if p
+        )
+        logger("prepared candidate %s at %s" % (candidate_id, commit_sha))
+        return _candidate_result(candidate_id, actual_base, evidence,
+                                 commit_sha=commit_sha, candidate_ref=candidate_ref)
+    finally:
+        git(["worktree", "remove", "--force", wt], canonical_root, check=False)
+        with contextlib.suppress(OSError):
+            os.rmdir(wt)
+
+
+def prepare_revert_candidate(candidate_id, run_first, run_last, pipeline, *,
+                             base_sha=None, worktree_parent=None,
+                             canonical_root=REPO_ROOT, logger=print):
+    """Prepare an inverse commit through the same build/parity evidence boundary.
+
+    No canonical checkout mutation, deploy, merge, remote update, or lifecycle RPC
+    occurs.  Conflicts and generated-contract divergence are hard failures.
+    """
+    assert_clean_tree(canonical_root)
+    actual_base = base_sha or head_sha(canonical_root)
+    evidence = {"schema_version": 1, "candidate_id": candidate_id,
+                "base_sha": actual_base, "kind": "revert", "hard_gates": []}
+    if base_sha and head_sha(canonical_root) != base_sha:
+        _candidate_gate(evidence, "base", False, "base_sha_mismatch")
+        return _candidate_result(candidate_id, actual_base, evidence, reason="base_sha_mismatch")
+    _candidate_gate(evidence, "base", True)
+    wt = tempfile.mkdtemp(prefix="candidate-revert-wt-", dir=worktree_parent)
+    try:
+        git(["worktree", "add", "--detach", wt, actual_base], canonical_root)
+        reverted = git(["revert", "--no-commit", "%s^..%s" % (run_first, run_last)],
+                       wt, check=False)
+        if not _candidate_gate(evidence, "inverse_revert", reverted.returncode == 0,
+                               "conflict" if reverted.returncode else None):
+            git(["revert", "--abort"], wt, check=False)
+            return _candidate_result(candidate_id, actual_base, evidence, reason="revert_conflict")
+        try:
+            pipeline.regenerate_map(wt)
+            _candidate_gate(evidence, "editor_map", True)
+        except Exception as exc:
+            _candidate_gate(evidence, "editor_map", False, str(exc)[:500])
+            return _candidate_result(candidate_id, actual_base, evidence, reason="editor_map_failed")
+        for name, operation, failure in (
+            ("validate_spine", pipeline.validate, "validator_red"),
+            ("build", pipeline.build, "build_failed"),
+            ("parity", pipeline.parity, "parity_mismatch"),
+        ):
+            ok, info = operation(wt)
+            if not _candidate_gate(evidence, name, ok, info):
+                return _candidate_result(candidate_id, actual_base, evidence, reason=failure)
+        artifacts = {}
+        for relpath in ("build/editor-map.generated.json",
+                        "build/personas.generated.json",
+                        "build/instructor-bundle.generated.json"):
+            path = os.path.join(wt, relpath)
+            if os.path.isfile(path):
+                with open(path, "rb") as fh:
+                    artifacts[relpath] = hashlib.sha256(fh.read()).hexdigest()
+        evidence["artifact_hashes"] = artifacts
+        git(["add", "-A"], wt)
+        git(["-c", "user.name=prod-candidate-builder",
+             "-c", "user.email=builder@sonsteng.local", "commit", "--allow-empty",
+             "-m", "prepare: revert candidate %s" % candidate_id], wt)
+        commit_sha = head_sha(wt)
+        candidate_ref = candidate_ref_for(candidate_id)
+        updated = git(["update-ref", candidate_ref, commit_sha,
+                       "0000000000000000000000000000000000000000"],
+                      canonical_root, check=False)
+        if not _candidate_gate(evidence, "immutable_ref", updated.returncode == 0,
+                               "ref_exists" if updated.returncode else None):
+            return _candidate_result(candidate_id, actual_base, evidence,
+                                     reason="candidate_ref_exists")
+        evidence["commit_sha"] = commit_sha
+        evidence["candidate_ref"] = candidate_ref
+        evidence["changed_paths"] = sorted(
+            git(["diff", "--name-only", actual_base, commit_sha], wt).stdout.splitlines())
+        logger("prepared revert candidate %s at %s" % (candidate_id, commit_sha))
+        return _candidate_result(candidate_id, actual_base, evidence,
+                                 commit_sha=commit_sha, candidate_ref=candidate_ref)
+    finally:
+        git(["worktree", "remove", "--force", wt], canonical_root, check=False)
+        with contextlib.suppress(OSError):
+            os.rmdir(wt)
 
 
 def _group_outcomes(rows, source_index):

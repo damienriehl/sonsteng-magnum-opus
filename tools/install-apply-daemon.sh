@@ -23,27 +23,33 @@
 #
 #     $HOME/.local/share/sonsteng-daemon/checkout   (override: SONSTENG_DAEMON_ROOT)
 #
-# — which has the canonical branch (`main`) checked out and is touched by nothing
+# — which has the dedicated DEV branch (`dev-direct-apply`) checked out and is touched by nothing
 # but the daemon. Reason: the apply engine and the History revert both refuse to
 # run on a dirty tree, so sharing a tree with interactive sessions let any parked
 # edit (or even a stray `build_site.py` run) block auto-apply. A *worktree* rather
 # than a clone is deliberate: it shares the object store and refs with the main
 # checkout, so an apply/revert commit the daemon makes is visible to interactive
 # sessions immediately (and pushable from there) — exactly the old behavior, minus
-# the shared working tree. Consequence: `main` is checked out HERE, so interactive
-# checkouts cannot check out `main` — merge into it from the daemon worktree under
-# the daemon flock (see docs/direct-apply-daemon.md "Deploy topology").
+# the shared working tree. Consequence: the DEV branch is checked out HERE, so interactive
+# checkouts cannot check out that DEV branch. PROD promotion alone owns `main`.
 #
 # PREREQS (env for the services — put them in the EnvironmentFile below, 0600):
 #   EDIT_API_BASE=https://sonsteng-chat.damienriehl.workers.dev/edit/v1
 #   EDIT_SERVICE_TOKEN=<admin bookmark token>     # from ~/.secrets/sonsteng-editor-tokens (EDIT_TOKEN_ADMIN)
-#   APPLY_DEPLOY_BRANCH=main                       # canonical branch published to DEV
+#   APPLY_DEPLOY_BRANCH=dev-direct-apply            # dedicated branch published to DEV
 # The ntfy topic is read from ~/.config/claude-rc/ntfy-topic (the rc-notify topic).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DAEMON_ROOT="${SONSTENG_DAEMON_ROOT:-$HOME/.local/share/sonsteng-daemon/checkout}"
-CANONICAL_BRANCH="${APPLY_DEPLOY_BRANCH:-main}"
+CANONICAL_BRANCH="${APPLY_DEPLOY_BRANCH:-dev-direct-apply}"
+
+case "${CANONICAL_BRANCH,,}" in
+  main|master|prod|production)
+    echo "[apply-daemon] REFUSED: APPLY_DEPLOY_BRANCH must be a dedicated DEV branch, not '$CANONICAL_BRANCH'." >&2
+    exit 2
+    ;;
+esac
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sonsteng-apply/env"
 APPLY_SERVICE="sonsteng-apply.service"
@@ -70,7 +76,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # ~/.secrets/sonsteng-editor-tokens (the EDIT_TOKEN_ADMIN value) — NEVER commit this file.
 EDIT_API_BASE=https://sonsteng-chat.damienriehl.workers.dev/edit/v1
 EDIT_SERVICE_TOKEN=
-APPLY_DEPLOY_BRANCH=main
+APPLY_DEPLOY_BRANCH=dev-direct-apply
 EOF
   echo "[apply-daemon] wrote a template env file: $ENV_FILE"
   echo "[apply-daemon] -> fill EDIT_SERVICE_TOKEN (EDIT_TOKEN_ADMIN from ~/.secrets/sonsteng-editor-tokens), then re-run."
@@ -86,7 +92,11 @@ elif [[ -d "$DAEMON_ROOT/.git" || -f "$DAEMON_ROOT/.git" ]]; then
 else
   echo "[apply-daemon] creating the dedicated daemon checkout: $DAEMON_ROOT"
   mkdir -p "$(dirname "$DAEMON_ROOT")"
-  git -C "$REPO_ROOT" worktree add "$DAEMON_ROOT" "$CANONICAL_BRANCH"
+  if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$CANONICAL_BRANCH"; then
+    git -C "$REPO_ROOT" worktree add "$DAEMON_ROOT" "$CANONICAL_BRANCH"
+  else
+    git -C "$REPO_ROOT" worktree add -b "$CANONICAL_BRANCH" "$DAEMON_ROOT" main
+  fi
 fi
 
 # Branch sanity: the daemon's tree MUST hold the branch it publishes (the apply
