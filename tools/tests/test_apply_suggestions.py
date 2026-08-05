@@ -1199,6 +1199,15 @@ class PageOverridePatchTest(unittest.TestCase):
                    "new_text": "42", "page": "modules/m1.html", "editor": "slot:john",
                    "comment": "JOS", "created_at": 1785871800000,
                    "original_hash": "hash"}
+            duplicate = dict(row, id="ov2", new_text="43")
+            status, duplicate_patches = ap._gate_group(
+                [row, duplicate], source_index, root)
+            self.assertEqual(status, "")
+            self.assertEqual(ap.apply_file_patches(
+                root, relpath, duplicate_patches), {
+                    "ov1": ap.OUT_NEEDS_HUMAN,
+                    "ov2": ap.OUT_NEEDS_HUMAN,
+                })
             invalid = dict(row, id="ov-invalid", new_text="1.5")
             status, patches = ap._gate_group([invalid], source_index, root)
             self.assertEqual(status, ap.OUT_NEEDS_HUMAN)

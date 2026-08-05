@@ -969,6 +969,16 @@ def apply_file_patches(worktree, relpath, patches):
     edits = []  # [(json_path, new_value)] for scalars, in patch order
     add_paths = []  # json_add paths (allowed to CREATE keys — U5)
     delete_paths = []
+    override_targets = [
+        p.json_path.rsplit(".", 1)[0]
+        for p in text_patches
+        if p.kind in ("page_override", "page_override_revert")
+    ]
+    if len(override_targets) != len(set(override_targets)):
+        # Concurrent editors can produce several accepted rows for the same
+        # deterministic page-owned leaf. Never let two creates overwrite one
+        # audit record or let two reverts delete the same path twice.
+        return {p.suggestion_id: OUT_NEEDS_HUMAN for p in patches}
     for p in text_patches:
         if p.kind == "page_override":
             parent_path = p.json_path.rsplit(".", 1)[0]

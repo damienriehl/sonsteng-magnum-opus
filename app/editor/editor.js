@@ -1140,7 +1140,8 @@
     // Worker contract: server derives editor/original_text/kind/page/map_version
     // and IGNORES client values for those. Send only { id, source_ref,
     // json_path?, new_text, original_hash }.
-    var payload = { id: id, source_ref: s.ref, new_text: textAtClick, original_hash: s.originalHash };
+    var payload = { id: id, source_ref: s.ref, new_text: textAtClick,
+      original_hash: s.originalHash, page: PAGE };
     if (s.jsonPath) payload.json_path = s.jsonPath;
     log('SEND ref=' + s.ref + ' id=' + id.slice(0, 8) + ' state=SAVING (disabled)' + (opts.auto ? ' auto' : ''));
 
@@ -1720,7 +1721,8 @@
     var pc = s.pendingComment;
     // Comment: server derives kind/page; send { id, source_ref, comment,
     // original_hash } only.
-    var payload = { id: pc.id, source_ref: s.ref, comment: (bText.value || '').trim(), original_hash: s.originalHash };
+    var payload = { id: pc.id, source_ref: s.ref, comment: (bText.value || '').trim(),
+      original_hash: s.originalHash, page: PAGE };
     api('/suggest', { body: payload }).then(function (out) {
       s._commentSending = false;
       if (out.ok) {
@@ -2075,7 +2077,8 @@
       var s = sessions[ref];
       if (!s.editable || !s.dirty || s.state === ST.SAVING) return;
       var id = s.suggestionId || (s.suggestionId = uuid());
-      var payload = { id: id, source_ref: s.ref, new_text: s.snapshot, original_hash: s.originalHash };
+      var payload = { id: id, source_ref: s.ref, new_text: s.snapshot,
+        original_hash: s.originalHash, page: PAGE };
       if (s.jsonPath) payload.json_path = s.jsonPath;
       saveDraft(s);   // draft is the durable backup regardless of the request outcome
       try { api('/suggest', { body: payload, keepalive: true }); } catch (e) {}

@@ -196,9 +196,20 @@ export async function suggestEndpoint(request, env, auth) {
   }
   if (!block) return editError("validation_error", "That block is not editable.", 400);
 
+  // When the client identifies the page it is editing, resolve the exact
+  // occurrence instead of attributing a shared edit to the first descriptor.
+  const requestedPage = typeof body.page === "string" ? body.page : "";
+  if (scope === "edit" && requestedPage) {
+    const pageBlock = (lookupBlocks(source_ref, "edit") || []).find((item) =>
+      item.page === requestedPage && Number.isInteger(item.index));
+    if (!pageBlock)
+      return editError("validation_error", "That block is not editable on this page.", 400);
+    block = pageBlock;
+  }
+
   let pageOverride = null;
   if (op === "page_override") {
-    const page = typeof body.page === "string" ? body.page : "";
+    const page = requestedPage;
     const occurrences = (EDITOR_MAP.occurrences || {})[source_ref] || [];
     const surfaces = new Set(occurrences.map((item) => item.page));
     const occurrence = occurrences.find((item) => item.page === page);
@@ -213,7 +224,7 @@ export async function suggestEndpoint(request, env, auth) {
     pageOverride = { kind: "page_override", page, index: occurrence.index };
   }
   if (op === "page_override_revert") {
-    const page = typeof body.page === "string" ? body.page : "";
+    const page = requestedPage;
     const record = (EDITOR_MAP.overrides || []).find((item) =>
       item.source_ref === source_ref && item.page === page);
     const occurrence = ((EDITOR_MAP.occurrences || {})[source_ref] || [])

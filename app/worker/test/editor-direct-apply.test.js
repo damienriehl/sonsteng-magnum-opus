@@ -101,7 +101,12 @@ test("a shared json_scalar suggestion stores one server-authoritative json_path"
   });
   const block = Object.values(EDITOR_MAP.pages).flat()
     .find((b) => b.source_ref === sharedRef);
+  const pageBlocks = Object.entries(EDITOR_MAP.pages).flatMap(([page, blocks]) =>
+    blocks.filter((b) => b.source_ref === sharedRef).map((b) => ({ ...b, page })));
+  const origin = pageBlocks[pageBlocks.length - 1];
   assert.ok(block, "fixture must contain a shared json_scalar block");
+  assert.ok(origin && origin.page !== pageBlocks[0].page,
+    "fixture must expose a non-first editable occurrence");
 
   const cap = {};
   const env = envWith({}, cap);
@@ -111,12 +116,15 @@ test("a shared json_scalar suggestion stores one server-authoritative json_path"
     source_ref: sharedRef,
     json_path: block.json_path,
     new_text: "Shared replacement text.",
+    page: origin.page,
   }), env, auth);
 
   assert.equal(resp.status, 200);
   assert.equal(cap.input.source_ref, sharedRef);
   assert.equal(cap.input.json_path, block.json_path);
   assert.equal(Array.isArray(cap.input.json_path), false);
+  assert.equal(cap.input.page, origin.page);
+  assert.equal(cap.input.block_anchor, `${origin.page}:${origin.index}`);
 
   const forgedCap = {};
   const forgedEnv = envWith({}, forgedCap);
