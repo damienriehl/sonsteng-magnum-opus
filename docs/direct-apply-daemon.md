@@ -12,6 +12,13 @@ Two systemd **user** timers (never PROD):
 | `sonsteng-apply.timer` | every 2 min (`OnUnitActiveSec=2min`, `Persistent`) | `tools/direct_apply_daemon.py` |
 | `sonsteng-editorial.timer` | daily 21:30 America/Chicago (`Persistent`) | `tools/editorial_pass.py --daily` |
 
+The PROD promotion lane is a third, isolated service contract:
+`sonsteng-prod-promotion.{service,timer}`. It has a different checkout, `main`
+branch, lock, state, API base, and capability-separated credential file. Its
+installer is intentionally default-off and never starts the timer. DEV must
+never share that environment file or those credentials; revoking PROD access
+must leave both DEV timers healthy.
+
 Install / refresh / remove (mirrors `install-digest-timer.sh`):
 
 ```
@@ -129,6 +136,10 @@ timer under its flock, confirm no `in_flight` apply batch or pending revert, cre
 `dev-direct-apply` at the checkout's current HEAD, update the 0600 env file, and
 re-run the installer. Roll back by stopping the timer and restoring the prior DEV
 branch only; never point this daemon back at `main` after PROD promotion is enabled.
+
+Conversely, the PROD installer requires `main` and rejects the DEV branch. Inspect
+that boundary with `bash tools/install-prod-promotion-daemon.sh --dry-run`. Do not
+activate it until `docs/prod-enable.md` has a complete rollout receipt.
 
 ## PROD candidate preparation boundary
 

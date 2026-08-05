@@ -9,13 +9,22 @@ deliberately deferred to the operational rollout unit.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from prod_promotion import ReleaseManifest  # noqa: E402
 
 PRODUCTION = "production"
+
+HEALTH_STATES = frozenset({
+    "idle", "queued", "awaiting_approval", "ai_degraded", "maintenance",
+    "stalled", "restoring", "restore_failed", "unavailable",
+})
+PRE_BREACH_SECONDS = 240
+BREACH_SECONDS = 300
 
 
 class PromotionError(RuntimeError): pass
@@ -23,6 +32,135 @@ class StaleFence(PromotionError): pass
 class DriftDetected(PromotionError): pass
 class VerificationFailed(PromotionError): pass
 class ReconciliationRequired(PromotionError): pass
+
+
+@dataclasses.dataclass(frozen=True)
+class OperationalConfig:
+    """Non-secret contract consumed by the installed PROD service."""
+    api_base: str
+    checkout: str
+    branch: str
+    lock_path: str
+    state_path: str
+    credential_file: str
+    wrangler_environment: str = PRODUCTION
+
+    def validate(self):
+        if self.wrangler_environment != PRODUCTION:
+            raise ValueError("production_environment_required")
+        if self.branch != "main":
+            raise ValueError("prod_branch_must_be_main")
+        if not self.api_base.startswith("https://"):
+            raise ValueError("https_api_required")
+        paths = (self.checkout, self.lock_path, self.state_path, self.credential_file)
+        if any(not os.path.isabs(value) for value in paths):
+            raise ValueError("absolute_paths_required")
+        if len(set(paths[1:])) != 3:
+            raise ValueError("isolated_paths_required")
+        return self
+
+    def public_dict(self):
+        value = dataclasses.asdict(self)
+        # The credential location is useful to operators; contents never are.
+        value["credential_file"] = "configured (path redacted)"
+        return value
+
+
+@dataclasses.dataclass(frozen=True)
+class KnownGoodAttestation:
+    pages_id: str
+    worker_id: str
+    commit_sha: str
+    manifest_hash: str
+    editor_map_id: str
+    build_id: str
+    generated_contract_hashes: dict
+    pages_restorable: bool
+    worker_restorable: bool
+
+    def validate(self):
+        required = (self.pages_id, self.worker_id, self.commit_sha,
+                    self.manifest_hash, self.editor_map_id, self.build_id)
+        if any(not value for value in required):
+            raise VerificationFailed("known_good_identity_incomplete")
+        if len(self.commit_sha) != 40 or not self.generated_contract_hashes:
+            raise VerificationFailed("known_good_hashes_incomplete")
+        if not self.pages_restorable or not self.worker_restorable:
+            raise VerificationFailed("known_good_not_restorable")
+        return self
+
+
+def inventory_exclusive_writers(items):
+    """Return a content-light receipt; any competing enabled writer denies use."""
+    normalized = []
+    for item in items:
+        normalized.append({
+            "id": str(item.get("id", "unknown")),
+            "kind": str(item.get("kind", "unknown")),
+            "enabled": bool(item.get("enabled")),
+            "intended": bool(item.get("intended")),
+        })
+    conflicts = [x["id"] for x in normalized if x["enabled"] and not x["intended"]]
+    return {"ok": not conflicts and bool(normalized), "writers": normalized,
+            "conflicts": conflicts, "default_deny": True}
+
+
+def timing_health(started_at, now=None, *, awaiting_approval_since=None):
+    now = time.time() if now is None else now
+    elapsed = max(0, int(now - started_at))
+    approval = (max(0, int(now - awaiting_approval_since))
+                if awaiting_approval_since is not None else 0)
+    active = max(0, elapsed - approval)
+    state = "stalled" if active >= BREACH_SECONDS else (
+        "queued" if active >= PRE_BREACH_SECONDS else "idle")
+    return {"state": state, "active_seconds": active,
+            "awaiting_approval_seconds": approval,
+            "pre_breach": active >= PRE_BREACH_SECONDS,
+            "breach": active >= BREACH_SECONDS}
+
+
+def content_light_alert(candidate_id, state, *, manifest_hash=None):
+    if state not in HEALTH_STATES:
+        raise ValueError("unknown_health_state")
+    result = {"candidate_id": candidate_id, "state": state,
+              "acknowledgement_required": state in {
+                  "stalled", "restore_failed", "unavailable"}}
+    if manifest_hash:
+        result["manifest_hash"] = manifest_hash
+    return result
+
+
+class LiveReleaseVerifier:
+    """Pure verification seam; callers inject provider and HTTP observations."""
+    def __init__(self, provider, fetch):
+        self.provider = provider
+        self.fetch = fetch
+
+    def verify(self, manifest, writes_expected=True):
+        observed = self.provider.observe()
+        if (observed.pages_id, observed.worker_id) != (
+                manifest.pages_production_id, manifest.worker_version_id):
+            return False
+        response = self.fetch(manifest)
+        expected = {
+            "manifest_hash": manifest.manifest_hash,
+            "pages_id": manifest.pages_production_id,
+            "worker_id": manifest.worker_version_id,
+            "editor_map_id": manifest.editor_map_id,
+            "build_id": manifest.build_id,
+            "generated_contract_hashes": manifest.generated_contract_hashes,
+            "writes_enabled": bool(writes_expected),
+        }
+        headers = {str(k).lower(): str(v) for k, v in response["headers"].items()}
+        return (response.get("status") == 200 and response.get("markers") == expected
+                and "no-store" in headers.get("cache-control", "").lower())
+
+    def verify_known_good(self, known, writes_expected=True):
+        known.validate()
+        observed = self.provider.observe()
+        if (observed.pages_id, observed.worker_id) != (known.pages_id, known.worker_id):
+            return False
+        return bool(self.provider.verify_known_good(known, writes_expected=writes_expected))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -313,7 +451,14 @@ class PromotionCoordinator:
 
 
 def main():
-    raise SystemExit("No live PROD adapter is installed; use injected adapters in tests.")
+    if os.environ.get("PROD_PROMOTION_ENABLED") != "1":
+        print(json.dumps({"state": "maintenance", "reason": "rollout_disabled",
+                          "content_light": True}, sort_keys=True))
+        return 0
+    print(json.dumps({"state": "unavailable", "reason": "live_adapter_not_configured",
+                      "acknowledgement_required": True,
+                      "content_light": True}, sort_keys=True))
+    return 78
 
 
-if __name__ == "__main__": main()
+if __name__ == "__main__": raise SystemExit(main())

@@ -1,4 +1,37 @@
-# PROD injector enable — one-command sequence
+# PROD promotion lane — staged enable and recovery
+
+> **Current state (2026-08-05): installed contract only; mutation remains OFF.**
+> Do not run a PROD deploy, enable the timer, change Cloudflare or GitHub
+> settings, or perform a live canary yet. The required 14-day/50-candidate
+> calibration and attributed rollout receipt do not exist. U6 is verified with
+> installer dry runs and hermetic live-adapter tests; live proof belongs to U7.
+
+Safe inspection commands:
+
+    bash tools/install-prod-promotion-daemon.sh --dry-run
+    deploy/deploy-prod.sh --dry-run
+    cd app/worker && npx wrangler@4 deploy --env production --dry-run
+
+`--install` only writes private service, timer, and environment templates. It
+does not call `systemctl`, enable a timer, create a checkout, fetch a secret, or
+mutate a provider.
+
+## Required activation receipt (default deny)
+
+Before any PROD mutation, record all of these observations together:
+
+- Restorable, provider-queryable Pages and Worker IDs.
+- Exact `main` SHA, manifest/build/editor-map IDs, and generated-contract hashes,
+  all agreeing with public release markers.
+- An exclusive-writer inventory proving Pages branch builds and every competing
+  PROD publisher or `main` writer are disabled.
+- Separate 0600 ledger, Cloudflare, and GitHub credentials; revocation and
+  cross-use must fail without affecting DEV.
+- Restart/reconciliation and paired-restoration receipts, no drift, healthy DEV,
+  and an assigned release owner.
+- Every U7 launch threshold, including 50 reviewed candidates over 14 days.
+
+Any missing or stale item keeps `PROD_PROMOTION_ENABLED=0` and the timer disabled.
 
 ## Promotion risk and advisory AI boundary
 
@@ -28,11 +61,8 @@ at least 95% of automatic candidates completing within five minutes, and an
 explicit disposition for every AI-unavailable sample. Reducing the cap back to
 zero does not disable deterministic promotion.
 
-**Status:** BUILT, NOT FLIPPED. This doc is the exact sequence to turn on the
-Worker-injected `/edit` editor on PROD. The former per-deploy approval hold was
-superseded on 2026-08-04: merged, release-green engineering changes may proceed
-to PROD without another confirmation. The prerequisites and verification in
-this runbook remain mandatory.
+**Status:** BUILT, NOT FLIPPED. A green engineering change alone is not an
+activation receipt.
 
 The config is already wired: `app/worker/wrangler.jsonc` defines an `env.production`
 block (a SEPARATE worker `sonsteng-chat-production`) whose only deltas from DEV are
@@ -75,7 +105,7 @@ Set each on the production worker (run from `app/worker/`; creds via
 
 ---
 
-## The enable sequence (in order)
+## Historical manual sequence — prohibited for promotion
 
     # 0) Regenerate the server-only bundles the worker inlines (map = universal allowlist).
     python3 tools/build_site.py --check
@@ -83,11 +113,11 @@ Set each on the production worker (run from `app/worker/`; creds via
 
     # 1) Publish the PROD static site to Cloudflare Pages (sonsteng.damienriehl.com).
     #    This is what EDIT_UPSTREAM proxies; it must carry the /platform/ pages.
-    deploy/deploy-prod.sh
+    # REFUSED by design: deploy/deploy-prod.sh
 
     # 2) Deploy the PRODUCTION worker (separate instance; DEV worker untouched).
     cd app/worker
-    npx wrangler@4 deploy --env production     # build.command bundles editor-data first
+    # The coordinator alone may perform the corresponding staged upload.
 
     # (secrets from the Prerequisites section must already be set for --env production)
 
@@ -106,7 +136,24 @@ Set each on the production worker (run from `app/worker/`; creds via
 
 ---
 
-## Rollback
+## Pause, retry, restoration, and credentials
+
+Pause before rotating or investigating a credential. Revocation or insufficient
+scope stops only PROD with content-light `unavailable` health. Retry requires an
+attributed decision against fresh evidence and the current fencing token.
+
+Restoration restores and re-verifies both known-good provider artifacts even if
+one appears unchanged. Writes remain fenced until the exact pair, hashes, public
+markers, and `main` agree. Ambiguity remains durable `restore_failed`, with an
+acknowledged ID-only alert; it never resumes writes or claims another candidate.
+
+Health distinguishes `idle`, `queued`, `awaiting_approval`, `ai_degraded`,
+`maintenance`, `stalled`, `restoring`, `restore_failed`, and `unavailable`.
+Pre-breach begins at four active minutes and breach at five. Human-approval time
+is reported separately; AI outage time counts. Alerts contain IDs/states/hashes
+only, never content, credentials, command lines, or provider error bodies.
+
+## Legacy rollback note
 
 The PROD **pitch site is a separate Pages deploy** and is never touched by the
 worker deploy, so the public pitch cannot regress from enabling the injector.

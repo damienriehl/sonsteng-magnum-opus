@@ -97,8 +97,11 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 
 ## What happens next
 
-- **Your edit publishes itself.** The system double-checks it, rebuilds the site, and puts it
-  live — no waiting on Damien. He sees every change, and Roger sees it too.
+- **Your edit enters a checked publishing queue.** The system double-checks it,
+  and low-risk changes can publish automatically once the PROD rollout is
+  enabled. Borderline changes wait for Damien's approval. Until that staged
+  rollout is enabled, your saved wording remains visible with an honest queued
+  or needs-attention status rather than claiming it is live.
 - **Your wording is right there when you come back.** Open your link again and the page shows
   what you wrote, exactly as you left it. Click the paragraph to keep refining it.
 - **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not
