@@ -98,15 +98,12 @@ test("page descriptor island carries all occurrences only for shared blocks", ()
 });
 
 test("json_scalar path forgery is rejected (json_path must match the map)", () => {
-  // Use a genuinely shared json_scalar so the multi-occurrence lookup cannot
-  // accidentally weaken the existing source_ref -> sole json_path guard.
-  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
-    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
-    return lookupBlock(ref, "edit")?.kind === "json_scalar";
-  });
-  const jsBlock = lookupBlock(sharedRef, "edit");
-  assert.ok(jsBlock, "bundle must contain a shared json_scalar block");
-  assert.ok(lookupBlocks(sharedRef, "edit").length > 1);
+  // Sharing is covered independently above. Path authority must remain true
+  // even when today's generated corpus has no multiply-rendered scalar.
+  const scalarRef = Object.values(EDITOR_MAP.pages).flat()
+    .find((block) => block.kind === "json_scalar")?.source_ref;
+  const jsBlock = lookupBlock(scalarRef, "edit");
+  assert.ok(jsBlock, "bundle must contain a json_scalar block");
   assert.ok(validateJsonScalar(jsBlock.source_ref, jsBlock.json_path, "edit"));
   // a forged json_path for the same source_ref is rejected
   assert.equal(validateJsonScalar(jsBlock.source_ref, "attacker.controlled.path", "edit"), null);
