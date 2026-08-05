@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeCore } from "./editor-sql-helper.mjs";
+import { makeCore, NodeSql } from "./editor-sql-helper.mjs";
 import { PROMOTION_STAGE } from "../src/editor-status.js";
+import { EditorStoreCore } from "../src/editor-store-core.js";
 
 function candidate(over = {}) {
   return {
     id: "cand-1", principal: "slot:john", environment: "production",
-    idempotency_key: "idem-1", request_digest: "digest-1", content_bytes: 120,
+    idempotency_key: "idem-1", request_digest: "digest-1", content_bytes: 2,
+    content_json: "{}", storage_bytes: 2,
     source_ref: "data/copy/home.json#hero", ...over,
   };
 }
@@ -16,11 +18,34 @@ test("accepted PROD save atomically creates candidate, attempt, and saved event"
   const first = core.createPromotionCandidate(candidate());
   assert.equal(first.ok, true);
   assert.equal(first.candidate.stage, PROMOTION_STAGE.SAVED);
+  assert.equal(first.candidate.content_json, undefined);
+  assert.equal(core._promotionCandidate("cand-1").content_json, "{}");
   assert.equal(first.attempt.number, 1);
   assert.deepEqual(core.listPromotionEvents("cand-1").map((e) => e.type), ["saved"]);
   const replay = core.createPromotionCandidate(candidate());
   assert.equal(replay.replay, true);
   assert.equal(core.listPromotionCandidates().length, 1);
+});
+
+test("candidate creation rolls back every ledger row when a statement fails", () => {
+  class FaultSql extends NodeSql {
+    armed = false;
+    exec(query, ...binds) {
+      if (this.armed && /INSERT INTO promotion_attempts/.test(query)) {
+        this.armed = false;
+        throw new Error("injected_statement_failure");
+      }
+      return super.exec(query, ...binds);
+    }
+  }
+  const sql = new FaultSql();
+  const core = new EditorStoreCore(sql, () => 1000, (fn) => sql.transaction(fn));
+  core.initSchema();
+  sql.armed = true;
+  assert.throws(() => core.createPromotionCandidate(candidate()), /injected_statement_failure/);
+  assert.deepEqual(core.listPromotionCandidates(), []);
+  assert.deepEqual(core.listPromotionEvents("cand-1"), []);
+  assert.equal(core.createPromotionCandidate(candidate()).ok, true);
 });
 
 test("idempotency is principal, environment, operation, resource and body bound", () => {
@@ -39,7 +64,8 @@ test("admission bounds reject before acceptance without disturbing accepted work
     { maxBytes: 200, maxQueued: 1, maxStoredBytes: 200, perPrincipalPerMinute: 2 });
   assert.equal(over.reason, "queue_full");
   assert.equal(core.listPromotionCandidates().length, 1);
-  assert.equal(core.createPromotionCandidate(candidate({ id: "huge", idempotency_key: "huge", request_digest: "huge", content_bytes: 201 }), { maxBytes: 200 }).reason, "too_large");
+  assert.equal(core.createPromotionCandidate(candidate({ id: "huge", idempotency_key: "huge", request_digest: "huge",
+    content_bytes: 201, content_json: "x".repeat(201), storage_bytes: 201 }), { maxBytes: 200 }).reason, "too_large");
 });
 
 test("legal transitions project public stages; stale and terminal writes do nothing", () => {

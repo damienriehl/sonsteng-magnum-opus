@@ -241,19 +241,21 @@ export const REVIEW_JS = `(() => {
     const r=await fetch("/edit/v1/prod/candidates",{credentials:"same-origin"});
     if(r.ok){promotionData.candidates=(await r.json()).candidates||[];renderPromotions();}
   }
-  async function promotionDecision(c,decision,rationale,confirmed,button,error){
+  async function promotionDecision(c,decision,rationale,confirmed,controls,error){
     if(!confirmed){error.textContent="Confirm that you reviewed this exact evidence before deciding.";return;}
-    button.disabled=true;error.textContent="";
+    for(const button of controls)button.disabled=true;error.textContent="";
     const body={candidate_id:c.id,attempt_id:c.attempt_id,decision,base_sha:c.base_sha,evidence_hash:c.evidence_hash,
       manifest_hash:c.manifest_hash,rationale,idempotency_key:c.id+":"+c.attempt_id+":"+decision+":"+Date.now(),manifest_epoch:promotionData.manifest_epoch};
     const r=await fetch("/edit/v1/prod/decision",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});
     if(r.ok){await refreshPromotions();const next=promotionRoot&&promotionRoot.querySelector("button");if(next)next.focus();return;}
-    button.disabled=false;
+    for(const button of controls)button.disabled=false;
     if(r.status===409){await refreshPromotions();announceChanged();return;}
     error.textContent="The decision was not recorded. Nothing was published; try again.";
   }
   async function openPromotion(c,card,trigger){
-    let detail=await loadDetail(c);if(!detail){await refreshPromotions();announceChanged();return;}
+    if(card.dataset.promotionBusy==="1")return;card.dataset.promotionBusy="1";trigger.disabled=true;
+    let detail;try{detail=await loadDetail(c);}catch{card.dataset.promotionBusy="0";trigger.disabled=false;announceChanged();return;}
+    if(!detail){await refreshPromotions();announceChanged();return;}
     let panel=card.querySelector(".pr-detail");panel.hidden=false;panel.textContent="";
     const evidence=document.createElement("section");evidence.className="pr-evidence";
     const h=document.createElement("h4");h.textContent="Validation evidence";evidence.appendChild(h);
@@ -264,8 +266,8 @@ export const REVIEW_JS = `(() => {
     const confirmLabel=document.createElement("label");confirmLabel.className="pr-confirm";const confirm=document.createElement("input");confirm.type="checkbox";confirmLabel.appendChild(confirm);confirmLabel.appendChild(document.createTextNode("I reviewed this exact attempt and evidence."));panel.appendChild(confirmLabel);
     const error=document.createElement("p");error.className="pr-error";error.setAttribute("role","alert");panel.appendChild(error);
     const actions=document.createElement("div");actions.className="pr-actions";
-    for(const d of ["approve","decline"]){const b=document.createElement("button");b.type="button";b.textContent=d==="approve"?"Approve promotion":"Decline promotion";b.onclick=()=>promotionDecision(c,d,rationale.value,confirm.checked,b,error);actions.appendChild(b);}panel.appendChild(actions);
-    const close=document.createElement("button");close.type="button";close.textContent="Return to queue";close.onclick=()=>{panel.hidden=true;trigger.focus();};actions.appendChild(close);rationale.focus();
+    for(const d of ["approve","decline"]){const b=document.createElement("button");b.type="button";b.textContent=d==="approve"?"Approve promotion":"Decline promotion";b.onclick=()=>promotionDecision(c,d,rationale.value,confirm.checked,actions.querySelectorAll("button"),error);actions.appendChild(b);}panel.appendChild(actions);
+    const close=document.createElement("button");close.type="button";close.textContent="Return to queue";close.onclick=()=>{panel.hidden=true;card.dataset.promotionBusy="0";trigger.disabled=false;trigger.focus();};actions.appendChild(close);rationale.focus();
   }
   function renderPromotions(){
     if(!promotionRoot)return;promotionRoot.textContent="";const lane=promotionData.lane;

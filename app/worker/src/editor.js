@@ -284,10 +284,9 @@ export async function editorFetch(request, env, ctx) {
     const stub = editorStub(env);
     const [items, reverts, promotionRows, lane] = await Promise.all([
       stub.listAll(), stub.listRevertRequests(null),
-      stub.listPromotionCandidates(null), stub.getPromotionLane(),
+      stub.listPromotionSummaries(null, 100), stub.getPromotionLane(),
     ]);
-    const promotions = (await Promise.all((promotionRows || []).map(async (row) =>
-      projectPromotionSummary(await stub.getPromotionCandidate(row.id))))).filter(Boolean);
+    const promotions = (promotionRows || []).map(projectPromotionSummary).filter(Boolean);
     promotions.sort((a, b) => (a.created_at || 0) - (b.created_at || 0) || a.id.localeCompare(b.id));
     const publicLane = lane && { version: lane.version, paused: !!lane.paused, health: lane.health,
       reason_code: lane.reason_code || null, active_candidate_id: lane.active_candidate_id || null,

@@ -8,6 +8,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 INSTALLER = ROOT / "tools" / "install-prod-promotion-daemon.sh"
+DIRECT_DEPLOY = ROOT / "deploy" / "deploy-prod.sh"
 
 
 class ProdPromotionInstallTest(unittest.TestCase):
@@ -49,6 +50,24 @@ class ProdPromotionInstallTest(unittest.TestCase):
                          {"PROD_PROMOTION_API_BASE": "http://example.invalid"}):
             env = dict(os.environ, **override)
             self.assertNotEqual(self.run_installer("--dry-run", env=env).returncode, 0)
+
+    def test_direct_prod_deploy_is_a_non_mutating_lockout(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            marker = root / "npx-invoked"
+            fake = root / "npx"
+            fake.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 99\n")
+            fake.chmod(0o700)
+            env = dict(os.environ, PATH=f"{root}:{os.environ.get('PATH', '')}")
+            refused = subprocess.run(["bash", str(DIRECT_DEPLOY)], cwd=ROOT, env=env,
+                                     text=True, capture_output=True, check=False)
+            self.assertEqual(refused.returncode, 64)
+            self.assertIn("direct PROD deploy is disabled", refused.stderr)
+            dry = subprocess.run(["bash", str(DIRECT_DEPLOY), "--dry-run"], cwd=ROOT, env=env,
+                                 text=True, capture_output=True, check=False)
+            self.assertEqual(dry.returncode, 0, dry.stderr)
+            self.assertIn("coordinator-only", dry.stdout)
+            self.assertFalse(marker.exists(), "direct deploy invoked npx/wrangler")
 
 
 if __name__ == "__main__":

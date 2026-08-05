@@ -26,13 +26,26 @@ test("promotion save binds authenticated principal and server-computed digest", 
   let received;
   const stub = { createPromotionCandidate: async (input) => (received = input, { ok: true, candidate: { id: input.id } }) };
   const response = await promotionSaveEndpoint(post("https://edit.example/edit/v1/prod/candidates", {
-    candidate_id: "candidate-123", idempotency_key: "idem-123", source_ref: "data/x#y",
+    candidate_id: "candidate-123", idempotency_key: "idem-123", source_ref: "data/copy/home.json#hero.heading",
     content: { new_text: "safe" }, manifest_epoch: "live:manifest-1",
   }), envWith(stub), auth("slot:john", true));
   assert.equal(response.status, 201);
   assert.equal(received.principal, "slot:john");
   assert.match(received.request_digest, /^[0-9a-f]{64}$/);
   assert.equal(received.environment, "production");
+  assert.equal(JSON.parse(received.content_json).new_text, "safe");
+});
+
+test("promotion save rejects oversized metadata before durable admission", async () => {
+  let called = false;
+  const stub = { createPromotionCandidate: async () => { called = true; return { ok: true }; } };
+  const response = await promotionSaveEndpoint(post("https://edit.example/edit/v1/prod/candidates", {
+    candidate_id: "c".repeat(129), idempotency_key: "idem",
+    source_ref: "data/copy/home.json#hero.heading", content: { new_text: "safe" },
+    manifest_epoch: "live:manifest-1",
+  }), envWith(stub), auth("slot:john", true));
+  assert.equal(response.status, 400);
+  assert.equal(called, false);
 });
 
 test("PROD promotion API fails closed outside the production Worker environment", async () => {
@@ -113,8 +126,8 @@ test("automation discovery returns only role-permitted bound summaries", async (
     active_attempt_id:row.id+":1", attempt:{ id:row.id+":1", base_sha:"b", evidence_hash:"e", manifest_hash:"m" },
     events:[{ detail:{ secret:"hidden" } }] });
   const stub = {
-    listPromotionCandidates: async (principal) => principal ? rows.filter((r) => r.principal === principal) : rows,
-    getPromotionCandidate: async (id) => full(rows.find((r) => r.id === id)),
+    listPromotionSummaries: async (principal) =>
+      (principal ? rows.filter((r) => r.principal === principal) : rows).map(full),
   };
   const editorResponse = await promotionCandidatesEndpoint(new Request("https://edit.example/edit/v1/prod/candidates"),
     envWith(stub), auth("slot:john", true));
@@ -133,7 +146,7 @@ test("lifecycle discovery exposes safe timestamps and sanitizes lane internals",
     stage_at:2000, created_at:1000, updated_at:3000, active_attempt_id:"own:1",
     attempt:{ id:"own:1", base_sha:"b", evidence_hash:"e", manifest_hash:"m" } };
   const stub = {
-    listPromotionCandidates: async () => [full], getPromotionCandidate: async () => full,
+    listPromotionSummaries: async () => [full],
     getPromotionLane: async () => ({ version:4, paused:1, health:"stalled", reason_code:"live_verification",
       active_candidate_id:"own", updated_at:3000, lease_owner:"secret-host", fencing_token:99 }),
   };
@@ -153,7 +166,7 @@ test("lifecycle discovery exposes safe timestamps and sanitizes lane internals",
 test("fresh saved candidates remain discoverable without granting preview or evidence access", async () => {
   const saved = { id:"fresh", principal:"slot:john", stage:"saved", source_ref:"data/x#y",
     active_attempt_id:"fresh:1", attempt:{ id:"fresh:1", base_sha:null, evidence_hash:null, manifest_hash:null } };
-  const stub = { listPromotionCandidates: async () => [saved], getPromotionCandidate: async () => saved };
+  const stub = { listPromotionSummaries: async () => [saved], getPromotionCandidate: async () => saved };
   const response = await promotionCandidatesEndpoint(new Request("https://edit.example/edit/v1/prod/candidates"),
     envWith(stub), auth("slot:john", true));
   const body = await response.json();
@@ -169,7 +182,8 @@ test("fresh saved candidates remain discoverable without granting preview or evi
 test("real store-bound projection flows through discovery, detail, and preview endpoints", async () => {
   const core = makeCore(() => 1000);
   const made = core.createPromotionCandidate({ id:"real", principal:"slot:john", environment:"production",
-    idempotency_key:"real-idem", request_digest:"real-digest", content_bytes:10, source_ref:"data/x#y" });
+    idempotency_key:"real-idem", request_digest:"real-digest", content_bytes:10,
+    content_json:'"12345678"', storage_bytes:2100, source_ref:"data/x#y" });
   const tuple = { candidate_id:"real", attempt_id:made.attempt.id, base_sha:"base", evidence_hash:"ev", manifest_hash:"man" };
   core.bindPromotionEvidence({ ...tuple, actor:"service:prod" });
   core.bindPromotionProjection({ ...tuple, preview_html:"<p>real candidate</p>",

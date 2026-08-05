@@ -139,15 +139,18 @@
     if (!(candidates || []).length) list.appendChild(el('li', 'prod-lifecycle__item', 'No saved production candidates.'));
     prodLifecycleEl.appendChild(list);
   }
+  var prodLifecycleRequestSeq = 0;
   function refreshProdLifecycle() {
-    return Promise.all([api('/prod/candidates'), api('/prod/lane')]).then(function(out) {
+    var requestSeq = ++prodLifecycleRequestSeq;
+    return Promise.all([api('/prod/candidates', { method: 'GET' }), api('/prod/lane', { method: 'GET' })]).then(function(out) {
+      if (requestSeq !== prodLifecycleRequestSeq) return;
       // The PROD contract is deliberately absent from DEV. Preserve the DEV
       // editor surface instead of mislabelling that separation as an outage.
       if (out[0].status === 404) return;
       var candidates = out[0].ok && out[0].data ? out[0].data.candidates : [];
       var lane = out[1].ok && out[1].data ? out[1].data.lane : null;
       renderProdLifecycle(candidates, lane);
-    }).catch(function(){ renderProdLifecycle([], null); });
+    }).catch(function(){ if (requestSeq === prodLifecycleRequestSeq) renderProdLifecycle([], null); });
   }
 
   function saveDialogDraft(key, rec) {
@@ -271,6 +274,8 @@
   }
   var MAP_ISLAND = readJsonIsland('editor-map-data') || {};
   var EDITS_ISLAND = readJsonIsland('edits-data') || {};
+  var PROD_EDITOR = EDITS_ISLAND.environment === 'production' &&
+    typeof EDITS_ISLAND.manifest_epoch === 'string' && /^live:/.test(EDITS_ISLAND.manifest_epoch);
   var MAP = MAP_ISLAND.blocks || [];
   var PAGE_OVERRIDES = MAP_ISLAND.overrides || [];
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
@@ -1204,7 +1209,10 @@
     if (s.jsonPath) payload.json_path = s.jsonPath;
     log('SEND ref=' + s.ref + ' id=' + id.slice(0, 8) + ' state=SAVING (disabled)' + (opts.auto ? ' auto' : ''));
 
-    api('/suggest', { body: payload }).then(function (out) {
+    var savePath = PROD_EDITOR ? '/prod/candidates' : '/suggest';
+    var saveBody = PROD_EDITOR ? { candidate_id: id, idempotency_key: id,
+      source_ref: s.ref, content: payload, manifest_epoch: EDITS_ISLAND.manifest_epoch } : payload;
+    api(savePath, { body: saveBody }).then(function (out) {
       if (out.ok) {
         if (s._retry) { clearTimeout(s._retry); s._retry = null; }
         s._retryDelay = 0;
@@ -1213,7 +1221,7 @@
         s.suggestionId = null;                      // rotate: next burst mints a fresh id
         // Honest status from the STORE (accepted "Going live…" under DIRECT_APPLY,
         // else "Pending review") — never an optimistic "Saved".
-        var srv = (out.data && out.data.status) || 'pending';
+        var srv = PROD_EDITOR ? 'saved' : ((out.data && out.data.status) || 'pending');
         var lbl = STATUS_LABELS[srv] || 'Sent';
         var tone = STATUS_TONE[srv] || 'sending';
         // Did the user type MORE while this send was in flight?

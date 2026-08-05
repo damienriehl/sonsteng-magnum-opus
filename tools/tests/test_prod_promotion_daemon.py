@@ -71,11 +71,17 @@ class FakeProvider:
         self.calls.append("worker-upload"); self.worker = pd.Artifact("worker-new", digest, environment, "worker-version"); return self.worker
     def find_pages_production(self, key): return self.production
     def upload_pages_production(self, key, digest, environment):
-        self.calls.append("pages-production"); self.production = pd.Artifact("pages-new", digest, environment, "pages-production"); return self.production
+        self.calls.append("pages-production"); self.production = pd.Artifact("pages-new", digest, environment, "pages-production")
+        self.live_pair = (self.production.id, self.live_pair[1])
+        if "pages-production" in self.timeout_once:
+            self.timeout_once.remove("pages-production"); raise TimeoutError()
+        return self.production
     def fetch_artifact(self, artifact):
         return pd.Artifact(artifact.id, "bad" if self.tamper else artifact.digest, artifact.environment, artifact.kind)
     def activate_worker(self, version_id, environment):
         self.calls.append("activate-worker"); self.live_pair = (self.live_pair[0], version_id); self._record_fence(self.live_pair)
+        if "activate-worker" in self.timeout_once:
+            self.timeout_once.remove("activate-worker"); raise TimeoutError()
     def restore_pages(self, pages_id, environment):
         self.calls.append("restore-pages"); self.live_pair = (pages_id, self.live_pair[1]); self._record_fence(self.live_pair)
     def restore_worker(self, worker_id, environment):

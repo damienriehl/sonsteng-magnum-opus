@@ -15,7 +15,8 @@ import { EditorStoreCore } from "./editor-store-core.js";
 export class EditorStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.core = new EditorStoreCore(ctx.storage.sql);
+    this.core = new EditorStoreCore(ctx.storage.sql, () => Date.now(),
+      (fn) => ctx.storage.transactionSync(fn));
     ctx.blockConcurrencyWhile(async () => {
       this.core.initSchema();
       // Crash reconciliation runs before the DO serves any claim: no limbo.
@@ -48,6 +49,7 @@ export class EditorStore extends DurableObject {
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
   createPromotionCandidate(input, limits) { return this.core.createPromotionCandidate(input, limits); }
   listPromotionCandidates(principal) { return this.core.listPromotionCandidates(principal); }
+  listPromotionSummaries(principal, limit) { return this.core.listPromotionSummaries(principal, limit); }
   getPromotionCandidate(id) { return this.core.getPromotionCandidate(id); }
   listPromotionEvents(id) { return this.core.listPromotionEvents(id); }
   claimPromotion(owner, leaseMs) { return this.core.claimPromotion(owner, leaseMs); }

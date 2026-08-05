@@ -359,7 +359,11 @@ class PromotionCoordinator:
             return "published"
         except ReconciliationRequired:
             return "reconciliation_required"
-        except (StaleFence, TimeoutError):
+        except StaleFence:
+            raise
+        except TimeoutError as exc:
+            if production_started:
+                return self._restore(token, known, str(exc) or "provider_timeout", mutate=True)
             raise
         except Exception as exc:
             return self._restore(token, known, str(exc), mutate=production_started)

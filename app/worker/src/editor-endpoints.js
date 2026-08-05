@@ -109,10 +109,19 @@ export async function promotionSaveEndpoint(request, env, auth) {
       typeof body.source_ref !== "string" || body.content == null)
     return editError("validation_error", "Invalid promotion save.", 400);
   const encoded = JSON.stringify(body.content);
+  const requestEncoded = JSON.stringify(body);
+  const requestBytes = new TextEncoder().encode(requestEncoded).byteLength;
+  const scope = auth.scopes.edit.granted ? "edit" : "instructor";
+  if (!lookupBlock(body.source_ref, scope) || body.candidate_id.length > 128 ||
+      body.idempotency_key.length > 256 || body.source_ref.length > 512 ||
+      requestBytes > 20 * 1024)
+    return editError("validation_error", "Invalid promotion save.", 400);
   const result = await editorStub(env).createPromotionCandidate({
     id: body.candidate_id, principal: auth.editor, environment: "production",
-    idempotency_key: body.idempotency_key, request_digest: await sha256Hex(JSON.stringify(body)),
-    content_bytes: new TextEncoder().encode(encoded).byteLength, source_ref: body.source_ref,
+    idempotency_key: body.idempotency_key, request_digest: await sha256Hex(requestEncoded),
+    content_bytes: new TextEncoder().encode(encoded).byteLength, content_json: encoded,
+    storage_bytes: requestBytes * 3 + 2048,
+    source_ref: body.source_ref,
   }, (() => {
     const c = ceilingsFor(env);
     return { maxBytes: c.maxBytes, maxQueued: c.globalPending,
@@ -141,10 +150,8 @@ export async function promotionCandidatesEndpoint(request, env, auth) {
   const admin = auth.scopes.admin.granted;
   if (!admin && !auth.scopes.edit.granted && !auth.scopes.instructor.granted) return uniform404();
   const stub = editorStub(env);
-  const rows = await stub.listPromotionCandidates(admin ? null : auth.editor);
-  const visible = (rows || []).filter((row) => admin || row.principal === auth.editor);
-  const candidates = (await Promise.all(visible.map(async (row) =>
-    projectPromotionSummary(await stub.getPromotionCandidate(row.id))))).filter(Boolean);
+  const rows = await stub.listPromotionSummaries(admin ? null : auth.editor, 100);
+  const candidates = (rows || []).map(projectPromotionSummary).filter(Boolean);
   return json({ ok: true, candidates });
 }
 

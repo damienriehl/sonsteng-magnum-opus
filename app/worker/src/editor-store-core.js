@@ -154,7 +154,8 @@ export const SCHEMA_SQL = `
   -- PROD promotion is deliberately separate from DEV suggestions/apply_batches.
   CREATE TABLE IF NOT EXISTS promotion_candidates (
     id TEXT PRIMARY KEY, principal TEXT NOT NULL, environment TEXT NOT NULL,
-    source_ref TEXT NOT NULL, content_bytes INTEGER NOT NULL,
+    source_ref TEXT NOT NULL, content_bytes INTEGER NOT NULL, content_json TEXT NOT NULL,
+    storage_bytes INTEGER NOT NULL,
     stage TEXT NOT NULL, stage_at INTEGER NOT NULL, active_attempt_id TEXT NOT NULL,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
   );
@@ -225,9 +226,10 @@ const SELECT_COLS =
   "created_at, updated_at";
 
 export class EditorStoreCore {
-  constructor(sql, now = () => Date.now()) {
+  constructor(sql, now = () => Date.now(), transaction = (fn) => fn()) {
     this.sql = sql;
     this.now = now;
+    this.transaction = transaction;
   }
 
   initSchema() {
@@ -240,6 +242,8 @@ export class EditorStoreCore {
     this._ensureColumn("suggestions", "client_fp", "TEXT");
     // Structural-operation operand (merge's second ref / move's destination).
     this._ensureColumn("suggestions", "op_arg", "TEXT");
+    this._ensureColumn("promotion_candidates", "content_json", "TEXT NOT NULL DEFAULT '{}'");
+    this._ensureColumn("promotion_candidates", "storage_bytes", "INTEGER NOT NULL DEFAULT 0");
     this.sql.exec("INSERT OR IGNORE INTO promotion_lane (id,version,paused,health,fencing_token,updated_at) VALUES (1,0,0,'healthy',0,?)", this.now());
   }
 
@@ -283,7 +287,13 @@ export class EditorStoreCore {
   createPromotionCandidate(input, limits = {}) {
     const cfg = { maxBytes: 16 * 1024, maxQueued: 5000,
       maxStoredBytes: 64 * 1024 * 1024, perPrincipalPerMinute: 60, ...limits };
-    if (!input || !input.id || !input.principal || !input.idempotency_key || !input.request_digest)
+    if (!input || !input.id || !input.principal || !input.idempotency_key || !input.request_digest ||
+        typeof input.content_json !== "string")
+      return { ok: false, reason: "validation_error" };
+    if (input.id.length > 128 || input.idempotency_key.length > 256 ||
+        String(input.source_ref || "").length > 512 ||
+        new TextEncoder().encode(input.content_json).byteLength !== input.content_bytes ||
+        !Number.isInteger(input.storage_bytes) || input.storage_bytes < input.content_bytes)
       return { ok: false, reason: "validation_error" };
     const identity = { ...input, operation: "create", resource: `${input.id}:${input.source_ref || ""}` };
     const replay = this._replay(identity);
@@ -297,27 +307,47 @@ export class EditorStoreCore {
     if (Number(recent.n) >= cfg.perPrincipalPerMinute) return { ok: false, reason: "rate_exceeded" };
     const queued = this._one("SELECT COUNT(*) AS n, COALESCE(SUM(content_bytes),0) AS bytes FROM promotion_candidates WHERE stage NOT IN ('published','failed')");
     if (Number(queued.n) >= cfg.maxQueued) return { ok: false, reason: "queue_full" };
-    const stored = this._one("SELECT COALESCE(SUM(content_bytes),0) AS bytes FROM promotion_candidates");
-    if (Number(stored.bytes) + input.content_bytes > cfg.maxStoredBytes) return { ok: false, reason: "storage_full" };
+    const stored = this._one("SELECT COALESCE(SUM(storage_bytes),0) AS bytes FROM promotion_candidates");
+    if (Number(stored.bytes) + input.storage_bytes > cfg.maxStoredBytes) return { ok: false, reason: "storage_full" };
     if (this._promotionCandidate(input.id)) return { ok: false, reason: "candidate_conflict" };
     const now = this.now();
     const attemptId = `${input.id}:1`;
-    this.sql.exec(`INSERT INTO promotion_candidates
-      (id,principal,environment,source_ref,content_bytes,stage,stage_at,active_attempt_id,created_at,updated_at)
-      VALUES (?,?,?,?,?,'saved',?,?,?,?)`, input.id, input.principal, input.environment,
-      input.source_ref, input.content_bytes, now, attemptId, now, now);
-    this.sql.exec(`INSERT INTO promotion_attempts
-      (id,candidate_id,number,created_at) VALUES (?,?,1,?)`, attemptId, input.id, now);
-    this._promotionEvent(input.id, attemptId, "saved", input.principal, null, PROMOTION_STAGE.SAVED);
-    const response = { ok: true, candidate: this._promotionCandidate(input.id), attempt: this._promotionAttempt(attemptId) };
-    this._receipt(identity, response);
-    return response;
+    return this.transaction(() => {
+      this.sql.exec(`INSERT INTO promotion_candidates
+        (id,principal,environment,source_ref,content_bytes,content_json,storage_bytes,stage,stage_at,active_attempt_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,'saved',?,?,?,?)`, input.id, input.principal, input.environment,
+        input.source_ref, input.content_bytes, input.content_json, input.storage_bytes, now, attemptId, now, now);
+      this.sql.exec(`INSERT INTO promotion_attempts
+        (id,candidate_id,number,created_at) VALUES (?,?,1,?)`, attemptId, input.id, now);
+      this._promotionEvent(input.id, attemptId, "saved", input.principal, null, PROMOTION_STAGE.SAVED);
+      const { content_json: _content, ...candidate } = this._promotionCandidate(input.id);
+      const response = { ok: true, candidate, attempt: this._promotionAttempt(attemptId) };
+      this._receipt(identity, response);
+      return response;
+    });
   }
 
   listPromotionCandidates(principal = null) {
     return principal
       ? this._all("SELECT * FROM promotion_candidates WHERE principal=? ORDER BY created_at,id", principal)
       : this._all("SELECT * FROM promotion_candidates ORDER BY created_at,id");
+  }
+
+  listPromotionSummaries(principal = null, limit = 100) {
+    const bounded = Math.max(1, Math.min(100, Number(limit) || 100));
+    const where = principal ? "WHERE c.principal=?" : "";
+    const binds = principal ? [principal, bounded] : [bounded];
+    return this._all(`SELECT c.id,c.principal,c.environment,c.source_ref,c.stage,c.stage_at,
+      c.active_attempt_id,c.created_at,c.updated_at,a.id AS attempt_id,a.base_sha,
+      a.evidence_hash,a.manifest_hash
+      FROM promotion_candidates c JOIN promotion_attempts a ON a.id=c.active_attempt_id
+      ${where} ORDER BY c.created_at DESC,c.id DESC LIMIT ?`, ...binds).map((row) => ({
+        id: row.id, principal: row.principal, environment: row.environment,
+        source_ref: row.source_ref, stage: row.stage, stage_at: row.stage_at,
+        active_attempt_id: row.active_attempt_id, created_at: row.created_at,
+        updated_at: row.updated_at, attempt: { id: row.attempt_id, base_sha: row.base_sha,
+          evidence_hash: row.evidence_hash, manifest_hash: row.manifest_hash },
+      }));
   }
 
   getPromotionCandidate(id) {
@@ -475,19 +505,21 @@ export class EditorStoreCore {
     if (a.evidence_hash !== input.evidence_hash) return { ok: false, reason: "stale_evidence" };
     if (a.manifest_hash !== input.manifest_hash) return { ok: false, reason: "stale_manifest" };
     if (!input.principal || !["approve", "decline"].includes(input.decision)) return { ok: false, reason: "validation_error" };
-    const now = this.now();
-    this.sql.exec(`INSERT INTO promotion_decisions
-      (candidate_id,attempt_id,decision,principal,rationale,base_sha,evidence_hash,manifest_hash,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?)`, c.id, a.id, input.decision, input.principal,
-      input.rationale || null, input.base_sha, input.evidence_hash, input.manifest_hash, now);
-    const decision = this._one("SELECT * FROM promotion_decisions WHERE id=last_insert_rowid()");
-    const to = input.decision === "approve" ? PROMOTION_STAGE.PUBLISHING : PROMOTION_STAGE.FAILED;
-    this.sql.exec("UPDATE promotion_candidates SET stage=?,stage_at=?,updated_at=? WHERE id=?", to, now, now, c.id);
-    this._promotionEvent(c.id, a.id, input.decision === "approve" ? "approved" : "declined", input.principal, c.stage, to,
-      { rationale: input.rationale || null, evidence_hash: input.evidence_hash });
-    const response = { ok: true, decision, candidate: this._promotionCandidate(c.id) };
-    this._receipt(identity, response, input.evidence_hash);
-    return response;
+    return this.transaction(() => {
+      const now = this.now();
+      this.sql.exec(`INSERT INTO promotion_decisions
+        (candidate_id,attempt_id,decision,principal,rationale,base_sha,evidence_hash,manifest_hash,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?)`, c.id, a.id, input.decision, input.principal,
+        input.rationale || null, input.base_sha, input.evidence_hash, input.manifest_hash, now);
+      const decision = this._one("SELECT * FROM promotion_decisions WHERE id=last_insert_rowid()");
+      const to = input.decision === "approve" ? PROMOTION_STAGE.PUBLISHING : PROMOTION_STAGE.FAILED;
+      this.sql.exec("UPDATE promotion_candidates SET stage=?,stage_at=?,updated_at=? WHERE id=?", to, now, now, c.id);
+      this._promotionEvent(c.id, a.id, input.decision === "approve" ? "approved" : "declined", input.principal, c.stage, to,
+        { rationale: input.rationale || null, evidence_hash: input.evidence_hash });
+      const response = { ok: true, decision, candidate: this._promotionCandidate(c.id) };
+      this._receipt(identity, response, input.evidence_hash);
+      return response;
+    });
   }
 
   retryPromotion(input) {
@@ -500,18 +532,20 @@ export class EditorStoreCore {
     const prior = this._promotionAttempt(input.prior_attempt_id);
     if (!c || !prior || c.active_attempt_id !== prior.id || c.stage !== PROMOTION_STAGE.FAILED)
       return { ok: false, reason: "stale_state" };
-    const number = Number(prior.number) + 1;
-    const id = `${c.id}:${number}`;
-    const now = this.now();
-    this.sql.exec("INSERT INTO promotion_attempts (id,candidate_id,number,prior_attempt_id,created_at) VALUES (?,?,?,?,?)",
-      id, c.id, number, prior.id, now);
-    this.sql.exec("UPDATE promotion_candidates SET stage='saved',stage_at=?,active_attempt_id=?,updated_at=? WHERE id=?",
-      now, id, now, c.id);
-    this._promotionEvent(c.id, id, "retry_authorized", input.principal,
-      PROMOTION_STAGE.FAILED, PROMOTION_STAGE.SAVED, { prior_attempt_id: prior.id });
-    const response = { ok: true, attempt: this._promotionAttempt(id), candidate: this._promotionCandidate(c.id) };
-    this._receipt(identity, response);
-    return response;
+    return this.transaction(() => {
+      const number = Number(prior.number) + 1;
+      const id = `${c.id}:${number}`;
+      const now = this.now();
+      this.sql.exec("INSERT INTO promotion_attempts (id,candidate_id,number,prior_attempt_id,created_at) VALUES (?,?,?,?,?)",
+        id, c.id, number, prior.id, now);
+      this.sql.exec("UPDATE promotion_candidates SET stage='saved',stage_at=?,active_attempt_id=?,updated_at=? WHERE id=?",
+        now, id, now, c.id);
+      this._promotionEvent(c.id, id, "retry_authorized", input.principal,
+        PROMOTION_STAGE.FAILED, PROMOTION_STAGE.SAVED, { prior_attempt_id: prior.id });
+      const response = { ok: true, attempt: this._promotionAttempt(id), candidate: this._promotionCandidate(c.id) };
+      this._receipt(identity, response);
+      return response;
+    });
   }
 
   getPromotionLane() { return this._one("SELECT * FROM promotion_lane WHERE id=1"); }

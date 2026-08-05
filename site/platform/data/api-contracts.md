@@ -412,10 +412,13 @@ from rollout configuration that enables or pauses automated promotion.
   request, per-principal rate, queue, and storage bounds before creating one
   candidate, immutable attempt 1, and append-only `saved` event. An idempotency
   key is principal/environment/operation/resource/body bound.
-- `GET /candidate?id=…` (originator or admin): returns the current public stage,
-  active immutable attempt, and ordered audit events. Unknown and unauthorized
-  resources use the same uniform 404 response.
-- `GET /lane` (admin): returns pause, health, version, lease, and fencing state.
+- `GET /candidate?id=…` (originator or admin): returns the exact tuple-bound
+  public stage, attempt, preview, evidence, score, and AI disposition. Internal
+  audit events remain ledger-only. Unknown and unauthorized resources use the
+  same uniform 404 response.
+- `GET /lane` (edit/instructor/admin): returns the sanitized public version,
+  pause, health, reason, active candidate, and update time. Lease owner and
+  fencing token remain coordinator-only.
 - `POST /decision` (admin): approve/decline is bound to exact candidate, attempt,
   base SHA, evidence hash, and manifest hash and records the authenticated admin.
 - `POST /retry` (admin): creates a linked immutable attempt; it never reuses or

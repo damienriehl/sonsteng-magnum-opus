@@ -9,6 +9,15 @@ class ReconciliationTest(unittest.TestCase):
         c, ledger, provider, git, live = coordinator(); provider.timeout_once.add("preview")
         with self.assertRaises(TimeoutError): c.run_once()
         self.assertEqual(provider.calls.count("preview"), 1)
+
+    def test_post_mutation_timeouts_restore_the_known_good_pair(self):
+        for boundary in ("pages-production", "activate-worker"):
+            with self.subTest(boundary=boundary):
+                c, ledger, provider, git, live = coordinator()
+                provider.timeout_once.add(boundary)
+                self.assertEqual(c.run_once(), "restored")
+                self.assertEqual(provider.live_pair, ("old-pages", "old-worker"))
+                self.assertTrue(all(fenced for _, fenced in provider.mutation_fences))
         ledger.released = False
         self.assertEqual(c.run_once(), "published")
         self.assertEqual(provider.calls.count("preview"), 1)

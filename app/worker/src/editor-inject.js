@@ -207,6 +207,9 @@ export async function handleEditPage(env, { pageKey, blocks, overrides = [], pen
     items: projectPendingItems(pending),
     heartbeat_age_s: heartbeatAgeS,
     direct_apply: directApply,
+    environment: env.EDIT_ENVIRONMENT === "production" ? "production" : "dev",
+    manifest_epoch: env.EDIT_ENVIRONMENT === "production" &&
+      typeof env.EDIT_PROD_MANIFEST_EPOCH === "string" ? env.EDIT_PROD_MANIFEST_EPOCH : "",
   });
 
   const headHtml = {
