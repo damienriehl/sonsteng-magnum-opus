@@ -83,6 +83,12 @@ export function buildUpstreamUrl(pageKey, editUpstream) {
     return null;
   }
   const url = new URL(pageKey, base);
+  // Cloudflare Pages canonicalizes explicit index.html URLs to their directory
+  // with a 308. The injector deliberately refuses redirects, so request the
+  // canonical directory form directly while retaining the map's stable key.
+  if (url.pathname.endsWith("/index.html")) {
+    url.pathname = url.pathname.slice(0, -"index.html".length);
+  }
   if (url.origin !== base.origin) return null; // never leave the origin
   // pathname must stay under the upstream prefix (the base path).
   const basePath = base.pathname.endsWith("/") ? base.pathname : base.pathname + "/";

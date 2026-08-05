@@ -47,6 +47,8 @@ test("buildUpstreamUrl stays inside the EDIT_UPSTREAM origin+prefix", () => {
   assert.ok(url);
   assert.equal(url.origin, "https://sonsteng-dev.damienriehl.com");
   assert.ok(url.pathname.startsWith("/platform/"));
+  assert.ok(!url.pathname.endsWith("/index.html"),
+    "Pages canonicalizes index.html to its directory; the clean subrequest must avoid a 308");
   // A page key can never escape the origin, even if it looked absolute.
   assert.equal(buildUpstreamUrl("https://evil.com/x", up), null);
 });
