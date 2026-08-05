@@ -65,6 +65,8 @@ def load_text(path):
 
 def write_file(relpath, content):
     """relpath is relative to OUT (site/platform)."""
+    if isinstance(content, str) and relpath.endswith(".html"):
+        content = _apply_page_overrides(relpath.replace(os.sep, "/"), content)
     dest = os.path.join(OUT, relpath)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     if isinstance(content, str):
@@ -260,6 +262,28 @@ class _EditorMap:
 
 
 EDMAP = _EditorMap()
+PAGE_OVERRIDES = {}
+
+
+_OVERRIDE_ELEMENT_RE = re.compile(
+    r'(<(?:p|li|h[1-6]|blockquote)\b[^>]*?)\sdata-ebsrc="([^"]+)"([^>]*>)(.*?)(</(?:p|li|h[1-6]|blockquote)>)',
+    re.DOTALL,
+)
+
+
+def _apply_page_overrides(page, html_text):
+    """Prefer a surface-owned leaf and re-address that render to the new leaf."""
+    def replace(match):
+        record = PAGE_OVERRIDES.get((page, html.unescape(match.group(2))))
+        if not record:
+            return match.group(0)
+        override_ref = record["source_ref"]
+        value = record["value"]
+        EDMAP.register(override_ref, "json_scalar", value, False,
+                       "Deliberate page override", record["json_path"])
+        return "%s data-ebsrc=\"%s\"%s%s%s" % (
+            match.group(1), esc(override_ref), match.group(3), esc(value), match.group(5))
+    return _OVERRIDE_ELEMENT_RE.sub(replace, html_text)
 
 _FMT_PATTERNS = [
     re.compile(r"\*\*[^*]+\*\*"),                 # **bold**
@@ -653,6 +677,17 @@ def load_corpus():
     firm = load_json(os.path.join(DATA, "firm", "firm.json"))
     copy = {page: load_json(os.path.join(DATA, "copy", page + ".json"))
             for page in ("home", "matters", "firm")}
+    PAGE_OVERRIDES.clear()
+    for page_copy, doc in copy.items():
+        relpath = data_relpath(DATA, "copy", page_copy + ".json")
+        for key, record in (doc.get("overrides") or {}).items():
+            if record.get("intent") != "deliberate_page_override":
+                continue
+            json_path = "overrides.%s.value" % key
+            PAGE_OVERRIDES[(record.get("page"), record.get("shared_source_ref"))] = {
+                **record, "json_path": json_path,
+                "source_ref": relpath + "#" + json_path,
+            }
     curriculum = load_curriculum()
     return {
         "manifest": manifest, "matters": matters, "by_id": by_id,
@@ -3503,6 +3538,7 @@ def build_editor_map(spine_build_id, scope_index=None):
         "counts": {},
         "scopes": scope_index or {},
         "facts": dict(FACTS_INDEX),
+        "overrides": [dict(record) for record in PAGE_OVERRIDES.values()],
         "occurrences": occurrences,
         "editor_contract_transition_allowlist": transition_allowlist,
         "pages": pages,

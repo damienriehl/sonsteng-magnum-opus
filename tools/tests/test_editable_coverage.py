@@ -340,6 +340,7 @@ class EditorContractGuardTest(unittest.TestCase):
                                     "renders on 3 surfaces.*records 1"):
             build_site.validate_editor_contract(pages, rendered, {})
 
+
     def test_allowlisted_violation_passes(self):
         pages = {"one.html": [self._block(rendered="Authored computed")]}
         rendered = {self.PURE_REF: [
@@ -373,6 +374,40 @@ class EditorContractGuardTest(unittest.TestCase):
         with self.assertRaisesRegex(build_site.EditorContractError,
                                     "renders on 2 surfaces.*records 1"):
             build_site.validate_editor_contract(pages, rendered, {})
+
+
+class PageOverrideRenderTest(unittest.TestCase):
+    def setUp(self):
+        build_site.EDMAP.reset()
+        build_site.EDMAP.enabled = True
+        build_site.PAGE_OVERRIDES.clear()
+
+    def tearDown(self):
+        build_site.PAGE_OVERRIDES.clear()
+
+    def test_renderer_prefers_surface_leaf_and_readdresses_the_block(self):
+        shared = "data/copy/home.json#volumes.modules.M1.title"
+        override = "data/copy/home.json#overrides.aaaaaaaaaaaaaaaa.value"
+        build_site.PAGE_OVERRIDES[("modules/m1.html", shared)] = {
+            "value": "Local title", "source_ref": override,
+            "json_path": "overrides.aaaaaaaaaaaaaaaa.value",
+        }
+        html = '<main><h1 data-ebsrc="%s">Shared title</h1></main>' % shared
+        rendered = build_site._apply_page_overrides("modules/m1.html", html)
+        self.assertIn('data-ebsrc="%s"' % override, rendered)
+        self.assertIn(">Local title</h1>", rendered)
+        self.assertNotIn("Shared title", rendered)
+
+        # A later shared edit still cannot reach the surface-owned copy.
+        rerendered = build_site._apply_page_overrides(
+            "modules/m1.html",
+            '<main><h1 data-ebsrc="%s">Changed shared title</h1></main>' % shared)
+        self.assertIn(">Local title</h1>", rerendered)
+
+    def test_renderer_falls_back_byte_for_byte_after_revert(self):
+        shared = "data/copy/home.json#volumes.modules.M1.title"
+        html = '<main><h1 data-ebsrc="%s">Shared title</h1></main>' % shared
+        self.assertEqual(build_site._apply_page_overrides("modules/m1.html", html), html)
 
 
 if __name__ == "__main__":

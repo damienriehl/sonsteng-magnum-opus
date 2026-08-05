@@ -65,7 +65,11 @@ export function resolvePagePath(rawPath) {
   if (isHostilePath(path)) return null;
   const pageKey = PATH_TO_PAGE.get(path);
   if (!pageKey) return null;
-  return { pageKey, blocks: EDITOR_MAP.pages[pageKey] || [] };
+  return {
+    pageKey,
+    blocks: EDITOR_MAP.pages[pageKey] || [],
+    overrides: (EDITOR_MAP.overrides || []).filter((item) => item.page === pageKey),
+  };
 }
 
 // Build the upstream URL for an allowlisted page key and assert it stays inside

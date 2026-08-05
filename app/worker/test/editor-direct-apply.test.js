@@ -132,6 +132,64 @@ test("a shared json_scalar suggestion stores one server-authoritative json_path"
   assert.equal(forgedCap.input, undefined, "forged path must never reach storage");
 });
 
+test("page_override is accepted only for a genuinely shared block on its occurrence", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) =>
+    EDITOR_MAP.occurrences[ref].length > 1 && Object.values(EDITOR_MAP.pages).flat()
+      .some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+  const occurrence = EDITOR_MAP.occurrences[sharedRef][0];
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "page-override-0001", source_ref: sharedRef,
+    new_text: "Only here", op: "page_override", page: occurrence.page,
+  }), env, auth);
+  assert.equal(resp.status, 200);
+  assert.equal(cap.input.kind, "page_override");
+  assert.equal(cap.input.page, occurrence.page);
+  assert.equal(cap.input.block_anchor, `${occurrence.page}:${occurrence.index}`);
+  assert.equal(cap.input.comment, "JOS");
+});
+
+test("page_override refuses a block with only one occurrence", async () => {
+  const singleton = Object.values(EDITOR_MAP.pages).flat().find((b) =>
+    b.kind === "json_scalar" && (EDITOR_MAP.occurrences[b.source_ref] || []).length === 1);
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "page-override-0002", source_ref: singleton.source_ref,
+    new_text: "Meaningless", op: "page_override",
+    page: EDITOR_MAP.occurrences[singleton.source_ref][0].page,
+  }), env, auth);
+  assert.equal(resp.status, 400);
+  assert.equal(cap.input, undefined);
+});
+
+test("page_override_revert anchors the actual override occurrence", async () => {
+  const block = Object.values(EDITOR_MAP.pages).flat().find((b) =>
+    b.kind === "json_scalar" && (EDITOR_MAP.occurrences[b.source_ref] || []).length === 1);
+  const occurrence = EDITOR_MAP.occurrences[block.source_ref][0];
+  const record = { source_ref: block.source_ref, page: occurrence.page,
+    intent: "deliberate_page_override" };
+  EDITOR_MAP.overrides = EDITOR_MAP.overrides || [];
+  EDITOR_MAP.overrides.push(record);
+  try {
+    const cap = {};
+    const env = envWith({}, cap);
+    const auth = await authBearer(env, "john-opaque-token-value-123");
+    const resp = await suggestEndpoint(suggestReq({
+      id: "page-revert-00001", source_ref: block.source_ref,
+      op: "page_override_revert", page: occurrence.page,
+    }), env, auth);
+    assert.equal(resp.status, 200);
+    assert.equal(cap.input.kind, "page_override_revert");
+    assert.equal(cap.input.block_anchor, `${occurrence.page}:${occurrence.index}`);
+  } finally {
+    EDITOR_MAP.overrides.pop();
+  }
+});
+
 test("id_conflict from the store surfaces as a 409 (client must rotate its id, no silent loss)", async () => {
   const cap = {};
   const env = {

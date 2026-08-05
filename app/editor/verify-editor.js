@@ -216,19 +216,57 @@ async function run() {
       window.SonstengEditor.typeInto(4, 'Only this page should receive this wording.');
       window.SonstengEditor.clickSave(4);
       window.SonstengEditor.chooseSharedThisPage();
+      window.SonstengEditor.repeatPageOverride(4);
     });
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
     const thisPage = await page.evaluate(() => ({
       calls: window.__MOCK_CTRL__.server().calls,
+      last: window.__MOCK_CTRL__.last(),
       requests: window.__U5_OVERRIDE_REQUESTS__,
       block: window.SonstengEditor.block(4),
       expectedRef: window.__HARNESS_MAP__[3].source_ref,
       expectedPage: window.SonstengEditor.page()
     }));
     assert('SH5 this-page-only routes to the U5 override seam without editing the shared leaf',
-      thisPage.calls === 0 && thisPage.requests.length === 1 &&
+      thisPage.calls === 1 && thisPage.requests.length === 1 &&
+      thisPage.last.op === 'page_override' && thisPage.last.page === thisPage.expectedPage &&
+      !Object.prototype.hasOwnProperty.call(thisPage.last, 'json_path') &&
       thisPage.requests[0].source_ref === thisPage.expectedRef &&
       thisPage.requests[0].page === thisPage.expectedPage,
-      'calls=' + thisPage.calls + ' requests=' + thisPage.requests.length);
+      'calls=' + thisPage.calls + ' requests=' + thisPage.requests.length + ' op=' + (thisPage.last && thisPage.last.op));
+
+    const visibleOverride = await page.evaluate(() => ({
+      rows: document.querySelectorAll('.eb-overrides__row').length,
+      text: document.querySelector('.eb-overrides__row')?.textContent || ''
+    }));
+    assert('SH6 applied page-only copies are visible with actor and revert control',
+      visibleOverride.rows === 1 && /JOS/.test(visibleOverride.text) && /Return to shared text/.test(visibleOverride.text),
+      JSON.stringify(visibleOverride));
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      document.querySelector('.eb-overrides__row button').click();
+    });
+    await page.waitForFunction(() => window.__MOCK_CTRL__.server().calls === 1, { timeout: 4000 });
+    const revertedOverride = await page.evaluate(() => ({
+      last: window.__MOCK_CTRL__.last(), rows: document.querySelectorAll('.eb-overrides__row').length
+    }));
+    assert('SH7 returning a page copy sends one explicit revert request and removes the row',
+      revertedOverride.last.op === 'page_override_revert' && revertedOverride.rows === 0,
+      JSON.stringify(revertedOverride));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear(); window.__MOCK_CTRL__.forceOnce('network');
+      window.SonstengEditor.typeInto(4, 'Preserve this page-only wording after failure.');
+      window.SonstengEditor.clickSave(4); window.SonstengEditor.chooseSharedThisPage();
+      window.SonstengEditor.repeatPageOverride(4);
+    });
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'EDITING', { timeout: 4000 });
+    const failedOverride = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls, block: window.SonstengEditor.block(4)
+    }));
+    assert('SH8 failed page-only send dedupes and preserves a recoverable draft',
+      failedOverride.calls === 1 && failedOverride.block.dirty === true && !!failedOverride.block.suggestionId,
+      'calls=' + failedOverride.calls + ' state=' + failedOverride.block.state + ' dirty=' + failedOverride.block.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(4));
 
     await page.evaluate(() => {

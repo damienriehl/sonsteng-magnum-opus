@@ -26,7 +26,9 @@ export const STRUCTURAL_KINDS = new Set([
   "insert_after", "delete", "split", "merge", "move",
 ]);
 // The ONLY kinds DIRECT_APPLY may auto-accept at suggest time.
-export const AUTO_APPLY_KINDS = new Set(["prose", "json_scalar"]);
+export const AUTO_APPLY_KINDS = new Set([
+  "prose", "json_scalar", "page_override", "page_override_revert",
+]);
 
 // Ceilings (docs/research/editor-apply-spec.md §Ceilings). Overridable per call.
 export const CEILINGS = {

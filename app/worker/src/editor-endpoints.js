@@ -8,7 +8,7 @@ import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
-  enumerateScope, EDITOR_MAP_FACTS,
+  enumerateScope, EDITOR_MAP_FACTS, EDITOR_MAP,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
@@ -196,6 +196,29 @@ export async function suggestEndpoint(request, env, auth) {
   }
   if (!block) return editError("validation_error", "That block is not editable.", 400);
 
+  let pageOverride = null;
+  if (op === "page_override") {
+    const page = typeof body.page === "string" ? body.page : "";
+    const occurrences = (EDITOR_MAP.occurrences || {})[source_ref] || [];
+    const surfaces = new Set(occurrences.map((item) => item.page));
+    const occurrence = occurrences.find((item) => item.page === page);
+    if (scope !== "edit" || block.kind === "comment_only" || surfaces.size < 2 || !occurrence)
+      return editError("validation_error", "This-page-only is available only for shared text on this page.", 400);
+    if (new_text == null)
+      return editError("validation_error", "Provide the page-only text.", 400);
+    pageOverride = { kind: "page_override", page, index: occurrence.index };
+  }
+  if (op === "page_override_revert") {
+    const page = typeof body.page === "string" ? body.page : "";
+    const record = (EDITOR_MAP.overrides || []).find((item) =>
+      item.source_ref === source_ref && item.page === page);
+    const occurrence = ((EDITOR_MAP.occurrences || {})[source_ref] || [])
+      .find((item) => item.page === page);
+    if (scope !== "edit" || !record || block.kind !== "json_scalar" || !occurrence)
+      return editError("validation_error", "That page-only copy is not available to revert.", 400);
+    pageOverride = { kind: "page_override_revert", page, index: occurrence.index };
+  }
+
   // json_scalar: json_path must match the map exactly (no path forgery).
   if (new_text != null && block.kind === "json_scalar") {
     if (!validateJsonScalar(source_ref, json_path, scope))
@@ -207,14 +230,14 @@ export async function suggestEndpoint(request, env, auth) {
 
   // Structural operation (U4): validate + normalize; the stored kind is the op.
   let structural = null;
-  if (op != null) {
+  if (op != null && op !== "page_override" && op !== "page_override_revert") {
     structural = resolveStructuralOp(body, block, scope);
     if (structural.error)
       return editError(structural.error[0], structural.error[1], 400);
   }
 
   // The kind we STORE is derived from the map (+ comment/op intent), never trusted.
-  const kind = structural ? structural.kind
+  const kind = pageOverride ? pageOverride.kind : structural ? structural.kind
     : new_text == null ? "comment" : block.kind;
 
   // Drift at suggest time: if the client's seen-hash disagrees with the map, the
@@ -229,14 +252,16 @@ export async function suggestEndpoint(request, env, auth) {
     scope,
     origin: "human",
     kind,
-    page: block.page || null,
-    block_anchor: `${block.page || (block.matter_id + "/" + block.doc_type)}:${block.index}`,
+    page: pageOverride ? pageOverride.page : block.page || null,
+    block_anchor: pageOverride
+      ? `${pageOverride.page}:${pageOverride.index}`
+      : `${block.page || (block.matter_id + "/" + block.doc_type)}:${block.index}`,
     source_ref,                    // allowlisted
     json_path: block.kind === "json_scalar" ? block.json_path : null,
     original_text: block.original_text, // SERVER-resolved from the map
     original_hash: block.original_hash, // SERVER-authoritative
     new_text: structural ? structural.new_text : new_text,
-    comment,
+    comment: pageOverride ? attributionLabel(auth.editor) : comment,
     context: block.context || "",
     map_version: MAP_VERSION,
     group_id: null,

@@ -78,7 +78,7 @@ def _render_doc(matter_dir, relfile):
     # Render with recording on; walk the produced fragment for indices.
     bs.EDMAP.enabled = True
     html = bs.markdown(md, src=src)
-    entries, _ = bs._extract_page_blocks("<main>" + html + "</main>")
+    entries, _, _ = bs._extract_page_blocks("<main>" + html + "</main>")
     # Build final block records (join rendered_hash already computed by walker).
     return html, entries
 

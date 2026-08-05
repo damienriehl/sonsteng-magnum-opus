@@ -213,6 +213,7 @@
   var MAP_ISLAND = readJsonIsland('editor-map-data') || {};
   var EDITS_ISLAND = readJsonIsland('edits-data') || {};
   var MAP = MAP_ISLAND.blocks || [];
+  var PAGE_OVERRIDES = MAP_ISLAND.overrides || [];
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
   var PAGE = MAP_ISLAND.page || derivePage();
 
@@ -1138,6 +1139,12 @@
     if (trigger) { try { trigger.focus(); } catch (e) {} }
   }
   function requestPageOverride(s) {
+    if (s.state === ST.SAVING) return;
+    clearTimeout(s._debounce); s._debounce = null;
+    s.state = ST.SAVING;
+    barDisable(true);
+    setLocalStatus(s, 'Saving this page’s copy…', 'sending');
+    setBarStatus('Creating a page-only authored copy…');
     var detail = {
       source_ref: s.ref, page: PAGE, new_text: s.snapshot,
       original_hash: s.originalHash, json_path: s.jsonPath,
@@ -1149,9 +1156,43 @@
       window.SonstengEditorPageOverride(detail);
     }
     window.dispatchEvent(new CustomEvent('sonsteng:page-override-requested', { detail: detail }));
-    saveDraft(s);
-    setLocalStatus(s, 'This-page copy requested — not sent to the shared text', 'draft');
-    setBarStatus('This-page-only is ready for the override step; the shared text was not changed.');
+    var id = s.suggestionId || (s.suggestionId = uuid());
+    api('/suggest', { body: {
+      id: id, source_ref: s.ref, new_text: s.snapshot,
+      original_hash: s.originalHash, op: 'page_override', page: PAGE
+    }}).then(function (out) {
+      if (!out.ok) { handleSendError(s, out, { pageOverride: true }); return; }
+      clearDraft(s); s.suggestionId = null; s.dirty = false; s.state = ST.IDLE;
+      s.el.classList.remove('editing', 'dirty'); s.el.removeAttribute('contenteditable');
+      setLocalStatus(s, 'Page-only copy recorded', 'pending');
+      setBarStatus('This page now has its own authored copy.');
+      hideBar(); repollPending();
+    });
+  }
+
+  function buildOverridesView() {
+    if (!PAGE_OVERRIDES.length) return;
+    var details = el('details', 'eb-overrides');
+    var summary = el('summary', 'eb-overrides__summary',
+      'Page-only copies (' + PAGE_OVERRIDES.length + ')');
+    details.appendChild(summary);
+    PAGE_OVERRIDES.forEach(function (record) {
+      var row = el('div', 'eb-overrides__row');
+      row.appendChild(el('span', 'eb-overrides__text',
+        record.value + ' · by ' + record.deliberate_by + ' · ' + record.deliberate_at));
+      var revert = el('button', 'btn btn--ghost', 'Return to shared text'); revert.type = 'button';
+      revert.addEventListener('click', function () {
+        var block = MAP.find(function (b) { return b.source_ref === record.source_ref; });
+        if (!block) { setBarStatus('Reload before returning this copy to shared text.'); return; }
+        api('/suggest', { body: { id: uuid(), source_ref: record.source_ref,
+          original_hash: block.original_hash, op: 'page_override_revert', page: PAGE }}).then(function (out) {
+          if (!out.ok) { setBarStatus('That page-only copy could not be reverted.'); return; }
+          row.remove(); setBarStatus('The page will return to shared text when this change is applied.');
+        });
+      });
+      row.appendChild(revert); details.appendChild(row);
+    });
+    document.body.appendChild(details);
   }
   function openSharedReachDialog(s) {
     if (sharedReachDlg && sharedReachDlg.isConnected) return;
@@ -1195,6 +1236,11 @@
       s.state = ST.EDITING; barDisable(false);
       s.suggestionId = uuid();
       saveDraft(s);
+      if (opts.pageOverride) {
+        setLocalStatus(s, 'Not sent — choose this page again', 'err');
+        setBarStatus('The request conflicted with an earlier send. Save again and choose this page only.');
+        return;
+      }
       log('SEND id_conflict ref=' + s.ref + ' -> rotated id, resending');
       sendSuggestion(s, { auto: true });
       return;
@@ -1240,6 +1286,12 @@
     // retry (the user need not press anything); the manual bar keeps its Save CTA.
     s.state = ST.EDITING; barDisable(false);
     saveDraft(s);
+    if (opts.pageOverride) {
+      setLocalStatus(s, 'Not sent — choose this page again', 'err');
+      setBarStatus('That didn’t send. Your wording is preserved; save again and choose this page only.');
+      log('PAGE OVERRIDE error ref=' + s.ref + ' status=' + out.status + ' code=' + code);
+      return;
+    }
     setLocalStatus(s, 'Not sent — will retry', 'err');
     setBarStatus('That didn’t send — it will retry automatically, or press Save to try now.');
     if (opts.auto) armRetry(s);
@@ -1992,6 +2044,7 @@
     buildBanner();
 
     buildAddFact();
+    buildOverridesView();
     buildBar();
     buildCommentUI();
     scheduleRailLayout();
@@ -2067,6 +2120,9 @@
     },
     chooseSharedEverywhere: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__everywhere').click(); },
     chooseSharedThisPage: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__here').click(); },
+    repeatPageOverride: function (index) {
+      var s = byIndex[index]; if (s) { requestPageOverride(s); requestPageOverride(s); }
+    },
     dismissSharedDialog: closeSharedReachDialog,
     tripleClickSave: function (index) { var s = byIndex[index]; if (s) { sendSuggestion(s); sendSuggestion(s); sendSuggestion(s); } },
     openPreview: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; showBar(s); openPreview(); } },
