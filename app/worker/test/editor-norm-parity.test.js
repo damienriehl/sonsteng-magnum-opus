@@ -30,8 +30,9 @@ const SAMPLES = [
 
 test("JS normalize/normHash matches Python text_norm byte-for-byte", async () => {
   // JS side
-  const jsRows = [];
-  for (const s of SAMPLES) jsRows.push([normalize(s), await normHash(s)]);
+  // Resolve the independent Web Crypto digests together. Serial subtle.digest
+  // calls can starve under Node's test-worker scheduler in constrained CI.
+  const jsRows = await Promise.all(SAMPLES.map(async (s) => [normalize(s), await normHash(s)]));
 
   // Python side (stdlib only; uses the frozen tools/text_norm.py).
   const py = spawnSync("python3", ["-c", `
