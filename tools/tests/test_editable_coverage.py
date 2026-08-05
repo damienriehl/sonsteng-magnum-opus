@@ -40,6 +40,7 @@ REPO = os.path.dirname(TOOLS)
 sys.path.insert(0, TOOLS)
 
 import text_norm          # noqa: E402
+import build_site         # noqa: E402
 from fresh_site_build import build_fresh_site  # noqa: E402
 
 COMMITTED_MAP = os.path.join(REPO, "build", "editor-map.generated.json")
@@ -293,6 +294,85 @@ class OccurrencesTest(unittest.TestCase):
                 })
         self.assertEqual(self.bundle["schema_version"], "1.1.0")
         self.assertEqual(self.occurrences, expected)
+
+
+class EditorContractGuardTest(unittest.TestCase):
+    """U3: both absence guards have seeded proof that they can fail."""
+
+    PURE_REF = "data/test.json#title"
+
+    @staticmethod
+    def _block(ref=PURE_REF, source="Authored", rendered="Authored", **extra):
+        block = {
+            "index": 0,
+            "kind": "json_scalar",
+            "source_ref": ref,
+            "original_text": source,
+            "original_hash": text_norm.norm_hash(rendered),
+            "json_path": ref.split("#", 1)[1],
+        }
+        block.update(extra)
+        return block
+
+    def test_mixed_element_violation_fails(self):
+        pages = {"one.html": [self._block(rendered="Authored computed-value")]}
+        with self.assertRaisesRegex(build_site.EditorContractError, "mixed element"):
+            build_site.validate_editor_contract(pages, {}, {})
+
+    def test_declared_mixed_element_passes(self):
+        pages = {"one.html": [self._block(
+            rendered="Authored computed-value", mixed=True)]}
+        build_site.validate_editor_contract(pages, {}, {})
+
+    def test_normalization_artifacts_do_not_trip_mixed_guard(self):
+        pages = {"one.html": [self._block(
+            source="Authored text", rendered="  Authored\u200b   text  ")]}
+        build_site.validate_editor_contract(pages, {}, {})
+
+    def test_three_render_surfaces_with_one_recorded_fails(self):
+        pages = {"one.html": [self._block()]}
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 4},
+            {"page": "three.html", "index": 2},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 3 surfaces.*records 1"):
+            build_site.validate_editor_contract(pages, rendered, {})
+
+    def test_allowlisted_violation_passes(self):
+        pages = {"one.html": [self._block(rendered="Authored computed")]}
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 1},
+        ]}
+        allowlist = {self.PURE_REF: "temporary test migration"}
+        build_site.validate_editor_contract(pages, rendered, allowlist)
+
+    def test_removing_live_coupled_ref_from_allowlist_fails(self):
+        pages = {
+            "one.html": [self._block()],
+            "two.html": [self._block()],
+        }
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 0},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "coupled ref is missing from transition allowlist"):
+            build_site.validate_editor_contract(pages, rendered, {})
+
+    def test_unannotated_task_name_pattern_is_caught(self):
+        ref = "data/taxonomy/tasks.json#tasks.0.name"
+        pages = {"skills/index.html": [self._block(ref=ref)]}
+        rendered = {ref: [
+            {"page": "skills/index.html", "index": 8},
+            {"page": "modules/m1.html", "index": None,
+             "pattern": "task-name"},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 2 surfaces.*records 1"):
+            build_site.validate_editor_contract(pages, rendered, {})
 
 
 if __name__ == "__main__":

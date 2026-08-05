@@ -244,7 +244,7 @@ class _EditorMap:
         self.unmarked = []
 
     def register(self, source_ref, kind, original_text, has_inline_formatting,
-                 context, json_path=None):
+                 context, json_path=None, mixed=False):
         # First registration wins — source_ref is unique per (file, block), so a
         # repeat is the same block re-rendered (e.g. packet assembled twice).
         if source_ref not in self.sources:
@@ -254,6 +254,7 @@ class _EditorMap:
                 "has_inline_formatting": bool(has_inline_formatting),
                 "context": context or "",
                 "json_path": json_path,
+                "mixed": bool(mixed),
             }
         return source_ref
 
@@ -278,13 +279,25 @@ def _has_inline_formatting(src_text):
     return any(p.search(src_text or "") for p in _FMT_PATTERNS)
 
 
-def _eb_scalar_attr(source_ref, original_text, json_path, context):
+def _eb_scalar_attr(source_ref, original_text, json_path, context, mixed=False):
     """Register a json_scalar block and return the ` data-ebsrc="..."` attribute
     to splice into its opening tag (or "" when recording is off)."""
     if not EDMAP.enabled:
         return ""
-    EDMAP.register(source_ref, "json_scalar", original_text, False, context, json_path)
+    EDMAP.register(source_ref, "json_scalar", original_text, False, context,
+                   json_path, mixed=mixed)
     return ' data-ebsrc="{r}"'.format(r=esc(source_ref))
+
+
+def _eb_render_attr(source_ref):
+    """Mark a read-only render of an authored leaf for the occurrence guard.
+
+    This is deliberately not data-ebsrc: it records that the leaf renders on
+    this surface without making the containing element editable.
+    """
+    if not EDMAP.enabled:
+        return ""
+    return ' data-ebrender="{r}"'.format(r=esc(source_ref))
 
 
 def _copy_scalar(page, copy, json_path, context):
@@ -1437,6 +1450,8 @@ def build_home(corpus):
 # --------------------------------------------------------------------------- #
 def build_modules(corpus):
     tasks = corpus["tasks"]["tasks"]
+    tasks_rel = data_relpath(DATA, "taxonomy", "tasks.json")
+    task_pos = {task["id"]: i for i, task in enumerate(tasks)}
     home_copy = corpus["copy"]["home"]
     skills_by_id = {s["id"]: s for s in corpus["skills"]["skills"]}
     for code, meta in MODULE_META.items():
@@ -1462,11 +1477,14 @@ def build_modules(corpus):
                     for r in refs if r in corpus["by_id"])
                 task_lines.append(
                     '<div class="index-row"><div class="index-row__main">'
-                    '<span class="task-name">{name}</span> '
+                    '<span class="task-name"{name_render}>{name}</span> '
                     '<span class="bloom">{bloom}</span>'
                     '<div class="chips" style="margin-top:.3rem">{chips}</div></div>'
                     '<span class="index-row__code">{tid}</span></div>'.format(
-                        name=esc(t["name"]), bloom=esc(t.get("bloom_level", "")),
+                        name=esc(t["name"]),
+                        name_render=_eb_render_attr(
+                            tasks_rel + "#tasks.{i}.name".format(i=task_pos[t["id"]])),
+                        bloom=esc(t.get("bloom_level", "")),
                         chips=chips, tid=esc(t["id"])))
             rows.append("""
   <section class="section-head" aria-label="{sn}">
@@ -2911,7 +2929,7 @@ def build_data_catalog(corpus):
 # --------------------------------------------------------------------------- #
 BUILD_DIR = os.path.join(ROOT, "build")
 EDITOR_MAP_PATH = os.path.join(BUILD_DIR, "editor-map.generated.json")
-_EBSRC_ATTR_RE = re.compile(r'\s+data-ebsrc="[^"]*"')
+_EDITOR_ANNOTATION_RE = re.compile(r'\s+data-eb(?:src|render)="[^"]*"')
 
 
 class _BlockWalker(HTMLParser):
@@ -2925,6 +2943,7 @@ class _BlockWalker(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.in_main = False
         self.candidates = []      # ordered: {"tag","ebsrc","text"}
+        self.rendered_refs = []
         self._cur = None
         self._cur_tag = None
         self._depth = 0
@@ -2935,12 +2954,14 @@ class _BlockWalker(HTMLParser):
             return
         if not self.in_main:
             return
+        d = dict(attrs)
+        if d.get("data-ebrender"):
+            self.rendered_refs.append(d["data-ebrender"])
         if self._cur is not None:
             if tag == self._cur_tag:
                 self._depth += 1
             return
         if tag in _CANDIDATE_TAGS:
-            d = dict(attrs)
             self._cur = {"tag": tag, "ebsrc": d.get("data-ebsrc"), "text": []}
             self._cur_tag = tag
             self._depth = 1
@@ -2962,7 +2983,9 @@ class _BlockWalker(HTMLParser):
 
 
 def _extract_page_blocks(html_text):
-    """Return (editable_entries, has_annotations). Each entry is a partial map
+    """Return (editable_entries, rendered_refs, has_annotations).
+
+    Each entry is a partial map
     block joined from the DOM + EDMAP.sources; index is document-order position
     among ALL candidates (editable or not)."""
     walker = _BlockWalker()
@@ -2987,8 +3010,11 @@ def _extract_page_blocks(html_text):
         }
         if meta["kind"] == "json_scalar" and meta.get("json_path"):
             block["json_path"] = meta["json_path"]
+        if meta.get("mixed"):
+            block["mixed"] = True
         entries.append(block)
-    return entries, ("data-ebsrc=" in html_text)
+    return entries, walker.rendered_refs, (
+        "data-ebsrc=" in html_text or "data-ebrender=" in html_text)
 
 
 # Pages the /edit proxy must NOT host. The injector strips a wrapped page's own
@@ -3319,6 +3345,92 @@ def compute_scope_index(corpus):
     return {"matters": matters, "modules": modules}
 
 
+class EditorContractError(RuntimeError):
+    """The generated editor map does not describe the rendered authored text."""
+
+
+def _surface_set(items):
+    return {(item.get("page"), item.get("index")) for item in (items or [])}
+
+
+def validate_editor_contract(pages, rendered_occurrences, transition_allowlist):
+    """Fail when editable elements are mixed or render sites are unrecorded."""
+    transition_allowlist = transition_allowlist or {}
+    recorded = {}
+    violations = []
+
+    for page, blocks in pages.items():
+        for block in blocks:
+            ref = block["source_ref"]
+            recorded.setdefault(ref, []).append({
+                "page": page,
+                "index": block["index"],
+            })
+            is_mixed = block.get("mixed") is True
+            expected_hash = text_norm.norm_hash(block.get("original_text"))
+            if (block.get("kind") == "json_scalar"
+                    and block.get("original_hash") != expected_hash
+                    and not is_mixed and ref not in transition_allowlist):
+                violations.append(
+                    "%s on %s[%s] is a mixed element: rendered text extends "
+                    "beyond its authored scalar" % (ref, page, block["index"]))
+
+    for ref in sorted(set(recorded) | set(rendered_occurrences or {})):
+        recorded_surfaces = _surface_set(recorded.get(ref))
+        rendered_surfaces = _surface_set((rendered_occurrences or {}).get(ref))
+        if not rendered_surfaces:
+            continue
+        if (len(rendered_surfaces) > len(recorded_surfaces)
+                and ref not in transition_allowlist):
+            violations.append(
+                "%s renders on %d surfaces but its block records %d"
+                % (ref, len(rendered_surfaces), len(recorded_surfaces)))
+        elif (len(recorded_surfaces) > 1
+              and ref not in transition_allowlist):
+            violations.append(
+                "%s: coupled ref is missing from transition allowlist"
+                % ref)
+
+    bad_reasons = [ref for ref, reason in transition_allowlist.items()
+                   if not isinstance(reason, str) or not reason.strip()]
+    if bad_reasons:
+        violations.append(
+            "transition allowlist entries require a reason: %s"
+            % ", ".join(sorted(bad_reasons)))
+
+    if violations:
+        raise EditorContractError(
+            "editor contract guard failed:\n  - " + "\n  - ".join(violations))
+
+
+def _editor_transition_allowlist(pages, rendered_occurrences):
+    """Expand transition families into live ref-to-migration-reason entries."""
+    recorded = {}
+    for page, blocks in pages.items():
+        for block in blocks:
+            recorded.setdefault(block["source_ref"], set()).add(
+                (page, block["index"]))
+
+    allowlist = {}
+    for ref, surfaces in recorded.items():
+        if len(surfaces) <= 1:
+            continue
+        if ref.startswith("data/jurisdictions/meridian.json#"):
+            allowlist[ref] = (
+                "Meridian canon leaf still renders on all ten Law pages")
+        elif (ref.startswith("data/matters/")
+              and ref.endswith("/matter.json#caption")):
+            allowlist[ref] = (
+                "Matter caption still renders on its packet and library card")
+
+    for ref, surfaces in (rendered_occurrences or {}).items():
+        if (ref.startswith("data/taxonomy/tasks.json#tasks.")
+                and ref.endswith(".name") and len(_surface_set(surfaces)) > 1):
+            allowlist[ref] = (
+                "Task name still renders read-only on its module cover")
+    return allowlist
+
+
 def build_editor_map(spine_build_id, scope_index=None):
     """POST-BUILD pass: for every written page, extract editable blocks in the
     walker's document order, then STRIP the data-ebsrc annotations so the public
@@ -3335,15 +3447,21 @@ def build_editor_map(spine_build_id, scope_index=None):
     end. An entry with an empty block list is a page that is readable, navigable
     and commentable in the editor, with nothing on it to edit."""
     pages = {}
+    rendered_occurrences = {}
     total = 0
     for page in sorted(glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True)):
         rel = os.path.relpath(page, OUT).replace(os.sep, "/")
         with open(page, "r", encoding="utf-8") as fh:
             content = fh.read()
-        entries, annotated = _extract_page_blocks(content)
+        entries, passive_refs, annotated = _extract_page_blocks(content)
+        for ref in passive_refs:
+            rendered_occurrences.setdefault(ref, []).append({
+                "page": rel,
+                "index": None,
+            })
         if annotated:
-            # strip every data-ebsrc attribute -> clean public HTML
-            cleaned = _EBSRC_ATTR_RE.sub("", content)
+            # strip temporary editor annotations -> clean public HTML
+            cleaned = _EDITOR_ANNOTATION_RE.sub("", content)
             with open(page, "w", encoding="utf-8") as fh:
                 fh.write(cleaned)
         if rel.startswith(EDITOR_MAP_EXCLUDE_PREFIXES):
@@ -3359,6 +3477,13 @@ def build_editor_map(spine_build_id, scope_index=None):
                 "page": rel,
                 "index": entry["index"],
             })
+    for ref, items in occurrences.items():
+        rendered_occurrences.setdefault(ref, []).extend(items)
+
+    transition_allowlist = _editor_transition_allowlist(
+        pages, rendered_occurrences)
+    validate_editor_contract(
+        pages, rendered_occurrences, transition_allowlist)
 
     bundle = {
         "schema_version": "1.1.0",
@@ -3379,6 +3504,7 @@ def build_editor_map(spine_build_id, scope_index=None):
         "scopes": scope_index or {},
         "facts": dict(FACTS_INDEX),
         "occurrences": occurrences,
+        "editor_contract_transition_allowlist": transition_allowlist,
         "pages": pages,
     }
     for rel, entries in pages.items():
