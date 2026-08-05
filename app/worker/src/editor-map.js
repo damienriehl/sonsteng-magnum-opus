@@ -88,14 +88,16 @@ export function buildUpstreamUrl(pageKey, editUpstream) {
 }
 
 // ---- source_ref / json_path allowlist (suggest + apply validation) ----------
-// Index every editable block by source_ref, with its page + descriptor. A
-// source_ref that is not in this index cannot be suggested against.
+// Index every editable block by source_ref, with every page + descriptor. A
+// source_ref that is not in this index cannot be suggested against. The first
+// descriptor remains the server-authoritative source metadata used by existing
+// suggest/apply flows; the full list preserves every render site.
 const BLOCK_BY_SRCREF = new Map();
 for (const [pageKey, blocks] of Object.entries(EDITOR_MAP.pages || {})) {
   for (const b of blocks) {
-    if (!BLOCK_BY_SRCREF.has(b.source_ref)) {
-      BLOCK_BY_SRCREF.set(b.source_ref, { ...b, page: pageKey });
-    }
+    const descriptors = BLOCK_BY_SRCREF.get(b.source_ref) || [];
+    descriptors.push({ ...b, page: pageKey });
+    BLOCK_BY_SRCREF.set(b.source_ref, descriptors);
   }
 }
 
@@ -117,16 +119,30 @@ for (const doc of INSTRUCTOR_BUNDLE.docs || []) {
 // source_ref/json_path never bypass it.
 export function lookupBlock(source_ref, scope) {
   const map = scope === "instructor" ? INSTR_BLOCK_BY_SRCREF : BLOCK_BY_SRCREF;
-  const block = map.get(source_ref);
+  const indexed = map.get(source_ref);
+  const block = Array.isArray(indexed) ? indexed[0] : indexed;
   if (!block) return null;
   return block;
+}
+
+// Return every public render-site descriptor for a source_ref. Instructor docs
+// do not share the public page occurrence contract, so their legacy descriptor
+// is represented as a one-item list.
+export function lookupBlocks(source_ref, scope) {
+  const map = scope === "instructor" ? INSTR_BLOCK_BY_SRCREF : BLOCK_BY_SRCREF;
+  const indexed = map.get(source_ref);
+  if (!indexed) return null;
+  return Array.isArray(indexed) ? indexed : [indexed];
 }
 
 // Validate a json_scalar suggest: the block must be kind json_scalar and its
 // json_path must equal the map's json_path for that source_ref (no path forgery).
 export function validateJsonScalar(source_ref, json_path, scope) {
-  const block = lookupBlock(source_ref, scope);
+  const blocks = lookupBlocks(source_ref, scope);
+  const block = blocks && blocks[0];
   if (!block || block.kind !== "json_scalar") return null;
+  if (blocks.some((candidate) =>
+    candidate.kind !== "json_scalar" || candidate.json_path !== block.json_path)) return null;
   if (json_path != null && json_path !== block.json_path) return null;
   return block;
 }
@@ -182,16 +198,21 @@ export function escapeHtml(s) {
 // Per-page block descriptor exposed to the editor client (the allowlist for that
 // page). No secrets — original_text is the same text the page renders.
 export function pageBlockDescriptors(blocks) {
-  return blocks.map((b) => ({
-    index: b.index,
-    kind: b.kind,
-    source_ref: b.source_ref,
-    json_path: b.json_path || null,
-    original_text: b.original_text,
-    original_hash: b.original_hash,
-    has_inline_formatting: !!b.has_inline_formatting,
-    context: b.context || "",
-  }));
+  return blocks.map((b) => {
+    const descriptor = {
+      index: b.index,
+      kind: b.kind,
+      source_ref: b.source_ref,
+      json_path: b.json_path || null,
+      original_text: b.original_text,
+      original_hash: b.original_hash,
+      has_inline_formatting: !!b.has_inline_formatting,
+      context: b.context || "",
+    };
+    const occurrences = (EDITOR_MAP.occurrences || {})[b.source_ref] || [];
+    if (occurrences.length > 1) descriptor.occurrences = occurrences;
+    return descriptor;
+  });
 }
 
 // Project raw DO suggestion rows into the injected #edits-data item shape the

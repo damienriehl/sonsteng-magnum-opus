@@ -5,8 +5,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  resolvePagePath, buildUpstreamUrl, lookupBlock, validateJsonScalar,
-  resolveInstructorDoc, escapeJsonIsland, projectPendingItems, EDITOR_MAP,
+  resolvePagePath, buildUpstreamUrl, lookupBlock, lookupBlocks, validateJsonScalar,
+  resolveInstructorDoc, escapeJsonIsland, pageBlockDescriptors, projectPendingItems,
+  EDITOR_MAP,
 } from "../src/editor-map.js";
 
 // A known-good page + block from the real bundle. The map registers EVERY
@@ -52,19 +53,58 @@ test("buildUpstreamUrl stays inside the EDIT_UPSTREAM origin+prefix", () => {
 
 test("map allowlist: unknown source_ref does not resolve", () => {
   assert.equal(lookupBlock("data/matters/evil.json#pwned", "edit"), null);
+  assert.equal(lookupBlocks("data/matters/evil.json#pwned", "edit"), null);
   assert.equal(lookupBlock("../../etc/passwd", "edit"), null);
   // a real one DOES resolve
   assert.ok(lookupBlock(someBlock.source_ref, "edit"));
 });
 
+test("shared source_ref resolves every render-site descriptor", () => {
+  const sharedRef = "data/jurisdictions/meridian.json#name";
+  const descriptors = lookupBlocks(sharedRef, "edit");
+  assert.equal(descriptors.length, 10);
+  assert.equal(new Set(descriptors.map((b) => b.page)).size, 10);
+  assert.deepEqual(lookupBlock(sharedRef, "edit"), descriptors[0],
+    "legacy single-block lookup remains the first descriptor");
+});
+
+test("page descriptor island carries all occurrences only for shared blocks", () => {
+  const sharedRef = "data/jurisdictions/meridian.json#name";
+  const sharedPage = EDITOR_MAP.occurrences[sharedRef][0].page;
+  const sharedBlock = EDITOR_MAP.pages[sharedPage].find((b) => b.source_ref === sharedRef);
+  const projected = pageBlockDescriptors([sharedBlock])[0];
+  assert.deepEqual(projected.occurrences, EDITOR_MAP.occurrences[sharedRef]);
+
+  const singleRef = Object.keys(EDITOR_MAP.occurrences)
+    .find((ref) => EDITOR_MAP.occurrences[ref].length === 1);
+  const singleOccurrence = EDITOR_MAP.occurrences[singleRef][0];
+  const singleBlock = EDITOR_MAP.pages[singleOccurrence.page]
+    .find((b) => b.source_ref === singleRef && b.index === singleOccurrence.index);
+  const singleProjected = pageBlockDescriptors([singleBlock])[0];
+  const legacyProjection = {
+    index: singleBlock.index,
+    kind: singleBlock.kind,
+    source_ref: singleBlock.source_ref,
+    json_path: singleBlock.json_path || null,
+    original_text: singleBlock.original_text,
+    original_hash: singleBlock.original_hash,
+    has_inline_formatting: !!singleBlock.has_inline_formatting,
+    context: singleBlock.context || "",
+  };
+  assert.equal(JSON.stringify(singleProjected), JSON.stringify(legacyProjection),
+    "single-occurrence island descriptor stays byte-identical to the old shape");
+});
+
 test("json_scalar path forgery is rejected (json_path must match the map)", () => {
-  // find a real json_scalar block
-  let jsBlock = null;
-  for (const blocks of Object.values(EDITOR_MAP.pages)) {
-    jsBlock = blocks.find((b) => b.kind === "json_scalar");
-    if (jsBlock) break;
-  }
-  assert.ok(jsBlock, "bundle must contain a json_scalar block");
+  // Use a genuinely shared json_scalar so the multi-occurrence lookup cannot
+  // accidentally weaken the existing source_ref -> sole json_path guard.
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
+    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
+    return lookupBlock(ref, "edit")?.kind === "json_scalar";
+  });
+  const jsBlock = lookupBlock(sharedRef, "edit");
+  assert.ok(jsBlock, "bundle must contain a shared json_scalar block");
+  assert.ok(lookupBlocks(sharedRef, "edit").length > 1);
   assert.ok(validateJsonScalar(jsBlock.source_ref, jsBlock.json_path, "edit"));
   // a forged json_path for the same source_ref is rejected
   assert.equal(validateJsonScalar(jsBlock.source_ref, "attacker.controlled.path", "edit"), null);

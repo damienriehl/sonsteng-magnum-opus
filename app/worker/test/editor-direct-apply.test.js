@@ -93,6 +93,45 @@ test("DIRECT_APPLY unset forwards { directApply:false } (classic suggestion mode
   assert.equal(cap.opts.directApply, false);
 });
 
+test("a shared json_scalar suggestion stores one server-authoritative json_path", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
+    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
+    return Object.values(EDITOR_MAP.pages).some((blocks) =>
+      blocks.some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+  });
+  const block = Object.values(EDITOR_MAP.pages).flat()
+    .find((b) => b.source_ref === sharedRef);
+  assert.ok(block, "fixture must contain a shared json_scalar block");
+
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "shared-json-0001",
+    source_ref: sharedRef,
+    json_path: block.json_path,
+    new_text: "Shared replacement text.",
+  }), env, auth);
+
+  assert.equal(resp.status, 200);
+  assert.equal(cap.input.source_ref, sharedRef);
+  assert.equal(cap.input.json_path, block.json_path);
+  assert.equal(Array.isArray(cap.input.json_path), false);
+
+  const forgedCap = {};
+  const forgedEnv = envWith({}, forgedCap);
+  const forgedAuth = await authBearer(forgedEnv, "john-opaque-token-value-123");
+  const forgedResp = await suggestEndpoint(suggestReq({
+    id: "shared-json-0002",
+    source_ref: sharedRef,
+    json_path: "attacker.controlled.path",
+    new_text: "Forged replacement text.",
+  }), forgedEnv, forgedAuth);
+  assert.equal(forgedResp.status, 400);
+  assert.equal((await forgedResp.json()).error.code, "validation_error");
+  assert.equal(forgedCap.input, undefined, "forged path must never reach storage");
+});
+
 test("id_conflict from the store surfaces as a 409 (client must rotate its id, no silent loss)", async () => {
   const cap = {};
   const env = {
