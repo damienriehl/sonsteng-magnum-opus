@@ -65,7 +65,7 @@ function renderRevertPanel(reverts) {
     "<ul class=\"rv-revert-list\">" + li + "</ul></section>";
 }
 
-export function renderReviewPage(items, reverts) {
+export function renderReviewPage(items, reverts, promotions = [], lane = null, manifestEpoch = "") {
   // Stamp the human attribution label ("slot:roger" -> "RSH", "slot:john" ->
   // "JOS") onto every row from its server-resolved `editor` identity. This is the
   // SURFACE Damien actually reviews from — REVIEW_JS reads this embedded island
@@ -73,6 +73,7 @@ export function renderReviewPage(items, reverts) {
   // only the JSON API. Additive: the raw slot identity is preserved.
   const withAttribution = (items || []).map((it) => ({ ...it, attribution: attributionLabel(it.editor) }));
   const island = escapeJsonIsland({ items: withAttribution, generated_at: Date.now() });
+  const promotionIsland = escapeJsonIsland({ candidates: promotions, lane, manifest_epoch: manifestEpoch });
   const html =
     "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
@@ -84,9 +85,14 @@ export function renderReviewPage(items, reverts) {
     "<header class=\"rv-head\"><h1>Suggestion Review</h1>" +
     "<p class=\"rv-sub\">All outstanding suggestions, grouped by source. Review the whole sweep at once.</p></header>" +
     "<div id=\"rv-root\" aria-live=\"polite\">Loading…</div>" +
+    "<section class=\"pr-review\" aria-labelledby=\"pr-heading\"><header><h2 id=\"pr-heading\">Promotion review</h2>" +
+    "<p>Oldest candidates needing attention appear first.</p></header>" +
+    "<div id=\"pr-alert\" class=\"pr-alert\" role=\"alert\" tabindex=\"-1\" hidden></div>" +
+    "<div id=\"pr-root\" aria-live=\"polite\">Loading promotion queue…</div></section>" +
     renderRevertPanel(reverts) +
     "</main>" +
     `<script type="application/json" id="review-data">${island}</script>` +
+    `<script type="application/json" id="promotion-data">${promotionIsland}</script>` +
     "<script src=\"/edit/assets/review.js\" defer></script>" +
     "</body></html>";
   return new Response(html, {

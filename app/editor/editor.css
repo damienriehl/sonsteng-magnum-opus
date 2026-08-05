@@ -33,6 +33,18 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
   html.has-editor-banner body { padding-right: 7.5rem; }
 }
 
+/* PROD promotion status is ledger-backed and survives navigation/reload. */
+.prod-lifecycle{position:relative;max-width:70ch;margin:1rem auto;padding:1rem 1.25rem;
+ border:1px solid var(--rule,#d8cfbf);border-left:5px solid var(--brass,#a9822f);background:#fff}
+.prod-lifecycle h2{font-size:1rem;margin:0 0 .5rem}.prod-lifecycle__lane{margin:.25rem 0;color:#5c5346}
+.prod-lifecycle__list{margin:.5rem 0;padding-left:1.4rem}.prod-lifecycle__item{margin:.65rem 0}
+.prod-lifecycle__stage{font-weight:700;text-transform:capitalize}.prod-lifecycle__secondary{display:block;color:#5c5346}
+.prod-lifecycle__delayed{display:block;color:var(--claret,#7c1e2b);font-weight:700}
+.prod-lifecycle__actions{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.3rem}
+.prod-lifecycle a,.prod-lifecycle button{min-height:44px;display:inline-flex;align-items:center;font:inherit}
+.prod-lifecycle :focus-visible{outline:3px solid var(--brass,#a9822f);outline-offset:3px}
+@media(max-width:640px){.prod-lifecycle{margin:.5rem;padding:.85rem}.prod-lifecycle__actions{display:grid}.prod-lifecycle__actions>*{width:100%}}
+
 /* ---------------------------------------------------------------------------
    Editable / commentable block affordances
    --------------------------------------------------------------------------- */

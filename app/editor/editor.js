@@ -90,6 +90,65 @@
   var DRAFT_PREFIX = 'sonsteng_edit_draft:';   // keyed by page + source_ref
   var SCOPED_DRAFT_KEY = DRAFT_PREFIX + 'scoped-request|' + location.pathname;
   var FACT_DRAFT_KEY = DRAFT_PREFIX + 'add-fact|' + location.pathname;
+  var prodLifecycleEl = null;
+
+  var PROD_STAGE = {
+    saved: ['Saved', 'Waiting for the promotion lane'],
+    validating: ['Validating', 'Deterministic validation and bounded risk review are running'],
+    preview_ready: ['Preview ready', 'The bound preview and evidence are ready'],
+    awaiting_approval: ['Awaiting approval', 'An admin decision is required'],
+    publishing: ['Publishing', 'Activation and live verification are in progress'],
+    published: ['Published', 'Live verification and main completion are verified'],
+    failed: ['Failed', 'Nothing was published; an admin can review evidence and recovery options']
+  };
+
+  function prodStamp(ms) {
+    return typeof ms === 'number' && isFinite(ms) ? new Date(ms).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : 'timestamp unavailable';
+  }
+  function prodSecondary(c, lane) {
+    var code = String(lane && lane.reason_code || '');
+    if (code.indexOf('live_verification') >= 0) return 'Live verification is checking the exact Pages and Worker release.';
+    if (code.indexOf('maintenance') >= 0 || (lane && lane.paused && c.stage === 'publishing')) return 'Activation maintenance: writes are paused; reads and recovery remain available.';
+    if (lane && lane.health === 'restore_failed') return 'Restoration could not be verified. The lane is fenced and editor writes remain closed.';
+    if (code.indexOf('restor') >= 0 && code.indexOf('verified') >= 0) return 'The prior known-good release was restored and verified.';
+    if (code.indexOf('restor') >= 0) return 'Restoring the prior known-good Pages and Worker pair.';
+    return (PROD_STAGE[c.stage] || [c.stage, 'Status reported by the promotion ledger'])[1];
+  }
+  function renderProdLifecycle(candidates, lane) {
+    if (!prodLifecycleEl) {
+      prodLifecycleEl = el('section', 'prod-lifecycle'); prodLifecycleEl.setAttribute('aria-labelledby', 'prod-lifecycle-heading');
+      var heading = el('h2', null, 'Production publication status'); heading.id = 'prod-lifecycle-heading'; prodLifecycleEl.appendChild(heading);
+      var anchor = document.querySelector('.editor-banner') || document.body.firstChild;
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(prodLifecycleEl, anchor.nextSibling); else document.body.insertBefore(prodLifecycleEl, document.body.firstChild);
+    }
+    while (prodLifecycleEl.children.length > 1) prodLifecycleEl.removeChild(prodLifecycleEl.lastChild);
+    var laneText = lane ? (lane.paused ? 'Promotion lane: maintenance paused' : 'Promotion lane: ' + (lane.health || 'unknown')) : 'Promotion lane unavailable — saves cannot advance until service returns';
+    var lp = el('p', 'prod-lifecycle__lane', laneText); lp.setAttribute('role', lane && lane.health === 'healthy' && !lane.paused ? 'status' : 'alert'); prodLifecycleEl.appendChild(lp);
+    var list = el('ol', 'prod-lifecycle__list'); list.setAttribute('aria-label', 'Your saved production candidates');
+    (candidates || []).sort(function(a,b){return (a.created_at||0)-(b.created_at||0)||String(a.id).localeCompare(String(b.id));}).forEach(function(c) {
+      var li = el('li', 'prod-lifecycle__item'); var info = PROD_STAGE[c.stage] || [String(c.stage || 'Unknown').replace(/_/g, ' '), 'Status reported by the promotion ledger'];
+      li.appendChild(el('span', 'prod-lifecycle__stage', info[0] + ' — ' + prodStamp(c.stage_at)));
+      li.appendChild(el('span', 'prod-lifecycle__secondary', prodSecondary(c, lane)));
+      if (c.stage !== 'awaiting_approval' && c.stage !== 'published' && typeof c.created_at === 'number' && Date.now() - c.created_at > 300000)
+        li.appendChild(el('span', 'prod-lifecycle__delayed', 'Delayed beyond the normal five-minute publication window.'));
+      var actions = el('span', 'prod-lifecycle__actions');
+      if (c.preview_href) { var a = el('a', null, 'Open bound preview'); a.href = c.preview_href; a.target = '_blank'; a.rel = 'noopener'; actions.appendChild(a); }
+      var edit = el('button', null, c.stage === 'published' || c.stage === 'failed' ? 'Return to editing' : 'Keep editing'); edit.type = 'button'; edit.addEventListener('click', function(){ var main=document.querySelector('main'); if(main){main.setAttribute('tabindex','-1');main.focus();} }); actions.appendChild(edit);
+      li.appendChild(actions); list.appendChild(li);
+    });
+    if (!(candidates || []).length) list.appendChild(el('li', 'prod-lifecycle__item', 'No saved production candidates.'));
+    prodLifecycleEl.appendChild(list);
+  }
+  function refreshProdLifecycle() {
+    return Promise.all([api('/prod/candidates'), api('/prod/lane')]).then(function(out) {
+      // The PROD contract is deliberately absent from DEV. Preserve the DEV
+      // editor surface instead of mislabelling that separation as an outage.
+      if (out[0].status === 404) return;
+      var candidates = out[0].ok && out[0].data ? out[0].data.candidates : [];
+      var lane = out[1].ok && out[1].data ? out[1].data.lane : null;
+      renderProdLifecycle(candidates, lane);
+    }).catch(function(){ renderProdLifecycle([], null); });
+  }
 
   function saveDialogDraft(key, rec) {
     rec.ts = Date.now();
@@ -1182,6 +1241,7 @@
         s._queued = false;
         log('SENT ref=' + s.ref + ' status=' + srv + (opts.auto ? ' (kept editing)' : ' (id cleared)'));
         repollPending();                            // pull canonical server status
+        refreshProdLifecycle();                    // PROD save appears in its durable lifecycle region
       } else {
         handleSendError(s, out, opts);
       }
@@ -1397,6 +1457,7 @@
     // A discarded block's RESTING state is any outstanding suggestion (WYSIWYG),
     // not the bare original — re-sync from the server so the overlay re-applies.
     repollPending();
+    refreshProdLifecycle();
   }
 
   /* ============================================================================
@@ -2146,6 +2207,7 @@
     // initial inline status from the island, then a live re-poll
     renderPending(INITIAL_PENDING);
     repollPending();
+    refreshProdLifecycle();
 
     log('EDITOR ready — ' + Object.keys(sessions).length + ' block(s), page=' + PAGE);
   }
@@ -2184,6 +2246,8 @@
     bannerWarn: function () { return !!(bannerEl && bannerEl.classList.contains('editor-banner--warn')); },
     blockWarn: function (index) { var s = byIndex[index]; return !!(s && s.el.classList.contains('eb--warn')); },
     refreshBanner: function () { updateBanner(); },
+    refreshProdLifecycle: refreshProdLifecycle,
+    prodLifecycleText: function () { return prodLifecycleEl ? prodLifecycleEl.textContent : ''; },
     barVisible: function () { return !!(bar && !bar.hidden); },
     previewVisible: function () { return !!(barPreview && !barPreview.hidden); },
     previewText: function () { return barPreview && !barPreview.hidden ? barPreviewText.textContent : null; },

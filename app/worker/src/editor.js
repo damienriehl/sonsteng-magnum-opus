@@ -25,6 +25,7 @@ import {
   promotionSaveEndpoint, promotionCandidateEndpoint, promotionLaneEndpoint,
   promotionDecisionEndpoint, promotionRetryEndpoint, promotionPauseEndpoint, promotionPreviewEndpoint,
   promotionCandidatesEndpoint,
+  projectPromotionSummary,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -283,7 +284,19 @@ export async function editorFetch(request, env, ctx) {
     const stub = editorStub(env);
     const items = await stub.listAll();
     const reverts = await stub.listRevertRequests(null);
-    return wrap(renderReviewPage(items, reverts));
+    const promotionRows = await stub.listPromotionCandidates(null);
+    const promotions = [];
+    for (const row of promotionRows || []) {
+      const projected = projectPromotionSummary(await stub.getPromotionCandidate(row.id));
+      if (projected) promotions.push(projected);
+    }
+    promotions.sort((a, b) => (a.created_at || 0) - (b.created_at || 0) || a.id.localeCompare(b.id));
+    const lane = await stub.getPromotionLane();
+    const publicLane = lane && { version: lane.version, paused: !!lane.paused, health: lane.health,
+      reason_code: lane.reason_code || null, active_candidate_id: lane.active_candidate_id || null,
+      updated_at: lane.updated_at };
+    return wrap(renderReviewPage(items, reverts, promotions, publicLane,
+      typeof env.EDIT_PROD_MANIFEST_EPOCH === "string" ? env.EDIT_PROD_MANIFEST_EPOCH : ""));
   }
 
   // ---- instructor view ------------------------------------------------------

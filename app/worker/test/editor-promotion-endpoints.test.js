@@ -4,7 +4,7 @@ import { makeCore } from "./editor-sql-helper.mjs";
 import {
   promotionSaveEndpoint, promotionCandidateEndpoint, promotionDecisionEndpoint,
   promotionRetryEndpoint, promotionPauseEndpoint, promotionPreviewEndpoint,
-  promotionCandidatesEndpoint,
+  promotionCandidatesEndpoint, promotionLaneEndpoint,
 } from "../src/editor-endpoints.js";
 
 const scopes = (edit = false, admin = false) => ({
@@ -125,6 +125,29 @@ test("automation discovery returns only role-permitted bound summaries", async (
   assert.deepEqual(adminBody.candidates.map((c) => c.id), ["own", "other"]);
   assert.doesNotMatch(JSON.stringify(adminBody), /hidden|secret|principal/);
   assert.match(adminBody.candidates[0].preview_href, /^\/edit\/v1\/prod\/preview\?/);
+  assert.equal(adminBody.candidates[0].stage_at, undefined);
+});
+
+test("lifecycle discovery exposes safe timestamps and sanitizes lane internals", async () => {
+  const full = { id:"own", principal:"slot:john", stage:"publishing", source_ref:"data/x#y",
+    stage_at:2000, created_at:1000, updated_at:3000, active_attempt_id:"own:1",
+    attempt:{ id:"own:1", base_sha:"b", evidence_hash:"e", manifest_hash:"m" } };
+  const stub = {
+    listPromotionCandidates: async () => [full], getPromotionCandidate: async () => full,
+    getPromotionLane: async () => ({ version:4, paused:1, health:"stalled", reason_code:"live_verification",
+      active_candidate_id:"own", updated_at:3000, lease_owner:"secret-host", fencing_token:99 }),
+  };
+  const env = envWith(stub);
+  const body = await (await promotionCandidatesEndpoint(new Request("https://edit.example/edit/v1/prod/candidates"),
+    env, auth("slot:john", true))).json();
+  assert.deepEqual({ stage_at:body.candidates[0].stage_at, created_at:body.candidates[0].created_at,
+    updated_at:body.candidates[0].updated_at }, { stage_at:2000, created_at:1000, updated_at:3000 });
+  const lane = await (await promotionLaneEndpoint(new Request("https://edit.example/edit/v1/prod/lane"),
+    env, auth("slot:admin", false, true))).json();
+  assert.equal(lane.lane.health, "stalled");
+  assert.equal(lane.lane.reason_code, "live_verification");
+  assert.equal(lane.lane.lease_owner, undefined);
+  assert.equal(lane.lane.fencing_token, undefined);
 });
 
 test("fresh saved candidates remain discoverable without granting preview or evidence access", async () => {

@@ -101,6 +101,17 @@ export const REVIEW_CSS = `.rv-head{border-bottom:2px solid var(--pp-accent);mar
 .rv-empty{padding:2rem;text-align:center;color:#6b5b46}
 .rv-toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--pp-ink);color:#fff;padding:.6rem 1rem;border-radius:8px;opacity:0;transition:opacity .2s}
 .rv-toast.show{opacity:1}
+.pr-review{margin:2rem 0;border-top:3px solid var(--pp-accent);padding-top:1rem}
+.pr-lane,.pr-candidate{border:1px solid var(--pp-rule);border-radius:8px;background:#fff;padding:1rem;margin:.75rem 0}
+.pr-lane[data-health="stalled"],.pr-lane[data-health="unavailable"],.pr-lane[data-health="restore_failed"]{border-left:6px solid #842029}
+.pr-stage{font-weight:700;text-transform:capitalize}.pr-secondary{color:#5c5346}.pr-delayed{color:#842029;font-weight:700}
+.pr-timeline{padding-left:1.4rem}.pr-timeline li{margin:.45rem 0}.pr-actions{display:flex;gap:.65rem;flex-wrap:wrap;align-items:center}
+.pr-actions button,.pr-actions a{font:inherit;min-height:44px;padding:.5rem .8rem;border-radius:6px}
+.pr-rationale{display:block;width:100%;min-height:5rem;font:inherit;padding:.55rem;border:1px solid #6b5b46;border-radius:6px}
+.pr-error{color:#842029}.pr-alert{border:2px solid #842029;background:#fff3f3;padding:.8rem;margin:.8rem 0}
+.pr-confirm{display:flex;gap:.5rem;align-items:flex-start}.pr-evidence{border-left:3px solid var(--pp-rule);padding-left:1rem}
+.pr-review :focus-visible{outline:3px solid var(--pp-focus);outline-offset:3px}
+@media (max-width:640px){.pr-actions{display:grid;grid-template-columns:1fr}.pr-actions>*{width:100%}.pr-confirm{min-height:44px}.pr-review{overflow-wrap:anywhere}}
 `;
 
 // Review client: reads the escaped island, renders groups + text-node-only word
@@ -112,6 +123,10 @@ export const REVIEW_JS = `(() => {
   let data = { items: [] };
   try { data = JSON.parse(el.textContent); } catch {}
   const root = document.getElementById("rv-root");
+  const promotionEl = document.getElementById("promotion-data");
+  let promotionData = { candidates: [], lane: null, manifest_epoch: "" };
+  try { if(promotionEl) promotionData=JSON.parse(promotionEl.textContent); } catch {}
+  const promotionRoot=document.getElementById("pr-root"), promotionAlert=document.getElementById("pr-alert");
 
   function toast(msg){ let t=document.querySelector(".rv-toast");
     if(!t){t=document.createElement("div");t.className="rv-toast";document.body.appendChild(t);}
@@ -202,7 +217,73 @@ export const REVIEW_JS = `(() => {
       root.appendChild(g);
     }
   }
+  const stageInfo={saved:["Saved","Waiting for the promotion lane"],validating:["Validating","Deterministic gates and bounded risk review are running"],
+    preview_ready:["Preview ready","Bound preview and evidence are ready"],awaiting_approval:["Awaiting approval","An admin decision is required"],
+    publishing:["Publishing","Activation and live verification are in progress"],published:["Published","Live verification and main completion are verified"],
+    failed:["Failed","Not published; review the evidence before retrying"]};
+  function stamp(ms){if(!Number.isFinite(ms))return "Timestamp unavailable";return new Date(ms).toISOString().replace("T"," ").replace(".000Z"," UTC");}
+  function lifecycleSecondary(c,lane){
+    const code=String(lane&&lane.reason_code||"");
+    if(code.includes("live_verification"))return "Live verification is checking the exact Pages and Worker release.";
+    if(code.includes("maintenance")||lane&&lane.paused&&c.stage==="publishing")return "Activation maintenance: writes are temporarily paused; reads and recovery remain available.";
+    if(code.includes("restor")&&lane&&lane.health==="restore_failed")return "Restoration could not be verified. The lane is fenced; no publication or editor write is allowed.";
+    if(code.includes("restor")&&code.includes("verified"))return "The prior known-good release was restored and verified.";
+    if(code.includes("restor"))return "Restoring the prior known-good Pages and Worker pair.";
+    return (stageInfo[c.stage]||[c.stage,"Status reported by the promotion ledger"])[1];
+  }
+  function announceChanged(){if(!promotionAlert)return;promotionAlert.hidden=false;promotionAlert.textContent="Changed evidence: this candidate was revalidated. Your rationale is preserved; review the refreshed evidence and confirm again.";promotionAlert.focus();}
+  async function loadDetail(c){
+    const q=new URLSearchParams({id:c.id,attempt_id:c.attempt_id,base_sha:c.base_sha,evidence_hash:c.evidence_hash,manifest_hash:c.manifest_hash});
+    const r=await fetch("/edit/v1/prod/candidate?"+q.toString(),{credentials:"same-origin"});
+    return r.ok?(await r.json()).candidate:null;
+  }
+  async function refreshPromotions(){
+    const r=await fetch("/edit/v1/prod/candidates",{credentials:"same-origin"});
+    if(r.ok){promotionData.candidates=(await r.json()).candidates||[];renderPromotions();}
+  }
+  async function promotionDecision(c,decision,rationale,confirmed,button,error){
+    if(!confirmed){error.textContent="Confirm that you reviewed this exact evidence before deciding.";return;}
+    button.disabled=true;error.textContent="";
+    const body={candidate_id:c.id,attempt_id:c.attempt_id,decision,base_sha:c.base_sha,evidence_hash:c.evidence_hash,
+      manifest_hash:c.manifest_hash,rationale,idempotency_key:c.id+":"+c.attempt_id+":"+decision+":"+Date.now(),manifest_epoch:promotionData.manifest_epoch};
+    const r=await fetch("/edit/v1/prod/decision",{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});
+    if(r.ok){await refreshPromotions();const next=promotionRoot&&promotionRoot.querySelector("button");if(next)next.focus();return;}
+    button.disabled=false;
+    if(r.status===409){await refreshPromotions();announceChanged();return;}
+    error.textContent="The decision was not recorded. Nothing was published; try again.";
+  }
+  async function openPromotion(c,card,trigger){
+    let detail=await loadDetail(c);if(!detail){await refreshPromotions();announceChanged();return;}
+    let panel=card.querySelector(".pr-detail");panel.hidden=false;panel.textContent="";
+    const evidence=document.createElement("section");evidence.className="pr-evidence";
+    const h=document.createElement("h4");h.textContent="Validation evidence";evidence.appendChild(h);
+    const ul=document.createElement("ul");for(const g of (detail.evidence&&detail.evidence.gates||[])){const li=document.createElement("li");li.textContent=(g.name||"Gate")+": "+(g.status||"unknown")+(g.summary?" — "+g.summary:"");ul.appendChild(li);}evidence.appendChild(ul);
+    if(detail.score){const p=document.createElement("p");p.textContent="Confidence: "+(detail.score.confidence==null?"unavailable":detail.score.confidence);evidence.appendChild(p);}
+    panel.appendChild(evidence);
+    const label=document.createElement("label");label.textContent="Decision rationale";const rationale=document.createElement("textarea");rationale.className="pr-rationale";rationale.name="rationale";label.appendChild(rationale);panel.appendChild(label);
+    const confirmLabel=document.createElement("label");confirmLabel.className="pr-confirm";const confirm=document.createElement("input");confirm.type="checkbox";confirmLabel.appendChild(confirm);confirmLabel.appendChild(document.createTextNode("I reviewed this exact attempt and evidence."));panel.appendChild(confirmLabel);
+    const error=document.createElement("p");error.className="pr-error";error.setAttribute("role","alert");panel.appendChild(error);
+    const actions=document.createElement("div");actions.className="pr-actions";
+    for(const d of ["approve","decline"]){const b=document.createElement("button");b.type="button";b.textContent=d==="approve"?"Approve promotion":"Decline promotion";b.onclick=()=>promotionDecision(c,d,rationale.value,confirm.checked,b,error);actions.appendChild(b);}panel.appendChild(actions);
+    const close=document.createElement("button");close.type="button";close.textContent="Return to queue";close.onclick=()=>{panel.hidden=true;trigger.focus();};actions.appendChild(close);rationale.focus();
+  }
+  function renderPromotions(){
+    if(!promotionRoot)return;promotionRoot.textContent="";const lane=promotionData.lane;
+    const laneBox=document.createElement("section");laneBox.className="pr-lane";laneBox.dataset.health=lane&&lane.health||"unavailable";
+    laneBox.setAttribute("aria-label","Promotion lane status");laneBox.textContent=lane?("Lane: "+(lane.paused?"maintenance paused":lane.health||"unknown")+" — updated "+stamp(lane.updated_at)):"Lane unavailable. Saves cannot advance until service returns.";promotionRoot.appendChild(laneBox);
+    const cs=(promotionData.candidates||[]).slice().sort((a,b)=>(a.created_at||0)-(b.created_at||0)||String(a.id).localeCompare(String(b.id)));
+    if(!cs.length){const p=document.createElement("p");p.className="rv-empty";p.textContent="No promotion candidates need attention.";promotionRoot.appendChild(p);return;}
+    for(const c of cs){const card=document.createElement("article");card.className="pr-candidate";const h=document.createElement("h3");h.textContent=c.source_ref||"Promotion candidate";card.appendChild(h);
+      const info=stageInfo[c.stage]||[String(c.stage||"Unknown").replace(/_/g," "),"Status reported by the promotion ledger"];
+      const p=document.createElement("p");p.className="pr-stage";p.textContent=info[0]+" — "+stamp(c.stage_at);card.appendChild(p);
+      const sec=document.createElement("p");sec.className="pr-secondary";sec.textContent=lifecycleSecondary(c,lane);card.appendChild(sec);
+      if(c.stage!=="awaiting_approval"&&c.stage!=="published"&&Number.isFinite(c.created_at)&&Date.now()-c.created_at>300000){const delay=document.createElement("p");delay.className="pr-delayed";delay.textContent="Delayed beyond the normal five-minute publication window.";card.appendChild(delay);}
+      const timeline=document.createElement("ol");timeline.className="pr-timeline";timeline.setAttribute("aria-label","Promotion timeline");for(const s of ["saved","validating","preview_ready","awaiting_approval","publishing","published"]){const li=document.createElement("li");li.textContent=(stageInfo[s]||[s])[0];if(s===c.stage)li.setAttribute("aria-current","step");timeline.appendChild(li);}card.appendChild(timeline);
+      const actions=document.createElement("div");actions.className="pr-actions";if(c.preview_href){const a=document.createElement("a");a.href=c.preview_href;a.target="_blank";a.rel="noopener";a.textContent="Open bound preview";actions.appendChild(a);}if(c.stage==="awaiting_approval"){const b=document.createElement("button");b.type="button";b.textContent="Review evidence and decide";b.onclick=()=>openPromotion(c,card,b);actions.appendChild(b);}card.appendChild(actions);
+      const detail=document.createElement("div");detail.className="pr-detail";detail.hidden=true;card.appendChild(detail);promotionRoot.appendChild(card);}
+  }
   render();
+  renderPromotions();
 })();
 `;
 

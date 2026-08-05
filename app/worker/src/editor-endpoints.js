@@ -45,6 +45,13 @@ function staleEpoch() {
   return editError("stale_manifest_epoch", "Refresh the editor before changing PROD.", 409);
 }
 
+function lifecycleTimes(candidate) {
+  const out = {};
+  for (const key of ["stage_at", "created_at", "updated_at"])
+    if (Number.isFinite(candidate?.[key])) out[key] = candidate[key];
+  return out;
+}
+
 function boundCandidate(candidate, url) {
   const a = candidate?.attempt;
   if (!candidate || !a) return null;
@@ -66,6 +73,7 @@ function boundCandidate(candidate, url) {
   } : null;
   return {
     id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    ...lifecycleTimes(candidate),
     attempt_id: a.id, base_sha: a.base_sha, evidence_hash: a.evidence_hash,
     manifest_hash: a.manifest_hash,
     preview_html: typeof candidate.preview_html === "string" ? candidate.preview_html : "",
@@ -77,16 +85,18 @@ function boundCandidate(candidate, url) {
   };
 }
 
-function candidateBinding(candidate) {
+export function projectPromotionSummary(candidate) {
   const a = candidate?.attempt;
   if (!candidate || !a || !a.id) return null;
   if (!a.base_sha || !a.evidence_hash || !a.manifest_hash) return {
     id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    ...lifecycleTimes(candidate),
     attempt_id: a.id, preview_href: null,
   };
   const query = new URLSearchParams({ id: candidate.id, attempt_id: a.id, base_sha: a.base_sha,
     evidence_hash: a.evidence_hash, manifest_hash: a.manifest_hash }).toString();
   return { id: candidate.id, stage: candidate.stage, source_ref: candidate.source_ref,
+    ...lifecycleTimes(candidate),
     attempt_id: a.id, base_sha: a.base_sha, evidence_hash: a.evidence_hash,
     manifest_hash: a.manifest_hash, preview_href: "/edit/v1/prod/preview?" + query };
 }
@@ -140,7 +150,7 @@ export async function promotionCandidatesEndpoint(request, env, auth) {
   const candidates = [];
   for (const row of rows || []) {
     if (!admin && row.principal !== auth.editor) continue;
-    const projected = candidateBinding(await stub.getPromotionCandidate(row.id));
+    const projected = projectPromotionSummary(await stub.getPromotionCandidate(row.id));
     if (projected) candidates.push(projected);
   }
   return json({ ok: true, candidates });
@@ -157,8 +167,14 @@ export async function promotionPreviewEndpoint(request, env, auth) {
 
 export async function promotionLaneEndpoint(request, env, auth) {
   if (!prodPromotionApiOk(env)) return uniform404();
-  if (!auth.scopes.admin.granted) return uniform404();
-  return json({ ok: true, lane: await editorStub(env).getPromotionLane() });
+  if (!auth.editor || (!auth.scopes.admin.granted && !auth.scopes.edit.granted && !auth.scopes.instructor.granted))
+    return uniform404();
+  const lane = await editorStub(env).getPromotionLane();
+  return json({ ok: true, lane: lane && {
+    version: lane.version, paused: !!lane.paused, health: lane.health,
+    reason_code: lane.reason_code || null, active_candidate_id: lane.active_candidate_id || null,
+    updated_at: lane.updated_at,
+  } });
 }
 
 export async function promotionDecisionEndpoint(request, env, auth) {
