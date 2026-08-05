@@ -132,7 +132,7 @@ class CandidatePreparationTest(unittest.TestCase):
         )}
         self.assertEqual(len(refs), 7)
         for ref in refs:
-            self.assertRegex(ref, r"^refs/sonsteng/candidates/[A-Za-z0-9._-]+-[0-9a-f]{64}$")
+            self.assertRegex(ref, r"^refs/heads/releases/[A-Za-z0-9._-]+-[0-9a-f]{64}$")
 
 
 if __name__ == "__main__":

@@ -134,7 +134,7 @@ branch only; never point this daemon back at `main` after PROD promotion is enab
 
 `tools.apply_suggestions.prepare_candidate()` applies authorized candidate rows in
 an isolated worktree, records named drift/path/group/validation/build/parity gates,
-creates an immutable `refs/sonsteng/candidates/<readable-prefix>-<sha256-of-exact-id>`
+creates an immutable, pushable `refs/heads/releases/<readable-prefix>-<sha256-of-exact-id>`
 ref, and returns a stable
 evidence hash. It performs no deploy, canonical merge, lifecycle finalization, or
 remote update. `prepare_revert_candidate()` creates inverse commits through the

@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# Deploy the walkthrough site to PROD → https://sonsteng.damienriehl.com
-# Cloudflare Pages direct-upload (no build; the site is a single static index.html).
-# Re-run after edits: same command → same URL.
+# PROD publication is owned by the crash-safe promotion coordinator.  This
+# historical direct-upload entrypoint is intentionally config-off: invoking it
+# must never bypass paired Pages + Worker verification or advance only one half.
 set -euo pipefail
 PROJECT=sonsteng
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Cloudflare creds (CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID) — same source the
-# other portfolio sites use.
-set -a; source "$HOME/.config/cloudflare/creds.env"; set +a
-export WRANGLER_SEND_METRICS=false
+if [[ "${1:-}" == "--dry-run" ]]; then
+  echo "PROD deployment is coordinator-only (config-off)."
+  echo "project=$PROJECT artifact=$ROOT/site environment=production"
+  echo "required=preview-id,production-pages-id,inactive-worker-version,exact-pair-live-check,main-cas"
+  exit 0
+fi
 
-echo "→ deploying $ROOT/site to Cloudflare Pages project '$PROJECT'"
-npx --yes wrangler@latest pages deploy "$ROOT/site" \
-  --project-name "$PROJECT" --branch main --commit-dirty=true
+echo "ERROR: direct PROD deploy is disabled; use the promotion coordinator." >&2
+echo "Run '$0 --dry-run' to inspect the non-mutating contract." >&2
+exit 64
 
-echo "✓ deployed → https://sonsteng.damienriehl.com/  (alias: https://$PROJECT.pages.dev/)"
+# Domain wiring is retained as documentation only; no command below is reachable.
 # One-time custom-domain wiring (already done; kept for reference):
 #   curl -sX POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
 #     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/domains" \

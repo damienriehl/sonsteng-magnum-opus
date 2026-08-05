@@ -1464,7 +1464,9 @@ def candidate_ref_for(candidate_id):
     if not readable:
         readable = "candidate"
     digest = hashlib.sha256(exact.encode("utf-8")).hexdigest()
-    return "refs/sonsteng/candidates/%s-%s" % (readable, digest)
+    # Durable release refs must be ordinary pushable branch refs. Keep the full
+    # exact-ID digest so different IDs that sanitize alike never collide.
+    return "refs/heads/releases/%s-%s" % (readable, digest)
 
 
 def prepare_candidate(rows, pipeline, candidate_id, *, base_sha=None,

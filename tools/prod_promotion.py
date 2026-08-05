@@ -26,6 +26,7 @@ MAX_AI_REASONS = 5
 MAX_REASON_CHARS = 240
 MAX_PROVIDER_RETENTION_DAYS = 30
 MAX_POLICY_INPUT_BYTES = 32768
+RELEASE_MANIFEST_SCHEMA_VERSION = "prod-release-v1"
 
 HARD_GATE_NAMES = (
     "base", "candidate_nonempty", "editor_map", "drift", "path_and_format",
@@ -131,6 +132,58 @@ class AIReview:
 class LaunchReadiness:
     ready: bool
     failed_criteria: tuple
+
+
+@dataclasses.dataclass(frozen=True)
+class ReleaseManifest:
+    """Canonical, immutable identity of one coherent PROD release."""
+    candidate_id: str
+    attempt_id: str
+    environment: str
+    base_sha: str
+    commit_sha: str
+    candidate_ref: str
+    pages_preview_id: str
+    pages_production_id: str
+    worker_version_id: str
+    editor_map_id: str
+    build_id: str
+    generated_contract_hashes: dict
+    schema_version: str = RELEASE_MANIFEST_SCHEMA_VERSION
+
+    def __post_init__(self):
+        if self.environment != "production":
+            raise ValueError("manifest_environment")
+        text_fields = (self.candidate_id, self.attempt_id, self.candidate_ref,
+                       self.pages_preview_id, self.pages_production_id,
+                       self.worker_version_id, self.editor_map_id, self.build_id)
+        if not all(isinstance(value, str) and value for value in text_fields):
+            raise ValueError("manifest_identity")
+        if self.pages_preview_id == self.pages_production_id:
+            raise ValueError("pages_deployments_not_distinct")
+        if not re.fullmatch(r"[0-9a-f]{40,64}", self.base_sha or "") or not re.fullmatch(r"[0-9a-f]{40,64}", self.commit_sha or ""):
+            raise ValueError("manifest_git_sha")
+        if not self.candidate_ref.startswith("refs/heads/releases/"):
+            raise ValueError("manifest_candidate_ref")
+        hashes = dict(self.generated_contract_hashes or {})
+        if not hashes or any(not isinstance(k, str) or not k or
+                             not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{64}", v)
+                             for k, v in hashes.items()):
+            raise ValueError("manifest_contract_hash")
+        object.__setattr__(self, "generated_contract_hashes", MappingProxyType(hashes))
+
+    def to_dict(self):
+        return {field.name: (dict(value) if field.name == "generated_contract_hashes" else value)
+                for field in dataclasses.fields(self)
+                for value in (getattr(self, field.name),)}
+
+    @classmethod
+    def from_dict(cls, value):
+        return cls(**{field.name: value[field.name] for field in dataclasses.fields(cls)})
+
+    @property
+    def manifest_hash(self):
+        return _canonical_hash(self.to_dict())
 
 
 def _canonical_hash(value):
