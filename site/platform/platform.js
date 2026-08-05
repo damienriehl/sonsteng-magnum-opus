@@ -11,11 +11,13 @@
   syncTT();
   if (tt){
     tt.addEventListener('click', function(){
-      var on = document.documentElement.classList.toggle('type-lg');
-      try{ localStorage.setItem('sonsteng-type-lg', on ? '1':'0'); }catch(e){}
+      var on = !document.documentElement.classList.contains('type-lg');
+      if (window.SonstengTypePreference) window.SonstengTypePreference.set(on);
+      else document.documentElement.classList.toggle('type-lg', on);
       syncTT();
     });
   }
+  if (window.SonstengTypePreference) window.SonstengTypePreference.subscribe(syncTT);
 
   /* ---- matter-library tier toggle ---- */
   var seg = document.querySelector('[data-tier-toggle]');

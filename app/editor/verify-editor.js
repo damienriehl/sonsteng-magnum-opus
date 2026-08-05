@@ -178,12 +178,16 @@ async function run() {
     await page.evaluate(() => window.SonstengEditor.clickCancel(3));
 
     /* --- MX: authored and computed text share one visual sentence (U7) ---- */
-    const mixedBefore = await page.evaluate(() => ({
-      authored: window.SonstengEditor.block(7),
-      sentence: document.querySelector('.mixed-sentence').textContent,
-      lockedEditable: Array.from(document.querySelectorAll('[data-eb-locked]')).some(el => el.isContentEditable),
-      lockedTools: document.querySelectorAll('[data-eb-locked] .eb-tools, .eb-tools [data-eb-locked]').length
-    }));
+    const mixedBefore = await page.evaluate(() => {
+      const sentence = document.querySelector('.mixed-sentence').cloneNode(true);
+      sentence.querySelectorAll('.eb-tools,.eb-status,.eb-note').forEach(el => el.remove());
+      return {
+        authored: window.SonstengEditor.block(7),
+        sentence: sentence.textContent,
+        lockedEditable: Array.from(document.querySelectorAll('[data-eb-locked]')).some(el => el.isContentEditable),
+        lockedTools: document.querySelectorAll('[data-eb-locked] .eb-tools, .eb-tools [data-eb-locked]').length
+      };
+    });
     assert('MX1 authored fragment is independently editable while computed spans have no edit affordance',
       mixedBefore.authored && mixedBefore.authored.editable === true && !mixedBefore.lockedEditable && mixedBefore.lockedTools === 0,
       JSON.stringify(mixedBefore));

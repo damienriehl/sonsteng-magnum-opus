@@ -86,6 +86,11 @@ python3 tools/validate_spine.py && python3 tools/build_site.py --check
   (Learned the hard way.)
 - `deploy-dev.sh` deploys `main` by default — pass the branch explicitly when shipping
   feature work.
+- **Production policy (adopted 2026-08-04):** after a change is merged and its
+  release gates pass, agents may deploy it to PROD without requesting a separate
+  approval. Preserve environment-specific prerequisites, deploy ordering, live
+  verification, and rollback guidance. This policy covers engineering releases;
+  it does not collapse the editor's distinct Approver and Publisher roles.
 
 ## Provenance & license
 

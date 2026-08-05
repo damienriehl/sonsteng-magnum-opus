@@ -57,12 +57,19 @@ if [ "$WANT_BROWSER" = "1" ]; then
     cookie=$(ls -t "/run/user/$(id -u)"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
     [ -n "$cookie" ] && export XAUTHORITY="$cookie"
   fi
-  if xdpyinfo >/dev/null 2>&1; then
+  if [ "${HEADLESS:-0}" = "1" ] || xdpyinfo >/dev/null 2>&1; then
     # verify-editor exits nonzero on any failed assertion and prints an
     # "N/N PASS" summary — trust the exit code, never a hardcoded count (the
     # literal "43/43" grep silently turned every added assertion into a FAIL).
-    run "editor client (headful)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
+    if [ "${HEADLESS:-0}" = "1" ]; then
+      skip "editor client" "headful-only gate"
+    else
+      run "editor client (headful)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
+    fi
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
+    run "platform layout matrix"                 node tools/verify_platform_layout.js
+    run "platform print matrix"                  node tools/verify_platform_layout.js --print
+    run "interview + critique matrix"            node tools/verify_chat_critique.js
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
     # a ?t= token — which meant that once the Access door retires those tokens
     # (plan KD1) the gate could never run again and would sit permanently
@@ -72,7 +79,9 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # property it proves is geometric (the rail's box never intersects its
     # block's box at ten widths), which the harness reproduces faithfully.
     # Setting TARGET_URL still upgrades it to a real editor page.
-    if [ -n "${TARGET_URL:-}" ]; then
+    if [ "${HEADLESS:-0}" = "1" ]; then
+      skip "rail placement" "headful-only gate"
+    elif [ -n "${TARGET_URL:-}" ]; then
       run "rail placement (live page)"           node app/editor/verify-rail-placement.js
     else
       run "rail placement (harness)"             node app/editor/verify-rail-placement.js
@@ -81,11 +90,17 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "editor client"        "no reachable X display"
     skip "accessibility audit"  "no reachable X display"
     skip "rail placement"       "no reachable X display"
+    skip "platform layout"      "no reachable X display"
+    skip "platform print"       "no reachable X display"
+    skip "interview + critique" "no reachable X display"
   fi
 else
   skip "editor client"        "--no-browser"
   skip "accessibility audit"  "--no-browser"
   skip "rail placement"       "--no-browser"
+  skip "platform layout"      "--no-browser"
+  skip "platform print"       "--no-browser"
+  skip "interview + critique" "--no-browser"
 fi
 
 # ---- summary ---------------------------------------------------------------

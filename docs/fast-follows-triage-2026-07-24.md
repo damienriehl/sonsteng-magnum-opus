@@ -1,5 +1,10 @@
 # Fast-follow backlog — re-triage 2026-07-24
 
+> **Deployment-policy update (2026-08-04):** the PROD approval hold recorded
+> below is superseded. Merged, release-green engineering changes may deploy to
+> PROD without a separate confirmation. The remaining text is retained as the
+> historical July triage record.
+
 *Requested by Damien's answer to `q7-fast-follows` (cockpit brief
 `sonsteng-2026-07-18-decisions`): **"None for now — revisit after the walkthrough … revisit
 next week with fresh capacity."** This is that revisit, done against reality (live DEV, the
