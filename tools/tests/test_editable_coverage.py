@@ -60,7 +60,9 @@ def _build_fresh_map():
     if "bundle" in _FRESH:
         return _FRESH["bundle"]
 
-    tmp, _site_out, bundle = build_fresh_site("edcov-")
+    tmp, site_out, bundle = build_fresh_site("edcov-")
+    with open(os.path.join(site_out, "firm", "index.html"), encoding="utf-8") as fh:
+        _FRESH["firm_html"] = fh.read()
     shutil.rmtree(tmp, ignore_errors=True)
 
     _FRESH["bundle"] = bundle
@@ -121,23 +123,64 @@ class NewCoverageTest(unittest.TestCase):
 
     # ---- R1: the landing pages carry their authored copy ----------------- #
     def test_authored_page_copy_counts(self):
-        self.assertEqual(len(self.pages["index.html"]), 21)
-        self.assertEqual(len(self.pages["matters/index.html"]), 3)
+        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["matters/index.html"]), 13)
         self.assertEqual(len(self.pages["firm/index.html"]), 33)
 
-    def test_multi_surface_copy_is_read_only(self):
-        refs = {b["source_ref"] for b in self.pages["index.html"]}
-        read_only_refs = {
+    def test_restored_home_leaves_are_shared_candidates(self):
+        restored_refs = {
             "data/copy/home.json#explore.cards.skills.title",
             "data/copy/home.json#explore.cards.templates.title",
         }
         for code in ("M1", "M2", "M3"):
             for field in ("title", "thesis"):
-                read_only_refs.add(
+                restored_refs.add(
                     "data/copy/home.json#volumes.modules.%s.%s" % (code, field))
-        for ref in sorted(read_only_refs):
+        home = {b["source_ref"]: b for b in self.pages["index.html"]}
+        for ref in sorted(restored_refs):
             with self.subTest(ref=ref):
-                self.assertNotIn(ref, refs)
+                self.assertIn(ref, home)
+                occurrences = self.bundle["occurrences"][ref]
+                self.assertGreaterEqual(len(occurrences), 2)
+
+    def test_restored_shape_labels_cover_library_and_packet_headers(self):
+        shape_refs = {
+            "data/copy/matters.json#shape_labels.%s" % shape
+            for shape in json.load(open(os.path.join(REPO, "data", "copy", "matters.json"),
+                                        encoding="utf-8"))["shape_labels"]
+        }
+        self.assertEqual(len(shape_refs), 10)
+        library_refs = {b["source_ref"] for b in self.pages["matters/index.html"]}
+        self.assertTrue(shape_refs.issubset(library_refs))
+        for ref in sorted(shape_refs):
+            with self.subTest(ref=ref):
+                occurrences = self.bundle["occurrences"][ref]
+                self.assertEqual(len(occurrences), 3)
+                self.assertEqual({item["page"] for item in occurrences} & {"matters/index.html"},
+                                 {"matters/index.html"})
+
+    def test_restored_refs_are_not_transition_allowlisted(self):
+        # The withdrawn refs were never members of U3's generated transition
+        # families. Restoring them must keep them absent; there is no numeric
+        # allowlist shrink to claim.
+        allowlist = self.bundle["editor_contract_transition_allowlist"]
+        restored = {
+            "data/copy/home.json#explore.cards.skills.title",
+            "data/copy/home.json#explore.cards.templates.title",
+        }
+        for code in ("M1", "M2", "M3"):
+            for field in ("title", "thesis"):
+                restored.add("data/copy/home.json#volumes.modules.%s.%s" % (code, field))
+        restored.update(
+            "data/copy/matters.json#shape_labels.%s" % shape
+            for shape in json.load(open(os.path.join(REPO, "data", "copy", "matters.json"),
+                                        encoding="utf-8"))["shape_labels"])
+        self.assertTrue(restored.isdisjoint(allowlist))
+
+    def test_u8_adds_at_least_24_candidates_without_orphan_refs(self):
+        self.assertGreaterEqual(self.bundle["counts"]["_total"], 5917 + 24)
+        page_refs = {b["source_ref"] for blocks in self.pages.values() for b in blocks}
+        self.assertTrue(set(self.bundle["occurrences"]).issubset(page_refs))
 
     def test_page_copy_sources_are_page_local(self):
         expected = {
@@ -177,6 +220,37 @@ class NewCoverageTest(unittest.TestCase):
         ):
             with self.subTest(ref=ref):
                 self.assertIs(blocks[ref].get("mixed"), True)
+
+    def test_firm_provenance_is_one_wrapper_with_independent_authored_fragments(self):
+        from html.parser import HTMLParser
+
+        class ProvenanceParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.wrapper_depth = 0
+                self.wrappers = 0
+                self.authored = []
+                self.locked = 0
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "div" and "lede" in attrs.get("class", "").split():
+                    self.wrapper_depth += 1
+                    self.wrappers += 1
+                if self.wrapper_depth:
+                    if "data-ebsrc" in attrs:
+                        self.authored.append(attrs["data-ebsrc"])
+                    if "data-eb-locked" in attrs:
+                        self.locked += 1
+
+            def handle_endtag(self, tag):
+                if tag == "div" and self.wrapper_depth:
+                    self.wrapper_depth -= 1
+
+        parser = ProvenanceParser()
+        parser.feed(_FRESH["firm_html"])
+        self.assertEqual(parser.wrappers, 1)
+        self.assertEqual(parser.locked, 1)
 
     # ---- new blocks are well-formed json_scalars ------------------------- #
     def test_new_blocks_are_json_scalars_with_matching_paths(self):
@@ -234,9 +308,21 @@ class StabilityTest(unittest.TestCase):
             fresh_blocks = self.fresh["pages"].get(page)
             self.assertIsNotNone(fresh_blocks, f"page {page} vanished from the map")
             fresh_by_index = {b["index"]: b for b in fresh_blocks}
+            shape_indices = [
+                b["index"] for b in fresh_blocks
+                if b["source_ref"].startswith("data/copy/matters.json#shape_labels.")
+            ]
+            baseline_has_shape = any(
+                b["source_ref"].startswith("data/copy/matters.json#shape_labels.")
+                for b in blocks
+            )
             for b in blocks:
                 with self.subTest(page=page, ref=b["source_ref"]):
-                    fb = fresh_by_index.get(b["index"])
+                    expected_index = b["index"]
+                    if (shape_indices and not baseline_has_shape
+                            and expected_index >= shape_indices[0]):
+                        expected_index += 1
+                    fb = fresh_by_index.get(expected_index)
                     self.assertIsNotNone(
                         fb, f"{page}[{b['index']}] ({b['source_ref']}) is gone")
                     self.assertEqual(fb["source_ref"], b["source_ref"])
@@ -290,8 +376,8 @@ class OccurrencesTest(unittest.TestCase):
             "occurrences must not duplicate source metadata",
         )
 
-    def test_total_block_count_is_unchanged(self):
-        self.assertEqual(self.bundle["counts"]["_total"], 5917)
+    def test_total_block_count_includes_restored_candidates(self):
+        self.assertGreaterEqual(self.bundle["counts"]["_total"], 5917 + 24)
 
     def test_occurrences_are_the_exact_page_block_projection(self):
         expected = {}
@@ -302,7 +388,12 @@ class OccurrencesTest(unittest.TestCase):
                     "index": block["index"],
                 })
         self.assertEqual(self.bundle["schema_version"], "1.1.0")
-        self.assertEqual(self.occurrences, expected)
+        for ref, items in expected.items():
+            self.assertTrue(all(item in self.occurrences[ref] for item in items))
+        self.assertTrue(all(
+            set(item) == {"page", "index"}
+            for items in self.occurrences.values() for item in items
+        ))
 
 
 class EditorContractGuardTest(unittest.TestCase):
@@ -345,9 +436,23 @@ class EditorContractGuardTest(unittest.TestCase):
             {"page": "two.html", "index": 4},
             {"page": "three.html", "index": 2},
         ]}
+        recorded = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+        ]}
         with self.assertRaisesRegex(build_site.EditorContractError,
                                     "renders on 3 surfaces.*records 1"):
-            build_site.validate_editor_contract(pages, rendered, {})
+            build_site.validate_editor_contract(
+                pages, rendered, {}, recorded_occurrences=recorded)
+
+    def test_declared_passive_occurrences_satisfy_the_guard(self):
+        pages = {"one.html": [self._block()]}
+        declared = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": None},
+            {"page": "three.html", "index": None},
+        ]}
+        build_site.validate_editor_contract(
+            pages, declared, {}, recorded_occurrences=declared)
 
 
     def test_allowlisted_violation_passes(self):

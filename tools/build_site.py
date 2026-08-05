@@ -1376,12 +1376,10 @@ def build_home(corpus):
             mod_counts[t.get("module")].add(ref.split(".")[0])
     for code, meta in MODULE_META.items():
         module = copy["volumes"]["modules"][code]
-        # Module titles and theses also render on the module-cover pages. Until
-        # the editor has an explicit shared-scalar contract, keep these shared
-        # leaves read-only on every surface rather than allowing a home-page
-        # edit to silently change another page.
-        title, title_eb = module["title"], ""
-        thesis, thesis_eb = module["thesis"], ""
+        title, title_eb = _copy_scalar("home", copy, "volumes.modules.%s.title" % code,
+                                      "home · curriculum modules")
+        thesis, thesis_eb = _copy_scalar("home", copy, "volumes.modules.%s.thesis" % code,
+                                        "home · curriculum modules")
         acc = {"brass": "", "claret": " volume--claret", "green": " volume--green"}[meta["accent"]]
         vols.append("""
     <a class="card volume{acc}" href="modules/{lo}.html">
@@ -1410,15 +1408,8 @@ def build_home(corpus):
             fields = ["meta", "description"]
         for field in fields:
             path = "explore.cards.%s.%s" % (card, field)
-            value = copy["explore"]["cards"][card][field]
-            # These headings also render as authored headings on their target
-            # pages. Keep duplicate rendered values read-only until edits have
-            # an explicit cross-surface contract.
-            if path in ("explore.cards.skills.title", "explore.cards.templates.title"):
-                values[path], attrs[path] = value, ""
-            else:
-                values[path], attrs[path] = _copy_scalar(
-                    "home", copy, path, "home · %s card" % card)
+            values[path], attrs[path] = _copy_scalar(
+                "home", copy, path, "home · %s card" % card)
 
     body = """
 <section class="hero reveal">
@@ -1570,8 +1561,8 @@ def build_modules(corpus):
 <div class="module module--{accent}">
 <section class="reveal">
   <div class="module-numeral" aria-hidden="true">{code}</div>
-  <h1>Module {n} — {title}</h1>
-  <p class="lede"><em>{thesis}</em></p>
+  <h1{title_render}>Module {n} — {title}</h1>
+  <p class="lede"{thesis_render}><em>{thesis}</em></p>
   <p class="card__meta">{ntasks} TASKS · {nsk} SKILLS · {nm} LINKED MATTERS</p>
 </section>
 <div class="brass-rule" role="presentation"></div>
@@ -1587,6 +1578,10 @@ def build_modules(corpus):
 </div>
 """.format(accent=("brass" if meta["accent"] == "brass" else meta["accent"]),
            code=esc(code), n=code[1], title=esc(module_meta["title"]), thesis=esc(module_meta["thesis"]),
+           title_render=_eb_render_attr(
+               "data/copy/home.json#volumes.modules.%s.title" % code),
+           thesis_render=_eb_render_attr(
+               "data/copy/home.json#volumes.modules.%s.thesis" % code),
            ntasks=len(mod_tasks), nsk=len(by_skill), nm=len(linked),
            prose_section=prose_section, rows="".join(rows), mcards=matter_cards)
         write_file(rel, page_shell(
@@ -1600,6 +1595,7 @@ def build_modules(corpus):
 # --------------------------------------------------------------------------- #
 def build_templates(corpus):
     rel = "templates/index.html"
+    title_ref = "data/copy/home.json#explore.cards.templates.title"
     templates = ((corpus.get("curriculum") or {}).get("templates") or [])
     present = [t for t in templates if (t.get("md") or "").strip()]
 
@@ -1625,7 +1621,7 @@ def build_templates(corpus):
     header = """
 <header class="reveal">
   <p class="eyebrow">THE PRACTICUM PRESS · COURSE DELIVERABLES</p>
-  <h1>Deliverable templates</h1>
+  <h1{title_render}>Deliverable templates</h1>
   <p class="lede">The handout templates for the six recurring course deliverables — the time
   sheet, engagement-letter checklist, client-interview plan, settlement &amp; negotiation plan,
   learning portfolio, and reflective report. Each carries its own &ldquo;how it&rsquo;s
@@ -1636,7 +1632,7 @@ def build_templates(corpus):
     <a class="chip chip--matter" href="../modules/m2.html">M2 · SUBSTANTIVE + SKILLS</a>
     <a class="chip chip--matter" href="../modules/m3.html">M3 · TRANSITION</a>
   </div>
-</header>"""
+</header>""".format(title_render=_eb_render_attr(title_ref))
 
     body = """
 {header}
@@ -1659,6 +1655,7 @@ def build_templates(corpus):
 # --------------------------------------------------------------------------- #
 def build_skills(corpus):
     rel = "skills/index.html"
+    title_ref = "data/copy/home.json#explore.cards.skills.title"
     skills = corpus["skills"]["skills"]
     tasks_by_skill = defaultdict(list)
     for t in corpus["tasks"]["tasks"]:
@@ -1744,7 +1741,7 @@ def build_skills(corpus):
     body = """
 <section class="reveal">
   <p class="eyebrow">TABLE OF AUTHORITIES · {n} SURVEYED SKILLS</p>
-  <h1>Skills browser</h1>
+  <h1{title_render}>Skills browser</h1>
   <p class="lede">Sonsteng&rsquo;s seventeen Legal Practice skills and nine Law Practice Management
   skills, decomposed into the tasks most lawyers most often perform — each mapped into the FOLIO
   ontology where a sound mapping exists, and cross-linked to the matters that exercise it.</p>
@@ -1772,7 +1769,7 @@ def build_skills(corpus):
   </div>
   {ext}
 </section>
-""".format(n=len(lp) + len(pm),
+""".format(n=len(lp) + len(pm), title_render=_eb_render_attr(title_ref),
            lp="".join(render_skill(s, open_first=(i == 0)) for i, s in enumerate(lp)),
            pm="".join(render_skill(s) for s in pm),
            ext="".join(render_skill(s) for s in ext))
@@ -1839,10 +1836,9 @@ def build_matter_library(corpus):
 
     rows = []
     for shape, pair in by_shape.items():
-        # These labels are shared with the generated packet-header framing below.
-        # Keep them read-only until the editor contract can represent one shared
-        # scalar inside generated framing without registering the whole lede.
-        label = shape_labels[shape]
+        label, label_eb = _copy_scalar(
+            "matters", copy, "shape_labels." + shape,
+            "matter library · practice shapes")
         cards = []
         for tier in ("meridian", "real"):
             m = pair[tier]
@@ -1852,10 +1848,10 @@ def build_matter_library(corpus):
   <div class="shape-row">
     <div>
       <p class="eyebrow">SHAPE</p>
-      <h2 class="shape-row__label" style="font-size:var(--fs-lg)">{label}</h2>
+      <h2 class="shape-row__label" style="font-size:var(--fs-lg)"{label_eb}>{label}</h2>
     </div>
     <div class="shape-row__cards">{cards}</div>
-  </div>""".format(label=esc(label), cards="".join(cards)))
+  </div>""".format(label=esc(label), label_eb=label_eb, cards="".join(cards)))
 
     hero = {}
     hero_eb = {}
@@ -2224,17 +2220,22 @@ def build_one_packet(corpus, m, man):
     jname_locked = _eb_locked_attr(
         "the practicum jurisdiction canon" if law_editable else "the matter's jurisdiction metadata",
         "law/index.html" if law_editable else None)
+    shape_path = "shape_labels." + m.get("shape", "")
+    shape_ref = "data/copy/matters.json#" + shape_path
+    shape_value = shape_labels.get(m.get("shape"), m.get("shape", ""))
+    shape_eb = _eb_scalar_attr(
+        shape_ref, shape_value, shape_path, "matter packet · practice shape")
     cap_eb = _eb_scalar_attr(matter_rel + "#caption", m.get("caption", ""),
                              "caption", "matter caption")
     header = """
 <header class="reveal">
   <div class="chips">{tc} <span class="chip">{fee} FEE</span> <span class="chip chip--folio">{mid}</span></div>
   <h1 style="margin-top:var(--sp-3)"{cap_eb}>{cap}</h1>
-  <div class="lede mixed-sentence"><span>{shape}</span> · <span{jname_locked}>{jname}</span></div>
+  <div class="lede mixed-sentence"><p style="display:inline;margin:0"{shape_eb}>{shape}</p> · <span{jname_locked}>{jname}</span></div>
   <div class="chips" aria-label="Skills exercised">{skills}</div>
 </header>""".format(tc=tier_chip(tier, m.get("jurisdiction")), fee=esc((m.get("fee_type") or "").upper()),
                     mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")), cap_eb=cap_eb,
-                    shape=esc(shape_labels.get(m.get("shape"), m.get("shape", ""))),
+                    shape=esc(shape_value), shape_eb=shape_eb,
                     jname=esc(jname), jname_locked=jname_locked, skills=skill_chips)
 
     instructor_note = """
@@ -3409,8 +3410,14 @@ def _surface_set(items):
     return {(item.get("page"), item.get("index")) for item in (items or [])}
 
 
-def validate_editor_contract(pages, rendered_occurrences, transition_allowlist):
-    """Fail when editable elements are mixed or render sites are unrecorded."""
+def validate_editor_contract(pages, rendered_occurrences, transition_allowlist,
+                             recorded_occurrences=None):
+    """Fail when editable elements are mixed or render sites are undeclared.
+
+    ``recorded_occurrences`` is the map's declared reach, including passive
+    render sites whose index is None. Synthetic callers may omit it to derive
+    the declaration from editable page blocks, preserving the strict guard.
+    """
     transition_allowlist = transition_allowlist or {}
     recorded = {}
     violations = []
@@ -3431,17 +3438,19 @@ def validate_editor_contract(pages, rendered_occurrences, transition_allowlist):
                     "%s on %s[%s] is a mixed element: rendered text extends "
                     "beyond its authored scalar" % (ref, page, block["index"]))
 
-    for ref in sorted(set(recorded) | set(rendered_occurrences or {})):
-        recorded_surfaces = _surface_set(recorded.get(ref))
+    declared = recorded if recorded_occurrences is None else recorded_occurrences
+    for ref in sorted(set(declared) | set(rendered_occurrences or {})):
+        recorded_surfaces = _surface_set(declared.get(ref))
         rendered_surfaces = _surface_set((rendered_occurrences or {}).get(ref))
         if not rendered_surfaces:
             continue
-        if (len(rendered_surfaces) > len(recorded_surfaces)
+        if (not rendered_surfaces.issubset(recorded_surfaces)
                 and ref not in transition_allowlist):
             violations.append(
                 "%s renders on %d surfaces but its block records %d"
                 % (ref, len(rendered_surfaces), len(recorded_surfaces)))
-        elif (len(recorded_surfaces) > 1
+        elif (recorded_occurrences is None
+              and len(recorded_surfaces) > 1
               and ref not in transition_allowlist):
             violations.append(
                 "%s: coupled ref is missing from transition allowlist"
@@ -3539,7 +3548,8 @@ def build_editor_map(spine_build_id, scope_index=None):
     transition_allowlist = _editor_transition_allowlist(
         pages, rendered_occurrences)
     validate_editor_contract(
-        pages, rendered_occurrences, transition_allowlist)
+        pages, rendered_occurrences, transition_allowlist,
+        recorded_occurrences=rendered_occurrences)
 
     bundle = {
         "schema_version": "1.1.0",
@@ -3560,7 +3570,10 @@ def build_editor_map(spine_build_id, scope_index=None):
         "scopes": scope_index or {},
         "facts": dict(FACTS_INDEX),
         "overrides": [dict(record) for record in PAGE_OVERRIDES.values()],
-        "occurrences": occurrences,
+        # Include read-only render sites as well as editable candidates. A
+        # passive occurrence has index=None: it is part of an edit's reach,
+        # but is not itself an editable target on that surface.
+        "occurrences": rendered_occurrences,
         "editor_contract_transition_allowlist": transition_allowlist,
         "pages": pages,
     }
