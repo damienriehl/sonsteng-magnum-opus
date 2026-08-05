@@ -1598,8 +1598,16 @@ def _gate_group(members, source_index, worktree):
     shared_json = {}
     for r in members:
         source_ref = r["source_ref"]
+        block = source_index.get(source_ref)
+        # Every operation against an existing map leaf, including page-only
+        # creation and revert, must pass the same apply-time drift fence.
+        if r.get("kind") != "json_add":
+            if block is None:
+                return OUT_DRIFT, []
+            if (r.get("original_hash") and block.get("original_hash")
+                    and r["original_hash"] != block["original_hash"]):
+                return OUT_DRIFT, []
         if r.get("kind") == "page_override_revert":
-            block = source_index.get(source_ref)
             relpath, locator = source_ref.split("#", 1)
             if (block is None or not relpath.startswith("data/copy/")
                     or not re.fullmatch(r"overrides\.[a-f0-9]{16}\.value", locator)):
@@ -1634,10 +1642,6 @@ def _gate_group(members, source_index, worktree):
                 created_at=r.get("created_at") or 0,
             ))
             continue
-        block = source_index.get(source_ref)
-        # Allowlist re-validation (defense in depth) — unknown ref => drift (re-review).
-        if block is None:
-            return OUT_DRIFT, []
         if r.get("kind") == "page_override":
             try:
                 validate_page_override_occurrences(r.get("page"), block.get("occurrences"))
@@ -1672,9 +1676,6 @@ def _gate_group(members, source_index, worktree):
             if (r.get("json_path") or "") != (block.get("json_path") or ""):
                 return OUT_NEEDS_HUMAN, []
         # DRIFT gate: rendered-hash of CURRENT source vs the suggestion's stored hash.
-        if r.get("original_hash") and block.get("original_hash") \
-                and r["original_hash"] != block["original_hash"]:
-            return OUT_DRIFT, []
         original_text = block.get("original_text") or r.get("original_text") or ""
         new_text = r.get("new_text") or ""
         # Structural operation (U4): the row's kind IS the op. The drift gate

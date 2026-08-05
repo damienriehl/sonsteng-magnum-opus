@@ -29,6 +29,7 @@ Run:  python3 -m pytest tools/tests/test_editable_coverage.py -q
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import sys
@@ -455,12 +456,25 @@ class EditorContractGuardTest(unittest.TestCase):
         build_site.validate_editor_contract(
             pages, declared, {}, recorded_occurrences=declared)
 
+    def test_phantom_declared_occurrence_fails(self):
+        pages = {"one.html": [self._block()]}
+        declared = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": None},
+        ]}
+        rendered = {self.PURE_REF: [{"page": "one.html", "index": 0}]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 1 surfaces.*records 2"):
+            build_site.validate_editor_contract(
+                pages, rendered, {}, recorded_occurrences=declared)
+
     def _build_passive_seam(self, declared_page, emitted_page="one.html"):
         """Exercise declaration-vs-DOM comparison through build_editor_map."""
         ref = self.PURE_REF
         with tempfile.TemporaryDirectory(prefix="passive-guard-") as tmp:
             old = (build_site.OUT, build_site.BUILD_DIR,
-                   build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES)
+                   build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES,
+                   build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256)
             try:
                 build_site.OUT = os.path.join(tmp, "site")
                 build_site.BUILD_DIR = os.path.join(tmp, "build")
@@ -469,6 +483,8 @@ class EditorContractGuardTest(unittest.TestCase):
                 build_site.PASSIVE_OCCURRENCES = {
                     ref: [{"page": declared_page, "index": None}],
                 }
+                build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256 = {
+                    hashlib.sha256(b"").hexdigest()}
                 path = os.path.join(build_site.OUT, emitted_page)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "w", encoding="utf-8") as fh:
@@ -478,7 +494,8 @@ class EditorContractGuardTest(unittest.TestCase):
                     return json.load(fh)
             finally:
                 (build_site.OUT, build_site.BUILD_DIR,
-                 build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES) = old
+                 build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES,
+                 build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256) = old
 
     def test_mismatched_passive_declaration_fails_at_build_seam(self):
         with self.assertRaisesRegex(build_site.EditorContractError,
@@ -525,6 +542,16 @@ class EditorContractGuardTest(unittest.TestCase):
         with self.assertRaisesRegex(build_site.EditorContractError,
                                     "renders on 2 surfaces.*records 1"):
             build_site.validate_editor_contract(pages, rendered, {})
+
+    def test_new_prefix_matching_ref_cannot_expand_transition_inventory(self):
+        ref = "data/taxonomy/tasks.json#tasks.999.name"
+        rendered = {ref: [
+            {"page": "skills/index.html", "index": 1},
+            {"page": "modules/m1.html", "index": None},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "allowlist inventory changed"):
+            build_site._editor_transition_allowlist({}, rendered)
 
 
 class PageOverrideRenderTest(unittest.TestCase):

@@ -309,18 +309,22 @@ export class EditorStoreCore {
     // stale intent (an in_flight/leased row is left alone; the machine forbids it).
     // Companion/ai_rewrite suggestions never supersede (they are group members).
     const structuralNames = [...STRUCTURAL_KINDS].map((k) => `'${k}'`).join(",");
+    const targetClause = effKind === "page_override"
+      ? " AND kind='page_override' AND page=?"
+      : " AND kind!='page_override'";
+    const targetArgs = effKind === "page_override" ? [page] : [];
     if (effOrigin === "human" && !STRUCTURAL_KINDS.has(effKind)) {
       const priors = this._all(
         "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human' " +
-          `AND kind NOT IN (${structuralNames})`,
-        editor, source_ref, STATUS.PENDING
+          `AND kind NOT IN (${structuralNames})${targetClause}`,
+        editor, source_ref, STATUS.PENDING, ...targetArgs
       );
       for (const p of priors) this._transition(p.id, STATUS.SUPERSEDED);
       if (directApply) {
         const accs = this._all(
           "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? AND origin='human' " +
-            `AND kind NOT IN (${structuralNames})`,
-          editor, source_ref, STATUS.ACCEPTED
+            `AND kind NOT IN (${structuralNames})${targetClause}`,
+          editor, source_ref, STATUS.ACCEPTED, ...targetArgs
         );
         for (const a of accs) this._transition(a.id, STATUS.SUPERSEDED);
       }
@@ -328,8 +332,9 @@ export class EditorStoreCore {
 
     const supersedes = effOrigin === "human" && !STRUCTURAL_KINDS.has(effKind)
       ? (this._one(
-          "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=? ORDER BY updated_at DESC LIMIT 1",
-          editor, source_ref, STATUS.SUPERSEDED
+          "SELECT id FROM suggestions WHERE editor=? AND source_ref=? AND status=?" +
+            targetClause + " ORDER BY updated_at DESC LIMIT 1",
+          editor, source_ref, STATUS.SUPERSEDED, ...targetArgs
         ) || {}).id || null
       : null;
 

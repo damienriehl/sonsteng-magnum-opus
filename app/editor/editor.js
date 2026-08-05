@@ -1213,18 +1213,33 @@
   }
   function requestPageOverride(s) {
     if (s.state === ST.SAVING) return;
+    var textAtClick = s.snapshot;
     clearTimeout(s._debounce); s._debounce = null;
     s.state = ST.SAVING;
+    // Freeze the editable surface before the request leaves. This prevents a
+    // keystroke during the response window from being cleared as if it were
+    // part of the page-only copy that was just sent.
+    s.el.removeAttribute('contenteditable');
     barDisable(true);
     setLocalStatus(s, 'Saving this page’s copy…', 'sending');
     setBarStatus('Creating a page-only authored copy…');
     var id = s.suggestionId || (s.suggestionId = uuid());
     api('/suggest', { body: {
-      id: id, source_ref: s.ref, new_text: s.snapshot,
+      id: id, source_ref: s.ref, new_text: textAtClick,
       original_hash: s.originalHash, op: 'page_override', page: PAGE
     }}).then(function (out) {
       if (!out.ok) { handleSendError(s, out, { pageOverride: true }); return; }
-      clearDraft(s); s.suggestionId = null; s.dirty = false; s.state = ST.IDLE;
+      clearDraft(s); s.originalText = textAtClick; s.suggestionId = null;
+      var stillDirty = normalize(s.snapshot) !== normalize(textAtClick);
+      s.dirty = stillDirty;
+      if (stillDirty) {
+        s.state = ST.EDITING; s.suggestionId = uuid(); barDisable(false);
+        saveDraft(s); s.el.classList.add('editing', 'dirty');
+        setLocalStatus(s, 'Page-only copy recorded; newer draft not sent', 'draft');
+        setBarStatus('This page’s copy was recorded. Save again to send your newer wording.');
+        repollPending(); return;
+      }
+      s.state = ST.IDLE;
       s.el.classList.remove('editing', 'dirty'); s.el.removeAttribute('contenteditable');
       setLocalStatus(s, 'Page-only copy recorded', 'pending');
       setBarStatus('This page now has its own authored copy.');
@@ -1290,6 +1305,7 @@
     var code = (data.error && data.error.code) || data.code ||
       (out.status === 401 ? 'no_edit_auth' : out.status === 429 ? 'rate_limited' :
        out.status === 413 ? 'validation_error' : (out.status === 409 || out.status === 410) ? 'stale_page' : 'network');
+    if (opts.pageOverride && code !== 'stale_page') makeEditable(s, false);
 
     if (code === 'id_conflict') {
       // The server saw this idempotency id with a DIFFERENT payload (rotation raced

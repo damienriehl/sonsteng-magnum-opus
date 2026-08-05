@@ -250,6 +250,10 @@ async function run() {
       window.SonstengEditor.chooseSharedThisPage();
       window.SonstengEditor.repeatPageOverride(4);
     });
+    const overrideFrozen = await page.evaluate(() =>
+      document.querySelector('[data-eb-index="4"]').hasAttribute('contenteditable'));
+    assert('SH5a this-page-only freezes typing while its request is in flight',
+      overrideFrozen === false, 'contenteditable=' + overrideFrozen);
     await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
     const thisPage = await page.evaluate(() => ({
       calls: window.__MOCK_CTRL__.server().calls,
@@ -292,10 +296,12 @@ async function run() {
     });
     await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'EDITING', { timeout: 4000 });
     const failedOverride = await page.evaluate(() => ({
-      calls: window.__MOCK_CTRL__.server().calls, block: window.SonstengEditor.block(4)
+      calls: window.__MOCK_CTRL__.server().calls, block: window.SonstengEditor.block(4),
+      editable: document.querySelector('[data-eb-index="4"]').hasAttribute('contenteditable')
     }));
     assert('SH8 failed page-only send dedupes and preserves a recoverable draft',
-      failedOverride.calls === 1 && failedOverride.block.dirty === true && !!failedOverride.block.suggestionId,
+      failedOverride.calls === 1 && failedOverride.block.dirty === true &&
+      !!failedOverride.block.suggestionId && failedOverride.editable === true,
       'calls=' + failedOverride.calls + ' state=' + failedOverride.block.state + ' dirty=' + failedOverride.block.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(4));
 

@@ -166,6 +166,26 @@ test("page_override refuses a block with only one occurrence", async () => {
   assert.equal(cap.input, undefined);
 });
 
+test("page_override refuses a passive-only occurrence", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) =>
+    EDITOR_MAP.occurrences[ref].some((item) => Number.isInteger(item.index)));
+  const passive = { page: "passive-only.html", index: null };
+  EDITOR_MAP.occurrences[sharedRef].push(passive);
+  try {
+    const cap = {};
+    const env = envWith({}, cap);
+    const auth = await authBearer(env, "john-opaque-token-value-123");
+    const resp = await suggestEndpoint(suggestReq({
+      id: "page-override-passive", source_ref: sharedRef,
+      new_text: "Cannot target passive", op: "page_override", page: passive.page,
+    }), env, auth);
+    assert.equal(resp.status, 400);
+    assert.equal(cap.input, undefined);
+  } finally {
+    EDITOR_MAP.occurrences[sharedRef].pop();
+  }
+});
+
 test("page_override_revert anchors the actual override occurrence", async () => {
   const block = Object.values(EDITOR_MAP.pages).flat().find((b) =>
     b.kind === "json_scalar" && (EDITOR_MAP.occurrences[b.source_ref] || []).length === 1);

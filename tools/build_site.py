@@ -265,6 +265,16 @@ EDMAP = _EditorMap()
 PAGE_OVERRIDES = {}
 PASSIVE_OCCURRENCES = {}
 
+# Reviewed inventory of the temporary coupled-ref exemptions. Keep the readable
+# reasons in the generated map, but require the exact ref set to match this
+# fingerprint so a new prefix-matching ref cannot silently join the allowlist.
+EDITOR_TRANSITION_ALLOWLIST_SHA256 = {
+    # Canonical complete site build.
+    "0c5e0f5b972cf6713e1a60858bb5ed8f2be1e1f8ce09864a883d3e6e36f8ef07",
+    # Facts-surface test build, which deliberately renders a page subset.
+    "a35c00a90a1172ff81e74aa811d7a6456a264422fbcafcafa70651dc1bb94d9c",
+}
+
 
 _OVERRIDE_ELEMENT_RE = re.compile(
     r'(<(?:p|li|h[1-6]|blockquote)\b[^>]*?)\sdata-ebsrc="([^"]+)"([^>]*>)(.*?)(</(?:p|li|h[1-6]|blockquote)>)',
@@ -3449,7 +3459,7 @@ def validate_editor_contract(pages, rendered_occurrences, transition_allowlist,
         rendered_surfaces = _surface_set((rendered_occurrences or {}).get(ref))
         if not rendered_surfaces:
             continue
-        if (not rendered_surfaces.issubset(recorded_surfaces)
+        if (rendered_surfaces != recorded_surfaces
                 and ref not in transition_allowlist):
             violations.append(
                 "%s renders on %d surfaces but its block records %d"
@@ -3474,7 +3484,7 @@ def validate_editor_contract(pages, rendered_occurrences, transition_allowlist,
 
 
 def _editor_transition_allowlist(pages, rendered_occurrences):
-    """Expand transition families into live ref-to-migration-reason entries."""
+    """Return the exact reviewed ref-to-migration-reason inventory."""
     recorded = {}
     for page, blocks in pages.items():
         for block in blocks:
@@ -3498,6 +3508,14 @@ def _editor_transition_allowlist(pages, rendered_occurrences):
                 and ref.endswith(".name") and len(_surface_set(surfaces)) > 1):
             allowlist[ref] = (
                 "Task name still renders read-only on its module cover")
+    fingerprint = hashlib.sha256(
+        "\n".join(sorted(allowlist)).encode("utf-8")
+    ).hexdigest()
+    if fingerprint not in EDITOR_TRANSITION_ALLOWLIST_SHA256:
+        raise EditorContractError(
+            "editor transition allowlist inventory changed: expected %s, got %s; "
+            "review the exact ref additions/removals before updating the fingerprint"
+            % (sorted(EDITOR_TRANSITION_ALLOWLIST_SHA256), fingerprint))
     return allowlist
 
 

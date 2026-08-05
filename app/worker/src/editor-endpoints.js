@@ -7,7 +7,7 @@ import { json } from "./errors.js";
 import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
-  lookupBlock, validateJsonScalar, projectPendingItems, MAP_VERSION,
+  lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, MAP_VERSION,
   enumerateScope, EDITOR_MAP_FACTS, EDITOR_MAP,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
@@ -202,7 +202,11 @@ export async function suggestEndpoint(request, env, auth) {
     const occurrences = (EDITOR_MAP.occurrences || {})[source_ref] || [];
     const surfaces = new Set(occurrences.map((item) => item.page));
     const occurrence = occurrences.find((item) => item.page === page);
-    if (scope !== "edit" || block.kind === "comment_only" || surfaces.size < 2 || !occurrence)
+    const pageBlock = occurrence && Number.isInteger(occurrence.index)
+      ? (lookupBlocks(source_ref, "edit") || []).find((item) =>
+          item.page === page && item.index === occurrence.index)
+      : null;
+    if (scope !== "edit" || block.kind === "comment_only" || surfaces.size < 2 || !pageBlock)
       return editError("validation_error", "This-page-only is available only for shared text on this page.", 400);
     if (new_text == null)
       return editError("validation_error", "Provide the page-only text.", 400);
