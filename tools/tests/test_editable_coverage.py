@@ -169,6 +169,15 @@ class NewCoverageTest(unittest.TestCase):
         }.issubset(refs))
         self.assertEqual(len(blocks), 33)
 
+    def test_firm_provenance_fragments_declare_the_mixed_sentence(self):
+        blocks = {b["source_ref"]: b for b in self.pages["firm/index.html"]}
+        for ref in (
+            "data/copy/firm.json#hero.provenance_before_path",
+            "data/copy/firm.json#hero.provenance_after_path",
+        ):
+            with self.subTest(ref=ref):
+                self.assertIs(blocks[ref].get("mixed"), True)
+
     # ---- new blocks are well-formed json_scalars ------------------------- #
     def test_new_blocks_are_json_scalars_with_matching_paths(self):
         new = _new_coverage_blocks(self.bundle)

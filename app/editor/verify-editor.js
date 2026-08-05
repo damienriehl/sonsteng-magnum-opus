@@ -177,6 +177,40 @@ async function run() {
       'state=' + b3after.state + ' dirty=' + b3after.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(3));
 
+    /* --- MX: authored and computed text share one visual sentence (U7) ---- */
+    const mixedBefore = await page.evaluate(() => ({
+      authored: window.SonstengEditor.block(7),
+      sentence: document.querySelector('.mixed-sentence').textContent,
+      lockedEditable: Array.from(document.querySelectorAll('[data-eb-locked]')).some(el => el.isContentEditable),
+      lockedTools: document.querySelectorAll('[data-eb-locked] .eb-tools, .eb-tools [data-eb-locked]').length
+    }));
+    assert('MX1 authored fragment is independently editable while computed spans have no edit affordance',
+      mixedBefore.authored && mixedBefore.authored.editable === true && !mixedBefore.lockedEditable && mixedBefore.lockedTools === 0,
+      JSON.stringify(mixedBefore));
+    assert('MX2 splitting the sentence preserves its visible wording',
+      mixedBefore.sentence === ' This packet concerns State v. Halvard; the filing date is October 14, 2026.',
+      JSON.stringify(mixedBefore.sentence));
+    await page.evaluate(() => window.SonstengEditor.typeInto(7, 'This exercise concerns '));
+    const mixedEdit = await page.evaluate(() => ({
+      authored: window.SonstengEditor.blockText(7),
+      known: document.querySelectorAll('[data-eb-locked]')[0].textContent
+    }));
+    assert('MX3 editing the authored fragment writes only its own leaf',
+      mixedEdit.authored === 'This exercise concerns ' && mixedEdit.known === 'State v. Halvard', JSON.stringify(mixedEdit));
+    await page.evaluate(() => window.SonstengEditor.clickCancel(7));
+    await page.evaluate(() => window.SonstengEditor.openLocked(0));
+    const knownLocked = await page.evaluate(() => window.SonstengEditor.lockedDialog());
+    assert('MX4 a computed value with a known source offers passage in a new tab',
+      knownLocked && /matter caption/i.test(knownLocked.text) && /facts\/index\.html$/.test(knownLocked.href || '') && knownLocked.target === '_blank',
+      JSON.stringify(knownLocked));
+    await page.evaluate(() => window.SonstengEditor.closeLocked());
+    await page.evaluate(() => window.SonstengEditor.openLocked(1));
+    const unknownLocked = await page.evaluate(() => window.SonstengEditor.lockedDialog());
+    assert('MX5 a computed value without an editing surface explains its origin and offers no link',
+      unknownLocked && /generated filing calendar/i.test(unknownLocked.text) && !unknownLocked.href,
+      JSON.stringify(unknownLocked));
+    await page.evaluate(() => window.SonstengEditor.closeLocked());
+
     /* --- SH: shared text exposes reach before commit (U4) ---------------- */
     const sharedAtRest = await page.evaluate(() => ({
       single: window.SonstengEditor.block(1),

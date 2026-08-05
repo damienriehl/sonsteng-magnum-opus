@@ -46,7 +46,8 @@
        idx 4  p  plain prose  EDITABLE            (map)  <- selection-comment + status
        idx 5  p  plain prose  EDITABLE (md, bid)  (map)  <- structural ops (U4)
        idx 6  p  plain prose  EDITABLE (md, bid)  (map)  <- structural ops (U4)
-       idx 7  p  computed KPI read-only (NOT in map)
+       idx 7  p  authored mixed fragment EDITABLE (map)
+       idx 8  p  computed KPI read-only (NOT in map)
      ========================================================================= -->
 <div class="wrap">
   <main id="main" class="prose">
@@ -63,6 +64,8 @@
     <p>The officer's report describes the road as untreated and the stop as routine.</p>
 
     <p>Counsel should weigh the timeline between the stop and the station test.</p>
+
+    <div class="mixed-sentence"> <p class="mixed-sentence__authored">This packet concerns </p><span class="eb-locked" data-eb-locked data-eb-origin="the matter caption" data-eb-passage="matters/m05-dwi-meridian/facts/index.html">State v. Halvard</span><span aria-hidden="true">; the filing date is </span><span class="eb-locked" data-eb-locked data-eb-origin="the generated filing calendar">October 14, 2026</span><span aria-hidden="true">.</span></div>
 
     <p class="kpi">EDITABLE BLOCKS: 6 · READ-ONLY CANDIDATES: 2 · COMPUTED, NEVER EDITABLE</p>
   </main>
@@ -97,7 +100,10 @@
       "original_hash": "hash-idx5-v1", "has_inline_formatting": false, "context": "case notes" },
     { "index": 6, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/case-file/notes.md#b5e6f7a8b",
       "original_text": "Counsel should weigh the timeline between the stop and the station test.",
-      "original_hash": "hash-idx6-v1", "has_inline_formatting": false, "context": "case notes" }
+      "original_hash": "hash-idx6-v1", "has_inline_formatting": false, "context": "case notes" },
+    { "index": 7, "kind": "prose", "source_ref": "data/copy/matters.json#mixed.packet_prefix",
+      "original_text": "This packet concerns ", "original_hash": "hash-idx7-v1",
+      "has_inline_formatting": false, "context": "mixed packet header", "mixed": true }
   ],
   "overrides": [
     { "page": "matters/m05-dwi-meridian/index.html",

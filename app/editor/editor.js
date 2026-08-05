@@ -320,6 +320,79 @@
 
   function setBlockText(s, text) { s.el.textContent = text; }   // never innerHTML
 
+  /* ---------- computed values: locked, but never a dead end -------------- */
+  var lockedDialogEl = null;
+  var lockedReturnFocus = null;
+
+  function closeLockedDialog() {
+    if (!lockedDialogEl) return;
+    lockedDialogEl.remove();
+    lockedDialogEl = null;
+    if (lockedReturnFocus && lockedReturnFocus.focus) lockedReturnFocus.focus();
+    lockedReturnFocus = null;
+  }
+
+  function openLockedDialog(el) {
+    if (!el) return;
+    closeLockedDialog();
+    lockedReturnFocus = el;
+    var origin = el.getAttribute('data-eb-origin') || 'a generated source';
+    var passage = el.getAttribute('data-eb-passage') || '';
+    var dlg = document.createElement('div');
+    dlg.className = 'eb-locked-dialog';
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-labelledby', 'eb-locked-title');
+    var inner = document.createElement('div');
+    inner.className = 'eb-locked-dialog__inner';
+    var title = document.createElement('h2');
+    title.id = 'eb-locked-title';
+    title.className = 'eb-locked-dialog__title';
+    title.textContent = 'Computed value';
+    var lede = document.createElement('p');
+    lede.className = 'eb-locked-dialog__lede';
+    lede.textContent = 'This value comes from ' + origin + ' and cannot be edited here.';
+    var row = document.createElement('div');
+    row.className = 'eb-locked-dialog__row';
+    if (passage) {
+      var link = document.createElement('a');
+      link.className = 'eb-locked-dialog__passage';
+      link.href = passage;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open its editing surface';
+      row.appendChild(link);
+    }
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'eb-locked-dialog__close';
+    close.textContent = 'Close';
+    close.addEventListener('click', closeLockedDialog);
+    row.appendChild(close);
+    inner.appendChild(title); inner.appendChild(lede); inner.appendChild(row);
+    dlg.appendChild(inner); document.body.appendChild(dlg);
+    dlg.addEventListener('mousedown', function (ev) { if (ev.target === dlg) closeLockedDialog(); });
+    dlg.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); closeLockedDialog(); }
+    });
+    lockedDialogEl = dlg;
+    (passage ? row.querySelector('a') : close).focus();
+  }
+
+  function installLockedPassages() {
+    var locked = document.querySelectorAll('[data-eb-locked]');
+    for (var i = 0; i < locked.length; i++) (function (el) {
+      el.classList.add('eb--locked');
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', 'Computed value: ' + (el.textContent || '') + '. Show its source.');
+      el.addEventListener('click', function () { openLockedDialog(el); });
+      el.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openLockedDialog(el); }
+      });
+    })(locked[i]);
+  }
+
   /* ============================================================================
      4. Per-block chrome — affordances, notes, inline status, margin bubbles.
         Each editable/commentable block is wrapped in a light DOM: the block
@@ -2043,6 +2116,8 @@
 
     buildBanner();
 
+    installLockedPassages();
+
     buildAddFact();
     buildOverridesView();
     buildBar();
@@ -2124,6 +2199,17 @@
       var s = byIndex[index]; if (s) { requestPageOverride(s); requestPageOverride(s); }
     },
     dismissSharedDialog: closeSharedReachDialog,
+    openLocked: function (index) {
+      var locked = document.querySelectorAll('[data-eb-locked]');
+      if (locked[index]) openLockedDialog(locked[index]);
+    },
+    closeLocked: closeLockedDialog,
+    lockedDialog: function () {
+      if (!lockedDialogEl) return null;
+      var link = lockedDialogEl.querySelector('.eb-locked-dialog__passage');
+      return { text: lockedDialogEl.textContent, href: link ? link.getAttribute('href') : null,
+               target: link ? link.getAttribute('target') : null };
+    },
     tripleClickSave: function (index) { var s = byIndex[index]; if (s) { sendSuggestion(s); sendSuggestion(s); sendSuggestion(s); } },
     openPreview: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; showBar(s); openPreview(); } },
     confirmSend: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; sendSuggestion(s); } },

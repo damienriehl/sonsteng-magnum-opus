@@ -324,6 +324,15 @@ def _eb_render_attr(source_ref):
     return ' data-ebrender="{r}"'.format(r=esc(source_ref))
 
 
+def _eb_locked_attr(origin, passage=None):
+    """Attributes for computed text: selectable provenance, never editability."""
+    attrs = ' data-eb-locked data-eb-origin="{o}"'.format(
+        o=esc(origin))
+    if passage:
+        attrs += ' data-eb-passage="{p}"'.format(p=esc(passage))
+    return attrs
+
+
 def _copy_scalar(page, copy, json_path, context):
     """Return one page-copy leaf and its json_scalar registration attribute."""
     value = copy
@@ -2211,18 +2220,22 @@ def build_one_packet(corpus, m, man):
     # --- caption header
     jname = juris.get("name", m.get("jurisdiction", ""))
     tier = "meridian" if m.get("tier") == "meridian" else "real"
+    law_editable = tier == "meridian"
+    jname_locked = _eb_locked_attr(
+        "the practicum jurisdiction canon" if law_editable else "the matter's jurisdiction metadata",
+        "law/index.html" if law_editable else None)
     cap_eb = _eb_scalar_attr(matter_rel + "#caption", m.get("caption", ""),
                              "caption", "matter caption")
     header = """
 <header class="reveal">
   <div class="chips">{tc} <span class="chip">{fee} FEE</span> <span class="chip chip--folio">{mid}</span></div>
   <h1 style="margin-top:var(--sp-3)"{cap_eb}>{cap}</h1>
-  <p class="lede">{shape} · {jname}</p>
+  <div class="lede mixed-sentence"><span>{shape}</span> · <span{jname_locked}>{jname}</span></div>
   <div class="chips" aria-label="Skills exercised">{skills}</div>
 </header>""".format(tc=tier_chip(tier, m.get("jurisdiction")), fee=esc((m.get("fee_type") or "").upper()),
                     mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")), cap_eb=cap_eb,
                     shape=esc(shape_labels.get(m.get("shape"), m.get("shape", ""))),
-                    jname=esc(jname), skills=skill_chips)
+                    jname=esc(jname), jname_locked=jname_locked, skills=skill_chips)
 
     instructor_note = """
   <p class="instructor-note">Instructor materials (master fact pattern, teaching notes, answer
@@ -2796,8 +2809,15 @@ def build_firm_dashboard(corpus):
     fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
                                ident.get("letterhead_note", ""),
                                "identity.letterhead_note", "firm identity")
-    provenance_before, provenance_before_eb = copy_pair("hero.provenance_before_path", "hero")
-    provenance_after, provenance_after_eb = copy_pair("hero.provenance_after_path", "hero")
+    provenance_before = copy["hero"]["provenance_before_path"]
+    provenance_after = copy["hero"]["provenance_after_path"]
+    provenance_before_eb = _eb_scalar_attr(
+        "data/copy/firm.json#hero.provenance_before_path", provenance_before,
+        "hero.provenance_before_path", "firm dashboard · hero", mixed=True)
+    provenance_after_eb = _eb_scalar_attr(
+        "data/copy/firm.json#hero.provenance_after_path", provenance_after,
+        "hero.provenance_after_path", "firm dashboard · hero", mixed=True)
+    provenance_path_locked = _eb_locked_attr("the generated firm-data path")
     snapshot_note, snapshot_note_eb = copy_pair("filters.snapshot_note", "reporting filters")
     downloads_eyebrow, downloads_eyebrow_eb = copy_pair("downloads.eyebrow", "downloads")
     downloads_heading, downloads_heading_eb = copy_pair("downloads.heading", "downloads")
@@ -2807,7 +2827,7 @@ def build_firm_dashboard(corpus):
   <h1{fname_eb}>{name}</h1>
   <p class="lede"{fnote_eb}>{note}</p>
   <div class="lede" style="margin:0 0 var(--space)"><p style="display:inline;margin:0"{provenance_before_eb}>{provenance_before}</p>
-  <span class="mono">data/firm/firm.json</span><p style="display:inline;margin:0"{provenance_after_eb}>{provenance_after}</p></div>
+  <span class="mono"{provenance_path_locked}>data/firm/firm.json</span><p style="display:inline;margin:0"{provenance_after_eb}>{provenance_after}</p></div>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2844,6 +2864,7 @@ def build_firm_dashboard(corpus):
            fname_eb=fname_eb, fnote_eb=fnote_eb,
            provenance_before=esc(provenance_before), provenance_before_eb=provenance_before_eb,
            provenance_after=esc(provenance_after), provenance_after_eb=provenance_after_eb,
+           provenance_path_locked=provenance_path_locked,
            snapshot_note=esc(snapshot_note), snapshot_note_eb=snapshot_note_eb,
            downloads_eyebrow=esc(downloads_eyebrow), downloads_eyebrow_eb=downloads_eyebrow_eb,
            downloads_heading=esc(downloads_heading), downloads_heading_eb=downloads_heading_eb,

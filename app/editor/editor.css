@@ -722,6 +722,48 @@ html.type-lg .eb-confirm__yes, html.type-lg .eb-confirm__no { font-size: 1.05rem
 }
 .eb--shared.editing::before { content: "Shared text · editing"; }
 
+/* Computed values are selectable for provenance, never contenteditable. Their
+   dotted cool-gray underline stays visually separate from shared brass. */
+.eb--locked {
+  color: var(--ink-soft, #625d54);
+  border-bottom: 2px dotted var(--ink-faint, #8a7f6d);
+  cursor: help;
+}
+.mixed-sentence > p, .mixed-sentence__authored {
+  display: inline;
+  margin: 0;
+}
+.eb--locked:focus-visible {
+  outline: 2px solid var(--claret, #7c1e2b);
+  outline-offset: 3px;
+}
+.eb-locked-dialog {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(29, 26, 22, .45);
+}
+.eb-locked-dialog__inner {
+  width: min(32rem, calc(100% - 2rem)); box-sizing: border-box;
+  padding: 1.2rem 1.4rem; border-radius: 8px;
+  border: 1.5px solid var(--eb-line, #c9c4bb);
+  border-top: 4px solid var(--ink-faint, #8a7f6d);
+  background: var(--paper-raise, #fbf9f4); color: var(--ink, #2b2925);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+.eb-locked-dialog__title { margin: 0 0 .45rem; font-size: 1.25rem; }
+.eb-locked-dialog__lede { margin: 0 0 .9rem; line-height: 1.45; }
+.eb-locked-dialog__row { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; }
+.eb-locked-dialog__passage, .eb-locked-dialog__close {
+  min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center;
+  padding: .45rem .8rem; border-radius: 5px; cursor: pointer;
+  font: inherit; border: 1.5px solid var(--claret, #7c1e2b);
+}
+.eb-locked-dialog__passage { background: var(--claret, #7c1e2b); color: #fff; text-decoration: none; }
+.eb-locked-dialog__close { background: transparent; color: var(--claret, #7c1e2b); }
+.eb-locked-dialog__passage:focus-visible, .eb-locked-dialog__close:focus-visible {
+  outline: 2px solid var(--claret, #7c1e2b); outline-offset: 2px;
+}
+
 .eb-shared-dialog {
   position: fixed; inset: 0; z-index: 10000;
   display: flex; align-items: center; justify-content: center;
