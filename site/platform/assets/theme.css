@@ -1,9 +1,9 @@
 /* ============================================================
    Sonsteng Practicum — theme.css
-   "The Practicum Press" — the single shared tokens + primitives
+   "Radical Casebook" — the single shared tokens + primitives
    partial. Compose pages from these primitives; never invent
    per-page palettes, fonts, radii, or shadows.
-   Contract: docs/research/design-direction.md §§2-4, 8-10.
+   Contract: docs/research/design-direction.md §§2-8.
 
    TABLE OF CONTENTS
      1. Fonts import
@@ -33,29 +33,27 @@
 
 /* ---------- 2. Tokens ---------- */
 :root{
-  /* palette — inherited (do not alter) */
-  --paper:#f4efe4; --ink:#1d1a16; --ink-soft:#544d43; --ink-faint:#8a7f6d;
-  --brass:#a9822f; --brass-lite:#c19a44; --claret:#7c1e2b; --claret-deep:#5c141d;
-  --green:#2c4636; --line:rgba(29,26,22,.16); --line-soft:rgba(29,26,22,.09);
-  --shadow:0 22px 60px -28px rgba(40,20,10,.55);
-  /* palette — platform extensions */
-  --paper-2:#efe8d9; --paper-3:#e8dfcc; --paper-edge:#dcd0b8;
-  --brass-wash:rgba(169,130,47,.10); --claret-wash:rgba(124,30,43,.07); --green-wash:rgba(44,70,54,.09);
+  /* Radical Casebook palette — warm stock, dark ink, quiet claret */
+  --paper:#f3ead5; --paper-deep:#e1cfa9;
+  --surface-card:#fffaf0; --surface-featured:#ede0c7; --surface-inset:#eadcbe;
+  --ink:#281e18; --ink-soft:#5f5046; --ink-faint:#857467;
+  --brass:#9a7131; --brass-lite:#c29a55;
+  --claret:#78363e; --claret-strong:#642b33; --claret-deep:var(--claret-strong);
+  --green:#30483a; --border-strong:#3a2920;
+  --line:rgba(58,41,32,.25); --line-soft:rgba(58,41,32,.12);
+  --shadow:0 24px 64px -34px rgba(40,25,18,.5);
+  --shadow-offset:5px 5px 0 var(--paper-deep);
+  /* compatibility aliases used by existing page primitives */
+  --paper-2:var(--surface-card); --paper-3:var(--surface-inset); --paper-edge:#d2bd92;
+  --brass-wash:rgba(154,113,49,.10); --claret-wash:rgba(120,54,62,.065); --green-wash:rgba(48,72,58,.09);
   /* palette — semantic */
-  --tier-volunteered:#2c4636; --tier-revealed:#a9822f; --tier-rapport:#7c1e2b;
-  --tier-concealed:#544d43; --tier-unknown:#8a7f6d; --flag-ethics:#7c1e2b;
+  --tier-volunteered:var(--green); --tier-revealed:var(--brass); --tier-rapport:var(--claret);
+  --tier-concealed:var(--ink-soft); --tier-unknown:var(--ink-faint); --flag-ethics:var(--claret);
   --meter-track:rgba(29,26,22,.10);
-  --ok:#2c4636; --warn:#a9822f; --stop:#7c1e2b; --ink-invert:#f4efe4;
-  /* palette — TEXT-SAFE variants (added 2026-07-27, accessibility sweep).
-     The inherited palette above is not altered: --ink-faint and --brass keep
-     their exact values for rules, washes, borders and chart fills, where the
-     3:1 non-text floor applies. But this house style sets a great deal of SMALL
-     type in them — eyebrows, dockets, chip labels, skill codes at ~11.5px — and
-     there they measured 3.43:1 and 3.09:1 against the paper, under the 4.5:1
-     WCAG 1.4.3 requires for body-size text. These are the same hues carried to
-     a legible depth, used ONLY where the token colours actual words. */
-  --ink-faint-text:#6a6151;   /* 5.30:1 on paper, 4.98 on paper-2, 4.58 on paper-3 */
-  --brass-text:#7a5c1c;       /* 5.43:1 on paper, 5.10 on paper-2 */
+  --ok:var(--green); --warn:var(--brass); --stop:var(--claret-strong); --ink-invert:#fffaf0;
+  /* Text-safe variants keep decorative accents from becoming small low-contrast copy. */
+  --ink-faint-text:#6b5b50;
+  --brass-text:#75531e;
   --brass-lite-text:#d3ae5c;  /* 4.90:1 on the green banner */
 
   /* spacing + shape */
@@ -71,11 +69,12 @@
   --font-mono:'Fragment Mono', ui-monospace, Menlo, Consolas, monospace;
 
   /* type scale (rem, fluid) */
-  --fs-mono-xs:.72rem; --fs-xs:.82rem; --fs-sm:.92rem; --fs-base:1.06rem;
-  --fs-md:1.2rem; --fs-lg:1.45rem;
-  --fs-xl:clamp(1.7rem,1.2rem+2vw,2.3rem);
-  --fs-2xl:clamp(2.2rem,1.4rem+3.5vw,3.4rem);
-  --fs-display:clamp(2.8rem,1.6rem+5vw,5rem);
+  --fs-mono-xs:.74rem; --fs-xs:.88rem; --fs-sm:1rem; --fs-base:1.125rem;
+  --fs-editorial-label:clamp(.92rem,.84rem + .28vw,1.06rem);
+  --fs-md:1.3rem; --fs-lg:clamp(1.55rem,1.35rem + .75vw,1.9rem);
+  --fs-xl:clamp(2rem,1.45rem + 2vw,3rem);
+  --fs-2xl:clamp(2.8rem,1.7rem + 4vw,5rem);
+  --fs-display:clamp(3.5rem,2rem + 6vw,6.5rem);
 
   /* paper grain — inline feTurbulence, data-URI (no requests) */
   --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -83,16 +82,17 @@
 
 /* ---------- 3. Large-type mode (first-class; John & Roger) ---------- */
 html.type-lg{
-  --fs-mono-xs:.86rem; --fs-xs:.98rem; --fs-sm:1.1rem; --fs-base:1.28rem;
-  --fs-md:1.45rem; --fs-lg:1.72rem;
-  --fs-xl:clamp(2rem,1.4rem+2.4vw,2.7rem);
-  --fs-2xl:clamp(2.6rem,1.6rem+4vw,3.9rem);
-  --fs-display:clamp(3.2rem,1.8rem+5.5vw,5.6rem);
+  --fs-mono-xs:.88rem; --fs-xs:1.04rem; --fs-sm:1.16rem; --fs-base:1.32rem;
+  --fs-editorial-label:clamp(1.08rem,1rem + .3vw,1.22rem);
+  --fs-md:1.55rem; --fs-lg:clamp(1.9rem,1.65rem + .9vw,2.25rem);
+  --fs-xl:clamp(2.35rem,1.7rem + 2.35vw,3.5rem);
+  --fs-2xl:clamp(3.3rem,2rem + 4.7vw,5.8rem);
+  --fs-display:clamp(4.1rem,2.3rem + 6.5vw,7.2rem);
 }
 
 /* ---------- 4. Reset + body washes + paper grain ---------- */
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;max-width:100%;overflow-x:clip}
 body{
   margin:0;
   min-height:100vh;
@@ -102,6 +102,7 @@ body{
   line-height:1.65;
   font-synthesis:none;
   -webkit-font-smoothing:antialiased;
+  max-width:100%;overflow-x:clip;
   /* two fixed radial washes: brass top-right, claret top-left */
   background:
     radial-gradient(58rem 40rem at 108% -8%, var(--brass-wash), transparent 60%),
@@ -128,11 +129,14 @@ h1,h2,h3,h4{
   margin:0 0 var(--sp-3);
   text-wrap:balance;
 }
-h1{font-size:var(--fs-2xl);font-weight:900;letter-spacing:-.02em}
-h2{font-size:var(--fs-xl);letter-spacing:-.015em}
-h3{font-size:var(--fs-lg)}
+h1{font-size:var(--fs-2xl);font-weight:900;letter-spacing:-.035em;line-height:.96}
+h2{font-size:var(--fs-xl);font-weight:800;letter-spacing:-.025em;line-height:1}
+h3{font-size:var(--fs-lg);font-weight:700;line-height:1.05}
 h4{font-size:var(--fs-md)}
 p{margin:0 0 var(--space)}
+.wrap,main,section,article,div,header,footer,nav{min-width:0}
+.wrap,main,.card,.doc-card,.viz-card,.fact-row,.prose{overflow-wrap:anywhere}
+pre{max-width:100%;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .prose{max-width:var(--maxw-read)}
 .prose p,.measure{max-width:68ch}         /* prose measure ≤68ch */
 strong,b{font-weight:600}
@@ -150,6 +154,16 @@ small{font-size:var(--fs-sm)}
   text-transform:uppercase;
   letter-spacing:.08em;
   color:var(--ink-soft);
+}
+.editorial-label{
+  margin:0 0 var(--sp-3);
+  color:var(--claret-strong);
+  font-family:var(--font-mono);
+  font-size:var(--fs-editorial-label);
+  font-weight:700;
+  line-height:1.35;
+  letter-spacing:.075em;
+  text-transform:uppercase;
 }
 .num{font-variant-numeric:tabular-nums}
 
@@ -218,18 +232,23 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 
 /* ---------- 8. Primitive — .card / .doc-card ---------- */
 .card{
-  background:var(--paper-2);
-  border:var(--rule) solid var(--line);
+  background:var(--surface-card);
+  border:var(--rule-bold) solid var(--border-strong);
   border-radius:var(--radius-card);
   padding:var(--sp-6);
-  box-shadow:inset 0 0 0 var(--rule) var(--paper-edge);   /* hairline bevel */
+  box-shadow:var(--shadow-offset);
   transition:transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 .card:hover{                     /* lift 2px */
   transform:translateY(-2px);
-  box-shadow:inset 0 0 0 var(--rule) var(--paper-edge), var(--shadow);
+  box-shadow:7px 7px 0 var(--paper-deep),var(--shadow);
 }
 .card > :last-child{margin-bottom:0}
+.card--featured{
+  background:var(--surface-featured);
+  border-color:var(--claret);
+  box-shadow:var(--shadow-offset);
+}
 
 /* inset case-file document card */
 .doc-card{
@@ -355,11 +374,10 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 }
 .toc-rail a{
   color:var(--ink-faint-text);
-  /* 24px floor: these are the packet's navigation, and at .2em padding they
-     measured 23.6px tall — under WCAG 2.5.8 by a third of a pixel. */
+  /* Project target: generous navigation for readers using touch or Large Type. */
   display:flex;
   align-items:center;
-  min-height:24px;
+  min-height:44px;
   padding:.3em 0 .3em var(--sp-2);
   margin-left:calc(-1 * var(--sp-3) - var(--rule));
   border-left:var(--rule-bold) solid transparent;
@@ -453,7 +471,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   color:var(--ink-soft);
   background:transparent;border:0;
   border-radius:var(--radius);
-  padding:.5em .9em;min-height:2.4em;
+  padding:.5em .9em;min-height:44px;
   transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 .segmented-toggle button[aria-pressed="true"],
@@ -477,7 +495,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 .masthead__inner{
   max-width:var(--maxw);margin:0 auto;
   padding:var(--sp-3) var(--gutter);
-  display:flex;align-items:center;gap:var(--sp-6);
+  display:flex;align-items:center;gap:var(--sp-6);flex-wrap:wrap;
 }
 .masthead__brand{
   font-family:var(--font-display);
@@ -497,6 +515,7 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
   padding:var(--sp-3) var(--gutter);
   font-family:var(--font-mono);font-size:var(--fs-mono-xs);
   text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint-text);
+  overflow-wrap:anywhere;
 }
 .breadcrumb a{color:var(--brass-text)}
 .breadcrumb .sep{color:var(--line);margin:0 .5em}
@@ -519,6 +538,12 @@ textarea:focus-visible,select:focus-visible,summary:focus-visible,
 
 /* layout helper */
 .wrap{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}
+
+@media (max-width:42rem){
+  .masthead__inner{gap:var(--sp-2) var(--sp-3)}
+  .masthead__brand{flex:1 1 auto;overflow-wrap:anywhere}
+  .masthead__docket{order:3;flex:1 0 100%;margin-left:0}
+}
 
 /* ---------- 18. Motion ---------- */
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}

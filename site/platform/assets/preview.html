@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Practicum Press — Primitives Gallery</title>
+<title>Radical Casebook — Primitives Gallery</title>
 <!-- self-contained: links the two shared assets; theme.css @imports fonts.css -->
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="theme.css">
@@ -12,6 +12,8 @@
   .gallery{max-width:var(--maxw);margin:0 auto;padding:var(--sp-8) var(--gutter)}
   .section{margin:var(--sp-12) 0}
   .section > h2{margin-bottom:var(--sp-2)}
+  .hero-sample{padding:clamp(2.5rem,7vw,5rem) 0;border-bottom:var(--rule-bold) solid var(--border-strong)}
+  .hero-sample h1{max-width:11ch;margin-bottom:var(--sp-6)}
   .demo-note{color:var(--ink-faint);font-size:var(--fs-sm);margin:0 0 var(--sp-6)}
   .grid-2{display:grid;gap:var(--sp-6);grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
   .chip-wrap{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center}
@@ -35,13 +37,13 @@
 <main class="gallery">
 
   <div class="running-head">
-    <span>PRIMITIVES GALLERY</span>
+    <span>RADICAL CASEBOOK · PRIMITIVES GALLERY</span>
     <span class="rh-spacer"></span>
     <span class="rh-right">THEME.CSS · 20 SECTIONS · TURN 01 / 01</span>
   </div>
 
   <div style="display:flex;gap:var(--sp-6);align-items:center;flex-wrap:wrap;margin:var(--sp-6) 0">
-    <h1 style="margin:0">The Practicum Press</h1>
+    <h1 style="margin:0">Radical Casebook</h1>
     <div class="segmented-toggle" role="group" aria-label="Type size mode" id="typeToggle">
       <button type="button" aria-pressed="true" data-lg="off">STANDARD</button>
       <button type="button" aria-pressed="false" data-lg="on">LARGE TYPE</button>
@@ -52,6 +54,12 @@
   and ledger math — rendered as legal machinery in the margins. Toggle large-type above
   (persisted). Every interactive primitive below carries a visible claret focus ring; reduced-motion
   disables all transforms.</p>
+
+  <header class="hero-sample">
+    <p class="editorial-label">Fifty years of method, rebuilt for practice</p>
+    <h1>The casebook becomes the law firm.</h1>
+    <p class="prose">This sample makes the hierarchy contract explicit: editorial labels announce sections, propositions dominate supporting prose, and metadata remains quiet.</p>
+  </header>
 
   <!-- ===== 1. Brass rule + running head ===== -->
   <section class="section">
@@ -88,7 +96,7 @@
     <h2>Card &amp; document card</h2>
     <p class="demo-note">Hover a card to see the 2px lift. Doc-card is the inset case-file well.</p>
     <div class="grid-2">
-      <article class="card">
+      <article class="card card--featured">
         <div class="running-head" style="margin-bottom:var(--sp-3)">
           <span>SKILL</span><span class="rh-spacer"></span><span class="rh-right">EXACT</span>
         </div>
