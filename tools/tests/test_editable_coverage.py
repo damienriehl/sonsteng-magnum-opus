@@ -29,9 +29,11 @@ Run:  python3 -m pytest tools/tests/test_editable_coverage.py -q
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -40,6 +42,7 @@ REPO = os.path.dirname(TOOLS)
 sys.path.insert(0, TOOLS)
 
 import text_norm          # noqa: E402
+import build_site         # noqa: E402
 from fresh_site_build import build_fresh_site  # noqa: E402
 
 COMMITTED_MAP = os.path.join(REPO, "build", "editor-map.generated.json")
@@ -59,7 +62,9 @@ def _build_fresh_map():
     if "bundle" in _FRESH:
         return _FRESH["bundle"]
 
-    tmp, _site_out, bundle = build_fresh_site("edcov-")
+    tmp, site_out, bundle = build_fresh_site("edcov-")
+    with open(os.path.join(site_out, "firm", "index.html"), encoding="utf-8") as fh:
+        _FRESH["firm_html"] = fh.read()
     shutil.rmtree(tmp, ignore_errors=True)
 
     _FRESH["bundle"] = bundle
@@ -120,23 +125,64 @@ class NewCoverageTest(unittest.TestCase):
 
     # ---- R1: the landing pages carry their authored copy ----------------- #
     def test_authored_page_copy_counts(self):
-        self.assertEqual(len(self.pages["index.html"]), 21)
-        self.assertEqual(len(self.pages["matters/index.html"]), 3)
+        self.assertEqual(len(self.pages["index.html"]), 29)
+        self.assertEqual(len(self.pages["matters/index.html"]), 13)
         self.assertEqual(len(self.pages["firm/index.html"]), 33)
 
-    def test_multi_surface_copy_is_read_only(self):
-        refs = {b["source_ref"] for b in self.pages["index.html"]}
-        read_only_refs = {
+    def test_restored_home_leaves_are_shared_candidates(self):
+        restored_refs = {
             "data/copy/home.json#explore.cards.skills.title",
             "data/copy/home.json#explore.cards.templates.title",
         }
         for code in ("M1", "M2", "M3"):
             for field in ("title", "thesis"):
-                read_only_refs.add(
+                restored_refs.add(
                     "data/copy/home.json#volumes.modules.%s.%s" % (code, field))
-        for ref in sorted(read_only_refs):
+        home = {b["source_ref"]: b for b in self.pages["index.html"]}
+        for ref in sorted(restored_refs):
             with self.subTest(ref=ref):
-                self.assertNotIn(ref, refs)
+                self.assertIn(ref, home)
+                occurrences = self.bundle["occurrences"][ref]
+                self.assertGreaterEqual(len(occurrences), 2)
+
+    def test_restored_shape_labels_cover_library_and_packet_headers(self):
+        shape_refs = {
+            "data/copy/matters.json#shape_labels.%s" % shape
+            for shape in json.load(open(os.path.join(REPO, "data", "copy", "matters.json"),
+                                        encoding="utf-8"))["shape_labels"]
+        }
+        self.assertEqual(len(shape_refs), 10)
+        library_refs = {b["source_ref"] for b in self.pages["matters/index.html"]}
+        self.assertTrue(shape_refs.issubset(library_refs))
+        for ref in sorted(shape_refs):
+            with self.subTest(ref=ref):
+                occurrences = self.bundle["occurrences"][ref]
+                self.assertEqual(len(occurrences), 3)
+                self.assertEqual({item["page"] for item in occurrences} & {"matters/index.html"},
+                                 {"matters/index.html"})
+
+    def test_restored_refs_are_not_transition_allowlisted(self):
+        # The withdrawn refs were never members of U3's generated transition
+        # families. Restoring them must keep them absent; there is no numeric
+        # allowlist shrink to claim.
+        allowlist = self.bundle["editor_contract_transition_allowlist"]
+        restored = {
+            "data/copy/home.json#explore.cards.skills.title",
+            "data/copy/home.json#explore.cards.templates.title",
+        }
+        for code in ("M1", "M2", "M3"):
+            for field in ("title", "thesis"):
+                restored.add("data/copy/home.json#volumes.modules.%s.%s" % (code, field))
+        restored.update(
+            "data/copy/matters.json#shape_labels.%s" % shape
+            for shape in json.load(open(os.path.join(REPO, "data", "copy", "matters.json"),
+                                        encoding="utf-8"))["shape_labels"])
+        self.assertTrue(restored.isdisjoint(allowlist))
+
+    def test_u8_adds_at_least_24_candidates_without_orphan_refs(self):
+        self.assertGreaterEqual(self.bundle["counts"]["_total"], 5917 + 24)
+        page_refs = {b["source_ref"] for blocks in self.pages.values() for b in blocks}
+        self.assertTrue(set(self.bundle["occurrences"]).issubset(page_refs))
 
     def test_page_copy_sources_are_page_local(self):
         expected = {
@@ -167,6 +213,46 @@ class NewCoverageTest(unittest.TestCase):
             "data/firm/firm.json#identity.letterhead_note",
         }.issubset(refs))
         self.assertEqual(len(blocks), 33)
+
+    def test_firm_provenance_fragments_declare_the_mixed_sentence(self):
+        blocks = {b["source_ref"]: b for b in self.pages["firm/index.html"]}
+        for ref in (
+            "data/copy/firm.json#hero.provenance_before_path",
+            "data/copy/firm.json#hero.provenance_after_path",
+        ):
+            with self.subTest(ref=ref):
+                self.assertIs(blocks[ref].get("mixed"), True)
+
+    def test_firm_provenance_is_one_wrapper_with_independent_authored_fragments(self):
+        from html.parser import HTMLParser
+
+        class ProvenanceParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.wrapper_depth = 0
+                self.wrappers = 0
+                self.authored = []
+                self.locked = 0
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "div" and "lede" in attrs.get("class", "").split():
+                    self.wrapper_depth += 1
+                    self.wrappers += 1
+                if self.wrapper_depth:
+                    if "data-ebsrc" in attrs:
+                        self.authored.append(attrs["data-ebsrc"])
+                    if "data-eb-locked" in attrs:
+                        self.locked += 1
+
+            def handle_endtag(self, tag):
+                if tag == "div" and self.wrapper_depth:
+                    self.wrapper_depth -= 1
+
+        parser = ProvenanceParser()
+        parser.feed(_FRESH["firm_html"])
+        self.assertEqual(parser.wrappers, 1)
+        self.assertEqual(parser.locked, 1)
 
     # ---- new blocks are well-formed json_scalars ------------------------- #
     def test_new_blocks_are_json_scalars_with_matching_paths(self):
@@ -224,9 +310,21 @@ class StabilityTest(unittest.TestCase):
             fresh_blocks = self.fresh["pages"].get(page)
             self.assertIsNotNone(fresh_blocks, f"page {page} vanished from the map")
             fresh_by_index = {b["index"]: b for b in fresh_blocks}
+            shape_indices = [
+                b["index"] for b in fresh_blocks
+                if b["source_ref"].startswith("data/copy/matters.json#shape_labels.")
+            ]
+            baseline_has_shape = any(
+                b["source_ref"].startswith("data/copy/matters.json#shape_labels.")
+                for b in blocks
+            )
             for b in blocks:
                 with self.subTest(page=page, ref=b["source_ref"]):
-                    fb = fresh_by_index.get(b["index"])
+                    expected_index = b["index"]
+                    if (shape_indices and not baseline_has_shape
+                            and expected_index >= shape_indices[0]):
+                        expected_index += 1
+                    fb = fresh_by_index.get(expected_index)
                     self.assertIsNotNone(
                         fb, f"{page}[{b['index']}] ({b['source_ref']}) is gone")
                     self.assertEqual(fb["source_ref"], b["source_ref"])
@@ -237,6 +335,257 @@ class StabilityTest(unittest.TestCase):
             with self.subTest(page=page):
                 self.assertGreaterEqual(
                     len(self.fresh["pages"].get(page, [])), len(blocks))
+
+
+class OccurrencesTest(unittest.TestCase):
+    """U1: every rendered location is indexed without changing page blocks."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bundle = _build_fresh_map()
+        cls.occurrences = cls.bundle["occurrences"]
+
+    def test_single_page_leaf_has_one_occurrence(self):
+        ref = "data/firm/firm.json#identity.name"
+        self.assertEqual(
+            self.occurrences[ref],
+            [{"page": "firm/index.html", "index": 1}],
+        )
+
+    def test_meridian_canon_leaf_has_ten_distinct_page_occurrences(self):
+        ref = "data/jurisdictions/meridian.json#name"
+        occurrences = self.occurrences[ref]
+        self.assertEqual(len(occurrences), 10)
+        self.assertEqual(len({item["page"] for item in occurrences}), 10)
+
+    def test_matter_caption_has_two_occurrences(self):
+        ref = "data/matters/m01-arbitration-meridian/matter.json#caption"
+        self.assertEqual(len(self.occurrences[ref]), 2)
+
+    def test_source_metadata_stays_single_valued_across_occurrences(self):
+        ref = "data/jurisdictions/meridian.json#name"
+        blocks = [
+            block
+            for page_blocks in self.bundle["pages"].values()
+            for block in page_blocks
+            if block["source_ref"] == ref
+        ]
+        self.assertEqual(len(blocks), 10)
+        self.assertEqual(len({block["original_text"] for block in blocks}), 1)
+        self.assertEqual(len({block["json_path"] for block in blocks}), 1)
+        self.assertEqual(
+            set(self.occurrences[ref][0]), {"page", "index"},
+            "occurrences must not duplicate source metadata",
+        )
+
+    def test_total_block_count_includes_restored_candidates(self):
+        self.assertGreaterEqual(self.bundle["counts"]["_total"], 5917 + 24)
+
+    def test_occurrences_are_the_exact_page_block_projection(self):
+        expected = {}
+        for page, blocks in self.bundle["pages"].items():
+            for block in blocks:
+                expected.setdefault(block["source_ref"], []).append({
+                    "page": page,
+                    "index": block["index"],
+                })
+        self.assertEqual(self.bundle["schema_version"], "1.1.0")
+        for ref, items in expected.items():
+            self.assertTrue(all(item in self.occurrences[ref] for item in items))
+        self.assertTrue(all(
+            set(item) == {"page", "index"}
+            for items in self.occurrences.values() for item in items
+        ))
+
+
+class EditorContractGuardTest(unittest.TestCase):
+    """U3: both absence guards have seeded proof that they can fail."""
+
+    PURE_REF = "data/test.json#title"
+
+    @staticmethod
+    def _block(ref=PURE_REF, source="Authored", rendered="Authored", **extra):
+        block = {
+            "index": 0,
+            "kind": "json_scalar",
+            "source_ref": ref,
+            "original_text": source,
+            "original_hash": text_norm.norm_hash(rendered),
+            "json_path": ref.split("#", 1)[1],
+        }
+        block.update(extra)
+        return block
+
+    def test_mixed_element_violation_fails(self):
+        pages = {"one.html": [self._block(rendered="Authored computed-value")]}
+        with self.assertRaisesRegex(build_site.EditorContractError, "mixed element"):
+            build_site.validate_editor_contract(pages, {}, {})
+
+    def test_declared_mixed_element_passes(self):
+        pages = {"one.html": [self._block(
+            rendered="Authored computed-value", mixed=True)]}
+        build_site.validate_editor_contract(pages, {}, {})
+
+    def test_normalization_artifacts_do_not_trip_mixed_guard(self):
+        pages = {"one.html": [self._block(
+            source="Authored text", rendered="  Authored\u200b   text  ")]}
+        build_site.validate_editor_contract(pages, {}, {})
+
+    def test_three_render_surfaces_with_one_recorded_fails(self):
+        pages = {"one.html": [self._block()]}
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 4},
+            {"page": "three.html", "index": 2},
+        ]}
+        recorded = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 3 surfaces.*records 1"):
+            build_site.validate_editor_contract(
+                pages, rendered, {}, recorded_occurrences=recorded)
+
+    def test_declared_passive_occurrences_satisfy_the_guard(self):
+        pages = {"one.html": [self._block()]}
+        declared = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": None},
+            {"page": "three.html", "index": None},
+        ]}
+        build_site.validate_editor_contract(
+            pages, declared, {}, recorded_occurrences=declared)
+
+    def test_phantom_declared_occurrence_fails(self):
+        pages = {"one.html": [self._block()]}
+        declared = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": None},
+        ]}
+        rendered = {self.PURE_REF: [{"page": "one.html", "index": 0}]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 1 surfaces.*records 2"):
+            build_site.validate_editor_contract(
+                pages, rendered, {}, recorded_occurrences=declared)
+
+    def _build_passive_seam(self, declared_page, emitted_page="one.html"):
+        """Exercise declaration-vs-DOM comparison through build_editor_map."""
+        ref = self.PURE_REF
+        with tempfile.TemporaryDirectory(prefix="passive-guard-") as tmp:
+            old = (build_site.OUT, build_site.BUILD_DIR,
+                   build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES,
+                   build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256)
+            try:
+                build_site.OUT = os.path.join(tmp, "site")
+                build_site.BUILD_DIR = os.path.join(tmp, "build")
+                build_site.EDITOR_MAP_PATH = os.path.join(
+                    build_site.BUILD_DIR, "editor-map.generated.json")
+                build_site.PASSIVE_OCCURRENCES = {
+                    ref: [{"page": declared_page, "index": None}],
+                }
+                build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256 = {
+                    hashlib.sha256(b"").hexdigest()}
+                path = os.path.join(build_site.OUT, emitted_page)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write('<main><p data-ebrender="%s">Authored</p></main>' % ref)
+                build_site.build_editor_map("test-build")
+                with open(build_site.EDITOR_MAP_PATH, encoding="utf-8") as fh:
+                    return json.load(fh)
+            finally:
+                (build_site.OUT, build_site.BUILD_DIR,
+                 build_site.EDITOR_MAP_PATH, build_site.PASSIVE_OCCURRENCES,
+                 build_site.EDITOR_TRANSITION_ALLOWLIST_SHA256) = old
+
+    def test_mismatched_passive_declaration_fails_at_build_seam(self):
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 1 surfaces.*records 1"):
+            self._build_passive_seam("wrong.html")
+
+    def test_matching_passive_declaration_passes_at_build_seam(self):
+        bundle = self._build_passive_seam("one.html")
+        self.assertEqual(bundle["occurrences"][self.PURE_REF], [
+            {"page": "one.html", "index": None},
+        ])
+
+
+    def test_allowlisted_violation_passes(self):
+        pages = {"one.html": [self._block(rendered="Authored computed")]}
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 1},
+        ]}
+        allowlist = {self.PURE_REF: "temporary test migration"}
+        build_site.validate_editor_contract(pages, rendered, allowlist)
+
+    def test_removing_live_coupled_ref_from_allowlist_fails(self):
+        pages = {
+            "one.html": [self._block()],
+            "two.html": [self._block()],
+        }
+        rendered = {self.PURE_REF: [
+            {"page": "one.html", "index": 0},
+            {"page": "two.html", "index": 0},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "coupled ref is missing from transition allowlist"):
+            build_site.validate_editor_contract(pages, rendered, {})
+
+    def test_unannotated_task_name_pattern_is_caught(self):
+        ref = "data/taxonomy/tasks.json#tasks.0.name"
+        pages = {"skills/index.html": [self._block(ref=ref)]}
+        rendered = {ref: [
+            {"page": "skills/index.html", "index": 8},
+            {"page": "modules/m1.html", "index": None,
+             "pattern": "task-name"},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "renders on 2 surfaces.*records 1"):
+            build_site.validate_editor_contract(pages, rendered, {})
+
+    def test_new_prefix_matching_ref_cannot_expand_transition_inventory(self):
+        ref = "data/taxonomy/tasks.json#tasks.999.name"
+        rendered = {ref: [
+            {"page": "skills/index.html", "index": 1},
+            {"page": "modules/m1.html", "index": None},
+        ]}
+        with self.assertRaisesRegex(build_site.EditorContractError,
+                                    "allowlist inventory changed"):
+            build_site._editor_transition_allowlist({}, rendered)
+
+
+class PageOverrideRenderTest(unittest.TestCase):
+    def setUp(self):
+        build_site.EDMAP.reset()
+        build_site.EDMAP.enabled = True
+        build_site.PAGE_OVERRIDES.clear()
+
+    def tearDown(self):
+        build_site.PAGE_OVERRIDES.clear()
+
+    def test_renderer_prefers_surface_leaf_and_readdresses_the_block(self):
+        shared = "data/copy/home.json#volumes.modules.M1.title"
+        override = "data/copy/home.json#overrides.aaaaaaaaaaaaaaaa.value"
+        build_site.PAGE_OVERRIDES[("modules/m1.html", shared)] = {
+            "value": "Local title", "source_ref": override,
+            "json_path": "overrides.aaaaaaaaaaaaaaaa.value",
+        }
+        html = '<main><h1 data-ebsrc="%s">Shared title</h1></main>' % shared
+        rendered = build_site._apply_page_overrides("modules/m1.html", html)
+        self.assertIn('data-ebsrc="%s"' % override, rendered)
+        self.assertIn(">Local title</h1>", rendered)
+        self.assertNotIn("Shared title", rendered)
+
+        # A later shared edit still cannot reach the surface-owned copy.
+        rerendered = build_site._apply_page_overrides(
+            "modules/m1.html",
+            '<main><h1 data-ebsrc="%s">Changed shared title</h1></main>' % shared)
+        self.assertIn(">Local title</h1>", rerendered)
+
+    def test_renderer_falls_back_byte_for_byte_after_revert(self):
+        shared = "data/copy/home.json#volumes.modules.M1.title"
+        html = '<main><h1 data-ebsrc="%s">Shared title</h1></main>' % shared
+        self.assertEqual(build_site._apply_page_overrides("modules/m1.html", html), html)
 
 
 if __name__ == "__main__":

@@ -46,7 +46,8 @@
        idx 4  p  plain prose  EDITABLE            (map)  <- selection-comment + status
        idx 5  p  plain prose  EDITABLE (md, bid)  (map)  <- structural ops (U4)
        idx 6  p  plain prose  EDITABLE (md, bid)  (map)  <- structural ops (U4)
-       idx 7  p  computed KPI read-only (NOT in map)
+       idx 7  p  authored mixed fragment EDITABLE (map)
+       idx 8  p  computed KPI read-only (NOT in map)
      ========================================================================= -->
 <div class="wrap">
   <main id="main" class="prose">
@@ -64,6 +65,8 @@
 
     <p>Counsel should weigh the timeline between the stop and the station test.</p>
 
+    <div class="mixed-sentence"> <p class="mixed-sentence__authored">This packet concerns </p><span class="eb-locked" data-eb-locked data-eb-origin="the matter caption" data-eb-passage="matters/m05-dwi-meridian/facts/index.html">State v. Halvard</span><span aria-hidden="true">; the filing date is </span><span class="eb-locked" data-eb-locked data-eb-origin="the generated filing calendar">October 14, 2026</span><span aria-hidden="true">.</span></div>
+
     <p class="kpi">EDITABLE BLOCKS: 6 · READ-ONLY CANDIDATES: 2 · COMPUTED, NEVER EDITABLE</p>
   </main>
 </div>
@@ -78,7 +81,7 @@
     { "index": 1, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.intro.body_md.p0",
       "original_text": "You are an attorney representing Devon Halvard, who was arrested on suspicion of driving while impaired after a late-night traffic stop on an icy county road. The State's evidence rests on a breath test administered at the station and the arresting officer's account of the stop.",
       "original_hash": "hash-idx1-v1", "has_inline_formatting": false, "context": "exercise intro" },
-    { "index": 2, "kind": "json_scalar", "source_ref": "data/matters/m05-dwi-meridian/matter.json#caption",
+    { "index": 2, "kind": "json_scalar", "source_ref": "data/copy/matters.json#overrides.aaaaaaaaaaaaaaaa.value",
       "original_text": "Halden Regional District v. Devon Halvard (DWI · Suppression)",
       "original_hash": "hash-idx2-v1", "has_inline_formatting": false, "context": "matter caption", "json_path": "caption" },
     { "index": 3, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.objectives.body_md.p0",
@@ -86,13 +89,29 @@
       "original_hash": "hash-idx3-v1", "has_inline_formatting": true, "context": "exercise objectives" },
     { "index": 4, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/exercise/exercise.json#sections.goals.body_md.p0",
       "original_text": "The client wants the breath-test result kept out and is worried about losing the delivery-route license that supports the family. He has no prior record and coaches a youth hockey team on weekends.",
-      "original_hash": "hash-idx4-v1", "has_inline_formatting": false, "context": "client goals" },
+      "original_hash": "hash-idx4-v1", "has_inline_formatting": false, "context": "client goals",
+      "occurrences": [
+        { "page": "matters/m05-dwi-meridian/index.html", "index": 4 },
+        { "page": "matters/m05-dwi-meridian/exercise/index.html", "index": 7 },
+        { "page": "modules/m1/index.html", "index": 12 }
+      ] },
     { "index": 5, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/case-file/notes.md#b1a2b3c4d",
       "original_text": "The officer's report describes the road as untreated and the stop as routine.",
       "original_hash": "hash-idx5-v1", "has_inline_formatting": false, "context": "case notes" },
     { "index": 6, "kind": "prose", "source_ref": "data/matters/m05-dwi-meridian/case-file/notes.md#b5e6f7a8b",
       "original_text": "Counsel should weigh the timeline between the stop and the station test.",
-      "original_hash": "hash-idx6-v1", "has_inline_formatting": false, "context": "case notes" }
+      "original_hash": "hash-idx6-v1", "has_inline_formatting": false, "context": "case notes" },
+    { "index": 7, "kind": "prose", "source_ref": "data/copy/matters.json#mixed.packet_prefix",
+      "original_text": "This packet concerns ", "original_hash": "hash-idx7-v1",
+      "has_inline_formatting": false, "context": "mixed packet header", "mixed": true }
+  ],
+  "overrides": [
+    { "page": "matters/m05-dwi-meridian/index.html",
+      "shared_source_ref": "data/matters/m05-dwi-meridian/matter.json#caption",
+      "source_ref": "data/copy/matters.json#overrides.aaaaaaaaaaaaaaaa.value",
+      "value": "Halden Regional District v. Devon Halvard (DWI · Suppression)",
+      "intent": "deliberate_page_override", "deliberate_by": "JOS",
+      "deliberate_at": "2026-08-04T15:30:00Z" }
   ]
 }
 </script>

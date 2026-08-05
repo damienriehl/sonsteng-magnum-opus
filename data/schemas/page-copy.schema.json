@@ -7,10 +7,11 @@
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "type": {"const": "page_copy"},
-    "page": {"enum": ["home", "matters", "firm"]}
+    "page": {"enum": ["home", "matters", "firm"]},
+    "overrides": {"$ref": "#/$defs/overrides"}
   },
   "patternProperties": {
-    "^(?!schema_version$|type$|page$).+": {"$ref": "#/$defs/copyNode"}
+    "^(?!schema_version$|type$|page$|overrides$).+": {"$ref": "#/$defs/copyNode"}
   },
   "additionalProperties": false,
   "allOf": [
@@ -20,6 +21,20 @@
   ],
   "$defs": {
     "scalar": {"type": "string", "minLength": 1},
+    "overrides": {"type": "object", "propertyNames": {"pattern": "^[a-f0-9]{16}$"}, "additionalProperties": {"$ref": "#/$defs/override"}},
+    "override": {
+      "type": "object",
+      "required": ["page", "shared_source_ref", "value", "intent", "deliberate_by", "deliberate_at"],
+      "properties": {
+        "page": {"type": "string", "minLength": 1},
+        "shared_source_ref": {"type": "string", "pattern": "^data/.+#.+$"},
+        "value": {"type": ["string", "number", "integer", "boolean"]},
+        "intent": {"const": "deliberate_page_override"},
+        "deliberate_by": {"type": "string", "minLength": 1},
+        "deliberate_at": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
     "hero": {"type": "object", "required": ["eyebrow", "heading", "lede"], "properties": {"eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"}, "lede": {"$ref": "#/$defs/scalar"}}},
     "module": {"type": "object", "required": ["title", "thesis"], "properties": {"title": {"$ref": "#/$defs/scalar"}, "thesis": {"$ref": "#/$defs/scalar"}}},
     "fullCard": {"type": "object", "required": ["meta", "title", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "title": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},

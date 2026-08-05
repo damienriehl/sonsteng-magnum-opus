@@ -61,6 +61,7 @@ import dataclasses
 import datetime
 import decimal
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -119,6 +120,69 @@ _JSON_NUMBER_RE = re.compile(
 
 class ApplyError(RuntimeError):
     """A fatal, abort-and-rollback condition (canonical stays clean)."""
+
+
+def _override_copy_relpath(page, shared_source_ref):
+    shared_relpath = shared_source_ref.split("#", 1)[0]
+    if shared_relpath.startswith("data/copy/") and shared_relpath.endswith(".json"):
+        return shared_relpath
+    root = (page or "").split("/", 1)[0]
+    copy_name = {"matters": "matters", "firm": "firm"}.get(root, "home")
+    return "data/copy/%s.json" % copy_name
+
+
+def page_override_address(page, shared_source_ref):
+    """Return the ordinary authored-leaf address for one surface override."""
+    identity = (str(page) + "\0" + str(shared_source_ref)).encode("utf-8")
+    key = hashlib.sha256(identity).hexdigest()[:16]
+    relpath = _override_copy_relpath(page, shared_source_ref)
+    json_path = "overrides.%s.value" % key
+    return relpath, json_path, relpath + "#" + json_path
+
+
+def page_override_record(page, shared_source_ref, value, editor, deliberate_at):
+    return {
+        "page": page,
+        "shared_source_ref": shared_source_ref,
+        "value": value,
+        "intent": "deliberate_page_override",
+        "deliberate_by": editor,
+        "deliberate_at": deliberate_at,
+    }
+
+
+def validate_page_override_occurrences(page, occurrences):
+    surfaces = {o.get("page") for o in (occurrences or []) if o.get("page")}
+    if page not in surfaces or len(surfaces) < 2:
+        raise ApplyError("page override refused: source is not shared on this surface")
+    return True
+
+
+def coerce_page_override_value(incoming, current):
+    if isinstance(current, bool):
+        if incoming not in ("true", "false"):
+            raise ValueError("expected boolean")
+        return incoming == "true"
+    if isinstance(current, int):
+        if not _JSON_INTEGER_RE.fullmatch(incoming):
+            raise ValueError("expected integer")
+        return int(incoming)
+    if isinstance(current, float):
+        if not _JSON_NUMBER_RE.fullmatch(incoming):
+            raise ValueError("expected number")
+        value = float(incoming)
+        if not math.isfinite(value):
+            raise ValueError("expected finite number")
+        return value
+    return incoming
+
+
+def delete_json_path(obj, path):
+    parts = path.split(".")
+    parent = obj
+    for part in parts[:-1]:
+        parent = parent[part]
+    del parent[parts[-1]]
 
 
 # --------------------------------------------------------------------------- #
@@ -380,11 +444,15 @@ def index_map(bundle):
     """Flatten editor-map.generated.json {pages: {page: [blocks]}} into
     {source_ref: block(+page)}. source_ref is unique per (file, block)."""
     idx = {}
+    occurrences = bundle.get("occurrences") or {}
     for page, blocks in (bundle.get("pages") or {}).items():
         for block in blocks:
+            source_ref = block["source_ref"]
             b = dict(block)
             b["page"] = page
-            idx[b["source_ref"]] = b
+            idx[source_ref] = b
+    for source_ref, block in idx.items():
+        block["occurrences"] = occurrences.get(source_ref) or []
     return idx
 
 
@@ -466,6 +534,10 @@ class Patch:
     op: str = None      # structural operation name (insert_after|delete|split|merge|move), else None
     op_arg: str = None  # merge's second ref / move's destination ref
     created_at: int = 0 # store row creation time (orders same-anchor inserts)
+    page: str = None
+    editor: str = None
+    deliberate_at: str = None
+    shared_source_ref: str = None
 
 
 # Structural suggestion kinds (U4, KTD3) — mirror of the Worker store's set.
@@ -896,7 +968,30 @@ def apply_file_patches(worktree, relpath, patches):
 
     edits = []  # [(json_path, new_value)] for scalars, in patch order
     add_paths = []  # json_add paths (allowed to CREATE keys — U5)
+    delete_paths = []
+    override_targets = [
+        p.json_path.rsplit(".", 1)[0]
+        for p in text_patches
+        if p.kind in ("page_override", "page_override_revert")
+    ]
+    if len(override_targets) != len(set(override_targets)):
+        # Concurrent editors can produce several accepted rows for the same
+        # deterministic page-owned leaf. Never let two creates overwrite one
+        # audit record or let two reverts delete the same path twice.
+        return {p.suggestion_id: OUT_NEEDS_HUMAN for p in patches}
     for p in text_patches:
+        if p.kind == "page_override":
+            parent_path = p.json_path.rsplit(".", 1)[0]
+            record = page_override_record(
+                p.page, p.shared_source_ref, p.new_text, p.editor, p.deliberate_at)
+            edits.append((parent_path, record))
+            add_paths.append(parent_path)
+            results[p.suggestion_id] = True
+            continue
+        if p.kind == "page_override_revert":
+            delete_paths.append(p.json_path.rsplit(".", 1)[0])
+            results[p.suggestion_id] = True
+            continue
         if p.kind == "json_add":
             # U5: create-only — an existing key routes to needs_human (a new
             # fact never silently overwrites one that already exists).
@@ -954,8 +1049,9 @@ def apply_file_patches(worktree, relpath, patches):
         if value != json_get(obj, path):
             edits.append((path, value))
 
-    if add_paths:
-        new_raw = write_json_edits(raw, edits, create_paths=add_paths)
+    if add_paths or delete_paths:
+        new_raw = write_json_edits(raw, edits, create_paths=add_paths,
+                                   delete_paths=delete_paths)
         with open(abspath, "w", encoding="utf-8") as fh:
             fh.write(new_raw)
         return results
@@ -966,7 +1062,7 @@ def apply_file_patches(worktree, relpath, patches):
     return results
 
 
-def write_json_edits(raw, edits, create_paths=()):
+def write_json_edits(raw, edits, create_paths=(), delete_paths=()):
     """Produce the new text for a .json file with `edits` = [(json_path, value)]
     applied. Prefers the formatting-preserving surgical splice; on SurgicalError
     falls back to the v1 whole-file parse->set->serialize. Both yield the same
@@ -974,13 +1070,16 @@ def write_json_edits(raw, edits, create_paths=()):
     `create_paths` (U5 json_add) names paths allowed to CREATE keys — those
     force the fallback path, since a splice cannot add structure."""
     try:
-        if create_paths:
+        if create_paths or delete_paths:
             raise json_surgical.SurgicalError("json_add present — whole-file write")
         return json_surgical.splice_scalars(raw, edits)
     except json_surgical.SurgicalError:
         obj = json.loads(raw)
+        create_paths = set(create_paths)
         for path, value in edits:
-            json_set(obj, path, value, create=path in set(create_paths))
+            json_set(obj, path, value, create=path in create_paths)
+        for path in delete_paths:
+            delete_json_path(obj, path)
         return dump_json_like(obj, raw)
 
 
@@ -1506,8 +1605,30 @@ def _gate_group(members, source_index, worktree):
     """Return (group_status, [Patch]). group_status in
     {OUT_DRIFT, OUT_NEEDS_HUMAN, ""}. "" => all members cleanly patchable."""
     patches = []
+    shared_json = {}
     for r in members:
         source_ref = r["source_ref"]
+        block = source_index.get(source_ref)
+        # Every operation against an existing map leaf, including page-only
+        # creation and revert, must pass the same apply-time drift fence.
+        if r.get("kind") != "json_add":
+            if block is None:
+                return OUT_DRIFT, []
+            if (r.get("original_hash") and block.get("original_hash")
+                    and r["original_hash"] != block["original_hash"]):
+                return OUT_DRIFT, []
+        if r.get("kind") == "page_override_revert":
+            relpath, locator = source_ref.split("#", 1)
+            if (block is None or not relpath.startswith("data/copy/")
+                    or not re.fullmatch(r"overrides\.[a-f0-9]{16}\.value", locator)):
+                return OUT_NEEDS_HUMAN, []
+            patches.append(Patch(
+                suggestion_id=r["id"], group_id=r.get("group_id") or ("solo:" + r["id"]),
+                source_ref=source_ref, relpath=relpath,
+                kind="page_override_revert", json_path=locator,
+                original_text=block.get("original_text") or "", new_text="",
+            ))
+            continue
         # json_add (U5) FIRST: a NEW fact has no map block yet, so the
         # unknown-ref drift gate below must not see it. Shape-validate here;
         # the patcher's own gate refuses an already-present key.
@@ -1531,18 +1652,40 @@ def _gate_group(members, source_index, worktree):
                 created_at=r.get("created_at") or 0,
             ))
             continue
-        block = source_index.get(source_ref)
-        # Allowlist re-validation (defense in depth) — unknown ref => drift (re-review).
-        if block is None:
-            return OUT_DRIFT, []
+        if r.get("kind") == "page_override":
+            try:
+                validate_page_override_occurrences(r.get("page"), block.get("occurrences"))
+                if block.get("kind") == "json_scalar":
+                    shared_relpath = source_ref.split("#", 1)[0]
+                    shared_path = block.get("json_path") or source_ref.split("#", 1)[1]
+                    if shared_relpath not in shared_json:
+                        with open(safe_data_path(worktree, shared_relpath), encoding="utf-8") as fh:
+                            shared_json[shared_relpath] = json.load(fh)
+                    shared_obj = shared_json[shared_relpath]
+                    current = json_get(shared_obj, shared_path)
+                    value = coerce_page_override_value(r.get("new_text") or "", current)
+                else:
+                    value = r.get("new_text") or ""
+                relpath, json_path, override_ref = page_override_address(r.get("page"), source_ref)
+                when = datetime.datetime.fromtimestamp(
+                    (r.get("created_at") or 0) / 1000, datetime.timezone.utc
+                ).isoformat().replace("+00:00", "Z")
+            except (ApplyError, OSError, ValueError, KeyError, IndexError):
+                return OUT_NEEDS_HUMAN, []
+            patches.append(Patch(
+                suggestion_id=r["id"], group_id=r.get("group_id") or ("solo:" + r["id"]),
+                source_ref=override_ref, relpath=relpath, kind="page_override",
+                json_path=json_path, original_text=block.get("original_text") or "",
+                new_text=value, page=r.get("page"),
+                editor=r.get("comment") or r.get("editor") or "unknown",
+                deliberate_at=when, shared_source_ref=source_ref,
+            ))
+            continue
         # json_path forgery check.
         if r.get("kind") == "json_scalar":
             if (r.get("json_path") or "") != (block.get("json_path") or ""):
                 return OUT_NEEDS_HUMAN, []
         # DRIFT gate: rendered-hash of CURRENT source vs the suggestion's stored hash.
-        if r.get("original_hash") and block.get("original_hash") \
-                and r["original_hash"] != block["original_hash"]:
-            return OUT_DRIFT, []
         original_text = block.get("original_text") or r.get("original_text") or ""
         new_text = r.get("new_text") or ""
         # Structural operation (U4): the row's kind IS the op. The drift gate

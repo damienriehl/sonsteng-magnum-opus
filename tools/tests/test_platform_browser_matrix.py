@@ -79,9 +79,10 @@ def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     ):
         assert heading in generator
 
-    # The semantic baseline deliberately changes only text placement/headings;
-    # link, durable editor identity, and reading-order digests remain pinned.
+    # Links remain unchanged. Shared/computed-text execution deliberately
+    # advances the editor-block and reading-order contracts, so pin their new
+    # reviewed digests alongside the visual heading repair.
     baseline = json.loads((TOOLS / "tests/fixtures/platform-semantic-baseline.json").read_text())
     assert baseline["fields"]["links"] == "7be8890c7a50456787215dff01b35c92844a0ac613648cbb8512272f992309e7"
-    assert baseline["fields"]["editor_blocks"] == "9b169b283c7316fe7bc24fe6bce00649b3667cbd62538f6e526f460c6cba28e9"
-    assert baseline["fields"]["reading_order"] == "94516e22ccf427575bafce1954b9938d6887ed8998251deca8fc6781d9ae7dfc"
+    assert baseline["fields"]["editor_blocks"] == "08c45f4277a0bdf5a98ec097442975e33139dfbf63add620cdf218a2026b7ee0"
+    assert baseline["fields"]["reading_order"] == "ea41efeca4ab6437164ff1e40f79ecb9c774d8a9299647b6cd1bb79ad9c12ead"

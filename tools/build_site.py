@@ -65,6 +65,8 @@ def load_text(path):
 
 def write_file(relpath, content):
     """relpath is relative to OUT (site/platform)."""
+    if isinstance(content, str) and relpath.endswith(".html"):
+        content = _apply_page_overrides(relpath.replace(os.sep, "/"), content)
     dest = os.path.join(OUT, relpath)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     if isinstance(content, str):
@@ -244,7 +246,7 @@ class _EditorMap:
         self.unmarked = []
 
     def register(self, source_ref, kind, original_text, has_inline_formatting,
-                 context, json_path=None):
+                 context, json_path=None, mixed=False):
         # First registration wins — source_ref is unique per (file, block), so a
         # repeat is the same block re-rendered (e.g. packet assembled twice).
         if source_ref not in self.sources:
@@ -254,11 +256,45 @@ class _EditorMap:
                 "has_inline_formatting": bool(has_inline_formatting),
                 "context": context or "",
                 "json_path": json_path,
+                "mixed": bool(mixed),
             }
         return source_ref
 
 
 EDMAP = _EditorMap()
+PAGE_OVERRIDES = {}
+PASSIVE_OCCURRENCES = {}
+
+# Reviewed inventory of the temporary coupled-ref exemptions. Keep the readable
+# reasons in the generated map, but require the exact ref set to match this
+# fingerprint so a new prefix-matching ref cannot silently join the allowlist.
+EDITOR_TRANSITION_ALLOWLIST_SHA256 = {
+    # Canonical complete site build.
+    "0c5e0f5b972cf6713e1a60858bb5ed8f2be1e1f8ce09864a883d3e6e36f8ef07",
+    # Facts-surface test build, which deliberately renders a page subset.
+    "a35c00a90a1172ff81e74aa811d7a6456a264422fbcafcafa70651dc1bb94d9c",
+}
+
+
+_OVERRIDE_ELEMENT_RE = re.compile(
+    r'(<(?:p|li|h[1-6]|blockquote)\b[^>]*?)\sdata-ebsrc="([^"]+)"([^>]*>)(.*?)(</(?:p|li|h[1-6]|blockquote)>)',
+    re.DOTALL,
+)
+
+
+def _apply_page_overrides(page, html_text):
+    """Prefer a surface-owned leaf and re-address that render to the new leaf."""
+    def replace(match):
+        record = PAGE_OVERRIDES.get((page, html.unescape(match.group(2))))
+        if not record:
+            return match.group(0)
+        override_ref = record["source_ref"]
+        value = record["value"]
+        EDMAP.register(override_ref, "json_scalar", value, False,
+                       "Deliberate page override", record["json_path"])
+        return "%s data-ebsrc=\"%s\"%s%s%s" % (
+            match.group(1), esc(override_ref), match.group(3), esc(value), match.group(5))
+    return _OVERRIDE_ELEMENT_RE.sub(replace, html_text)
 
 _FMT_PATTERNS = [
     re.compile(r"\*\*[^*]+\*\*"),                 # **bold**
@@ -278,13 +314,38 @@ def _has_inline_formatting(src_text):
     return any(p.search(src_text or "") for p in _FMT_PATTERNS)
 
 
-def _eb_scalar_attr(source_ref, original_text, json_path, context):
+def _eb_scalar_attr(source_ref, original_text, json_path, context, mixed=False):
     """Register a json_scalar block and return the ` data-ebsrc="..."` attribute
     to splice into its opening tag (or "" when recording is off)."""
     if not EDMAP.enabled:
         return ""
-    EDMAP.register(source_ref, "json_scalar", original_text, False, context, json_path)
+    EDMAP.register(source_ref, "json_scalar", original_text, False, context,
+                   json_path, mixed=mixed)
     return ' data-ebsrc="{r}"'.format(r=esc(source_ref))
+
+
+def _eb_render_attr(source_ref, page):
+    """Mark a read-only render of an authored leaf for the occurrence guard.
+
+    This is deliberately not data-ebsrc: it records that the leaf renders on
+    this surface without making the containing element editable.
+    """
+    if not EDMAP.enabled:
+        return ""
+    occurrence = {"page": page, "index": None}
+    registered = PASSIVE_OCCURRENCES.setdefault(source_ref, [])
+    if occurrence not in registered:
+        registered.append(occurrence)
+    return ' data-ebrender="{r}"'.format(r=esc(source_ref))
+
+
+def _eb_locked_attr(origin, passage=None):
+    """Attributes for computed text: selectable provenance, never editability."""
+    attrs = ' data-eb-locked data-eb-origin="{o}"'.format(
+        o=esc(origin))
+    if passage:
+        attrs += ' data-eb-passage="{p}"'.format(p=esc(passage))
+    return attrs
 
 
 def _copy_scalar(page, copy, json_path, context):
@@ -640,6 +701,17 @@ def load_corpus():
     firm = load_json(os.path.join(DATA, "firm", "firm.json"))
     copy = {page: load_json(os.path.join(DATA, "copy", page + ".json"))
             for page in ("home", "matters", "firm")}
+    PAGE_OVERRIDES.clear()
+    for page_copy, doc in copy.items():
+        relpath = data_relpath(DATA, "copy", page_copy + ".json")
+        for key, record in (doc.get("overrides") or {}).items():
+            if record.get("intent") != "deliberate_page_override":
+                continue
+            json_path = "overrides.%s.value" % key
+            PAGE_OVERRIDES[(record.get("page"), record.get("shared_source_ref"))] = {
+                **record, "json_path": json_path,
+                "source_ref": relpath + "#" + json_path,
+            }
     curriculum = load_curriculum()
     return {
         "manifest": manifest, "matters": matters, "by_id": by_id,
@@ -1344,12 +1416,10 @@ def build_home(corpus):
             mod_counts[t.get("module")].add(ref.split(".")[0])
     for code, meta in MODULE_META.items():
         module = copy["volumes"]["modules"][code]
-        # Module titles and theses also render on the module-cover pages. Until
-        # the editor has an explicit shared-scalar contract, keep these shared
-        # leaves read-only on every surface rather than allowing a home-page
-        # edit to silently change another page.
-        title, title_eb = module["title"], ""
-        thesis, thesis_eb = module["thesis"], ""
+        title, title_eb = _copy_scalar("home", copy, "volumes.modules.%s.title" % code,
+                                      "home · curriculum modules")
+        thesis, thesis_eb = _copy_scalar("home", copy, "volumes.modules.%s.thesis" % code,
+                                        "home · curriculum modules")
         acc = {"brass": "", "claret": " volume--claret card--featured", "green": " volume--green"}[meta["accent"]]
         vols.append("""
     <a class="card volume{acc}" href="modules/{lo}.html">
@@ -1378,15 +1448,8 @@ def build_home(corpus):
             fields = ["meta", "description"]
         for field in fields:
             path = "explore.cards.%s.%s" % (card, field)
-            value = copy["explore"]["cards"][card][field]
-            # These headings also render as authored headings on their target
-            # pages. Keep duplicate rendered values read-only until edits have
-            # an explicit cross-surface contract.
-            if path in ("explore.cards.skills.title", "explore.cards.templates.title"):
-                values[path], attrs[path] = value, ""
-            else:
-                values[path], attrs[path] = _copy_scalar(
-                    "home", copy, path, "home · %s card" % card)
+            values[path], attrs[path] = _copy_scalar(
+                "home", copy, path, "home · %s card" % card)
 
     body = """
 <section class="hero reveal">
@@ -1462,6 +1525,8 @@ def build_home(corpus):
 # --------------------------------------------------------------------------- #
 def build_modules(corpus):
     tasks = corpus["tasks"]["tasks"]
+    tasks_rel = data_relpath(DATA, "taxonomy", "tasks.json")
+    task_pos = {task["id"]: i for i, task in enumerate(tasks)}
     home_copy = corpus["copy"]["home"]
     skills_by_id = {s["id"]: s for s in corpus["skills"]["skills"]}
     for code, meta in MODULE_META.items():
@@ -1487,11 +1552,14 @@ def build_modules(corpus):
                     for r in refs if r in corpus["by_id"])
                 task_lines.append(
                     '<div class="index-row"><div class="index-row__main">'
-                    '<span class="task-name">{name}</span> '
+                    '<span class="task-name"{name_render}>{name}</span> '
                     '<span class="bloom">{bloom}</span>'
                     '<div class="chips" style="margin-top:.3rem">{chips}</div></div>'
                     '<span class="index-row__code">{tid}</span></div>'.format(
-                        name=esc(t["name"]), bloom=esc(t.get("bloom_level", "")),
+                        name=esc(t["name"]),
+                        name_render=_eb_render_attr(
+                            tasks_rel + "#tasks.{i}.name".format(i=task_pos[t["id"]]), rel),
+                        bloom=esc(t.get("bloom_level", "")),
                         chips=chips, tid=esc(t["id"])))
             rows.append("""
   <section class="section-head" aria-label="{sn}">
@@ -1533,8 +1601,8 @@ def build_modules(corpus):
 <div class="module module--{accent}">
 <section class="reveal">
   <div class="module-numeral" aria-hidden="true">{code}</div>
-  <h1>Module {n} — {title}</h1>
-  <p class="lede"><em>{thesis}</em></p>
+  <h1{title_render}>Module {n} — {title}</h1>
+  <p class="lede"{thesis_render}><em>{thesis}</em></p>
   <p class="card__meta">{ntasks} TASKS · {nsk} SKILLS · {nm} LINKED MATTERS</p>
 </section>
 <div class="brass-rule" role="presentation"></div>
@@ -1550,6 +1618,10 @@ def build_modules(corpus):
 </div>
 """.format(accent=("brass" if meta["accent"] == "brass" else meta["accent"]),
            code=esc(code), n=code[1], title=esc(module_meta["title"]), thesis=esc(module_meta["thesis"]),
+           title_render=_eb_render_attr(
+               "data/copy/home.json#volumes.modules.%s.title" % code, rel),
+           thesis_render=_eb_render_attr(
+               "data/copy/home.json#volumes.modules.%s.thesis" % code, rel),
            ntasks=len(mod_tasks), nsk=len(by_skill), nm=len(linked),
            prose_section=prose_section, rows="".join(rows), mcards=matter_cards)
         write_file(rel, page_shell(
@@ -1563,6 +1635,7 @@ def build_modules(corpus):
 # --------------------------------------------------------------------------- #
 def build_templates(corpus):
     rel = "templates/index.html"
+    title_ref = "data/copy/home.json#explore.cards.templates.title"
     templates = ((corpus.get("curriculum") or {}).get("templates") or [])
     present = [t for t in templates if (t.get("md") or "").strip()]
 
@@ -1588,7 +1661,7 @@ def build_templates(corpus):
     header = """
 <header class="reveal">
   <p class="eyebrow">THE PRACTICUM PRESS · COURSE DELIVERABLES</p>
-  <h1>Deliverable templates</h1>
+  <h1{title_render}>Deliverable templates</h1>
   <p class="lede">The handout templates for the six recurring course deliverables — the time
   sheet, engagement-letter checklist, client-interview plan, settlement &amp; negotiation plan,
   learning portfolio, and reflective report. Each carries its own &ldquo;how it&rsquo;s
@@ -1599,7 +1672,7 @@ def build_templates(corpus):
     <a class="chip chip--matter" href="../modules/m2.html">M2 · SUBSTANTIVE + SKILLS</a>
     <a class="chip chip--matter" href="../modules/m3.html">M3 · TRANSITION</a>
   </div>
-</header>"""
+</header>""".format(title_render=_eb_render_attr(title_ref, rel))
 
     body = """
 {header}
@@ -1622,6 +1695,7 @@ def build_templates(corpus):
 # --------------------------------------------------------------------------- #
 def build_skills(corpus):
     rel = "skills/index.html"
+    title_ref = "data/copy/home.json#explore.cards.skills.title"
     skills = corpus["skills"]["skills"]
     tasks_by_skill = defaultdict(list)
     for t in corpus["tasks"]["tasks"]:
@@ -1707,7 +1781,7 @@ def build_skills(corpus):
     body = """
 <section class="reveal">
   <p class="eyebrow">TABLE OF AUTHORITIES · {n} SURVEYED SKILLS</p>
-  <h1>Skills browser</h1>
+  <h1{title_render}>Skills browser</h1>
   <p class="lede">Sonsteng&rsquo;s seventeen Legal Practice skills and nine Law Practice Management
   skills, decomposed into the tasks most lawyers most often perform — each mapped into the FOLIO
   ontology where a sound mapping exists, and cross-linked to the matters that exercise it.</p>
@@ -1735,7 +1809,7 @@ def build_skills(corpus):
   </div>
   {ext}
 </section>
-""".format(n=len(lp) + len(pm),
+""".format(n=len(lp) + len(pm), title_render=_eb_render_attr(title_ref, rel),
            lp="".join(render_skill(s, open_first=(i == 0)) for i, s in enumerate(lp)),
            pm="".join(render_skill(s) for s in pm),
            ext="".join(render_skill(s) for s in ext))
@@ -1802,10 +1876,9 @@ def build_matter_library(corpus):
 
     rows = []
     for shape, pair in by_shape.items():
-        # These labels are shared with the generated packet-header framing below.
-        # Keep them read-only until the editor contract can represent one shared
-        # scalar inside generated framing without registering the whole lede.
-        label = shape_labels[shape]
+        label, label_eb = _copy_scalar(
+            "matters", copy, "shape_labels." + shape,
+            "matter library · practice shapes")
         cards = []
         for tier in ("meridian", "real"):
             m = pair[tier]
@@ -1815,10 +1888,10 @@ def build_matter_library(corpus):
   <div class="shape-row">
     <div>
       <p class="eyebrow">SHAPE</p>
-      <h2 class="shape-row__label" style="font-size:var(--fs-lg)">{label}</h2>
+      <h2 class="shape-row__label" style="font-size:var(--fs-lg)"{label_eb}>{label}</h2>
     </div>
     <div class="shape-row__cards">{cards}</div>
-  </div>""".format(label=esc(label), cards="".join(cards)))
+  </div>""".format(label=esc(label), label_eb=label_eb, cards="".join(cards)))
 
     hero = {}
     hero_eb = {}
@@ -2183,18 +2256,27 @@ def build_one_packet(corpus, m, man):
     # --- caption header
     jname = juris.get("name", m.get("jurisdiction", ""))
     tier = "meridian" if m.get("tier") == "meridian" else "real"
+    law_editable = tier == "meridian"
+    jname_locked = _eb_locked_attr(
+        "the practicum jurisdiction canon" if law_editable else "the matter's jurisdiction metadata",
+        "law/index.html" if law_editable else None)
+    shape_path = "shape_labels." + m.get("shape", "")
+    shape_ref = "data/copy/matters.json#" + shape_path
+    shape_value = shape_labels.get(m.get("shape"), m.get("shape", ""))
+    shape_eb = _eb_scalar_attr(
+        shape_ref, shape_value, shape_path, "matter packet · practice shape")
     cap_eb = _eb_scalar_attr(matter_rel + "#caption", m.get("caption", ""),
                              "caption", "matter caption")
     header = """
 <header class="reveal">
   <div class="chips">{tc} <span class="chip">{fee} FEE</span> <span class="chip chip--folio">{mid}</span></div>
   <h1 style="margin-top:var(--sp-3)"{cap_eb}>{cap}</h1>
-  <p class="lede">{shape} · {jname}</p>
+  <div class="lede mixed-sentence"><p style="display:inline;margin:0"{shape_eb}>{shape}</p> · <span{jname_locked}>{jname}</span></div>
   <div class="chips" aria-label="Skills exercised">{skills}</div>
 </header>""".format(tc=tier_chip(tier, m.get("jurisdiction")), fee=esc((m.get("fee_type") or "").upper()),
                     mid=esc(m["id"].upper()), cap=esc(m.get("caption", "")), cap_eb=cap_eb,
-                    shape=esc(shape_labels.get(m.get("shape"), m.get("shape", ""))),
-                    jname=esc(jname), skills=skill_chips)
+                    shape=esc(shape_value), shape_eb=shape_eb,
+                    jname=esc(jname), jname_locked=jname_locked, skills=skill_chips)
 
     instructor_note = """
   <p class="instructor-note">Instructor materials (master fact pattern, teaching notes, answer
@@ -2768,8 +2850,15 @@ def build_firm_dashboard(corpus):
     fnote_eb = _eb_scalar_attr(firm_rel + "#identity.letterhead_note",
                                ident.get("letterhead_note", ""),
                                "identity.letterhead_note", "firm identity")
-    provenance_before, provenance_before_eb = copy_pair("hero.provenance_before_path", "hero")
-    provenance_after, provenance_after_eb = copy_pair("hero.provenance_after_path", "hero")
+    provenance_before = copy["hero"]["provenance_before_path"]
+    provenance_after = copy["hero"]["provenance_after_path"]
+    provenance_before_eb = _eb_scalar_attr(
+        "data/copy/firm.json#hero.provenance_before_path", provenance_before,
+        "hero.provenance_before_path", "firm dashboard · hero", mixed=True)
+    provenance_after_eb = _eb_scalar_attr(
+        "data/copy/firm.json#hero.provenance_after_path", provenance_after,
+        "hero.provenance_after_path", "firm dashboard · hero", mixed=True)
+    provenance_path_locked = _eb_locked_attr("the generated firm-data path")
     snapshot_note, snapshot_note_eb = copy_pair("filters.snapshot_note", "reporting filters")
     downloads_eyebrow, downloads_eyebrow_eb = copy_pair("downloads.eyebrow", "downloads")
     downloads_heading, downloads_heading_eb = copy_pair("downloads.heading", "downloads")
@@ -2779,7 +2868,7 @@ def build_firm_dashboard(corpus):
   <h1{fname_eb}>{name}</h1>
   <p class="lede"{fnote_eb}>{note}</p>
   <div class="lede" style="margin:0 0 var(--space)"><p style="display:inline;margin:0"{provenance_before_eb}>{provenance_before}</p>
-  <span class="mono">data/firm/firm.json</span><p style="display:inline;margin:0"{provenance_after_eb}>{provenance_after}</p></div>
+  <span class="mono"{provenance_path_locked}>data/firm/firm.json</span><p style="display:inline;margin:0"{provenance_after_eb}>{provenance_after}</p></div>
 </section>
 
 <div class="viz-filter" role="group" aria-label="Reporting filters">
@@ -2816,6 +2905,7 @@ def build_firm_dashboard(corpus):
            fname_eb=fname_eb, fnote_eb=fnote_eb,
            provenance_before=esc(provenance_before), provenance_before_eb=provenance_before_eb,
            provenance_after=esc(provenance_after), provenance_after_eb=provenance_after_eb,
+           provenance_path_locked=provenance_path_locked,
            snapshot_note=esc(snapshot_note), snapshot_note_eb=snapshot_note_eb,
            downloads_eyebrow=esc(downloads_eyebrow), downloads_eyebrow_eb=downloads_eyebrow_eb,
            downloads_heading=esc(downloads_heading), downloads_heading_eb=downloads_heading_eb,
@@ -2936,7 +3026,7 @@ def build_data_catalog(corpus):
 # --------------------------------------------------------------------------- #
 BUILD_DIR = os.path.join(ROOT, "build")
 EDITOR_MAP_PATH = os.path.join(BUILD_DIR, "editor-map.generated.json")
-_EBSRC_ATTR_RE = re.compile(r'\s+data-ebsrc="[^"]*"')
+_EDITOR_ANNOTATION_RE = re.compile(r'\s+data-eb(?:src|render)="[^"]*"')
 
 
 class _BlockWalker(HTMLParser):
@@ -2950,6 +3040,7 @@ class _BlockWalker(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.in_main = False
         self.candidates = []      # ordered: {"tag","ebsrc","text"}
+        self.rendered_refs = []
         self._cur = None
         self._cur_tag = None
         self._depth = 0
@@ -2960,12 +3051,14 @@ class _BlockWalker(HTMLParser):
             return
         if not self.in_main:
             return
+        d = dict(attrs)
+        if d.get("data-ebrender"):
+            self.rendered_refs.append(d["data-ebrender"])
         if self._cur is not None:
             if tag == self._cur_tag:
                 self._depth += 1
             return
         if tag in _CANDIDATE_TAGS:
-            d = dict(attrs)
             self._cur = {"tag": tag, "ebsrc": d.get("data-ebsrc"), "text": []}
             self._cur_tag = tag
             self._depth = 1
@@ -2987,7 +3080,9 @@ class _BlockWalker(HTMLParser):
 
 
 def _extract_page_blocks(html_text):
-    """Return (editable_entries, has_annotations). Each entry is a partial map
+    """Return (editable_entries, rendered_refs, has_annotations).
+
+    Each entry is a partial map
     block joined from the DOM + EDMAP.sources; index is document-order position
     among ALL candidates (editable or not)."""
     walker = _BlockWalker()
@@ -3012,8 +3107,11 @@ def _extract_page_blocks(html_text):
         }
         if meta["kind"] == "json_scalar" and meta.get("json_path"):
             block["json_path"] = meta["json_path"]
+        if meta.get("mixed"):
+            block["mixed"] = True
         entries.append(block)
-    return entries, ("data-ebsrc=" in html_text)
+    return entries, walker.rendered_refs, (
+        "data-ebsrc=" in html_text or "data-ebrender=" in html_text)
 
 
 # Pages the /edit proxy must NOT host. The injector strips a wrapped page's own
@@ -3344,6 +3442,108 @@ def compute_scope_index(corpus):
     return {"matters": matters, "modules": modules}
 
 
+class EditorContractError(RuntimeError):
+    """The generated editor map does not describe the rendered authored text."""
+
+
+def _surface_set(items):
+    return {(item.get("page"), item.get("index")) for item in (items or [])}
+
+
+def validate_editor_contract(pages, rendered_occurrences, transition_allowlist,
+                             recorded_occurrences=None):
+    """Fail when editable elements are mixed or render sites are undeclared.
+
+    ``recorded_occurrences`` is the map's declared reach, including passive
+    render sites whose index is None. Synthetic callers may omit it to derive
+    the declaration from editable page blocks, preserving the strict guard.
+    """
+    transition_allowlist = transition_allowlist or {}
+    recorded = {}
+    violations = []
+
+    for page, blocks in pages.items():
+        for block in blocks:
+            ref = block["source_ref"]
+            recorded.setdefault(ref, []).append({
+                "page": page,
+                "index": block["index"],
+            })
+            is_mixed = block.get("mixed") is True
+            expected_hash = text_norm.norm_hash(block.get("original_text"))
+            if (block.get("kind") == "json_scalar"
+                    and block.get("original_hash") != expected_hash
+                    and not is_mixed and ref not in transition_allowlist):
+                violations.append(
+                    "%s on %s[%s] is a mixed element: rendered text extends "
+                    "beyond its authored scalar" % (ref, page, block["index"]))
+
+    declared = recorded if recorded_occurrences is None else recorded_occurrences
+    for ref in sorted(set(declared) | set(rendered_occurrences or {})):
+        recorded_surfaces = _surface_set(declared.get(ref))
+        rendered_surfaces = _surface_set((rendered_occurrences or {}).get(ref))
+        if not rendered_surfaces:
+            continue
+        if (rendered_surfaces != recorded_surfaces
+                and ref not in transition_allowlist):
+            violations.append(
+                "%s renders on %d surfaces but its block records %d"
+                % (ref, len(rendered_surfaces), len(recorded_surfaces)))
+        elif (recorded_occurrences is None
+              and len(recorded_surfaces) > 1
+              and ref not in transition_allowlist):
+            violations.append(
+                "%s: coupled ref is missing from transition allowlist"
+                % ref)
+
+    bad_reasons = [ref for ref, reason in transition_allowlist.items()
+                   if not isinstance(reason, str) or not reason.strip()]
+    if bad_reasons:
+        violations.append(
+            "transition allowlist entries require a reason: %s"
+            % ", ".join(sorted(bad_reasons)))
+
+    if violations:
+        raise EditorContractError(
+            "editor contract guard failed:\n  - " + "\n  - ".join(violations))
+
+
+def _editor_transition_allowlist(pages, rendered_occurrences):
+    """Return the exact reviewed ref-to-migration-reason inventory."""
+    recorded = {}
+    for page, blocks in pages.items():
+        for block in blocks:
+            recorded.setdefault(block["source_ref"], set()).add(
+                (page, block["index"]))
+
+    allowlist = {}
+    for ref, surfaces in recorded.items():
+        if len(surfaces) <= 1:
+            continue
+        if ref.startswith("data/jurisdictions/meridian.json#"):
+            allowlist[ref] = (
+                "Meridian canon leaf still renders on all ten Law pages")
+        elif (ref.startswith("data/matters/")
+              and ref.endswith("/matter.json#caption")):
+            allowlist[ref] = (
+                "Matter caption still renders on its packet and library card")
+
+    for ref, surfaces in (rendered_occurrences or {}).items():
+        if (ref.startswith("data/taxonomy/tasks.json#tasks.")
+                and ref.endswith(".name") and len(_surface_set(surfaces)) > 1):
+            allowlist[ref] = (
+                "Task name still renders read-only on its module cover")
+    fingerprint = hashlib.sha256(
+        "\n".join(sorted(allowlist)).encode("utf-8")
+    ).hexdigest()
+    if fingerprint not in EDITOR_TRANSITION_ALLOWLIST_SHA256:
+        raise EditorContractError(
+            "editor transition allowlist inventory changed: expected %s, got %s; "
+            "review the exact ref additions/removals before updating the fingerprint"
+            % (sorted(EDITOR_TRANSITION_ALLOWLIST_SHA256), fingerprint))
+    return allowlist
+
+
 def build_editor_map(spine_build_id, scope_index=None):
     """POST-BUILD pass: for every written page, extract editable blocks in the
     walker's document order, then STRIP the data-ebsrc annotations so the public
@@ -3360,15 +3560,21 @@ def build_editor_map(spine_build_id, scope_index=None):
     end. An entry with an empty block list is a page that is readable, navigable
     and commentable in the editor, with nothing on it to edit."""
     pages = {}
+    rendered_occurrences = {}
     total = 0
     for page in sorted(glob.glob(os.path.join(OUT, "**", "*.html"), recursive=True)):
         rel = os.path.relpath(page, OUT).replace(os.sep, "/")
         with open(page, "r", encoding="utf-8") as fh:
             content = fh.read()
-        entries, annotated = _extract_page_blocks(content)
+        entries, passive_refs, annotated = _extract_page_blocks(content)
+        for ref in passive_refs:
+            rendered_occurrences.setdefault(ref, []).append({
+                "page": rel,
+                "index": None,
+            })
         if annotated:
-            # strip every data-ebsrc attribute -> clean public HTML
-            cleaned = _EBSRC_ATTR_RE.sub("", content)
+            # strip temporary editor annotations -> clean public HTML
+            cleaned = _EDITOR_ANNOTATION_RE.sub("", content)
             with open(page, "w", encoding="utf-8") as fh:
                 fh.write(cleaned)
         if rel.startswith(EDITOR_MAP_EXCLUDE_PREFIXES):
@@ -3377,8 +3583,31 @@ def build_editor_map(spine_build_id, scope_index=None):
         total += len(entries)
 
     os.makedirs(BUILD_DIR, exist_ok=True)
+    editable_occurrences = {}
+    for rel, entries in pages.items():
+        for entry in entries:
+            editable_occurrences.setdefault(entry["source_ref"], []).append({
+                "page": rel,
+                "index": entry["index"],
+            })
+    for ref, items in editable_occurrences.items():
+        rendered_occurrences.setdefault(ref, []).extend(items)
+
+    declared_occurrences = {
+        ref: [dict(item) for item in items]
+        for ref, items in PASSIVE_OCCURRENCES.items()
+    }
+    for ref, items in editable_occurrences.items():
+        declared_occurrences.setdefault(ref, []).extend(items)
+
+    transition_allowlist = _editor_transition_allowlist(
+        pages, declared_occurrences)
+    validate_editor_contract(
+        pages, rendered_occurrences, transition_allowlist,
+        recorded_occurrences=declared_occurrences)
+
     bundle = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "generated_by": "tools/build_site.py",
         "note": ("EDITABLE-BLOCK ALLOWLIST — server-only. The Worker bundles this "
                  "to validate every source_ref/json_path at suggest AND apply time. "
@@ -3395,6 +3624,12 @@ def build_editor_map(spine_build_id, scope_index=None):
         "counts": {},
         "scopes": scope_index or {},
         "facts": dict(FACTS_INDEX),
+        "overrides": [dict(record) for record in PAGE_OVERRIDES.values()],
+        # Include read-only render sites as well as editable candidates. A
+        # passive occurrence has index=None: it is part of an edit's reach,
+        # but is not itself an editable target on that surface.
+        "occurrences": declared_occurrences,
+        "editor_contract_transition_allowlist": transition_allowlist,
         "pages": pages,
     }
     for rel, entries in pages.items():
@@ -3563,9 +3798,10 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
-    global SPINE_BUILD_ID
+    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES
     SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
     EDMAP.reset()
+    PASSIVE_OCCURRENCES = {}
     EDMAP.enabled = True                         # record editable blocks while rendering
 
     corpus = load_corpus()

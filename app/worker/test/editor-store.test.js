@@ -80,6 +80,30 @@ test("supersede: same editor re-edits same source_ref -> prior goes superseded",
   assert.equal(core._get("f2").supersedes, "f1");
 });
 
+test("page overrides supersede only the same page target", () => {
+  const core = makeCore();
+  const sref = "data/copy/home.json#shared.title";
+  core.suggest(suggestInput({ id: "po-a1", kind: "page_override", source_ref: sref,
+    page: "modules/m1.html", new_text: "M1 first" }));
+  core.suggest(suggestInput({ id: "po-b1", kind: "page_override", source_ref: sref,
+    page: "modules/m2.html", new_text: "M2 first" }));
+  core.suggest(suggestInput({ id: "po-a2", kind: "page_override", source_ref: sref,
+    page: "modules/m1.html", new_text: "M1 second" }));
+  assert.equal(core._get("po-a1").status, STATUS.SUPERSEDED);
+  assert.equal(core._get("po-b1").status, STATUS.PENDING);
+  assert.equal(core._get("po-a2").supersedes, "po-a1");
+});
+
+test("shared edits and page overrides do not supersede each other", () => {
+  const core = makeCore();
+  const sref = "data/copy/home.json#shared.title";
+  core.suggest(suggestInput({ id: "shared-1", kind: "json_scalar", source_ref: sref }));
+  core.suggest(suggestInput({ id: "override-1", kind: "page_override", source_ref: sref,
+    page: "modules/m1.html" }));
+  assert.equal(core._get("shared-1").status, STATUS.PENDING);
+  assert.equal(core._get("override-1").status, STATUS.PENDING);
+});
+
 test("decide is the SOLE writer of accepted; accept moves pending->accepted", () => {
   const core = makeCore();
   core.suggest(suggestInput({ id: "a1" }));
@@ -300,6 +324,17 @@ test("DIRECT_APPLY: re-editing supersedes a prior ACCEPTED-but-unapplied row (no
   assert.equal(core._get("dae1").status, STATUS.SUPERSEDED); // prior accepted superseded
   assert.equal(core._get("dae2").status, STATUS.ACCEPTED);   // newest is the live accepted
   assert.equal(core._get("dae2").supersedes, "dae1");
+});
+
+test("DIRECT_APPLY: page override supersede stays partitioned by page", () => {
+  const core = makeCore();
+  const sref = "data/copy/home.json#shared.title";
+  core.suggest(suggestInput({ id: "dpo-a", kind: "page_override", source_ref: sref,
+    page: "modules/m1.html" }), undefined, { directApply: true });
+  core.suggest(suggestInput({ id: "dpo-b", kind: "page_override", source_ref: sref,
+    page: "modules/m2.html" }), undefined, { directApply: true });
+  assert.equal(core._get("dpo-a").status, STATUS.ACCEPTED);
+  assert.equal(core._get("dpo-b").status, STATUS.ACCEPTED);
 });
 
 test("DIRECT_APPLY: an IN_FLIGHT (claimed) row is NOT superseded by a new edit", () => {

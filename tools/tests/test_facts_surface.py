@@ -46,7 +46,8 @@ def _build_fresh():
         return _FRESH
     tmp = tempfile.mkdtemp(prefix="facts-")
     saved = {k: getattr(bs, k) for k in
-             ("OUT", "BUILD_DIR", "EDITOR_MAP_PATH", "SPINE_BUILD_ID")}
+             ("OUT", "BUILD_DIR", "EDITOR_MAP_PATH", "SPINE_BUILD_ID",
+              "PASSIVE_OCCURRENCES")}
     bs.OUT = os.path.join(tmp, "site", "platform")
     bs.BUILD_DIR = os.path.join(tmp, "build")
     bs.EDITOR_MAP_PATH = os.path.join(bs.BUILD_DIR, "editor-map.generated.json")
@@ -54,6 +55,7 @@ def _build_fresh():
         bs.SPINE_BUILD_ID = spine_stamp.compute(bs.DATA)
         bs.EDMAP.reset()
         bs.EDMAP.enabled = True
+        bs.PASSIVE_OCCURRENCES = {}
         corpus = bs.load_corpus()
         bs.SKILLS_BY_ID.update({s["id"]: s for s in corpus["skills"]["skills"]})
         bs.TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})

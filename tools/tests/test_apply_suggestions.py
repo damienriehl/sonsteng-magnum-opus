@@ -1079,6 +1079,7 @@ class FactsApplyTest(unittest.TestCase):
         res = self._run("b1", FakePipeline(SPEC), deploy_plan_only=True)
         self.assertEqual([r["id"] for r in res.needs_human], ["fa3"])
 
+
     def test_fact_edit_syndicates_restated_prose_as_one_group(self):
         # caption is restated verbatim in a case-file paragraph
         cur = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
@@ -1123,3 +1124,123 @@ class FactsApplyTest(unittest.TestCase):
                 original_text="Oz.", new_text="Ozzy")],
             self.index, self.client, "bX")
         self.assertEqual(payloads, [])
+
+
+class PageOverridePatchTest(unittest.TestCase):
+    def test_override_record_is_surface_owned_and_auditable(self):
+        record = ap.page_override_record(
+            page="modules/m1.html",
+            shared_source_ref="data/copy/home.json#volumes.modules.M1.title",
+            value="A page-only title",
+            editor="John Sonsteng",
+            deliberate_at="2026-08-04T15:30:00Z",
+        )
+        self.assertEqual(record["page"], "modules/m1.html")
+        self.assertEqual(record["shared_source_ref"],
+                         "data/copy/home.json#volumes.modules.M1.title")
+        self.assertEqual(record["value"], "A page-only title")
+        self.assertEqual(record["intent"], "deliberate_page_override")
+        self.assertEqual(record["deliberate_by"], "John Sonsteng")
+        self.assertEqual(record["deliberate_at"], "2026-08-04T15:30:00Z")
+
+    def test_override_path_is_stable_and_ordinary(self):
+        relpath, json_path, source_ref = ap.page_override_address(
+            "modules/m1.html",
+            "data/copy/home.json#volumes.modules.M1.title",
+        )
+        self.assertEqual(relpath, "data/copy/home.json")
+        self.assertRegex(json_path, r"^overrides\.[a-f0-9]{16}\.value$")
+        self.assertEqual(source_ref, relpath + "#" + json_path)
+
+    def test_page_only_is_refused_for_non_shared_leaf(self):
+        with self.assertRaisesRegex(ap.ApplyError, "not shared"):
+            ap.validate_page_override_occurrences(
+                "home/index.html", [{"page": "home/index.html", "index": 1}])
+
+    def test_numeric_override_stays_numeric(self):
+        self.assertEqual(ap.coerce_page_override_value("42", 7), 42)
+        self.assertIsInstance(ap.coerce_page_override_value("42", 7), int)
+
+    def test_invalid_typed_overrides_are_refused(self):
+        for proposed, current in (("truthy", True), ("1.5", 7),
+                                  ("not-a-number", 1.0), ("nan", 1.0)):
+            with self.subTest(proposed=proposed, current=current):
+                with self.assertRaises(ValueError):
+                    ap.coerce_page_override_value(proposed, current)
+
+    def test_revert_deletes_only_the_surface_leaf(self):
+        obj = {
+            "schema_version": "1.0.0", "type": "page_copy", "page": "home",
+            "overrides": {
+                "a" * 16: {"page": "modules/m1.html", "value": "local"},
+                "b" * 16: {"page": "modules/m2.html", "value": "other"},
+            },
+        }
+        ap.delete_json_path(obj, "overrides." + "a" * 16)
+        self.assertNotIn("a" * 16, obj["overrides"])
+        self.assertEqual(obj["overrides"]["b" * 16]["value"], "other")
+
+    def test_gate_and_patcher_create_then_remove_an_ordinary_override_leaf(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "data", "copy"))
+            relpath = "data/copy/home.json"
+            source_ref = relpath + "#volumes.modules.M1.title"
+            _write(root, relpath, json.dumps({
+                "schema_version": "1.0.0", "type": "page_copy", "page": "home",
+                "volumes": {"modules": {"M1": {"title": 7}}},
+            }, indent=2) + "\n")
+            source_index = {source_ref: {
+                "kind": "json_scalar", "json_path": "volumes.modules.M1.title",
+                "original_text": 7, "original_hash": "hash",
+                "occurrences": [{"page": "home/index.html", "index": 1},
+                                {"page": "modules/m1.html", "index": 2}],
+            }}
+            row = {"id": "ov1", "kind": "page_override", "source_ref": source_ref,
+                   "new_text": "42", "page": "modules/m1.html", "editor": "slot:john",
+                   "comment": "JOS", "created_at": 1785871800000,
+                   "original_hash": "hash"}
+            duplicate = dict(row, id="ov2", new_text="43")
+            status, duplicate_patches = ap._gate_group(
+                [row, duplicate], source_index, root)
+            self.assertEqual(status, "")
+            self.assertEqual(ap.apply_file_patches(
+                root, relpath, duplicate_patches), {
+                    "ov1": ap.OUT_NEEDS_HUMAN,
+                    "ov2": ap.OUT_NEEDS_HUMAN,
+                })
+            invalid = dict(row, id="ov-invalid", new_text="1.5")
+            status, patches = ap._gate_group([invalid], source_index, root)
+            self.assertEqual(status, ap.OUT_NEEDS_HUMAN)
+            self.assertEqual(patches, [])
+            status, patches = ap._gate_group([row], source_index, root)
+            self.assertEqual(status, "")
+            self.assertEqual(ap.apply_file_patches(root, relpath, patches), {"ov1": True})
+            obj = json.load(open(os.path.join(root, relpath), encoding="utf-8"))
+            key, record = next(iter(obj["overrides"].items()))
+            self.assertEqual(record["value"], 42)
+            self.assertEqual(record["deliberate_by"], "JOS")
+            self.assertEqual(obj["volumes"]["modules"]["M1"]["title"], 7)
+
+            stale = dict(row, id="ov-stale", original_hash="stale")
+            status, patches = ap._gate_group([stale], source_index, root)
+            self.assertEqual(status, ap.OUT_DRIFT)
+            self.assertEqual(patches, [])
+
+            override_ref = relpath + "#overrides.%s.value" % key
+            revert_index = {override_ref: {"kind": "json_scalar", "original_text": 42}}
+            revert_row = {
+                "id": "rv1", "kind": "page_override_revert", "source_ref": override_ref,
+                "original_hash": "fresh",
+            }
+            revert_index[override_ref]["original_hash"] = "fresh"
+            status, patches = ap._gate_group([revert_row], revert_index, root)
+            self.assertEqual(status, "")
+            self.assertEqual(ap.apply_file_patches(root, relpath, patches), {"rv1": True})
+            reverted = json.load(open(os.path.join(root, relpath), encoding="utf-8"))
+            self.assertEqual(reverted["volumes"]["modules"]["M1"]["title"], 7)
+            self.assertEqual(reverted.get("overrides"), {})
+
+            stale_revert = dict(revert_row, id="rv-stale", original_hash="stale")
+            status, patches = ap._gate_group([stale_revert], revert_index, root)
+            self.assertEqual(status, ap.OUT_DRIFT)
+            self.assertEqual(patches, [])

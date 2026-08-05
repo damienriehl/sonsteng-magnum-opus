@@ -93,6 +93,131 @@ test("DIRECT_APPLY unset forwards { directApply:false } (classic suggestion mode
   assert.equal(cap.opts.directApply, false);
 });
 
+test("a shared json_scalar suggestion stores one server-authoritative json_path", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
+    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
+    return Object.values(EDITOR_MAP.pages).some((blocks) =>
+      blocks.some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+  });
+  const block = Object.values(EDITOR_MAP.pages).flat()
+    .find((b) => b.source_ref === sharedRef);
+  const pageBlocks = Object.entries(EDITOR_MAP.pages).flatMap(([page, blocks]) =>
+    blocks.filter((b) => b.source_ref === sharedRef).map((b) => ({ ...b, page })));
+  const origin = pageBlocks[pageBlocks.length - 1];
+  assert.ok(block, "fixture must contain a shared json_scalar block");
+  assert.ok(origin && origin.page !== pageBlocks[0].page,
+    "fixture must expose a non-first editable occurrence");
+
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "shared-json-0001",
+    source_ref: sharedRef,
+    json_path: block.json_path,
+    new_text: "Shared replacement text.",
+    page: origin.page,
+  }), env, auth);
+
+  assert.equal(resp.status, 200);
+  assert.equal(cap.input.source_ref, sharedRef);
+  assert.equal(cap.input.json_path, block.json_path);
+  assert.equal(Array.isArray(cap.input.json_path), false);
+  assert.equal(cap.input.page, origin.page);
+  assert.equal(cap.input.block_anchor, `${origin.page}:${origin.index}`);
+
+  const forgedCap = {};
+  const forgedEnv = envWith({}, forgedCap);
+  const forgedAuth = await authBearer(forgedEnv, "john-opaque-token-value-123");
+  const forgedResp = await suggestEndpoint(suggestReq({
+    id: "shared-json-0002",
+    source_ref: sharedRef,
+    json_path: "attacker.controlled.path",
+    new_text: "Forged replacement text.",
+  }), forgedEnv, forgedAuth);
+  assert.equal(forgedResp.status, 400);
+  assert.equal((await forgedResp.json()).error.code, "validation_error");
+  assert.equal(forgedCap.input, undefined, "forged path must never reach storage");
+});
+
+test("page_override is accepted only for a genuinely shared block on its occurrence", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) =>
+    EDITOR_MAP.occurrences[ref].length > 1 && Object.values(EDITOR_MAP.pages).flat()
+      .some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+  const occurrence = EDITOR_MAP.occurrences[sharedRef][0];
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "page-override-0001", source_ref: sharedRef,
+    new_text: "Only here", op: "page_override", page: occurrence.page,
+  }), env, auth);
+  assert.equal(resp.status, 200);
+  assert.equal(cap.input.kind, "page_override");
+  assert.equal(cap.input.page, occurrence.page);
+  assert.equal(cap.input.block_anchor, `${occurrence.page}:${occurrence.index}`);
+  assert.equal(cap.input.comment, "JOS");
+});
+
+test("page_override refuses a block with only one occurrence", async () => {
+  const singleton = Object.values(EDITOR_MAP.pages).flat().find((b) =>
+    b.kind === "json_scalar" && (EDITOR_MAP.occurrences[b.source_ref] || []).length === 1);
+  const cap = {};
+  const env = envWith({}, cap);
+  const auth = await authBearer(env, "john-opaque-token-value-123");
+  const resp = await suggestEndpoint(suggestReq({
+    id: "page-override-0002", source_ref: singleton.source_ref,
+    new_text: "Meaningless", op: "page_override",
+    page: EDITOR_MAP.occurrences[singleton.source_ref][0].page,
+  }), env, auth);
+  assert.equal(resp.status, 400);
+  assert.equal(cap.input, undefined);
+});
+
+test("page_override refuses a passive-only occurrence", async () => {
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) =>
+    EDITOR_MAP.occurrences[ref].some((item) => Number.isInteger(item.index)));
+  const passive = { page: "passive-only.html", index: null };
+  EDITOR_MAP.occurrences[sharedRef].push(passive);
+  try {
+    const cap = {};
+    const env = envWith({}, cap);
+    const auth = await authBearer(env, "john-opaque-token-value-123");
+    const resp = await suggestEndpoint(suggestReq({
+      id: "page-override-passive", source_ref: sharedRef,
+      new_text: "Cannot target passive", op: "page_override", page: passive.page,
+    }), env, auth);
+    assert.equal(resp.status, 400);
+    assert.equal(cap.input, undefined);
+  } finally {
+    EDITOR_MAP.occurrences[sharedRef].pop();
+  }
+});
+
+test("page_override_revert anchors the actual override occurrence", async () => {
+  const block = Object.values(EDITOR_MAP.pages).flat().find((b) =>
+    b.kind === "json_scalar" && (EDITOR_MAP.occurrences[b.source_ref] || []).length === 1);
+  const occurrence = EDITOR_MAP.occurrences[block.source_ref][0];
+  const record = { source_ref: block.source_ref, page: occurrence.page,
+    intent: "deliberate_page_override" };
+  EDITOR_MAP.overrides = EDITOR_MAP.overrides || [];
+  EDITOR_MAP.overrides.push(record);
+  try {
+    const cap = {};
+    const env = envWith({}, cap);
+    const auth = await authBearer(env, "john-opaque-token-value-123");
+    const resp = await suggestEndpoint(suggestReq({
+      id: "page-revert-00001", source_ref: block.source_ref,
+      op: "page_override_revert", page: occurrence.page,
+    }), env, auth);
+    assert.equal(resp.status, 200);
+    assert.equal(cap.input.kind, "page_override_revert");
+    assert.equal(cap.input.block_anchor, `${occurrence.page}:${occurrence.index}`);
+  } finally {
+    EDITOR_MAP.overrides.pop();
+  }
+});
+
 test("id_conflict from the store surfaces as a 409 (client must rotate its id, no silent loss)", async () => {
   const cap = {};
   const env = {

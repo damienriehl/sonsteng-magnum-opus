@@ -213,6 +213,7 @@
   var MAP_ISLAND = readJsonIsland('editor-map-data') || {};
   var EDITS_ISLAND = readJsonIsland('edits-data') || {};
   var MAP = MAP_ISLAND.blocks || [];
+  var PAGE_OVERRIDES = MAP_ISLAND.overrides || [];
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
   var PAGE = MAP_ISLAND.page || derivePage();
 
@@ -274,6 +275,8 @@
       ref: desc.source_ref, index: desc.index, el: elx, kind: desc.kind,
       editable: editable, commentOnly: commentOnly,
       hasFormatting: !!desc.has_inline_formatting, jsonPath: desc.json_path || null,
+      occurrences: Array.isArray(desc.occurrences) ? desc.occurrences.slice() : [],
+      shared: Array.isArray(desc.occurrences) && desc.occurrences.length > 1,
       originalText: desc.original_text != null ? desc.original_text : (elx.textContent || ''),
       originalHash: desc.original_hash || '',
       suggestionId: null, snapshot: null, state: ST.IDLE, dirty: false,
@@ -316,6 +319,79 @@
   }
 
   function setBlockText(s, text) { s.el.textContent = text; }   // never innerHTML
+
+  /* ---------- computed values: locked, but never a dead end -------------- */
+  var lockedDialogEl = null;
+  var lockedReturnFocus = null;
+
+  function closeLockedDialog() {
+    if (!lockedDialogEl) return;
+    lockedDialogEl.remove();
+    lockedDialogEl = null;
+    if (lockedReturnFocus && lockedReturnFocus.focus) lockedReturnFocus.focus();
+    lockedReturnFocus = null;
+  }
+
+  function openLockedDialog(el) {
+    if (!el) return;
+    closeLockedDialog();
+    lockedReturnFocus = el;
+    var origin = el.getAttribute('data-eb-origin') || 'a generated source';
+    var passage = el.getAttribute('data-eb-passage') || '';
+    var dlg = document.createElement('div');
+    dlg.className = 'eb-locked-dialog';
+    dlg.setAttribute('role', 'dialog');
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-labelledby', 'eb-locked-title');
+    var inner = document.createElement('div');
+    inner.className = 'eb-locked-dialog__inner';
+    var title = document.createElement('h2');
+    title.id = 'eb-locked-title';
+    title.className = 'eb-locked-dialog__title';
+    title.textContent = 'Computed value';
+    var lede = document.createElement('p');
+    lede.className = 'eb-locked-dialog__lede';
+    lede.textContent = 'This value comes from ' + origin + ' and cannot be edited here.';
+    var row = document.createElement('div');
+    row.className = 'eb-locked-dialog__row';
+    if (passage) {
+      var link = document.createElement('a');
+      link.className = 'eb-locked-dialog__passage';
+      link.href = passage;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open its editing surface';
+      row.appendChild(link);
+    }
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'eb-locked-dialog__close';
+    close.textContent = 'Close';
+    close.addEventListener('click', closeLockedDialog);
+    row.appendChild(close);
+    inner.appendChild(title); inner.appendChild(lede); inner.appendChild(row);
+    dlg.appendChild(inner); document.body.appendChild(dlg);
+    dlg.addEventListener('mousedown', function (ev) { if (ev.target === dlg) closeLockedDialog(); });
+    dlg.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); closeLockedDialog(); }
+    });
+    lockedDialogEl = dlg;
+    (passage ? row.querySelector('a') : close).focus();
+  }
+
+  function installLockedPassages() {
+    var locked = document.querySelectorAll('[data-eb-locked]');
+    for (var i = 0; i < locked.length; i++) (function (el) {
+      el.classList.add('eb--locked');
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', 'Computed value: ' + (el.textContent || '') + '. Show its source.');
+      el.addEventListener('click', function () { openLockedDialog(el); });
+      el.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openLockedDialog(el); }
+      });
+    })(locked[i]);
+  }
 
   /* ============================================================================
      4. Per-block chrome — affordances, notes, inline status, margin bubbles.
@@ -933,6 +1009,11 @@
     eb.classList.add('eb');
     eb.classList.add(s.editable ? 'eb--editable' : 'eb--comment-only');
     eb.setAttribute('data-eb-index', String(s.index));
+    if (s.shared) {
+      eb.classList.add('eb--shared');
+      eb.setAttribute('data-eb-shared', 'true');
+      eb.setAttribute('title', 'Shared text — editing it can change more than one page');
+    }
 
     toolsEl(s);
 
@@ -1042,6 +1123,12 @@
     opts = opts || {};
     if (s.state === ST.SAVING) return;              // in-flight guard (dedupe layer 1)
     if (!s.dirty) { if (!opts.auto) setLocalStatus(s, 'No change to send', null); return; }
+    // A shared leaf remains one edit session and one suggestion. Its reach is a
+    // choice made before the critical section, never client-side fan-out.
+    if (s.shared && !opts.sharedEverywhere) {
+      openSharedReachDialog(s);
+      return;
+    }
     clearTimeout(s._debounce); s._debounce = null;  // a send is happening now
     // ---- synchronous critical section (chat.js §Input; spike R3/R4) ----
     s.state = ST.SAVING;
@@ -1053,7 +1140,8 @@
     // Worker contract: server derives editor/original_text/kind/page/map_version
     // and IGNORES client values for those. Send only { id, source_ref,
     // json_path?, new_text, original_hash }.
-    var payload = { id: id, source_ref: s.ref, new_text: textAtClick, original_hash: s.originalHash };
+    var payload = { id: id, source_ref: s.ref, new_text: textAtClick,
+      original_hash: s.originalHash, page: PAGE };
     if (s.jsonPath) payload.json_path = s.jsonPath;
     log('SEND ref=' + s.ref + ' id=' + id.slice(0, 8) + ' state=SAVING (disabled)' + (opts.auto ? ' auto' : ''));
 
@@ -1100,6 +1188,117 @@
     });
   }
 
+  /* ---------- SHARED REACH: one leaf, an explicit scope decision (U4) ----- */
+  var sharedReachDlg = null;
+  function titleWords(value) {
+    return String(value || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+  function pageLabel(page) {
+    var parts = String(page || '').replace(/\/index\.html$/, '').split('/').filter(Boolean);
+    if (parts[0] === 'modules' && parts[1]) return 'Module ' + parts[1].replace(/^m/i, '');
+    if (parts[0] === 'matters' && parts[1]) {
+      var matter = titleWords(parts[1].replace(/^m\d+-/, ''));
+      return matter + (parts[2] ? ' · ' + titleWords(parts.slice(2).join(' · ')) : ' · Overview');
+    }
+    return parts.length ? parts.map(titleWords).join(' · ') : String(page || 'another page');
+  }
+  function otherOccurrences(s) {
+    return s.occurrences.filter(function (o) { return o && o.page && o.page !== PAGE; });
+  }
+  function closeSharedReachDialog() {
+    if (!sharedReachDlg) return;
+    var trigger = sharedReachDlg._trigger;
+    if (sharedReachDlg.parentNode) sharedReachDlg.parentNode.removeChild(sharedReachDlg);
+    sharedReachDlg = null;
+    if (trigger) { try { trigger.focus(); } catch (e) {} }
+  }
+  function requestPageOverride(s) {
+    if (s.state === ST.SAVING) return;
+    var textAtClick = s.snapshot;
+    clearTimeout(s._debounce); s._debounce = null;
+    s.state = ST.SAVING;
+    // Freeze the editable surface before the request leaves. This prevents a
+    // keystroke during the response window from being cleared as if it were
+    // part of the page-only copy that was just sent.
+    s.el.removeAttribute('contenteditable');
+    barDisable(true);
+    setLocalStatus(s, 'Saving this page’s copy…', 'sending');
+    setBarStatus('Creating a page-only authored copy…');
+    var id = s.suggestionId || (s.suggestionId = uuid());
+    api('/suggest', { body: {
+      id: id, source_ref: s.ref, new_text: textAtClick,
+      original_hash: s.originalHash, op: 'page_override', page: PAGE
+    }}).then(function (out) {
+      if (!out.ok) { handleSendError(s, out, { pageOverride: true }); return; }
+      clearDraft(s); s.originalText = textAtClick; s.suggestionId = null;
+      var stillDirty = normalize(s.snapshot) !== normalize(textAtClick);
+      s.dirty = stillDirty;
+      if (stillDirty) {
+        s.state = ST.EDITING; s.suggestionId = uuid(); barDisable(false);
+        saveDraft(s); s.el.classList.add('editing', 'dirty');
+        setLocalStatus(s, 'Page-only copy recorded; newer draft not sent', 'draft');
+        setBarStatus('This page’s copy was recorded. Save again to send your newer wording.');
+        repollPending(); return;
+      }
+      s.state = ST.IDLE;
+      s.el.classList.remove('editing', 'dirty'); s.el.removeAttribute('contenteditable');
+      setLocalStatus(s, 'Page-only copy recorded', 'pending');
+      setBarStatus('This page now has its own authored copy.');
+      hideBar(); repollPending();
+    });
+  }
+
+  function buildOverridesView() {
+    if (!PAGE_OVERRIDES.length) return;
+    var details = el('details', 'eb-overrides');
+    var summary = el('summary', 'eb-overrides__summary',
+      'Page-only copies (' + PAGE_OVERRIDES.length + ')');
+    details.appendChild(summary);
+    PAGE_OVERRIDES.forEach(function (record) {
+      var row = el('div', 'eb-overrides__row');
+      row.appendChild(el('span', 'eb-overrides__text',
+        record.value + ' · by ' + record.deliberate_by + ' · ' + record.deliberate_at));
+      var revert = el('button', 'btn btn--ghost', 'Return to shared text'); revert.type = 'button';
+      revert.addEventListener('click', function () {
+        var block = MAP.find(function (b) { return b.source_ref === record.source_ref; });
+        if (!block) { setBarStatus('Reload before returning this copy to shared text.'); return; }
+        api('/suggest', { body: { id: uuid(), source_ref: record.source_ref,
+          original_hash: block.original_hash, op: 'page_override_revert', page: PAGE }}).then(function (out) {
+          if (!out.ok) { setBarStatus('That page-only copy could not be reverted.'); return; }
+          row.remove(); setBarStatus('The page will return to shared text when this change is applied.');
+        });
+      });
+      row.appendChild(revert); details.appendChild(row);
+    });
+    document.body.appendChild(details);
+  }
+  function openSharedReachDialog(s) {
+    if (sharedReachDlg && sharedReachDlg.isConnected) return;
+    var others = otherOccurrences(s);
+    var d = el('div', 'eb-shared-dialog');
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true');
+    d.setAttribute('aria-label', 'Choose where this shared edit applies');
+    var inner = el('div', 'eb-shared-dialog__inner');
+    inner.appendChild(el('h2', 'eb-shared-dialog__title', 'This text appears on more than one page'));
+    inner.appendChild(el('p', 'eb-shared-dialog__lede',
+      'Changing it everywhere will also update ' + (others.length === 1 ? 'this page:' : 'these pages:')));
+    var list = el('ul', 'eb-shared-dialog__pages');
+    others.forEach(function (o) { list.appendChild(el('li', '', pageLabel(o.page))); });
+    inner.appendChild(list);
+    var row = el('div', 'eb-shared-dialog__row');
+    var everywhere = el('button', 'eb-shared-dialog__everywhere', 'Change everywhere'); everywhere.type = 'button';
+    var here = el('button', 'eb-shared-dialog__here', 'Change this page only'); here.type = 'button';
+    var cancel = el('button', 'eb-shared-dialog__cancel', 'Keep editing'); cancel.type = 'button';
+    row.appendChild(everywhere); row.appendChild(here); row.appendChild(cancel);
+    inner.appendChild(row); d.appendChild(inner); document.body.appendChild(d);
+    d._session = s; d._trigger = barSave || s.el; sharedReachDlg = d;
+    everywhere.addEventListener('click', function () { closeSharedReachDialog(); sendSuggestion(s, { sharedEverywhere: true }); });
+    here.addEventListener('click', function () { closeSharedReachDialog(); requestPageOverride(s); });
+    cancel.addEventListener('click', closeSharedReachDialog);
+    d.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSharedReachDialog(); });
+    setTimeout(function () { try { everywhere.focus(); } catch (e) {} }, 0);
+  }
+
   function handleSendError(s, out, opts) {
     opts = opts || {};
     var data = out.data || {};
@@ -1107,6 +1306,7 @@
     var code = (data.error && data.error.code) || data.code ||
       (out.status === 401 ? 'no_edit_auth' : out.status === 429 ? 'rate_limited' :
        out.status === 413 ? 'validation_error' : (out.status === 409 || out.status === 410) ? 'stale_page' : 'network');
+    if (opts.pageOverride && code !== 'stale_page') makeEditable(s, false);
 
     if (code === 'id_conflict') {
       // The server saw this idempotency id with a DIFFERENT payload (rotation raced
@@ -1115,6 +1315,11 @@
       s.state = ST.EDITING; barDisable(false);
       s.suggestionId = uuid();
       saveDraft(s);
+      if (opts.pageOverride) {
+        setLocalStatus(s, 'Not sent — choose this page again', 'err');
+        setBarStatus('The request conflicted with an earlier send. Save again and choose this page only.');
+        return;
+      }
       log('SEND id_conflict ref=' + s.ref + ' -> rotated id, resending');
       sendSuggestion(s, { auto: true });
       return;
@@ -1160,6 +1365,12 @@
     // retry (the user need not press anything); the manual bar keeps its Save CTA.
     s.state = ST.EDITING; barDisable(false);
     saveDraft(s);
+    if (opts.pageOverride) {
+      setLocalStatus(s, 'Not sent — choose this page again', 'err');
+      setBarStatus('That didn’t send. Your wording is preserved; save again and choose this page only.');
+      log('PAGE OVERRIDE error ref=' + s.ref + ' status=' + out.status + ' code=' + code);
+      return;
+    }
     setLocalStatus(s, 'Not sent — will retry', 'err');
     setBarStatus('That didn’t send — it will retry automatically, or press Save to try now.');
     if (opts.auto) armRetry(s);
@@ -1510,7 +1721,8 @@
     var pc = s.pendingComment;
     // Comment: server derives kind/page; send { id, source_ref, comment,
     // original_hash } only.
-    var payload = { id: pc.id, source_ref: s.ref, comment: (bText.value || '').trim(), original_hash: s.originalHash };
+    var payload = { id: pc.id, source_ref: s.ref, comment: (bText.value || '').trim(),
+      original_hash: s.originalHash, page: PAGE };
     api('/suggest', { body: payload }).then(function (out) {
       s._commentSending = false;
       if (out.ok) {
@@ -1865,7 +2077,8 @@
       var s = sessions[ref];
       if (!s.editable || !s.dirty || s.state === ST.SAVING) return;
       var id = s.suggestionId || (s.suggestionId = uuid());
-      var payload = { id: id, source_ref: s.ref, new_text: s.snapshot, original_hash: s.originalHash };
+      var payload = { id: id, source_ref: s.ref, new_text: s.snapshot,
+        original_hash: s.originalHash, page: PAGE };
       if (s.jsonPath) payload.json_path = s.jsonPath;
       saveDraft(s);   // draft is the durable backup regardless of the request outcome
       try { api('/suggest', { body: payload, keepalive: true }); } catch (e) {}
@@ -1911,7 +2124,10 @@
 
     buildBanner();
 
+    installLockedPassages();
+
     buildAddFact();
+    buildOverridesView();
     buildBar();
     buildCommentUI();
     scheduleRailLayout();
@@ -1951,7 +2167,8 @@
         state: s.state, dirty: s.dirty, suggestionId: s.suggestionId, snapshot: s.snapshot,
         originalHash: s.originalHash, originalText: s.originalText,
         hydrated: !!s._hydrated, attribution: s._attr || '',
-        statusText: s._status ? s._status.textContent : ''
+        statusText: s._status ? s._status.textContent : '',
+        shared: s.shared, occurrenceCount: s.occurrences.length
       };
     },
     // hydration harness hooks: render an arbitrary #edits-data item set (the
@@ -1980,6 +2197,27 @@
     },
     blurBlock: function (index) { var s = byIndex[index]; if (s) s.el.dispatchEvent(new Event('blur')); },
     clickSave: function (index) { var s = byIndex[index]; if (s) sendSuggestion(s); },                 // the guarded send
+    sharedDialog: function () {
+      if (!sharedReachDlg) return null;
+      return { pages: Array.prototype.map.call(sharedReachDlg.querySelectorAll('.eb-shared-dialog__pages li'), function (n) { return n.textContent; }) };
+    },
+    chooseSharedEverywhere: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__everywhere').click(); },
+    chooseSharedThisPage: function () { if (sharedReachDlg) sharedReachDlg.querySelector('.eb-shared-dialog__here').click(); },
+    repeatPageOverride: function (index) {
+      var s = byIndex[index]; if (s) { requestPageOverride(s); requestPageOverride(s); }
+    },
+    dismissSharedDialog: closeSharedReachDialog,
+    openLocked: function (index) {
+      var locked = document.querySelectorAll('[data-eb-locked]');
+      if (locked[index]) openLockedDialog(locked[index]);
+    },
+    closeLocked: closeLockedDialog,
+    lockedDialog: function () {
+      if (!lockedDialogEl) return null;
+      var link = lockedDialogEl.querySelector('.eb-locked-dialog__passage');
+      return { text: lockedDialogEl.textContent, href: link ? link.getAttribute('href') : null,
+               target: link ? link.getAttribute('target') : null };
+    },
     tripleClickSave: function (index) { var s = byIndex[index]; if (s) { sendSuggestion(s); sendSuggestion(s); sendSuggestion(s); } },
     openPreview: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; showBar(s); openPreview(); } },
     confirmSend: function (index) { var s = byIndex[index]; if (s) { activeRef = s.ref; sendSuggestion(s); } },

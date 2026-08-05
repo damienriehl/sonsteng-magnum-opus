@@ -112,7 +112,7 @@ async function bootFacts(browser, w, h) {
 async function run() {
   const browser = await puppeteer.launch({
     executablePath: '/snap/bin/chromium',
-    headless: false,
+    headless: process.env.EDITOR_HEADLESS === '1',
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1300,1500']
   });
 
@@ -176,6 +176,161 @@ async function run() {
       b3after.state === 'EDITING' && b3after.dirty === true && !!b3after.suggestionId,
       'state=' + b3after.state + ' dirty=' + b3after.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(3));
+
+    /* --- MX: authored and computed text share one visual sentence (U7) ---- */
+    const mixedBefore = await page.evaluate(() => {
+      const sentence = document.querySelector('.mixed-sentence').cloneNode(true);
+      sentence.querySelectorAll('.eb-tools,.eb-status,.eb-note').forEach(el => el.remove());
+      return {
+        authored: window.SonstengEditor.block(7),
+        sentence: sentence.textContent,
+        lockedEditable: Array.from(document.querySelectorAll('[data-eb-locked]')).some(el => el.isContentEditable),
+        lockedTools: document.querySelectorAll('[data-eb-locked] .eb-tools, .eb-tools [data-eb-locked]').length
+      };
+    });
+    assert('MX1 authored fragment is independently editable while computed spans have no edit affordance',
+      mixedBefore.authored && mixedBefore.authored.editable === true && !mixedBefore.lockedEditable && mixedBefore.lockedTools === 0,
+      JSON.stringify(mixedBefore));
+    assert('MX2 splitting the sentence preserves its visible wording',
+      mixedBefore.sentence === ' This packet concerns State v. Halvard; the filing date is October 14, 2026.',
+      JSON.stringify(mixedBefore.sentence));
+    await page.evaluate(() => window.SonstengEditor.typeInto(7, 'This exercise concerns '));
+    const mixedEdit = await page.evaluate(() => ({
+      authored: window.SonstengEditor.blockText(7),
+      known: document.querySelectorAll('[data-eb-locked]')[0].textContent
+    }));
+    assert('MX3 editing the authored fragment writes only its own leaf',
+      mixedEdit.authored === 'This exercise concerns ' && mixedEdit.known === 'State v. Halvard', JSON.stringify(mixedEdit));
+    await page.evaluate(() => window.SonstengEditor.clickCancel(7));
+    await page.evaluate(() => window.SonstengEditor.openLocked(0));
+    const knownLocked = await page.evaluate(() => window.SonstengEditor.lockedDialog());
+    assert('MX4 a computed value with a known source offers passage in a new tab',
+      knownLocked && /matter caption/i.test(knownLocked.text) && /facts\/index\.html$/.test(knownLocked.href || '') && knownLocked.target === '_blank',
+      JSON.stringify(knownLocked));
+    await page.evaluate(() => window.SonstengEditor.closeLocked());
+    await page.evaluate(() => window.SonstengEditor.openLocked(1));
+    const unknownLocked = await page.evaluate(() => window.SonstengEditor.lockedDialog());
+    assert('MX5 a computed value without an editing surface explains its origin and offers no link',
+      unknownLocked && /generated filing calendar/i.test(unknownLocked.text) && !unknownLocked.href,
+      JSON.stringify(unknownLocked));
+    await page.evaluate(() => window.SonstengEditor.closeLocked());
+
+    /* --- SH: shared text exposes reach before commit (U4) ---------------- */
+    const sharedAtRest = await page.evaluate(() => ({
+      single: window.SonstengEditor.block(1),
+      shared: window.SonstengEditor.block(4),
+      singleMarked: document.querySelector('[data-eb-index="1"]').classList.contains('eb--shared'),
+      sharedMarked: document.querySelector('[data-eb-index="4"]').classList.contains('eb--shared')
+    }));
+    assert('SH1 a single-occurrence block has no shared mark',
+      sharedAtRest.single.shared === false && sharedAtRest.singleMarked === false);
+    assert('SH2 a three-occurrence block is marked as shared before selection',
+      sharedAtRest.shared.shared === true && sharedAtRest.shared.occurrenceCount === 3 && sharedAtRest.sharedMarked === true,
+      'shared=' + sharedAtRest.shared.shared + ' occurrences=' + sharedAtRest.shared.occurrenceCount);
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.SonstengEditor.typeInto(4, 'A shared edit whose reach John must choose.');
+      window.SonstengEditor.clickSave(4);
+    });
+    const reach = await page.evaluate(() => window.SonstengEditor.sharedDialog());
+    assert('SH3 shared commit names the other two pages before sending',
+      reach && reach.pages.length === 2 &&
+      reach.pages.some(p => /exercise/i.test(p)) && reach.pages.some(p => /module 1/i.test(p)),
+      reach ? JSON.stringify(reach.pages) : 'dialog absent');
+    const beforeEverywhere = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    await page.evaluate(() => window.SonstengEditor.chooseSharedEverywhere());
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
+    const everywhere = await page.evaluate(() => ({ server: window.__MOCK_CTRL__.server(), last: window.__MOCK_CTRL__.last(), expectedRef: window.__HARNESS_MAP__[3].source_ref }));
+    assert('SH4 change-everywhere sends exactly one suggestion against the shared leaf',
+      everywhere.server.calls - beforeEverywhere === 1 &&
+      everywhere.last.source_ref === everywhere.expectedRef,
+      'calls=' + (everywhere.server.calls - beforeEverywhere) + ' ref=' + (everywhere.last && everywhere.last.source_ref));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.SonstengEditor.typeInto(4, 'Only this page should receive this wording.');
+      window.SonstengEditor.clickSave(4);
+      window.SonstengEditor.chooseSharedThisPage();
+      window.SonstengEditor.repeatPageOverride(4);
+    });
+    const overrideFrozen = await page.evaluate(() =>
+      document.querySelector('[data-eb-index="4"]').hasAttribute('contenteditable'));
+    assert('SH5a this-page-only freezes typing while its request is in flight',
+      overrideFrozen === false, 'contenteditable=' + overrideFrozen);
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
+    const thisPage = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls,
+      last: window.__MOCK_CTRL__.last(),
+      block: window.SonstengEditor.block(4),
+      expectedRef: window.__HARNESS_MAP__[3].source_ref,
+      expectedPage: window.SonstengEditor.page()
+    }));
+    assert('SH5 this-page-only sends one authoritative page-override suggestion',
+      thisPage.calls === 1 &&
+      thisPage.last.op === 'page_override' && thisPage.last.page === thisPage.expectedPage &&
+      !Object.prototype.hasOwnProperty.call(thisPage.last, 'json_path') &&
+      thisPage.last.source_ref === thisPage.expectedRef,
+      'calls=' + thisPage.calls + ' op=' + (thisPage.last && thisPage.last.op));
+
+    const visibleOverride = await page.evaluate(() => ({
+      rows: document.querySelectorAll('.eb-overrides__row').length,
+      text: document.querySelector('.eb-overrides__row')?.textContent || ''
+    }));
+    assert('SH6 applied page-only copies are visible with actor and revert control',
+      visibleOverride.rows === 1 && /JOS/.test(visibleOverride.text) && /Return to shared text/.test(visibleOverride.text),
+      JSON.stringify(visibleOverride));
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      document.querySelector('.eb-overrides__row button').click();
+    });
+    await page.waitForFunction(() => window.__MOCK_CTRL__.server().calls === 1, { timeout: 4000 });
+    const revertedOverride = await page.evaluate(() => ({
+      last: window.__MOCK_CTRL__.last(), rows: document.querySelectorAll('.eb-overrides__row').length
+    }));
+    assert('SH7 returning a page copy sends one explicit revert request and removes the row',
+      revertedOverride.last.op === 'page_override_revert' && revertedOverride.rows === 0,
+      JSON.stringify(revertedOverride));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear(); window.__MOCK_CTRL__.forceOnce('network');
+      window.SonstengEditor.typeInto(4, 'Preserve this page-only wording after failure.');
+      window.SonstengEditor.clickSave(4); window.SonstengEditor.chooseSharedThisPage();
+      window.SonstengEditor.repeatPageOverride(4);
+    });
+    await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'EDITING', { timeout: 4000 });
+    const failedOverride = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls, block: window.SonstengEditor.block(4),
+      editable: document.querySelector('[data-eb-index="4"]').hasAttribute('contenteditable')
+    }));
+    assert('SH8 failed page-only send dedupes and preserves a recoverable draft',
+      failedOverride.calls === 1 && failedOverride.block.dirty === true &&
+      !!failedOverride.block.suggestionId && failedOverride.editable === true,
+      'calls=' + failedOverride.calls + ' state=' + failedOverride.block.state + ' dirty=' + failedOverride.block.dirty);
+    await page.evaluate(() => window.SonstengEditor.clickCancel(4));
+
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.clear();
+      window.SonstengEditor.typeInto(4, 'Dismiss this reach choice.');
+      window.SonstengEditor.clickSave(4);
+      window.SonstengEditor.dismissSharedDialog();
+    });
+    const dismissed = await page.evaluate(() => ({
+      calls: window.__MOCK_CTRL__.server().calls,
+      open: window.SonstengEditor.sharedDialog(),
+      block: window.SonstengEditor.block(4),
+      pending: document.querySelector('[data-eb-index="4"]').classList.contains('eb--pending')
+    }));
+    assert('SH6 dismissing reach leaves no suggestion or pending mark',
+      dismissed.calls === 0 && !dismissed.open && dismissed.block.state === 'EDITING' && dismissed.pending === false,
+      'calls=' + dismissed.calls + ' state=' + dismissed.block.state + ' pending=' + dismissed.pending);
+    await page.evaluate(() => window.SonstengEditor.clickCancel(4));
+    // U4 deliberately exercises a successful edit of block 4, which changes
+    // that session's in-memory baseline. Reload so the long-standing hydration
+    // and selection checks below retain their pristine fixture assumptions.
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+    await installRadiusMock(page);
     // C4 (revised 2026-07-27): the explanation used to stand permanently under
     // every formatted block — the same sentence repeated dozens of times down a
     // matter packet. It now travels with the control that can act on it: the
@@ -401,6 +556,7 @@ async function run() {
     ]), HYREF, 'A hydrated starting point for the re-edit.');
     await page.evaluate(() => window.SonstengEditor.typeInto(4, 'A re-edit that starts from the hydrated suggestion text.'));
     await page.evaluate(() => window.SonstengEditor.clickSave(4));
+    await page.evaluate(() => window.SonstengEditor.chooseSharedEverywhere());
     await page.waitForFunction(() => window.SonstengEditor.block(4).state === 'IDLE', { timeout: 4000 });
     const last = await page.evaluate(() => window.__MOCK_CTRL__.last());
     assert('HY7 re-edit from a hydrated block saves a valid supersede (canonical original_hash sent, unpoisoned)',
