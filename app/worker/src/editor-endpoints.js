@@ -4,7 +4,7 @@
 // auth record + the map) and never read from the client body.
 
 import { json } from "./errors.js";
-import { csrfOk, editError } from "./editor-http.js";
+import { csrfOk, editError, uniform404 } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
   lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, MAP_VERSION,
@@ -14,6 +14,96 @@ import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
+
+function jsonMutationOk(request, env) {
+  const type = (request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase();
+  return type === "application/json" && csrfOk(request, env);
+}
+
+// Deployment identity, not a rollout switch. Only the separately configured
+// production Worker may address the PROD ledger; missing/unknown values fail
+// closed. Whether automated promotion is enabled is a separate policy concern.
+function prodPromotionApiOk(env) {
+  return env?.EDIT_ENVIRONMENT === "production";
+}
+
+async function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ---- PROD promotion contract ------------------------------------------------
+// These endpoints are intentionally role-scoped façades over the dedicated
+// promotion ledger. The coordinator and later UI use the same resources.
+export async function promotionSaveEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.editor || (!auth.scopes.edit.granted && !auth.scopes.instructor.granted)) return uniform404();
+  const body = await readJson(request);
+  if (!body || typeof body.candidate_id !== "string" || typeof body.idempotency_key !== "string" ||
+      typeof body.source_ref !== "string" || body.content == null)
+    return editError("validation_error", "Invalid promotion save.", 400);
+  const encoded = JSON.stringify(body.content);
+  const result = await editorStub(env).createPromotionCandidate({
+    id: body.candidate_id, principal: auth.editor, environment: "production",
+    idempotency_key: body.idempotency_key, request_digest: await sha256Hex(encoded),
+    content_bytes: new TextEncoder().encode(encoded).byteLength, source_ref: body.source_ref,
+  }, (() => {
+    const c = ceilingsFor(env);
+    return { maxBytes: c.maxBytes, maxQueued: c.globalPending,
+      maxStoredBytes: Number(env.EDIT_PROD_MAX_STORED_BYTES || 64 * 1024 * 1024),
+      perPrincipalPerMinute: Number(env.EDIT_PROD_RATE_PER_MINUTE || 60) };
+  })());
+  const status = result.ok ? 201 : ({ too_large: 413, rate_exceeded: 429,
+    queue_full: 503, storage_full: 507, idempotency_conflict: 409 }[result.reason] || 400);
+  return json(result, result.replay ? 200 : status);
+}
+
+export async function promotionCandidateEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id || !auth.editor) return uniform404();
+  const candidate = await editorStub(env).getPromotionCandidate(id);
+  if (!candidate || (!auth.scopes.admin.granted && candidate.principal !== auth.editor)) return uniform404();
+  return json({ ok: true, candidate });
+}
+
+export async function promotionLaneEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  if (!auth.scopes.admin.granted) return uniform404();
+  return json({ ok: true, lane: await editorStub(env).getPromotionLane() });
+}
+
+export async function promotionDecisionEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).decidePromotion({ ...body, principal: auth.editor });
+  return json(result, result.ok ? 200 : 409);
+}
+
+export async function promotionRetryEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).retryPromotion({ ...body, principal: auth.editor });
+  return json(result, result.ok ? 200 : 409);
+}
+
+export async function promotionPauseEndpoint(request, env, auth) {
+  if (!prodPromotionApiOk(env)) return uniform404();
+  if (!jsonMutationOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted || !auth.editor) return uniform404();
+  const body = await readJson(request);
+  if (!body || typeof body.paused !== "boolean") return editError("validation_error", "Invalid lane update.", 400);
+  const result = await editorStub(env).setPromotionLane({ ...body, actor: auth.editor });
+  return json(result, result.ok ? 200 : 409);
+}
 
 // "{#b:" is the durable-block-ID marker lead-in — reserved bytes that may never
 // enter any suggested text (a payload carrying one could forge or corrupt block

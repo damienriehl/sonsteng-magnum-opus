@@ -15,7 +15,7 @@
 //     `in_flight`. finalize()/reconcile() own the apply-time terminal states.
 //   * Status machine + terminal enforcement is centralized in _transition().
 
-import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-status.js";
+import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition, PROMOTION_TRANSITIONS } from "./editor-status.js";
 
 // Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
 // rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
@@ -147,6 +147,55 @@ export const SCHEMA_SQL = `
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_revert_status ON revert_requests(status, created_at);
+
+  -- PROD promotion is deliberately separate from DEV suggestions/apply_batches.
+  CREATE TABLE IF NOT EXISTS promotion_candidates (
+    id TEXT PRIMARY KEY, principal TEXT NOT NULL, environment TEXT NOT NULL,
+    source_ref TEXT NOT NULL, content_bytes INTEGER NOT NULL,
+    stage TEXT NOT NULL, stage_at INTEGER NOT NULL, active_attempt_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_promotion_queue
+    ON promotion_candidates(stage, created_at, id);
+  CREATE TABLE IF NOT EXISTS promotion_attempts (
+    id TEXT PRIMARY KEY, candidate_id TEXT NOT NULL, number INTEGER NOT NULL,
+    prior_attempt_id TEXT, base_sha TEXT, evidence_hash TEXT, manifest_hash TEXT,
+    created_at INTEGER NOT NULL, UNIQUE(candidate_id, number)
+  );
+  CREATE TABLE IF NOT EXISTS promotion_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL, type TEXT NOT NULL, from_stage TEXT, to_stage TEXT,
+    actor TEXT NOT NULL, detail TEXT, created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_promotion_events ON promotion_events(candidate_id, seq);
+  CREATE TABLE IF NOT EXISTS promotion_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL, decision TEXT NOT NULL, principal TEXT NOT NULL,
+    rationale TEXT, base_sha TEXT NOT NULL, evidence_hash TEXT NOT NULL,
+    manifest_hash TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promotion_receipts (
+    idempotency_key TEXT PRIMARY KEY, principal TEXT NOT NULL,
+    environment TEXT NOT NULL, operation TEXT NOT NULL, resource TEXT NOT NULL,
+    request_digest TEXT NOT NULL, evidence_hash TEXT, response TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promotion_lane (
+    id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL,
+    paused INTEGER NOT NULL, health TEXT NOT NULL, reason_code TEXT,
+    lease_owner TEXT, lease_expires_at INTEGER, fencing_token INTEGER NOT NULL,
+    active_candidate_id TEXT, updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promotion_observations (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, kind TEXT NOT NULL,
+    resource TEXT NOT NULL, observed_id TEXT, digest TEXT, created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS promotion_releases (
+    manifest_hash TEXT PRIMARY KEY, candidate_id TEXT, attempt_id TEXT,
+    base_sha TEXT NOT NULL, commit_sha TEXT NOT NULL, pages_preview_id TEXT,
+    pages_production_id TEXT, worker_version_id TEXT, editor_map_id TEXT,
+    contract_hashes TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
 `;
 
 // Revert-request lifecycle states.
@@ -181,6 +230,264 @@ export class EditorStoreCore {
     this._ensureColumn("suggestions", "client_fp", "TEXT");
     // Structural-operation operand (merge's second ref / move's destination).
     this._ensureColumn("suggestions", "op_arg", "TEXT");
+    this.sql.exec("INSERT OR IGNORE INTO promotion_lane (id,version,paused,health,fencing_token,updated_at) VALUES (1,0,0,'healthy',0,?)", this.now());
+  }
+
+  _promotionReceipt(key) {
+    return this._one("SELECT * FROM promotion_receipts WHERE idempotency_key=?", key);
+  }
+
+  _receipt(input, response, evidenceHash = null) {
+    this.sql.exec(`INSERT INTO promotion_receipts
+      (idempotency_key,principal,environment,operation,resource,request_digest,evidence_hash,response,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`, input.idempotency_key, input.principal,
+      input.environment, input.operation, input.resource, input.request_digest,
+      evidenceHash, JSON.stringify(response), this.now());
+  }
+
+  _replay(input, evidenceHash = null) {
+    const row = this._promotionReceipt(input.idempotency_key);
+    if (!row) return null;
+    const same = row.principal === input.principal && row.environment === input.environment &&
+      row.operation === input.operation && row.resource === input.resource &&
+      row.request_digest === input.request_digest && (row.evidence_hash || null) === (evidenceHash || null);
+    return same ? { ...JSON.parse(row.response), replay: true }
+      : { ok: false, reason: "idempotency_conflict" };
+  }
+
+  _promotionCandidate(id) {
+    return this._one("SELECT * FROM promotion_candidates WHERE id=?", id);
+  }
+
+  _promotionAttempt(id) {
+    return this._one("SELECT * FROM promotion_attempts WHERE id=?", id);
+  }
+
+  _promotionEvent(candidateId, attemptId, type, actor, from = null, to = null, detail = null) {
+    this.sql.exec(`INSERT INTO promotion_events
+      (candidate_id,attempt_id,type,from_stage,to_stage,actor,detail,created_at)
+      VALUES (?,?,?,?,?,?,?,?)`, candidateId, attemptId, type, from, to,
+      actor || "system", detail == null ? null : JSON.stringify(detail), this.now());
+  }
+
+  createPromotionCandidate(input, limits = {}) {
+    const cfg = { maxBytes: 16 * 1024, maxQueued: 5000,
+      maxStoredBytes: 64 * 1024 * 1024, perPrincipalPerMinute: 60, ...limits };
+    if (!input || !input.id || !input.principal || !input.idempotency_key || !input.request_digest)
+      return { ok: false, reason: "validation_error" };
+    const identity = { ...input, operation: "create", resource: `${input.id}:${input.source_ref || ""}` };
+    const replay = this._replay(identity);
+    if (replay) return replay;
+    if (input.environment !== "production" || !input.source_ref ||
+        !Number.isInteger(input.content_bytes) || input.content_bytes < 0)
+      return { ok: false, reason: "validation_error" };
+    if (input.content_bytes > cfg.maxBytes) return { ok: false, reason: "too_large" };
+    const since = this.now() - 60_000;
+    const recent = this._one("SELECT COUNT(*) AS n FROM promotion_candidates WHERE principal=? AND created_at>=?", input.principal, since);
+    if (Number(recent.n) >= cfg.perPrincipalPerMinute) return { ok: false, reason: "rate_exceeded" };
+    const queued = this._one("SELECT COUNT(*) AS n, COALESCE(SUM(content_bytes),0) AS bytes FROM promotion_candidates WHERE stage NOT IN ('published','failed')");
+    if (Number(queued.n) >= cfg.maxQueued) return { ok: false, reason: "queue_full" };
+    const stored = this._one("SELECT COALESCE(SUM(content_bytes),0) AS bytes FROM promotion_candidates");
+    if (Number(stored.bytes) + input.content_bytes > cfg.maxStoredBytes) return { ok: false, reason: "storage_full" };
+    if (this._promotionCandidate(input.id)) return { ok: false, reason: "candidate_conflict" };
+    const now = this.now();
+    const attemptId = `${input.id}:1`;
+    this.sql.exec(`INSERT INTO promotion_candidates
+      (id,principal,environment,source_ref,content_bytes,stage,stage_at,active_attempt_id,created_at,updated_at)
+      VALUES (?,?,?,?,?,'saved',?,?,?,?)`, input.id, input.principal, input.environment,
+      input.source_ref, input.content_bytes, now, attemptId, now, now);
+    this.sql.exec(`INSERT INTO promotion_attempts
+      (id,candidate_id,number,created_at) VALUES (?,?,1,?)`, attemptId, input.id, now);
+    this._promotionEvent(input.id, attemptId, "saved", input.principal, null, "saved");
+    const response = { ok: true, candidate: this._promotionCandidate(input.id), attempt: this._promotionAttempt(attemptId) };
+    this._receipt(identity, response);
+    return response;
+  }
+
+  listPromotionCandidates(principal = null) {
+    return principal
+      ? this._all("SELECT * FROM promotion_candidates WHERE principal=? ORDER BY created_at,id", principal)
+      : this._all("SELECT * FROM promotion_candidates ORDER BY created_at,id");
+  }
+
+  getPromotionCandidate(id) {
+    const candidate = this._promotionCandidate(id);
+    if (!candidate) return null;
+    return { ...candidate, attempt: this._promotionAttempt(candidate.active_attempt_id),
+      events: this.listPromotionEvents(id) };
+  }
+
+  listPromotionEvents(id) {
+    return this._all("SELECT * FROM promotion_events WHERE candidate_id=? ORDER BY seq", id)
+      .map((row) => ({ ...row, detail: row.detail ? JSON.parse(row.detail) : null }));
+  }
+
+  claimPromotion(owner, leaseMs = 300000) {
+    if (!owner || !Number.isFinite(leaseMs) || leaseMs <= 0) return { ok: false, reason: "validation_error" };
+    const now = this.now();
+    const lane = this.getPromotionLane();
+    if (lane.paused || lane.health !== "healthy") return { ok: false, reason: "lane_unavailable" };
+    if (lane.lease_owner && lane.lease_expires_at > now) return { ok: false, reason: "lease_held" };
+    let candidate = lane.active_candidate_id ? this._promotionCandidate(lane.active_candidate_id) : null;
+    if (!candidate || ["published", "failed"].includes(candidate.stage))
+      candidate = this._one("SELECT * FROM promotion_candidates WHERE stage='saved' ORDER BY created_at,id LIMIT 1");
+    if (!candidate) return { ok: false, reason: "nothing_to_claim" };
+    const token = Number(lane.fencing_token) + 1;
+    this.sql.exec(`UPDATE promotion_lane SET lease_owner=?,lease_expires_at=?,fencing_token=?,
+      active_candidate_id=?,version=version+1,updated_at=? WHERE id=1`, owner, now + leaseMs, token, candidate.id, now);
+    if (candidate.stage === "saved") {
+      this.sql.exec("UPDATE promotion_candidates SET stage='validating',stage_at=?,updated_at=? WHERE id=? AND stage='saved'", now, now, candidate.id);
+      this._promotionEvent(candidate.id, candidate.active_attempt_id, "transition", owner, "saved", "validating");
+    }
+    return { ok: true, candidate: this._promotionCandidate(candidate.id),
+      attempt: this._promotionAttempt(candidate.active_attempt_id), fencing_token: token,
+      lease_expires_at: now + leaseMs };
+  }
+
+  renewPromotionLease(owner, fencingToken, leaseMs = 300000) {
+    const lane = this.getPromotionLane();
+    if (lane.lease_owner !== owner || Number(lane.fencing_token) !== Number(fencingToken) || lane.lease_expires_at <= this.now())
+      return { ok: false, reason: "stale_fence" };
+    const expires = this.now() + leaseMs;
+    this.sql.exec("UPDATE promotion_lane SET lease_expires_at=?,updated_at=? WHERE id=1", expires, this.now());
+    return { ok: true, lease_expires_at: expires, fencing_token: Number(fencingToken) };
+  }
+
+  transitionPromotion(input) {
+    const candidate = this._promotionCandidate(input.candidate_id);
+    if (!candidate || candidate.active_attempt_id !== input.attempt_id) return { ok: false, reason: "not_found" };
+    if (input.fencing_token > 0 && Number(this.getPromotionLane().fencing_token) !== Number(input.fencing_token))
+      return { ok: false, reason: "stale_fence" };
+    if (candidate.stage !== input.expected_stage) return { ok: false, reason: "stale_state" };
+    const allowed = PROMOTION_TRANSITIONS[candidate.stage];
+    if (!allowed || allowed.size === 0) return { ok: false, reason: "terminal_state" };
+    if (!allowed.has(input.to)) return { ok: false, reason: "illegal_transition" };
+    const now = this.now();
+    this.sql.exec("UPDATE promotion_candidates SET stage=?,stage_at=?,updated_at=? WHERE id=? AND stage=?",
+      input.to, now, now, candidate.id, input.expected_stage);
+    this._promotionEvent(candidate.id, input.attempt_id, "transition", input.actor, candidate.stage, input.to, input.detail);
+    return { ok: true, candidate: this._promotionCandidate(candidate.id) };
+  }
+
+  bindPromotionEvidence(input) {
+    const c = this._promotionCandidate(input.candidate_id);
+    if (!c || c.active_attempt_id !== input.attempt_id) return { ok: false, reason: "not_found" };
+    if (![input.base_sha, input.evidence_hash, input.manifest_hash].every((x) => typeof x === "string" && x))
+      return { ok: false, reason: "validation_error" };
+    this.sql.exec("UPDATE promotion_attempts SET base_sha=?,evidence_hash=?,manifest_hash=? WHERE id=? AND base_sha IS NULL",
+      input.base_sha, input.evidence_hash, input.manifest_hash, input.attempt_id);
+    const attempt = this._promotionAttempt(input.attempt_id);
+    if (attempt.base_sha !== input.base_sha || attempt.evidence_hash !== input.evidence_hash || attempt.manifest_hash !== input.manifest_hash)
+      return { ok: false, reason: "immutable_evidence" };
+    this._promotionEvent(c.id, input.attempt_id, "evidence_bound", input.actor, null, null,
+      { base_sha: input.base_sha, evidence_hash: input.evidence_hash, manifest_hash: input.manifest_hash });
+    return { ok: true, attempt };
+  }
+
+  decidePromotion(input) {
+    if (!input || !input.idempotency_key || !input.request_digest)
+      return { ok: false, reason: "validation_error" };
+    const identity = { ...input, environment: "production", operation: "decision", resource: input.candidate_id };
+    const replay = this._replay(identity, input.evidence_hash);
+    if (replay) return replay;
+    const c = this._promotionCandidate(input.candidate_id);
+    const a = this._promotionAttempt(input.attempt_id);
+    if (!c || !a || c.active_attempt_id !== a.id) return { ok: false, reason: "not_found" };
+    if (c.stage !== "awaiting_approval") return { ok: false, reason: "stale_state" };
+    if (a.base_sha !== input.base_sha) return { ok: false, reason: "stale_base" };
+    if (a.evidence_hash !== input.evidence_hash) return { ok: false, reason: "stale_evidence" };
+    if (a.manifest_hash !== input.manifest_hash) return { ok: false, reason: "stale_manifest" };
+    if (!input.principal || !["approve", "decline"].includes(input.decision)) return { ok: false, reason: "validation_error" };
+    const now = this.now();
+    this.sql.exec(`INSERT INTO promotion_decisions
+      (candidate_id,attempt_id,decision,principal,rationale,base_sha,evidence_hash,manifest_hash,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`, c.id, a.id, input.decision, input.principal,
+      input.rationale || null, input.base_sha, input.evidence_hash, input.manifest_hash, now);
+    const decision = this._one("SELECT * FROM promotion_decisions WHERE id=last_insert_rowid()");
+    const to = input.decision === "approve" ? "publishing" : "failed";
+    this.sql.exec("UPDATE promotion_candidates SET stage=?,stage_at=?,updated_at=? WHERE id=?", to, now, now, c.id);
+    this._promotionEvent(c.id, a.id, input.decision === "approve" ? "approved" : "declined", input.principal, c.stage, to,
+      { rationale: input.rationale || null, evidence_hash: input.evidence_hash });
+    const response = { ok: true, decision, candidate: this._promotionCandidate(c.id) };
+    this._receipt(identity, response, input.evidence_hash);
+    return response;
+  }
+
+  retryPromotion(input) {
+    if (!input || !input.idempotency_key || !input.request_digest || !input.principal)
+      return { ok: false, reason: "validation_error" };
+    const identity = { ...input, environment: "production", operation: "retry", resource: input.candidate_id };
+    const replay = this._replay(identity);
+    if (replay) return replay;
+    const c = this._promotionCandidate(input.candidate_id);
+    const prior = this._promotionAttempt(input.prior_attempt_id);
+    if (!c || !prior || c.active_attempt_id !== prior.id || c.stage !== "failed") return { ok: false, reason: "stale_state" };
+    const number = Number(prior.number) + 1;
+    const id = `${c.id}:${number}`;
+    const now = this.now();
+    this.sql.exec("INSERT INTO promotion_attempts (id,candidate_id,number,prior_attempt_id,created_at) VALUES (?,?,?,?,?)",
+      id, c.id, number, prior.id, now);
+    this.sql.exec("UPDATE promotion_candidates SET stage='saved',stage_at=?,active_attempt_id=?,updated_at=? WHERE id=?",
+      now, id, now, c.id);
+    this._promotionEvent(c.id, id, "retry_authorized", input.principal, "failed", "saved", { prior_attempt_id: prior.id });
+    const response = { ok: true, attempt: this._promotionAttempt(id), candidate: this._promotionCandidate(c.id) };
+    this._receipt(identity, response);
+    return response;
+  }
+
+  getPromotionLane() { return this._one("SELECT * FROM promotion_lane WHERE id=1"); }
+
+  setPromotionLane(input) {
+    const lane = this.getPromotionLane();
+    if (Number(input.expected_version) !== Number(lane.version)) return { ok: false, reason: "stale_state" };
+    const health = input.health || lane.health;
+    if (!["healthy", "stalled", "unavailable", "restore_failed"].includes(health)) return { ok: false, reason: "validation_error" };
+    const now = this.now();
+    this.sql.exec("UPDATE promotion_lane SET version=version+1,paused=?,health=?,reason_code=?,updated_at=? WHERE id=1",
+      input.paused == null ? lane.paused : (input.paused ? 1 : 0), health, input.reason_code || null, now);
+    this._promotionEvent(lane.active_candidate_id || "lane", "lane", "lane_changed", input.actor || "system", null, null,
+      { paused: input.paused, health, reason_code: input.reason_code || null });
+    return { ok: true, lane: this.getPromotionLane() };
+  }
+
+  recordPromotionObservation(input) {
+    if (!input.actor || !input.kind || !input.resource) return { ok: false, reason: "validation_error" };
+    this.sql.exec(`INSERT INTO promotion_observations
+      (actor,kind,resource,observed_id,digest,created_at) VALUES (?,?,?,?,?,?)`,
+      input.actor, input.kind, input.resource, input.observed_id || null, input.digest || null, this.now());
+    return { ok: true };
+  }
+
+  listPromotionObservations() { return this._all("SELECT * FROM promotion_observations ORDER BY seq"); }
+
+  recordPromotionRelease(input) {
+    const required = ["manifest_hash", "base_sha", "commit_sha", "contract_hashes", "state"];
+    if (!input || required.some((key) => typeof input[key] !== "string" || !input[key]))
+      return { ok: false, reason: "validation_error" };
+    const prior = this._one("SELECT * FROM promotion_releases WHERE manifest_hash=?", input.manifest_hash);
+    const normalizedContracts = typeof input.contract_hashes === "string"
+      ? input.contract_hashes : JSON.stringify(input.contract_hashes);
+    if (prior) {
+      const same = prior.base_sha === input.base_sha && prior.commit_sha === input.commit_sha &&
+        prior.contract_hashes === normalizedContracts && prior.state === input.state;
+      return same ? { ok: true, replay: true, release: prior }
+        : { ok: false, reason: "immutable_release" };
+    }
+    this.sql.exec(`INSERT INTO promotion_releases
+      (manifest_hash,candidate_id,attempt_id,base_sha,commit_sha,pages_preview_id,
+       pages_production_id,worker_version_id,editor_map_id,contract_hashes,state,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, input.manifest_hash, input.candidate_id || null,
+      input.attempt_id || null, input.base_sha, input.commit_sha, input.pages_preview_id || null,
+      input.pages_production_id || null, input.worker_version_id || null,
+      input.editor_map_id || null, normalizedContracts, input.state, this.now());
+    return { ok: true, release: this.getPromotionRelease(input.manifest_hash) };
+  }
+
+  getPromotionRelease(manifestHash) {
+    const row = this._one("SELECT * FROM promotion_releases WHERE manifest_hash=?", manifestHash);
+    if (!row) return null;
+    try { return { ...row, contract_hashes: JSON.parse(row.contract_hashes) }; }
+    catch { return row; }
   }
 
   _ensureColumn(table, col, type) {

@@ -62,3 +62,25 @@ export function canTransition(from, to) {
   const set = ALLOWED_TRANSITIONS[from];
   return !!set && set.has(to);
 }
+
+// Public PROD promotion vocabulary. Internal coordinator substates are recorded
+// as events; callers only project these deliberately small, stable stages.
+export const PROMOTION_STAGE = Object.freeze({
+  SAVED: "saved",
+  VALIDATING: "validating",
+  PREVIEW_READY: "preview_ready",
+  AWAITING_APPROVAL: "awaiting_approval",
+  PUBLISHING: "publishing",
+  PUBLISHED: "published",
+  FAILED: "failed",
+});
+
+export const PROMOTION_TRANSITIONS = Object.freeze({
+  saved: new Set(["validating", "failed"]),
+  validating: new Set(["preview_ready", "failed"]),
+  preview_ready: new Set(["awaiting_approval", "publishing", "failed"]),
+  awaiting_approval: new Set(["publishing", "failed"]),
+  publishing: new Set(["published", "failed"]),
+  published: new Set(),
+  failed: new Set(),
+});

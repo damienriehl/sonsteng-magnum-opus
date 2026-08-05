@@ -22,6 +22,8 @@ import {
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
+  promotionSaveEndpoint, promotionCandidateEndpoint, promotionLaneEndpoint,
+  promotionDecisionEndpoint, promotionRetryEndpoint, promotionPauseEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -188,6 +190,18 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await revertRequestsEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-resolve" && request.method === "POST")
     return wrap(await revertResolveEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/candidates" && request.method === "POST")
+    return wrap(await promotionSaveEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/candidate" && request.method === "GET")
+    return wrap(await promotionCandidateEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/lane" && request.method === "GET")
+    return wrap(await promotionLaneEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/decision" && request.method === "POST")
+    return wrap(await promotionDecisionEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/retry" && request.method === "POST")
+    return wrap(await promotionRetryEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/pause" && request.method === "POST")
+    return wrap(await promotionPauseEndpoint(request, env, auth));
 
   // ---- editor-gated redline History browser (edit/instructor scope) ---------
   // Same gate as /edit/v1/pending. Index + per-doc slice from the inlined bundle.

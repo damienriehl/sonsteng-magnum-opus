@@ -398,6 +398,36 @@ Secrets (never in source, **per-environment**): `EDIT_TOKEN_JOHN`,
 
 ## Privacy / logging / retention
 
+## PROD promotion ledger (`/edit/v1/prod/*`)
+
+PROD promotion state is separate from DEV `suggestions` and `apply_batches`.
+Every response remains `private, no-store` through the `/edit` response wrapper.
+Every PROD route also requires `EDIT_ENVIRONMENT=production`; the top-level and
+explicit DEV deployments set `dev`, and a missing or unknown identity returns the
+uniform 404 without touching the ledger. This identity is deliberately separate
+from rollout configuration that enables or pauses automated promotion.
+
+- `POST /candidates` (edit/instructor): JSON + CSRF only. The server binds the
+  authenticated principal and hashes the submitted content; admission enforces
+  request, per-principal rate, queue, and storage bounds before creating one
+  candidate, immutable attempt 1, and append-only `saved` event. An idempotency
+  key is principal/environment/operation/resource/body bound.
+- `GET /candidate?id=…` (originator or admin): returns the current public stage,
+  active immutable attempt, and ordered audit events. Unknown and unauthorized
+  resources use the same uniform 404 response.
+- `GET /lane` (admin): returns pause, health, version, lease, and fencing state.
+- `POST /decision` (admin): approve/decline is bound to exact candidate, attempt,
+  base SHA, evidence hash, and manifest hash and records the authenticated admin.
+- `POST /retry` (admin): creates a linked immutable attempt; it never reuses or
+  mutates failed-attempt evidence.
+- `POST /pause` (admin): compare-and-set lane pause/health mutation.
+
+Coordinator RPCs are Durable Object methods (`claimPromotion`,
+`renewPromotionLease`, `transitionPromotion`, `bindPromotionEvidence`, and
+`recordPromotionObservation`). They use oldest-first claiming, one renewable
+lease, monotonic fencing, expected-stage CAS, and append-only events. Stale
+writers and illegal or terminal transitions do not alter ledger state.
+
 - Suggestions are the only new server state (DO SQLite; terminal at
   `applied/declined/superseded`; `EditorStore.purge(days)` deletes terminal rows
   after a retention window). Drafts are client-side only.

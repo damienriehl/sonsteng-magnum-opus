@@ -46,4 +46,20 @@ export class EditorStore extends DurableObject {
   claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
   resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
+  createPromotionCandidate(input, limits) { return this.core.createPromotionCandidate(input, limits); }
+  listPromotionCandidates(principal) { return this.core.listPromotionCandidates(principal); }
+  getPromotionCandidate(id) { return this.core.getPromotionCandidate(id); }
+  listPromotionEvents(id) { return this.core.listPromotionEvents(id); }
+  claimPromotion(owner, leaseMs) { return this.core.claimPromotion(owner, leaseMs); }
+  renewPromotionLease(owner, token, leaseMs) { return this.core.renewPromotionLease(owner, token, leaseMs); }
+  transitionPromotion(input) { return this.core.transitionPromotion(input); }
+  bindPromotionEvidence(input) { return this.core.bindPromotionEvidence(input); }
+  decidePromotion(input) { return this.core.decidePromotion(input); }
+  retryPromotion(input) { return this.core.retryPromotion(input); }
+  getPromotionLane() { return this.core.getPromotionLane(); }
+  setPromotionLane(input) { return this.core.setPromotionLane(input); }
+  recordPromotionObservation(input) { return this.core.recordPromotionObservation(input); }
+  listPromotionObservations() { return this.core.listPromotionObservations(); }
+  recordPromotionRelease(input) { return this.core.recordPromotionRelease(input); }
+  getPromotionRelease(hash) { return this.core.getPromotionRelease(hash); }
 }

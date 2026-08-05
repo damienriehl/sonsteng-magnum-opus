@@ -74,6 +74,9 @@
 
   // ---- TOP-LEVEL vars = DEV defaults (the default `wrangler deploy` target) ----
   "vars": {
+    // Immutable deployment identity for fail-closed PROD API routing. This is
+    // not the promotion rollout/enable switch.
+    "EDIT_ENVIRONMENT": "dev",
     "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
     "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
     "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
@@ -181,6 +184,7 @@
         ]
       },
       "vars": {
+        "EDIT_ENVIRONMENT": "dev",
         "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
         "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
         "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
@@ -242,6 +246,7 @@
         ]
       },
       "vars": {
+        "EDIT_ENVIRONMENT": "production",
         "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
         "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
         "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
