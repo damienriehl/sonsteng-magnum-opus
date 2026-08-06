@@ -124,6 +124,57 @@ class ReportTests(unittest.TestCase):
         self.assertIn("overdue", tr.notify_title(self.report))
 
 
+class HeaderSafetyTests(unittest.TestCase):
+    """urllib encodes headers as latin-1. One em dash in the title lost the whole
+    notification, and it failed at run time from a timer, not at install time."""
+
+    def test_em_dash_survives_as_ascii(self):
+        self.assertEqual(tr.header_safe("Legal Practicum — 25 open"),
+                         "Legal Practicum - 25 open")
+
+    def test_curly_punctuation_folds(self):
+        self.assertEqual(tr.header_safe("John’s “CD”…"),
+                         "John's \"CD\"...")
+
+    def test_everything_is_latin1_encodable(self):
+        for probe in ["—", "•", " ", "café", "中文", "plain"]:
+            tr.header_safe(probe).encode("latin-1")
+
+    def test_generated_titles_are_header_clean(self):
+        report = tr.build_report(tr.parse_tasks(SAMPLE), "2026-08-06")
+        tr.notify_title(report).encode("latin-1")
+
+    def test_publish_encodes_without_raising(self):
+        """Guards the whole header path, not just the title string."""
+        import urllib.request
+        captured = {}
+
+        class FakeResp:
+            status = 200
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        real_urlopen = urllib.request.urlopen
+        real_request = urllib.request.Request
+
+        def fake_urlopen(req, timeout=None):
+            captured["headers"] = dict(req.header_items())
+            return FakeResp()
+
+        urllib.request.urlopen = fake_urlopen
+        try:
+            tr.publish_ntfy("topic", "Legal Practicum — 25 open", "body • ok",
+                            "https://example.test/TODO.md")
+        finally:
+            urllib.request.urlopen = real_urlopen
+            urllib.request.Request = real_request
+        for key, value in captured["headers"].items():
+            str(value).encode("latin-1")
+        self.assertEqual(captured["headers"].get("Title"), "Legal Practicum - 25 open")
+
+
 class SignatureTests(unittest.TestCase):
     def sig(self, text, today="2026-08-06"):
         return tr.signature(tr.build_report(tr.parse_tasks(text), today), today)
