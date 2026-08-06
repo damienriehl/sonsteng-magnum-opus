@@ -7,6 +7,8 @@ import shutil
 import sys
 from pathlib import Path
 
+import pytest
+
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
 
@@ -26,6 +28,15 @@ def identity() -> dict:
     return json.loads(HOME_COPY.read_text(encoding="utf-8"))["identity"]
 
 
+@pytest.fixture(scope="module")
+def fresh_site():
+    tmp, site, _ = build_fresh_site("identity-rights-")
+    try:
+        yield Path(site)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_canonical_identity_records_settled_title_credit_and_host():
     assert identity() == {
         "title": "Legal Practicum",
@@ -34,21 +45,17 @@ def test_canonical_identity_records_settled_title_credit_and_host():
     }
 
 
-def test_fresh_generated_pages_use_canonical_current_identity():
-    tmp, site, _ = build_fresh_site("identity-rights-")
-    try:
-        pages = [page for page in Path(site).rglob("*.html")
-                 if "assets" not in page.relative_to(site).parts]
-        assert pages
-        for page in pages:
-            text = page.read_text(encoding="utf-8")
-            assert "Legal Practicum" in text, page
-            assert "Sonsteng Practicum" not in text, page
-        home = (Path(site) / "index.html").read_text(encoding="utf-8")
-        assert identity()["byline"] in home
-        assert identity()["host"] in home
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+def test_fresh_generated_pages_use_canonical_current_identity(fresh_site):
+    pages = [page for page in fresh_site.rglob("*.html")
+             if "assets" not in page.relative_to(fresh_site).parts]
+    assert pages
+    for page in pages:
+        text = page.read_text(encoding="utf-8")
+        assert "Legal Practicum" in text, page
+        assert "Sonsteng Practicum" not in text, page
+    home = (fresh_site / "index.html").read_text(encoding="utf-8")
+    assert identity()["byline"] in home
+    assert identity()["host"] in home
 
 
 def test_hand_authored_current_surfaces_use_settled_identity():
@@ -101,22 +108,17 @@ def test_mit_notice_is_unchanged_and_points_to_layered_scope():
     assert "CONTENT-LICENSE.md" in license_text
 
 
-def test_public_surfaces_link_content_and_code_licenses():
-    tmp, site, _ = build_fresh_site("identity-rights-licenses-")
-    try:
-        site = Path(site)
-        assert (site / "about/content-license.html").exists()
-        assert (site / "about/code-license.html").exists()
-        content_page = (site / "about/content-license.html").read_text(encoding="utf-8")
-        assert f'href="{CC_BY_URL}"' in content_page
-        for rel in ("index.html", "matters/m01-arbitration-meridian/index.html"):
-            html = (site / rel).read_text(encoding="utf-8")
-            assert "CONTENT: CC BY 4.0" in html
-            assert "CODE: MIT" in html
-            assert "content-license.html" in html
-            assert "code-license.html" in html
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+def test_public_surfaces_link_content_and_code_licenses(fresh_site):
+    assert (fresh_site / "about/content-license.html").exists()
+    assert (fresh_site / "about/code-license.html").exists()
+    content_page = (fresh_site / "about/content-license.html").read_text(encoding="utf-8")
+    assert f'href="{CC_BY_URL}"' in content_page
+    for rel in ("index.html", "matters/m01-arbitration-meridian/index.html"):
+        html = (fresh_site / rel).read_text(encoding="utf-8")
+        assert "CONTENT: CC BY 4.0" in html
+        assert "CODE: MIT" in html
+        assert "content-license.html" in html
+        assert "code-license.html" in html
 
     for surface in (PITCH.read_text(encoding="utf-8"), README.read_text(encoding="utf-8")):
         assert CC_BY_URL in surface

@@ -544,12 +544,7 @@ def markdown(md, src=None, spans=None):
 # --------------------------------------------------------------------------- #
 # Page shell
 # --------------------------------------------------------------------------- #
-PRODUCT_IDENTITY = {
-    "title": "Legal Practicum",
-    "byline": "John O. Sonsteng · Damien Riehl · with Roger S. Haydock",
-    "host": "Hosted by Damien Riehl",
-}
-SITE_TITLE = PRODUCT_IDENTITY["title"]
+PRODUCT_IDENTITY = load_json(os.path.join(DATA, "copy", "home.json"))["identity"]
 
 # Set once at the top of main(); stamped into every page's <meta name="spine-build">
 # so a served page can be checked against the editor map it was mapped from.
@@ -562,6 +557,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     body:    inner HTML placed inside <main>.
     """
     up = up_prefix(relpath)
+    site_title = PRODUCT_IDENTITY["title"]
     crumb_html = []
     for idx, (label, href) in enumerate(crumbs):
         if idx:
@@ -618,7 +614,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <script src="{up}platform.js" defer></script>
 </body>
 </html>""".format(
-        title=esc(title), site=esc(SITE_TITLE), site_upper=esc(SITE_TITLE.upper()),
+        title=esc(title), site=esc(site_title), site_upper=esc(site_title.upper()),
         byline=esc(PRODUCT_IDENTITY["byline"]), host=esc(PRODUCT_IDENTITY["host"]),
         up=up, docket=esc(docket),
         bodyclass=esc(body_class), crumb=crumb_bar, body=body,
@@ -1829,48 +1825,49 @@ def build_skills(corpus):
 # --------------------------------------------------------------------------- #
 # Page — about/third-party (footer target; content from repo THIRD-PARTY.md)
 # --------------------------------------------------------------------------- #
-def build_third_party():
-    rel = "about/third-party.html"
-    tp_path = os.path.join(ROOT, "THIRD-PARTY.md")
-    md = ""
-    if os.path.exists(tp_path):
-        with open(tp_path, "r", encoding="utf-8") as fh:
-            md = fh.read()
+def build_markdown_about_page(filename, source, title, docket, eyebrow,
+                              preface_html="", empty_html="", crumb_label=None):
+    """Render one repository Markdown document as a public About page."""
+    rel = "about/" + filename
+    content = load_text(os.path.join(ROOT, source))
+    rendered = markdown(content) if content else empty_html
     body = """
 <section class="reveal prose">
-  <p class="eyebrow">ATTRIBUTIONS</p>
-  <h1>Third-party components</h1>
+  <p class="eyebrow">{eyebrow}</p>
+  {preface}
   {content}
-</section>""".format(content=markdown(md) if md else "<p>No third-party components recorded.</p>")
-    write_file(rel, page_shell(rel, "Third-Party", "ABOUT · THIRD-PARTY",
-                               [("Home", "../index.html"), ("Third-party", None)], body))
+</section>""".format(eyebrow=esc(eyebrow), preface=preface_html,
+                     content=rendered)
+    write_file(rel, page_shell(rel, title, docket,
+                               [("Home", "../index.html"), (crumb_label or title, None)], body))
+
+
+def build_third_party():
+    rel = "about/third-party.html"
+    build_markdown_about_page(
+        os.path.basename(rel), "THIRD-PARTY.md", "Third-Party", "ABOUT · THIRD-PARTY",
+        "ATTRIBUTIONS", preface_html="<h1>Third-party components</h1>",
+        empty_html="<p>No third-party components recorded.</p>", crumb_label="Third-party")
 
 
 def build_license_pages():
     """Render the repo's layered rights documents into public, linkable pages."""
     pages = (
-        ("content-license.html", "CONTENT-LICENSE.md", "Content License",
-         "RIGHTS · CONTENT", "CONTENT · CC BY 4.0"),
-        ("code-license.html", "LICENSE", "Code License", "RIGHTS · CODE", "CODE · MIT"),
+        {
+            "filename": "content-license.html", "source": "CONTENT-LICENSE.md",
+            "title": "Content License", "docket": "RIGHTS · CONTENT",
+            "eyebrow": "CONTENT · CC BY 4.0",
+            "preface_html": ('<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
+                             'Official Creative Commons Attribution 4.0 license</a></p>'),
+        },
+        {
+            "filename": "code-license.html", "source": "LICENSE",
+            "title": "Code License", "docket": "RIGHTS · CODE",
+            "eyebrow": "CODE · MIT", "preface_html": "",
+        },
     )
-    for filename, source, title, docket, eyebrow in pages:
-        rel = "about/" + filename
-        source_path = os.path.join(ROOT, source)
-        with open(source_path, "r", encoding="utf-8") as fh:
-            content = fh.read()
-        official = ""
-        if source == "CONTENT-LICENSE.md":
-            official = ('<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
-                        'Official Creative Commons Attribution 4.0 license</a></p>')
-        body = """
-<section class="reveal prose">
-  <p class="eyebrow">{eyebrow}</p>
-  {official}
-  {content}
-</section>""".format(eyebrow=esc(eyebrow), official=official,
-                     content=markdown(content))
-        write_file(rel, page_shell(rel, title, docket,
-                                   [("Home", "../index.html"), (title, None)], body))
+    for page in pages:
+        build_markdown_about_page(**page)
 
 # --------------------------------------------------------------------------- #
 # Page — matter library (shape-first, Meridian ⇄ real segmented toggle)
@@ -3023,7 +3020,7 @@ def build_data_catalog(corpus):
     catalog = {
         "schema_version": "1.0.0",
         "@id": "https://sonsteng.damienriehl.com/platform/data/index.json",
-        "title": SITE_TITLE + " — machine catalog",
+        "title": PRODUCT_IDENTITY["title"] + " — machine catalog",
         "description": ("Agent/LMS entry point for the practicum data spine. All paths are "
                         "relative to this file. Instructor-side materials (master fact patterns, "
                         "instructor notes, persona disclosure tiers) are intentionally absent."),
@@ -3695,10 +3692,9 @@ def write_build_stamp(spine_build_id):
 # --------------------------------------------------------------------------- #
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
 
-# The site is otherwise fully self-contained (zero external requests). The ONE
-# sanctioned external dependency is the Cloudflare Turnstile bot-gate (WP6): its
-# api.js and challenge iframe MUST load from Cloudflare's edge — the token cannot
-# be self-hosted. Any OTHER external http(s) request is still a link-check error.
+# The site is otherwise fully self-contained. Turnstile is the only sanctioned
+# external runtime dependency; the CC BY URL is a navigational license link.
+# Every other external http(s) request remains a link-check error.
 _EXTERNAL_ALLOW = (
     "https://challenges.cloudflare.com/",
     "https://creativecommons.org/licenses/by/4.0/",
@@ -3838,7 +3834,7 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
-    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES, PRODUCT_IDENTITY, SITE_TITLE
+    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES, PRODUCT_IDENTITY
     SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
     EDMAP.reset()
     PASSIVE_OCCURRENCES = {}
@@ -3846,7 +3842,6 @@ def main(argv):
 
     corpus = load_corpus()
     PRODUCT_IDENTITY = dict(corpus["copy"]["home"]["identity"])
-    SITE_TITLE = PRODUCT_IDENTITY["title"]
     # Make the skills taxonomy addressable by id for every chip renderer.
     SKILLS_BY_ID.update({sk["id"]: sk for sk in corpus["skills"]["skills"]})
     TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})
