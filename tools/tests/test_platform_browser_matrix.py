@@ -18,7 +18,7 @@ def test_matrix_has_every_required_family_exactly_once():
 
 def test_matrix_pins_breakpoint_edges_and_both_type_modes():
     data = matrix()
-    assert {1280, 960, 959, 672, 671, 390} <= {v["width"] for v in data["viewports"]}
+    assert {1280, 960, 959, 672, 671, 480, 390} <= {v["width"] for v in data["viewports"]}
     assert data["typeModes"] == ["baseline", "large"]
 
 
@@ -26,7 +26,7 @@ def test_every_static_page_has_hierarchy_roles_and_document_families_print():
     data = matrix()
     static = [p for p in data["pages"] if not p.get("interactive")]
     assert all({"primary", "support", "section", "metadata"} <= set(p["hierarchy"]) for p in static)
-    assert {p["family"] for p in data["pages"] if p.get("print")} == {"packet", "facts", "law", "templates"}
+    assert {p["family"] for p in data["pages"] if p.get("print")} == {"catalog-print", "packet", "facts", "law", "templates"}
 
 
 def test_browser_gates_are_wired_into_preflight_and_never_soft_pass_launch_errors():
