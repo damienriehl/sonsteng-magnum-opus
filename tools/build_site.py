@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-build_site.py — Sonsteng Practicum platform site generator.
+build_site.py — Legal Practicum platform site generator.
 
 Renders the machine-readable data spine (data/) into a static, self-contained
 student-facing curriculum site under site/platform/, per:
@@ -544,7 +544,12 @@ def markdown(md, src=None, spans=None):
 # --------------------------------------------------------------------------- #
 # Page shell
 # --------------------------------------------------------------------------- #
-SITE_TITLE = "Sonsteng Practicum"
+PRODUCT_IDENTITY = {
+    "title": "Legal Practicum",
+    "byline": "John O. Sonsteng · Damien Riehl · with Roger S. Haydock",
+    "host": "Hosted by Damien Riehl",
+}
+SITE_TITLE = PRODUCT_IDENTITY["title"]
 
 # Set once at the top of main(); stamped into every page's <meta name="spine-build">
 # so a served page can be checked against the editor map it was mapped from.
@@ -573,7 +578,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title} — {site}</title>
-<meta name="description" content="Sonsteng Practicum — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
+<meta name="description" content="{site} — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
 <meta name="spine-build" content="{spine_build}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f4efe4'/%3E%3Crect y='1' width='16' height='2' fill='%23a9822f'/%3E%3Crect y='12' width='16' height='1' fill='%23a9822f'/%3E%3Crect x='2' y='6' width='3' height='4' fill='%237c1e2b'/%3E%3C/svg%3E">
 <script src="{up}assets/type-preference.js"></script>
@@ -585,7 +590,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="masthead">
   <div class="masthead__inner">
-    <a class="masthead__brand" href="{up}index.html">SONSTENG PRACTICUM</a>
+    <a class="masthead__brand" href="{up}index.html">{site_upper}</a>
     <span class="masthead__docket mono">{docket}</span>
     <button type="button" class="type-toggle mono" id="type-toggle" aria-pressed="false" title="Toggle large type">A+ LARGE TYPE</button>
   </div>
@@ -597,7 +602,8 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <footer class="site-footer">
   <div class="site-footer__inner">
     <div>
-      <strong>Sonsteng Practicum</strong> — a living casebook.
+      <strong>{site}</strong> — a living casebook.<br>
+      {byline} · {host}.<br>
       <span class="mono">MIT-LICENSED</span> · no platform fees; bring your own key.
     </div>
     <div class="site-footer__links mono">
@@ -610,7 +616,9 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <script src="{up}platform.js" defer></script>
 </body>
 </html>""".format(
-        title=esc(title), site=esc(SITE_TITLE), up=up, docket=esc(docket),
+        title=esc(title), site=esc(SITE_TITLE), site_upper=esc(SITE_TITLE.upper()),
+        byline=esc(PRODUCT_IDENTITY["byline"]), host=esc(PRODUCT_IDENTITY["host"]),
+        up=up, docket=esc(docket),
         bodyclass=esc(body_class), crumb=crumb_bar, body=body,
         spine_build=esc(SPINE_BUILD_ID),
         root=up + "../",  # THIRD-PARTY.md lives at repo/site's parent; link is best-effort
@@ -2986,7 +2994,7 @@ def build_data_catalog(corpus):
     catalog = {
         "schema_version": "1.0.0",
         "@id": "https://sonsteng.damienriehl.com/platform/data/index.json",
-        "title": "Sonsteng Practicum — machine catalog",
+        "title": SITE_TITLE + " — machine catalog",
         "description": ("Agent/LMS entry point for the practicum data spine. All paths are "
                         "relative to this file. Instructor-side materials (master fact patterns, "
                         "instructor notes, persona disclosure tiers) are intentionally absent."),
@@ -3798,13 +3806,15 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
-    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES
+    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES, PRODUCT_IDENTITY, SITE_TITLE
     SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
     EDMAP.reset()
     PASSIVE_OCCURRENCES = {}
     EDMAP.enabled = True                         # record editable blocks while rendering
 
     corpus = load_corpus()
+    PRODUCT_IDENTITY = dict(corpus["copy"]["home"]["identity"])
+    SITE_TITLE = PRODUCT_IDENTITY["title"]
     # Make the skills taxonomy addressable by id for every chip renderer.
     SKILLS_BY_ID.update({sk["id"]: sk for sk in corpus["skills"]["skills"]})
     TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})

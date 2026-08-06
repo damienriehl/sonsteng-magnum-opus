@@ -1,11 +1,12 @@
-# Sonsteng Magnum Opus
+# Legal Practicum
 
 Consolidating **Prof. John O. Sonsteng's** life work on legal-education reform into a
-layered **"Magnum Opus"** — a canonical text, a structured practicum curriculum, and an
+layered whole — a canonical text, a structured practicum curriculum, and an
 AI-assisted delivery platform — that trains the next generation of advocates through a
 **human-and-AI ("centaur") apprenticeship**.
 
-Built with Roger S. Haydock; open-source and **MIT-licensed**. Extends the open-access
+**John O. Sonsteng · Damien Riehl · with Roger S. Haydock.** Hosted by Damien Riehl;
+open-source and **MIT-licensed**. Extends the open-access
 spirit of the [Open Resource Tool](https://www.openresourcetool.info/) (Mitchell Hamline
 C-LAB × IGUL / Bahçeşehir University) and [Trialbook](https://trialbook.org/)
 (Sonsteng, Haydock & Riehl).

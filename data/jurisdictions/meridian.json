@@ -8,7 +8,7 @@
   "name": "State of Meridian",
   "short_name": "Meridian",
   "adjective": "Meridian",
-  "canon_note": "Meridian is a wholly fictional U.S. state invented for the Sonsteng Practicum corpus. Every name, court, statute number, reporter, judge, and place below is original and does not refer to any real jurisdiction, court, official, or person. All ten fictional-tier matters (m01-m10) are set here. Matter agents MUST draw courts, judges, citation formats, county/city names, and procedural framing from this file rather than improvising — this is the single source of Meridian truth. Where a Meridian matter needs a fact this file does not supply (e.g., a specific street address), the matter agent may invent it consistently with the geography and naming flavor established here, using only its own matter-prefixed IDs.",
+  "canon_note": "Meridian is a wholly fictional U.S. state invented for the Legal Practicum corpus. Every name, court, statute number, reporter, judge, and place below is original and does not refer to any real jurisdiction, court, official, or person. All ten fictional-tier matters (m01-m10) are set here. Matter agents MUST draw courts, judges, citation formats, county/city names, and procedural framing from this file rather than improvising — this is the single source of Meridian truth. Where a Meridian matter needs a fact this file does not supply (e.g., a specific street address), the matter agent may invent it consistently with the geography and naming flavor established here, using only its own matter-prefixed IDs.",
   "government": {
     "capital_city": "Norsholm",
     "capital_county": "Halden County",

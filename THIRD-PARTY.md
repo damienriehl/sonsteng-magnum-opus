@@ -1,7 +1,7 @@
 # Third-Party Notices
 
-The Sonsteng Magnum Opus platform is licensed under the **MIT License**
-(© 2026 Damien Riehl / Sonsteng Practicum). It bundles the following
+The Legal Practicum platform is licensed under the **MIT License**
+(© 2026 Damien Riehl / Legal Practicum). It bundles the following
 third-party assets. Each is embedded (base64) so the platform makes
 **zero external network requests** at runtime.
 

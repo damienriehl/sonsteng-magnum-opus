@@ -2,6 +2,11 @@
   "schema_version": "1.0.0",
   "type": "page_copy",
   "page": "home",
+  "identity": {
+    "title": "Legal Practicum",
+    "byline": "John O. Sonsteng · Damien Riehl · with Roger S. Haydock",
+    "host": "Hosted by Damien Riehl"
+  },
   "hero": {
     "eyebrow": "A LIVING CASEBOOK · 50 YEARS OF METHOD",
     "heading": "The practicum, rendered as a working law firm.",

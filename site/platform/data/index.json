@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "@id": "https://sonsteng.damienriehl.com/platform/data/index.json",
-  "title": "Sonsteng Practicum — machine catalog",
+  "title": "Legal Practicum — machine catalog",
   "description": "Agent/LMS entry point for the practicum data spine. All paths are relative to this file. Instructor-side materials (master fact patterns, instructor notes, persona disclosure tiers) are intentionally absent.",
   "generated_by": "tools/build_site.py",
   "matters": [
