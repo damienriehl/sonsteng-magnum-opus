@@ -46,16 +46,24 @@ EOF
   echo "[todo] wrote $ENV_FILE (all values optional)."
 fi
 
+# NOTE: the repo path contains a space ("Coding Projects"), and the three settings
+# below each want it handled differently. Getting any of them wrong fails loudly
+# only on the second one — the first fails at RUN time, days later, from a timer.
+#   ExecStart=        is a command line, split on whitespace -> MUST be quoted.
+#   WorkingDirectory= is a path taken literally -> MUST NOT be quoted
+#                     ("path is not absolute" if you do).
+#   Documentation=    is a URL list; file:// with a raw space is rejected and
+#                     dropped -> point at the remote URL instead.
 cat > "$UNIT_DIR/$SERVICE" <<EOF
 [Unit]
 Description=Legal Practicum — TODO reminder (docs/TODO.md -> ntfy)
-Documentation=file://$REPO_ROOT/docs/TODO.md
+Documentation=https://github.com/damienriehl/sonsteng-magnum-opus/blob/main/docs/TODO.md
 
 [Service]
 Type=oneshot
 WorkingDirectory=$REPO_ROOT
 EnvironmentFile=-$ENV_FILE
-ExecStart=/usr/bin/env python3 $REPO_ROOT/tools/todo_report.py
+ExecStart=/usr/bin/env python3 "$REPO_ROOT/tools/todo_report.py"
 Nice=10
 EOF
 

@@ -200,12 +200,35 @@ def render_text(report, today):
     return "\n".join(lines).rstrip() + "\n"
 
 
+#: Typographic characters that must not reach an HTTP header. See header_safe().
+_ASCII_FOLD = {
+    "—": "-", "–": "-", "‒": "-", "−": "-",   # dashes
+    "‘": "'", "’": "'", "“": '"', "”": '"',   # quotes
+    "…": "...", "•": "*", " ": " ",                # ellipsis, bullet, nbsp
+}
+
+
+def header_safe(value):
+    """Fold a string to something an HTTP header can actually carry.
+
+    urllib encodes header values as latin-1, so a single em dash raises
+    UnicodeEncodeError and the whole notification is lost. This bit us for real:
+    the title read "Legal Practicum — N open" and the timer failed at run time,
+    not at install time. Anything still unencodable after folding is dropped
+    rather than allowed to kill the send.
+    """
+    for bad, good in _ASCII_FOLD.items():
+        value = value.replace(bad, good)
+    return value.encode("latin-1", "replace").decode("latin-1")
+
+
 def notify_title(report):
+    # ASCII hyphen deliberately, not an em dash — this string becomes a header.
     if report["overdue"]:
-        return "Legal Practicum — %d overdue" % len(report["overdue"])
+        return "Legal Practicum - %d overdue" % len(report["overdue"])
     if report["due_today"]:
-        return "Legal Practicum — %d due today" % len(report["due_today"])
-    return "Legal Practicum — %d open" % len(report["open"])
+        return "Legal Practicum - %d due today" % len(report["due_today"])
+    return "Legal Practicum - %d open" % len(report["open"])
 
 
 def notify_body(report, today):
@@ -263,11 +286,12 @@ def resolve_topic():
 def publish_ntfy(topic, title, body, click_url, timeout=15, server=None, priority="default"):
     base = (server or os.environ.get(ENV_SERVER) or DEFAULT_SERVER).rstrip("/")
     url = "%s/%s" % (base, topic)
+    # Body goes out as UTF-8 and may hold anything; headers are latin-1 only.
     req = urllib.request.Request(url, data=body.encode("utf-8"), method="POST")
-    req.add_header("Title", title)
-    req.add_header("Priority", priority)
+    req.add_header("Title", header_safe(title))
+    req.add_header("Priority", header_safe(priority))
     if click_url:
-        req.add_header("Click", click_url)
+        req.add_header("Click", header_safe(click_url))
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.status
 
