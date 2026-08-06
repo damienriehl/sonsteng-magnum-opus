@@ -42,7 +42,7 @@
     "metaDescriptionCard": {"type": "object", "required": ["meta", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},
     "identity": {"type": "object", "required": ["title", "byline", "host"], "properties": {
       "title": {"$ref": "#/$defs/scalar"}, "byline": {"$ref": "#/$defs/scalar"}, "host": {"$ref": "#/$defs/scalar"}
-    },
+    }},
     "home": {
       "type": "object", "required": ["identity", "hero", "volumes", "explore"],
       "properties": {

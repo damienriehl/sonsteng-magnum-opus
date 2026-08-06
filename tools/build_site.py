@@ -558,6 +558,10 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     """
     up = up_prefix(relpath)
     site_title = PRODUCT_IDENTITY["title"]
+    identity_origin = "data/copy/home.json#identity"
+    title_locked = _eb_locked_attr(identity_origin + ".title")
+    byline_locked = _eb_locked_attr(identity_origin + ".byline")
+    host_locked = _eb_locked_attr(identity_origin + ".host")
     crumb_html = []
     for idx, (label, href) in enumerate(crumbs):
         if idx:
@@ -586,7 +590,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="masthead">
   <div class="masthead__inner">
-    <a class="masthead__brand" href="{up}index.html">{site_upper}</a>
+    <a class="masthead__brand" href="{up}index.html"{title_locked}>{site_upper}</a>
     <span class="masthead__docket mono">{docket}</span>
     <button type="button" class="type-toggle mono" id="type-toggle" aria-pressed="false" title="Toggle large type">A+ LARGE TYPE</button>
   </div>
@@ -598,9 +602,9 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <footer class="site-footer">
   <div class="site-footer__inner">
     <div>
-      <strong>{site}</strong> — a living casebook.<br>
-      {byline} · {host}.<br>
-      <span class="mono">MIT-LICENSED</span> · no platform fees; bring your own key.
+      <strong{title_locked}>{site}</strong> — a living casebook.<br>
+      <span{byline_locked}>{byline}</span> · <span{host_locked}>{host}</span>.<br>
+      <span class="mono">CONTENT: CC BY 4.0 · CODE: MIT</span> · no platform fees; bring your own key.
     </div>
     <div class="site-footer__links mono">
       <a href="{up}data/index.json">DATA CATALOG</a>
@@ -616,6 +620,8 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 </html>""".format(
         title=esc(title), site=esc(site_title), site_upper=esc(site_title.upper()),
         byline=esc(PRODUCT_IDENTITY["byline"]), host=esc(PRODUCT_IDENTITY["host"]),
+        title_locked=title_locked, byline_locked=byline_locked,
+        host_locked=host_locked,
         up=up, docket=esc(docket),
         bodyclass=esc(body_class), crumb=crumb_bar, body=body,
         spine_build=esc(SPINE_BUILD_ID),
@@ -1834,7 +1840,7 @@ def build_markdown_about_page(filename, source, title, docket, eyebrow,
     body = """
 <section class="reveal prose">
   <p class="eyebrow">{eyebrow}</p>
-  {preface}
+{preface}
   {content}
 </section>""".format(eyebrow=esc(eyebrow), preface=preface_html,
                      content=rendered)
