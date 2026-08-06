@@ -1920,7 +1920,12 @@ def paginate_catalog_records(records, page_size=CATALOG_PAGE_SIZE):
 
 def build_matter_library(corpus):
     copy = corpus["copy"]["matters"]
-    shape_labels = copy["shape_labels"]
+    shape_labels = {}
+    shape_attrs = {}
+    for shape in copy["shape_labels"]:
+        shape_labels[shape], shape_attrs[shape] = _copy_scalar(
+            "matters", copy, "shape_labels." + shape,
+            "matter library · practice shapes")
 
     def history_summary(m, limit=300):
         text = strip_bid_markers(m["_history"]["body_md"])
@@ -1935,23 +1940,27 @@ def build_matter_library(corpus):
                 "history_summary": history_summary(m), "shape": m.get("shape", ""),
                 "shape_label": shape_labels.get(m.get("shape"), m.get("shape", "")),
                 "tier": tier, "jurisdiction": m.get("jurisdiction", ""),
-                "fee_type": m.get("fee_type", "")}
+                "fee_type": m.get("fee_type", ""), "shape_attr": shape_attrs.get(m.get("shape"), "")}
 
     records = [record(m) for m in corpus["matters"]]
 
-    def card(item, prefix=""):
+    def card(item, prefix="", annotate_shape=False):
+        shape_attr = item["shape_attr"] if annotate_shape else ""
         return """<article class="card catalog-card" data-catalog-id="{id}">
-  <div class="chips"><span class="chip">{tier}</span><span class="chip">{shape}</span><span class="chip">{fee}</span></div>
+  <div class="chips"><span class="chip">{tier}</span><p class="chip"{shape_attr}>{shape}</p><span class="chip">{fee}</span></div>
   <h2 class="matter-card__caption"><a href="{prefix}{slug}/index.html">{caption}</a></h2>
   <p class="matter-card__premise">{history}</p>
   <p><a class="btn" href="{prefix}../downloads/{slug}-student-materials.zip" download>Download student materials (.zip)</a></p>
 </article>""".format(id=esc(item["id"]), tier=esc(item["tier"].upper()),
-        shape=esc(item["shape_label"]), fee=esc(item["fee_type"].upper()), prefix=prefix,
+        shape=esc(item["shape_label"]), shape_attr=shape_attr,
+        fee=esc(item["fee_type"].upper()), prefix=prefix,
         slug=esc(item["slug"]), caption=esc(item["caption"]), history=esc(item["history_summary"]))
 
-    hero = {field: _copy_scalar("matters", copy, "hero." + field,
-                               "matter library · hero")[0]
-            for field in ("eyebrow", "heading", "lede")}
+    hero = {}
+    hero_attrs = {}
+    for field in ("eyebrow", "heading", "lede"):
+        hero[field], hero_attrs[field] = _copy_scalar(
+            "matters", copy, "hero." + field, "matter library · hero")
     pages = paginate_catalog_records(records)
     total_pages = len(pages)
     for page_number in range(1, total_pages + 1):
@@ -1961,7 +1970,13 @@ def build_matter_library(corpus):
         nav = " ".join('<a href="{href}" aria-current="{cur}">Page {n}</a>'.format(
             href="index.html" if n == 1 else "page-{n}.html".format(n=n),
             cur="page" if n == page_number else "false", n=n) for n in range(1, total_pages + 1))
-        body = """<section><p class="eyebrow">{eyebrow}</p><h1>{heading}</h1><p class="lede">{lede}</p>
+        seen_shapes = set()
+        rendered_cards = []
+        for item in current:
+            first_shape = item["shape"] not in seen_shapes
+            seen_shapes.add(item["shape"])
+            rendered_cards.append(card(item, prefix, annotate_shape=first_shape))
+        body = """<section><p class="eyebrow"{eyebrow_attr}>{eyebrow}</p><h1{heading_attr}>{heading}</h1><p class="lede"{lede_attr}>{lede}</p>
 <p><a class="arrow-link" href="{repo}">View complete public source repository (includes instructor materials and answer keys)</a></p></section>
 <form class="lib-toolbar" data-catalog-form role="search"><label>Search matters <input name="q" type="search"></label>
 <label>Practice shape <select name="shape"><option value="">All shapes</option>{shapes}</select></label>
@@ -1972,9 +1987,10 @@ def build_matter_library(corpus):
 <p data-catalog-empty hidden>No matters match your search and filters.</p><nav class="pagination" aria-label="Catalog pages">{nav}</nav>
 <p><a href="print-all.html">Print all matters</a></p><script src="catalog.js" defer></script>""".format(
             repo=esc(PUBLIC_SOURCE_REPOSITORY), total=len(records), page=page_number, pages=total_pages,
-            cards="".join(card(i, prefix) for i in current), nav=nav,
+            cards="".join(rendered_cards), nav=nav,
             shapes="".join('<option value="{v}">{l}</option>'.format(v=esc(k), l=esc(v)) for k, v in shape_labels.items()),
-            fees="".join('<option value="{v}">{v}</option>'.format(v=esc(v)) for v in sorted({r["fee_type"] for r in records})), **hero)
+            fees="".join('<option value="{v}">{v}</option>'.format(v=esc(v)) for v in sorted({r["fee_type"] for r in records})),
+            eyebrow_attr=hero_attrs["eyebrow"], heading_attr=hero_attrs["heading"], lede_attr=hero_attrs["lede"], **hero)
         write_file(rel, page_shell(rel, "Matter Library", "MATTERS · LIBRARY",
                                    [("Home", "../index.html"), ("Matters", None)], body))
 
