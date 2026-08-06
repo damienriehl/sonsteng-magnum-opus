@@ -46,7 +46,7 @@ def test_repository_gate_fails_on_caption_drift(tmp_path):
         source = tmp_path / relative_path
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text("Midstate and Rogers\n", encoding="utf-8")
-    manifest = tmp_path / "data/midstate-contract.json"
+    manifest = tmp_path / "docs/contracts/midstate-contract.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps(EXPECTED_CONTRACT), encoding="utf-8")
     public = tmp_path / "site/platform/matters/m99-midstate/index.html"

@@ -32,7 +32,7 @@ EXPECTED_CONTRACT = {
     },
 }
 
-CONTRACT_PATH = Path("data/midstate-contract.json")
+CONTRACT_PATH = Path("docs/contracts/midstate-contract.json")
 CANONICAL_DOCS = (
     Path("docs/master-outline.md"),
     Path("docs/decisions/2026-07-18-midstate-deferred.md"),
@@ -50,7 +50,7 @@ def validate_contract(contract: object) -> None:
 
     if contract != EXPECTED_CONTRACT:
         raise ContractViolation(
-            "data/midstate-contract.json must preserve the exact arbitration and court "
+            f"{CONTRACT_PATH} must preserve the exact arbitration and court "
             "caption/remedy mapping"
         )
 
