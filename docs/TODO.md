@@ -25,7 +25,7 @@ this file is what those decisions oblige us to *do*.
 
 ## Today
 
-- [x] **T01 — Collect John's CD** `@damien` `due:2026-08-06` `origin:call-2026-08-06`
+- [ ] **T01 — Collect John's CD** `@damien` `due:2026-08-06` `origin:call-2026-08-06`
       1:00 PM at **401 Southeast Main, West Building** — John meets Damien at the
       front, on Main Street. He cannot drive right now, so Damien goes to him.
       John has it all labeled: the print files, the video, and the needed case.
