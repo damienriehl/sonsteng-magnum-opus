@@ -1,0 +1,535 @@
+<title>Sonsteng Practicum — Decisions with John, Aug 6</title>
+<style>
+  :root{
+    --bg:#f8f4ed; --panel:#ffffff; --panel2:#efe9e0; --ink:#201b16; --muted:#5f5448;
+    --teal:#08745f; --amber:#7a5200; --rose:#a3302a; --line:#c3b7a7;
+    --on-teal:#ffffff; --on-amber:#ffffff;
+    --wash:rgba(32,27,22,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12100e; --panel:#1c1916; --panel2:#242019; --ink:#f2ece1; --muted:#a89e8c;
+      --teal:#3fc1a8; --amber:#e8b04b; --rose:#e8746b; --line:#3a342b;
+      --on-teal:#0d1512; --on-amber:#1a120a;
+      --wash:rgba(255,255,255,.05);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12100e; --panel:#1c1916; --panel2:#242019; --ink:#f2ece1; --muted:#a89e8c;
+    --teal:#3fc1a8; --amber:#e8b04b; --rose:#e8746b; --line:#3a342b;
+    --on-teal:#0d1512; --on-amber:#1a120a;
+    --wash:rgba(255,255,255,.05);
+  }
+  :root[data-theme="light"]{
+    --bg:#f8f4ed; --panel:#ffffff; --panel2:#efe9e0; --ink:#201b16; --muted:#5f5448;
+    --teal:#08745f; --amber:#7a5200; --rose:#a3302a; --line:#c3b7a7;
+    --on-teal:#ffffff; --on-amber:#ffffff;
+    --wash:rgba(32,27,22,.06);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--ink); min-height:100vh;
+    font:16px/1.55 "Space Grotesk","Avenir Next",Optima,system-ui,sans-serif;
+    background-image:
+      radial-gradient(1100px 480px at 12% -6%, color-mix(in srgb, var(--teal) 9%, transparent), transparent),
+      radial-gradient(900px 420px at 108% 12%, color-mix(in srgb, var(--amber) 8%, transparent), transparent);
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:26px 18px 120px;display:flex;flex-direction:column;gap:0}
+
+  .themebar{display:flex;justify-content:flex-end;gap:5px;margin-bottom:16px}
+  .themebar button{min-height:34px;padding:5px 11px;color:var(--muted);background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;font-family:inherit;font-weight:600;
+    font-size:.75rem;letter-spacing:.03em;cursor:pointer}
+  .themebar button[aria-pressed="true"]{color:var(--ink);border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal)}
+
+  .eyebrow{font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);font-weight:700;margin:0 0 8px}
+  h1{font-size:clamp(1.5rem,4.6vw,2rem);margin:0 0 .25em;letter-spacing:-.02em;line-height:1.15;text-wrap:balance}
+  .sub{color:var(--muted);margin:0 0 6px;font-size:.95rem}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .chip{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;font-size:.74rem;
+    border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted);background:var(--panel)}
+  .chip b{color:var(--ink);font-weight:700}
+
+  .runsheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin:20px 0 8px}
+  .runsheet h2{margin:0 0 10px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+  .runsheet ol{margin:0;padding:0;list-style:none;display:grid;gap:2px}
+  .runsheet li{display:flex;gap:10px;align-items:baseline;font-size:.9rem;padding:3px 0}
+  .runsheet .rmin{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.78rem;color:var(--muted);
+    min-width:3.1em;text-align:right;font-variant-numeric:tabular-nums}
+  .runsheet a{color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
+  .runsheet a:hover{border-bottom-color:var(--teal)}
+  .runsheet .tot{border-top:1px solid var(--line);margin-top:8px;padding-top:8px;color:var(--muted);font-size:.82rem}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px 17px;margin:16px 0}
+  .card > .hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+  .num{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.8rem;font-weight:700;
+    color:var(--on-teal);background:var(--teal);border-radius:6px;padding:2px 7px;letter-spacing:.02em}
+  .mins{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.74rem;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-left:auto}
+  h3{margin:0;font-size:1.08rem;letter-spacing:-.01em;text-wrap:balance;flex:1 1 12em}
+
+  ul.body{list-style:none;margin:10px 0 4px;padding:0;display:grid;gap:7px}
+  ul.body ul{list-style:none;margin:7px 0 0;padding:0 0 0 12px;display:grid;gap:6px;
+    border-left:1px solid var(--line)}
+  ul.body li{font-size:.9rem;color:var(--muted);line-height:1.5}
+  ul.body b{color:var(--ink);font-weight:700}
+  ul.body li.why > b{color:var(--teal)}
+  ul.body li.warn > b{color:var(--rose)}
+  ul.body q{font-style:italic}
+  ul.body q::before{content:"\201C"} ul.body q::after{content:"\201D"}
+
+  .opts{display:grid;gap:7px;margin:12px 0 4px}
+  .opt{display:flex;gap:10px;align-items:flex-start;background:var(--panel2);
+    border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;cursor:pointer;
+    transition:border-color .15s, background .15s}
+  .opt:hover{border-color:var(--amber)}
+  .opt.sel{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 9%, transparent)}
+  .opt:focus-within{outline:3px solid var(--teal);outline-offset:2px}
+  .opt input{margin-top:4px;accent-color:var(--teal);flex:0 0 auto}
+  .opt .lbl{font-weight:700;font-size:.94rem}
+  .opt .rec{color:var(--teal);font-size:.72rem;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;margin-left:7px;white-space:nowrap}
+  .opt .det{color:var(--muted);font-size:.86rem;margin-top:3px;line-height:1.45}
+
+  label.note{display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;margin:12px 0 3px}
+  textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);padding:9px 11px;font:inherit;font-size:.9rem;min-height:52px;resize:vertical}
+  textarea:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  .flag{border-left:3px solid var(--rose);background:color-mix(in srgb, var(--rose) 7%, transparent);
+    border-radius:0 8px 8px 0;padding:9px 12px;margin:11px 0 0;font-size:.86rem;color:var(--muted)}
+  .flag b{color:var(--rose)}
+
+  .outbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px;margin:26px 0 0}
+  .outbox h2{margin:0 0 4px;font-size:1.05rem}
+  .outbox p{color:var(--muted);font-size:.88rem;margin:0 0 10px}
+  button.copy{background:var(--teal);color:var(--on-teal);border:0;border-radius:12px;width:100%;
+    padding:19px 22px;font-family:inherit;font-weight:700;font-size:clamp(1.05rem,4vw,1.32rem);
+    line-height:1.05;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;-webkit-appearance:none}
+  button.copy:active{transform:translateY(1px)}
+  button.copy:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+  #copystatus{display:block;margin-top:9px;font-size:.85rem;color:var(--muted);min-height:1.3em}
+  #out{margin-top:12px;min-height:190px;font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+    font-size:.8rem;line-height:1.5;white-space:pre}
+
+  footer{margin-top:30px;color:var(--muted);font-size:.8rem;line-height:1.6;
+    border-top:1px solid var(--line);padding-top:14px}
+  footer code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.92em;color:var(--amber)}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<div class="page"><div class="wrap">
+
+<div class="themebar">
+  <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+  <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+  <button type="button" data-theme-set="system" aria-pressed="true">Auto</button>
+</div>
+
+<p class="eyebrow">Decision Sheet &middot; Sonsteng Practicum</p>
+<h1>Ten decisions with John — Thursday, 10:00&nbsp;AM</h1>
+<p class="sub">Built from John's two emails (Aug 5 and Aug 6). Every item he raised is here; related items are merged so ten decisions fit thirty minutes. Recommended answers are pre-selected — march down the list, change what you disagree with, add notes, then Copy answers.</p>
+
+<div class="meta">
+  <span class="chip"><b>30</b> minutes</span>
+  <span class="chip"><b>10</b> decisions</span>
+  <span class="chip"><b>17</b> of John's items covered</span>
+  <span class="chip">Repo <b>sonsteng-magnum-opus</b></span>
+</div>
+
+<div class="runsheet">
+  <h2>Running order</h2>
+  <ol>
+    <li><span class="rmin">4 min</span><a href="#d1">Title &amp; institutional home</a></li>
+    <li><span class="rmin">1 min</span><a href="#d2">Byline order</a></li>
+    <li><span class="rmin">4 min</span><a href="#d3">Copyright &amp; license</a></li>
+    <li><span class="rmin">3 min</span><a href="#d4">Model case file — Midstate v. Rogers</a></li>
+    <li><span class="rmin">3 min</span><a href="#d5">The CD</a></li>
+    <li><span class="rmin">5 min</span><a href="#d6">AI briefings &amp; recorded speakers</a></li>
+    <li><span class="rmin">1 min</span><a href="#d7">Vocabulary lock</a></li>
+    <li><span class="rmin">3 min</span><a href="#d8">Exercise catalog &amp; ordering</a></li>
+    <li><span class="rmin">3 min</span><a href="#d9">Credit hours &amp; the billable log</a></li>
+    <li><span class="rmin">3 min</span><a href="#d10">Alumni faculty &amp; the board meeting</a></li>
+    <li class="tot"><span class="rmin">30 min</span>Total. Item 11 is a two-line wrap-up, filled after the call.</li>
+  </ol>
+</div>
+
+<!-- D1 -->
+<div class="card" id="d1" data-q="q1" data-topic="Title &amp; institutional home">
+  <div class="hd"><span class="num">01</span><h3>Title and institutional home</h3><span class="mins">4 min</span></div>
+  <ul class="body">
+    <li class="warn"><b>The home vanished</b> — John: <q>We can no longer use the center for law and business. It no longer exists.</q> Nothing currently publishes or houses this work.</li>
+    <li><b>Two knots, one string</b> — the title and the institutional home pull on each other. A Mitchell&nbsp;Hamline-branded name only works if the school signs on, and that answer comes from item&nbsp;10.
+      <ul>
+        <li><b>Title candidates</b> — <i>The Legal Practicum</i> &middot; <i>The Practicum Method</i> &middot; <i>The Legal Practicum System</i> &middot; <i>Practicum: A Legal Education Renaissance</i>. John's existing book title, <i>The Legal Practicum Method</i>, is the strongest anchor and the one already carrying his name.</li>
+      </ul>
+    </li>
+    <li class="why"><b>Why sequence it</b> — locking a title costs nothing and unblocks every document, site header, and syllabus today. Locking a home before the Buck/Harris conversation spends leverage you don't have yet.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q1" value="Lock the title today, decide the home after the board meeting" checked>
+      <div><span class="lbl">Lock the title today, defer the home</span><span class="rec">Recommended</span>
+      <div class="det">Pick a working title in this meeting. Leave the publisher/home open until item 10's conversation happens — it forecloses nothing, and every draft can move meanwhile.</div></div></label>
+    <label class="opt"><input type="radio" name="q1" value="Mitchell Hamline as the institutional home">
+      <div><span class="lbl">Mitchell Hamline as the home</span>
+      <div class="det">Ask MHSL to host it as a named program. Matches John's national-leader ambition and gives the work an institution — but makes the school a gatekeeper on every future decision.</div></div></label>
+    <label class="opt"><input type="radio" name="q1" value="Standalone imprint, MHSL credited as origin">
+      <div><span class="lbl">Standalone imprint</span>
+      <div class="det">The Practicum stands on its own name; MHSL is credited as where it was built. Other schools adopt without adopting a competitor's badge.</div></div></label>
+  </div>
+  <label class="note" for="n_q1">Notes — working title chosen</label>
+  <textarea id="n_q1" data-note="q1" placeholder="Title we agreed on, and anything about the home / publisher"></textarea>
+</div>
+
+<!-- D2 -->
+<div class="card" id="d2" data-q="q2" data-topic="Byline order">
+  <div class="hd"><span class="num">02</span><h3>Byline order</h3><span class="mins">1 min</span></div>
+  <ul class="body">
+    <li><b>John's proposal</b> — <q>I suggest that listing your name goes second and if Roger wants to be involved, his name will go third.</q></li>
+    <li class="why"><b>Why it's right</b> — this is fifty years of Sonsteng scholarship. First position is his, and settling it in one minute keeps it from resurfacing on every artifact.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q2" value="Sonsteng, Riehl, Haydock — as John proposed" checked>
+      <div><span class="lbl">Sonsteng, Riehl, Haydock</span><span class="rec">Recommended</span>
+      <div class="det">Exactly as John proposed, with Roger third if he takes an authorship role.</div></div></label>
+    <label class="opt"><input type="radio" name="q2" value="Sonsteng and Riehl, with Haydock credited separately">
+      <div><span class="lbl">Sonsteng &amp; Riehl; Haydock credited separately</span>
+      <div class="det">If Roger would rather contribute than co-author — a contributor credit rather than a byline slot.</div></div></label>
+  </div>
+  <label class="note" for="n_q2">Notes</label>
+  <textarea id="n_q2" data-note="q2" placeholder="Who asks Roger, and by when"></textarea>
+</div>
+
+<!-- D3 -->
+<div class="card" id="d3" data-q="q3" data-topic="Copyright &amp; license">
+  <div class="hd"><span class="num">03</span><h3>Copyright and license</h3><span class="mins">4 min</span></div>
+  <ul class="body">
+    <li><b>John's position</b> — <q>I would like to maintain the copyright</q> and <q>I already own all the needed materials.</q> Both are compatible with everything the project needs.</li>
+    <li class="why"><b>Ownership is not the question</b> — John stays the sole copyright owner. The only question is what license the Practicum software gets, and CC-BY answers it without transferring anything.</li>
+    <li><b>Attribution is the teeth</b> — CC-BY requires the Sonsteng credit to travel with every copy, every adaptation, every school's derivative, permanently. That is a stronger name-recognition instrument than a locked copyright nobody can use.
+      <ul>
+        <li><b>Two layers, two licenses</b> — John's content under CC-BY 4.0; the software the project wrote stays MIT. They sit side by side without conflict, exactly as the repo already anticipates.</li>
+        <li><b>Unblocks the originals</b> — the July 18 record deferred John's Midstate/Trialbook materials purely because the license was unsettled. This settles it, and item 4 becomes buildable.</li>
+      </ul>
+    </li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q3" value="John holds copyright; licenses to the Practicum software under CC-BY 4.0" checked>
+      <div><span class="lbl">John holds &copy;, CC-BY 4.0 to the platform</span><span class="rec">Recommended</span>
+      <div class="det">John remains sole owner and grants a CC-BY 4.0 license for use in the Practicum software. Anyone may use, adapt, and teach from it — and must credit Sonsteng every time.</div></div></label>
+    <label class="opt"><input type="radio" name="q3" value="John holds copyright; CC-BY-NC (non-commercial)">
+      <div><span class="lbl">John holds &copy;, CC-BY-NC</span>
+      <div class="det">Adds a non-commercial restriction. Blocks commercial republication, but also snags schools recovering their own costs and muddies the ordering model in item 8.</div></div></label>
+    <label class="opt"><input type="radio" name="q3" value="John holds copyright; private license to this project only">
+      <div><span class="lbl">John holds &copy;, private license only</span>
+      <div class="det">No public CC license; a permission grant to this project alone. Narrowest and most controlled — and it gives up the open-commons position the work descends from.</div></div></label>
+  </div>
+  <div class="flag"><b>Confirm before relying on it:</b> get John's <q>I already own all the needed materials</q> in writing, covering (a) anything produced under a school appointment or with school resources, and (b) the other lawyers who appear on the CD in item 5 — their briefings are their copyrights unless cleared.</div>
+  <div class="flag"><b>Say it out loud once:</b> CC-BY lets anyone redistribute free of charge. The website ordering in item 8 therefore sells assembly, currency, and support — not exclusivity. That is a workable business; it just isn't a copyright moat.</div>
+  <label class="note" for="n_q3">Notes</label>
+  <textarea id="n_q3" data-note="q3" placeholder="Version of CC-BY, credit line wording, who drafts the written confirmation"></textarea>
+</div>
+
+<!-- D4 -->
+<div class="card" id="d4" data-q="q4" data-topic="Model case file">
+  <div class="hd"><span class="num">04</span><h3>Model case file — Midstate University v. Rogers</h3><span class="mins">3 min</span></div>
+  <ul class="body">
+    <li><b>John's call</b> — <q>The model case file should be Midstate University and Rogers. It is an arbitration that can also be used for a court trial, negotiation, mediation, and contract interpretation.</q></li>
+    <li class="why"><b>One file, five modes</b> — that reuse is the whole argument. A single fact pattern a student re-enters five ways teaches that posture changes strategy, which no five separate exercises can show.</li>
+    <li><b>Now buildable</b> — the platform currently ships 20 original matters and deliberately excluded the Sonsteng originals pending the license. Item 3 removes that block; Midstate lands in its own separately-licensed directory with John's copyright marked on every artifact.</li>
+    <li class="warn"><b>Scope is the real question</b> — five full postures is five times the packet work. Building arbitration first and proving the reuse before committing to all five is the cheaper path to the same claim.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q4" value="Midstate v. Rogers as the model file; build arbitration first, then the other four postures" checked>
+      <div><span class="lbl">Yes — arbitration first, other four to follow</span><span class="rec">Recommended</span>
+      <div class="det">Adopt Midstate v. Rogers as the model case file. Build the arbitration posture to full depth first, then layer trial, negotiation, mediation, and contract interpretation onto the same facts.</div></div></label>
+    <label class="opt"><input type="radio" name="q4" value="Midstate v. Rogers; build all five postures together">
+      <div><span class="lbl">Yes — all five postures together</span>
+      <div class="det">Ship the complete demonstration at once. Strongest pitch to a dean or a board; considerably more work before anything is showable.</div></div></label>
+    <label class="opt"><input type="radio" name="q4" value="Keep an original matter as the model; Midstate added alongside">
+      <div><span class="lbl">Keep an original as the model</span>
+      <div class="det">Leave one of the 20 existing matters as the reference implementation and add Midstate beside it. Avoids re-cutting the demo path.</div></div></label>
+  </div>
+  <label class="note" for="n_q4">Notes</label>
+  <textarea id="n_q4" data-note="q4" placeholder="Which of John's original Midstate files exist, and where they are"></textarea>
+</div>
+
+<!-- D5 -->
+<div class="card" id="d5" data-q="q5" data-topic="The CD">
+  <div class="hd"><span class="num">05</span><h3>The CD — getting it into the platform</h3><span class="mins">3 min</span></div>
+  <ul class="body">
+    <li><b>What John has</b> — <q>I prepared a pretty good CD and do not know how to turn it into the format that you need. It has briefings, demonstrations, analysis, and many small briefings on narrow topics by very talented lawyers.</q></li>
+    <li class="why"><b>The format worry is not John's problem</b> — conversion is a mechanical step on Damien's side. The only thing John needs to do is hand over the disc.</li>
+    <li><b>Value hiding on it</b> — the narrow-topic briefings by other lawyers are exactly the recorded-expert layer item 6 is about. This disc may already be a first season of it.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q5" value="John hands over the disc; Damien digitizes and returns a contents index" checked>
+      <div><span class="lbl">Hand over the disc; Damien digitizes</span><span class="rec">Recommended</span>
+      <div class="det">John mails or hands over the physical CD. Damien rips it, inventories every asset, and returns a plain contents index within a week so John can say what to keep. Zero technical burden on John.</div></div></label>
+    <label class="opt"><input type="radio" name="q5" value="John uploads the contents to shared Drive himself">
+      <div><span class="lbl">John uploads to shared Drive</span>
+      <div class="det">Faster if John's machine still reads the disc and a drive is handy. Depends on hardware many current computers no longer have.</div></div></label>
+    <label class="opt"><input type="radio" name="q5" value="Treat the CD as archive only; rebuild the briefings fresh">
+      <div><span class="lbl">Archive only; rebuild fresh</span>
+      <div class="det">Preserve the disc but build new briefings from scratch. Cleanest on rights and consistency; discards work that may be excellent.</div></div></label>
+  </div>
+  <div class="flag"><b>Rights follow-on:</b> the other lawyers' briefings need their permission before publication — see the clearance flag in item 3.</div>
+  <label class="note" for="n_q5">Notes</label>
+  <textarea id="n_q5" data-note="q5" placeholder="Where the disc is, how it gets to Damien, target date"></textarea>
+</div>
+
+<!-- D6 -->
+<div class="card" id="d6" data-q="q6" data-topic="AI briefings &amp; recorded speakers">
+  <div class="hd"><span class="num">06</span><h3>AI briefings and recorded speakers</h3><span class="mins">5 min</span></div>
+  <ul class="body">
+    <li class="why"><b>John's assumption is correct</b> — <q>I hope I am correct in assuming that the briefings can be conducted using artificial intelligence. If this is true, the game changes.</q> It is true. It works today, and the platform already runs AI-delivered client interviews with debrief and critique.</li>
+    <li><b>What it already gives him</b> — every requirement in his second email falls out of it:
+      <ul>
+        <li><b>Consistent format</b> — <q>The briefings must be consistent in format.</q> A generated briefing is identical in shape every time; a room full of professors is not.</li>
+        <li><b>Printable and rewatchable</b> — <q>A student can print out the written portions and watch any part more than once.</q> Script and transcript ship with every briefing by construction.</li>
+        <li><b>Presenter quality</b> — <q>One cannot assume that all professors are good at making presentations.</q> This is the strongest argument for AI delivery, not against it: it removes the variance.</li>
+        <li><b>Revisable</b> — a rule changes, the briefing updates. No re-recording, no rescheduling a speaker.</li>
+      </ul>
+    </li>
+    <li><b>Where humans still win</b> — John's <q>extraordinary speakers</q> recorded on a studio background carry authority and recruit schools. That is a marquee layer, not the baseline.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q6" value="AI briefings as the default layer; a curated set of recorded human speakers as the marquee layer" checked>
+      <div><span class="lbl">AI baseline, human speakers as marquee</span><span class="rec">Recommended</span>
+      <div class="det">Every briefing exists as an AI-delivered module — consistent, printable, rewatchable, updatable. A curated handful of extraordinary lawyers get studio-background recordings as signature pieces on top.</div></div></label>
+    <label class="opt"><input type="radio" name="q6" value="Record human speakers first; add AI briefings later">
+      <div><span class="lbl">Human-recorded first, AI later</span>
+      <div class="det">Highest fidelity out of the gate. Slow and expensive per briefing, and scale is the thesis the whole project rests on.</div></div></label>
+    <label class="opt"><input type="radio" name="q6" value="AI briefings only for now; defer all speaker recording">
+      <div><span class="lbl">AI only for now</span>
+      <div class="det">Fastest and cheapest to complete coverage. Gives up the star power that helps recruit schools, alumni, and a board.</div></div></label>
+  </div>
+  <label class="note" for="n_q6">Notes — who are the first speakers?</label>
+  <textarea id="n_q6" data-note="q6" placeholder="Names John would ask, and which topics get a human face"></textarea>
+</div>
+
+<!-- D7 -->
+<div class="card" id="d7" data-q="q7" data-topic="Vocabulary lock">
+  <div class="hd"><span class="num">07</span><h3>Vocabulary lock</h3><span class="mins">1 min</span></div>
+  <ul class="body">
+    <li><b>Two terms, hard-won</b> — John has already run the experiments on students and reported the results:
+      <ul>
+        <li><b>Assessment and feedback</b> — <q>I do not want to use the term grading.</q></li>
+        <li><b>Planning Guide and Checklist</b> — <q>Planning guide</q> alone went unread; <q>checklist</q> alone made students think they had to do every item and tick it off. The combined term works.</li>
+      </ul>
+    </li>
+    <li class="why"><b>Lock it, then stop revisiting</b> — this is field-tested and costs one minute. Once locked it propagates through the site, the syllabi, and every rubric automatically.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q7" value="Lock both terms exactly as John states them" checked>
+      <div><span class="lbl">Lock both terms as John states them</span><span class="rec">Recommended</span>
+      <div class="det">&ldquo;Assessment and feedback&rdquo; everywhere, never &ldquo;grading.&rdquo; &ldquo;Planning Guide and Checklist&rdquo; as one term, never either half alone.</div></div></label>
+    <label class="opt"><input type="radio" name="q7" value="Lock both, with an exception where a registrar requires the word grade">
+      <div><span class="lbl">Lock both, one registrar exception</span>
+      <div class="det">Same lock, but permit &ldquo;grade&rdquo; in accreditation and registrar paperwork where the word is required by the form.</div></div></label>
+  </div>
+  <label class="note" for="n_q7">Notes — any third term to lock</label>
+  <textarea id="n_q7" data-note="q7" placeholder="e.g. practicum vs course, matter vs case, briefing vs lecture"></textarea>
+</div>
+
+<!-- D8 -->
+<div class="card" id="d8" data-q="q8" data-topic="Exercise catalog &amp; ordering">
+  <div class="hd"><span class="num">08</span><h3>Exercise catalog and how schools order</h3><span class="mins">3 min</span></div>
+  <ul class="body">
+    <li><b>John's design</b> — <q>Rather than list all the exercises completely… we can provide a procedural and factual history for each one, allowing schools to choose the exercises they find helpful. The schools can then order the materials through our website.</q></li>
+    <li class="why"><b>The catalog is the marketing</b> — a procedural and factual history is enough for a professor to know whether an exercise fits their course, and not enough to run it. That is the right line.</li>
+    <li><b>First two packages</b> — John named them: the <b>General Practice Practicum</b> and the <b>Small Business Practicum</b>, syllabus and materials. Those are the reference implementations to ship first.</li>
+    <li class="warn"><b>What ordering actually sells</b> — under CC-BY (item 3) anyone may redistribute free. So the order button delivers assembly, print-ready packages, LMS-ready files, updates, and support — decide which of those before pricing anything.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q8" value="Free public catalog of procedural and factual histories; full materials ordered through the site" checked>
+      <div><span class="lbl">Free catalog, ordered materials</span><span class="rec">Recommended</span>
+      <div class="det">Every exercise gets a free, public page with its procedural and factual history. Full materials are ordered through the website. Exactly John's design.</div></div></label>
+    <label class="opt"><input type="radio" name="q8" value="Everything public and free; no ordering step">
+      <div><span class="lbl">Everything public</span>
+      <div class="det">Maximum adoption and the purest commons position. No ordering revenue and no signal about who is using it.</div></div></label>
+    <label class="opt"><input type="radio" name="q8" value="Catalog behind a school signup as well">
+      <div><span class="lbl">Catalog behind a signup</span>
+      <div class="det">Schools register to browse. Captures every lead; adds friction exactly where a curious professor decides whether to keep looking.</div></div></label>
+  </div>
+  <label class="note" for="n_q8">Notes — what an order includes, and roughly what it costs</label>
+  <textarea id="n_q8" data-note="q8" placeholder="Print? LMS package? Support? Updates? Per-school or per-student?"></textarea>
+</div>
+
+<!-- D9 -->
+<div class="card" id="d9" data-q="q9" data-topic="Credit hours &amp; the billable log">
+  <div class="hd"><span class="num">09</span><h3>Credit hours and the billable-hours log</h3><span class="mins">3 min</span></div>
+  <ul class="body">
+    <li><b>John's diagnosis</b> — <q>The slower the learners are, the more time they spend. The system is geared to reward inefficiencies.</q> Against practice, where <q>if the lawyer does good work fast, the lawyer must charge the client a higher rate or make less per hour.</q></li>
+    <li><b>What he wants logged</b> — <q>Each week the student must submit the number of hours they spent working on projects. This includes class time. The students also submit how many hours they can bill a client.</q> The gap between those two numbers is the lesson.</li>
+    <li class="why"><b>Log it without fighting the ABA</b> — the weekly log delivers the entire pedagogy on its own. Making it the <i>basis</i> for credit turns a build into an accreditation campaign, and the two are separable.</li>
+    <li><b>What the log produces</b> — hours per project, effective hourly rate at a stated fee, a flat-fee comparison, and cohort benchmarks. That is the instrument that answers John's real question: <q>whether they can make a living being a lawyer.</q></li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q9" value="Log hours worked and hours billable weekly; keep course credits conventional for now" checked>
+      <div><span class="lbl">Log both hours; keep credits conventional</span><span class="rec">Recommended</span>
+      <div class="det">Students log hours worked and hours billable every week. Course credits stay conventional for the registrar and the ABA. The log runs alongside as assessment and self-knowledge — full pedagogy, no accreditation fight.</div></div></label>
+    <label class="opt"><input type="radio" name="q9" value="Propose a competency-based credit model to the ABA">
+      <div><span class="lbl">Propose competency-based credit</span>
+      <div class="det">Argue for credit by demonstrated outcome rather than seat time. This is the reform John is actually describing — and a multi-year institutional project on its own.</div></div></label>
+    <label class="opt"><input type="radio" name="q9" value="Log hours worked only; drop the billable comparison">
+      <div><span class="lbl">Hours worked only</span>
+      <div class="det">Simpler to collect and less exposed. Drops the billable comparison — which is the half that teaches whether the work pays.</div></div></label>
+  </div>
+  <label class="note" for="n_q9">Notes</label>
+  <textarea id="n_q9" data-note="q9" placeholder="Assumed billing rate, flat-fee scenarios, whether the log is graded or ungraded"></textarea>
+</div>
+
+<!-- D10 -->
+<div class="card" id="d10" data-q="q10" data-topic="Alumni faculty &amp; the board meeting">
+  <div class="hd"><span class="num">10</span><h3>Alumni as national faculty, and the board meeting</h3><span class="mins">3 min</span></div>
+  <ul class="body">
+    <li><b>John's alumni idea</b> — every school works with its alumni advisor to recruit alumni for assessment and feedback. He gives three reasons:
+      <ul>
+        <li><b>Recognition, not fundraising</b> — <q>involves the alumni in a way that recognizes their accomplishments and does not seek funding.</q></li>
+        <li><b>Giving follows</b> — <q>when alumni is involved this way, we can expect an increase in contributions.</q></li>
+        <li><b>National faculty</b> — <q>it also allows the school to say they have a national faculty in the practicum courses.</q></li>
+      </ul>
+    </li>
+    <li><b>The institutional ask</b> — John wants to meet Greg Buck, the new board chairman, plus Frank Harris and perhaps the dean, so that <q>MHSL have the opportunity to be a national leader.</q></li>
+    <li class="why"><b>Don't make them choose sight-unseen</b> — a pilot with real alumni assessors turns the board meeting from a proposal into a demonstration. But scheduling takes weeks, so start it now rather than after.</li>
+  </ul>
+  <div class="opts">
+    <label class="opt sel"><input type="radio" name="q10" value="Schedule the Buck / Harris / dean meeting now and start the alumni pilot in parallel" checked>
+      <div><span class="lbl">Both in parallel</span><span class="rec">Recommended</span>
+      <div class="det">John opens the conversation with Greg Buck, Frank Harris, and the dean now, while the alumni-assessor pilot starts immediately — so by the time the meeting happens there is something working to show.</div></div></label>
+    <label class="opt"><input type="radio" name="q10" value="Meet the board first; build after their backing">
+      <div><span class="lbl">Meet the board first</span>
+      <div class="det">Secure institutional backing before investing further. Much faster if they say yes; stalls everything if they hesitate.</div></div></label>
+    <label class="opt"><input type="radio" name="q10" value="Run the alumni pilot first; approach the board with results">
+      <div><span class="lbl">Pilot first, board later</span>
+      <div class="det">Arrive with evidence rather than a pitch. Strongest position — and it leaves John's board conversation waiting on a cohort.</div></div></label>
+  </div>
+  <label class="note" for="n_q10">Notes — who reaches out, and when</label>
+  <textarea id="n_q10" data-note="q10" placeholder="Who contacts Buck / Harris / the dean, target date, which alumni for the pilot"></textarea>
+</div>
+
+<!-- D11 wrap -->
+<div class="card" id="d11" data-q="q11" data-topic="Wrap-up">
+  <div class="hd"><span class="num">11</span><h3>Wrap-up — owners and next date</h3><span class="mins">after</span></div>
+  <ul class="body">
+    <li><b>Fill after the call</b> — anything John raised that isn't above, who owns what, and when you two talk next.</li>
+  </ul>
+  <label class="note" for="n_q11">Notes</label>
+  <textarea id="n_q11" data-note="q11" placeholder="Owners, dates, anything new John raised"></textarea>
+</div>
+
+<div class="outbox">
+  <h2>Copy answers</h2>
+  <p>Assembles everything above into text. Tap the button, then paste it back into the chat. If the copy is blocked, the text is already selected below — press &#8984;C or Ctrl+C.</p>
+  <button class="copy" type="button" id="copybtn">Copy answers</button>
+  <span id="copystatus" role="status" aria-live="polite"></span>
+  <label class="note" for="out">Assembled answers</label>
+  <textarea id="out" readonly></textarea>
+</div>
+
+<footer>
+  <p>Source: John's emails of Aug 5 and Aug 6, 2026. Quotations are John's own words, lightly repunctuated. Ten decisions cover all seventeen points he raised; related points are merged to fit thirty minutes.</p>
+  <p>Canonical repo: <code>sonsteng-magnum-opus</code>. Related record: <code>docs/decisions/2026-07-18-midstate-deferred.md</code>, which item&nbsp;3 unblocks. This sheet: <code>docs/decisions/2026-08-06-john-meeting-decision-sheet.html</code>. Cockpit ask stem: <code>sonsteng-magnum-opus-2026-08-06-0940-john-meeting-decisions</code>.</p>
+</footer>
+
+</div></div>
+
+<script>
+(function(){
+  var root = document.documentElement;
+  var KEY = 'sonsteng.decisions.theme';
+  var media = window.matchMedia('(prefers-color-scheme: dark)');
+  var pref = 'system';
+  try { var s = localStorage.getItem(KEY); if (s === 'light' || s === 'dark' || s === 'system') pref = s; } catch (e) {}
+
+  function apply(){
+    var t = pref === 'system' ? (media.matches ? 'dark' : 'light') : pref;
+    root.setAttribute('data-theme', t);
+    root.style.colorScheme = t;
+    var btns = document.querySelectorAll('[data-theme-set]');
+    for (var i = 0; i < btns.length; i++){
+      btns[i].setAttribute('aria-pressed', String(btns[i].getAttribute('data-theme-set') === pref));
+    }
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-theme-set]') : null;
+    if (!b) return;
+    pref = b.getAttribute('data-theme-set');
+    try { localStorage.setItem(KEY, pref); } catch (e) {}
+    apply();
+  });
+  if (media.addEventListener) media.addEventListener('change', function(){ if (pref === 'system') apply(); });
+  apply();
+
+  // selected-state styling on option cards
+  function paint(){
+    var opts = document.querySelectorAll('.opt');
+    for (var i = 0; i < opts.length; i++){
+      var input = opts[i].querySelector('input');
+      opts[i].classList.toggle('sel', !!(input && input.checked));
+    }
+  }
+  document.addEventListener('change', function(ev){
+    if (ev.target && ev.target.type === 'radio') { paint(); assemble(); }
+  });
+  document.addEventListener('input', function(ev){
+    if (ev.target && ev.target.tagName === 'TEXTAREA' && ev.target.id !== 'out') assemble();
+  });
+
+  var out = document.getElementById('out');
+
+  function assemble(){
+    var lines = [];
+    lines.push('SONSTENG PRACTICUM — DECISIONS WITH JOHN (2026-08-06)');
+    lines.push('ask stem: sonsteng-magnum-opus-2026-08-06-0940-john-meeting-decisions');
+    lines.push('');
+    var cards = document.querySelectorAll('.card[data-q]');
+    for (var i = 0; i < cards.length; i++){
+      var card = cards[i];
+      var qid = card.getAttribute('data-q');
+      var num = card.querySelector('.num');
+      var h = card.querySelector('h3');
+      var topic = h ? h.textContent.trim() : qid;
+      var checked = card.querySelector('input[type=radio]:checked');
+      var note = card.querySelector('textarea[data-note]');
+      lines.push('[' + (num ? num.textContent.trim() : '') + '] ' + topic + '  (' + qid + ')');
+      if (checked) lines.push('  DECISION: ' + checked.value);
+      else if (card.querySelector('input[type=radio]')) lines.push('  DECISION: (none selected)');
+      var nv = note && note.value.trim();
+      if (nv) lines.push('  NOTES: ' + nv.replace(/\n/g, '\n         '));
+      lines.push('');
+    }
+    out.value = lines.join('\n');
+  }
+
+  var status = document.getElementById('copystatus');
+  document.getElementById('copybtn').addEventListener('click', function(){
+    assemble();
+    out.focus();
+    out.select();
+    try { out.setSelectionRange(0, out.value.length); } catch (e) {}
+    var done = function(msg){ status.textContent = msg; };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.value).then(
+        function(){ done('Copied. Paste it back into the chat.'); },
+        function(){ fallback(); }
+      );
+    } else { fallback(); }
+    function fallback(){
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      done(ok ? 'Copied. Paste it back into the chat.'
+              : 'Copy was blocked — the text below is selected. Press ⌘C or Ctrl+C.');
+    }
+  });
+
+  paint();
+  assemble();
+})();
+</script>
