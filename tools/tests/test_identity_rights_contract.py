@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HOME_COPY = ROOT / "data/copy/home.json"
 PITCH = ROOT / "site/index.html"
 README = ROOT / "README.md"
+CONTENT_LICENSE = ROOT / "CONTENT-LICENSE.md"
+MIT_LICENSE = ROOT / "LICENSE"
+CC_BY_URL = "https://creativecommons.org/licenses/by/4.0/"
 
 
 def identity() -> dict:
@@ -66,3 +69,56 @@ def test_historical_mitchell_attribution_and_technical_names_are_preserved():
     assert "run jointly by Mitchell Hamline's C-LAB and IGUL" in pitch
     assert "sonsteng.damienriehl.com" in readme
     assert "site/platform/" in readme
+
+
+def test_content_license_has_conservative_scope_attribution_and_exclusions():
+    content = CONTENT_LICENSE.read_text(encoding="utf-8")
+    for included in (
+        "data/copy/",
+        "data/curriculum/",
+        "data/jurisdictions/",
+        "data/matters/",
+        "site/index.html",
+    ):
+        assert included in content
+    for excluded in (
+        "software",
+        "third-party",
+        "data/taxonomy/",
+        "data/midstate/",
+        "uncleared recordings",
+    ):
+        assert excluded in content.lower()
+    assert CC_BY_URL in content
+    assert "Legal Practicum — John O. Sonsteng · Damien Riehl · with Roger S. Haydock" in content
+    assert "indicate if changes were made" in content
+
+
+def test_mit_notice_is_unchanged_and_points_to_layered_scope():
+    license_text = MIT_LICENSE.read_text(encoding="utf-8")
+    assert "Copyright (c) 2026 Damien Riehl, John O. Sonsteng, Roger S. Haydock" in license_text
+    assert "Permission is hereby granted, free of charge" in license_text
+    assert "CONTENT-LICENSE.md" in license_text
+
+
+def test_public_surfaces_link_content_and_code_licenses():
+    tmp, site, _ = build_fresh_site("identity-rights-licenses-")
+    try:
+        site = Path(site)
+        assert (site / "about/content-license.html").exists()
+        assert (site / "about/code-license.html").exists()
+        content_page = (site / "about/content-license.html").read_text(encoding="utf-8")
+        assert f'href="{CC_BY_URL}"' in content_page
+        for rel in ("index.html", "matters/m01-arbitration-meridian/index.html"):
+            html = (site / rel).read_text(encoding="utf-8")
+            assert "CONTENT: CC BY 4.0" in html
+            assert "CODE: MIT" in html
+            assert "content-license.html" in html
+            assert "code-license.html" in html
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    for surface in (PITCH.read_text(encoding="utf-8"), README.read_text(encoding="utf-8")):
+        assert CC_BY_URL in surface
+        assert "CONTENT-LICENSE.md" in surface
+        assert "LICENSE" in surface

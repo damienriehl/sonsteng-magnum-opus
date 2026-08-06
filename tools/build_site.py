@@ -609,6 +609,8 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     <div class="site-footer__links mono">
       <a href="{up}data/index.json">DATA CATALOG</a>
       <a href="{up}index.html">HOME</a>
+      <a href="{up}about/content-license.html">CONTENT: CC BY 4.0</a>
+      <a href="{up}about/code-license.html">CODE: MIT</a>
       <a href="{up}about/third-party.html">THIRD-PARTY</a>
     </div>
   </div>
@@ -1842,6 +1844,33 @@ def build_third_party():
 </section>""".format(content=markdown(md) if md else "<p>No third-party components recorded.</p>")
     write_file(rel, page_shell(rel, "Third-Party", "ABOUT · THIRD-PARTY",
                                [("Home", "../index.html"), ("Third-party", None)], body))
+
+
+def build_license_pages():
+    """Render the repo's layered rights documents into public, linkable pages."""
+    pages = (
+        ("content-license.html", "CONTENT-LICENSE.md", "Content License",
+         "RIGHTS · CONTENT", "CONTENT · CC BY 4.0"),
+        ("code-license.html", "LICENSE", "Code License", "RIGHTS · CODE", "CODE · MIT"),
+    )
+    for filename, source, title, docket, eyebrow in pages:
+        rel = "about/" + filename
+        source_path = os.path.join(ROOT, source)
+        with open(source_path, "r", encoding="utf-8") as fh:
+            content = fh.read()
+        official = ""
+        if source == "CONTENT-LICENSE.md":
+            official = ('<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
+                        'Official Creative Commons Attribution 4.0 license</a></p>')
+        body = """
+<section class="reveal prose">
+  <p class="eyebrow">{eyebrow}</p>
+  {official}
+  {content}
+</section>""".format(eyebrow=esc(eyebrow), official=official,
+                     content=markdown(content))
+        write_file(rel, page_shell(rel, title, docket,
+                                   [("Home", "../index.html"), (title, None)], body))
 
 # --------------------------------------------------------------------------- #
 # Page — matter library (shape-first, Meridian ⇄ real segmented toggle)
@@ -3670,7 +3699,10 @@ _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
 # sanctioned external dependency is the Cloudflare Turnstile bot-gate (WP6): its
 # api.js and challenge iframe MUST load from Cloudflare's edge — the token cannot
 # be self-hosted. Any OTHER external http(s) request is still a link-check error.
-_EXTERNAL_ALLOW = ("https://challenges.cloudflare.com/",)
+_EXTERNAL_ALLOW = (
+    "https://challenges.cloudflare.com/",
+    "https://creativecommons.org/licenses/by/4.0/",
+)
 _ID_RE = re.compile(r'id="([^"]+)"')
 
 def check_links():
@@ -3832,6 +3864,7 @@ def main(argv):
     build_law_pages(corpus)
     build_firm_dashboard(corpus)
     build_third_party()
+    build_license_pages()
     catalog = build_data_catalog(corpus)
 
     # ---- editor map + parity stamp (post-build: walk DOM, then strip anchors) ----
@@ -3903,7 +3936,7 @@ def main(argv):
             for e in errors:
                 print("  BROKEN: " + e)
         else:
-            print("all internal links resolve; no external requests except the sanctioned Turnstile bot-gate.")
+            print("all internal links resolve; external requests limited to sanctioned Turnstile and CC BY license URLs.")
         leaks = check_no_instructor_leaks(corpus)
         print("== instructor-leak sweep ==")
         if leaks:

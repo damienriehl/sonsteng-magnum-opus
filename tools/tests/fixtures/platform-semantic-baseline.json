@@ -1,6 +1,8 @@
 {
   "schema_version": "1.0.0-digests",
   "page_ids": [
+    "about/code-license.html",
+    "about/content-license.html",
     "about/third-party.html",
     "firm/index.html",
     "index.html",
@@ -72,10 +74,10 @@
     "templates/index.html"
   ],
   "fields": {
-    "text": "0a7c68733c03eafabfe8b836c81469c45296a1adef4a480dc1780e993d4f4c77",
-    "headings": "86462a123e8f1c000a3308a580194b08067aef9e65140efc2c372e72162e3559",
-    "links": "51b1b357901356a2e39b04f6ea657e988c048fd2d54f153d5392eb147e83b08f",
-    "editor_blocks": "340e74918304b00d8157559d1c14433817e32f8f39b7f6356cd49c196ed86ba3",
-    "reading_order": "ea41efeca4ab6437164ff1e40f79ecb9c774d8a9299647b6cd1bb79ad9c12ead"
+    "text": "e06978e7dc8e3de13eb7a69e1f7da6118c875c45c9202a6a36263cdca96de26c",
+    "headings": "424ecba59a572389a3a343aff3a91b69efc98ffc707297ee25f95d7451608d64",
+    "links": "9e9083b2b2433db57f721bcd83aae4e46d148c2a777ddea8c611d2f57d97c4be",
+    "editor_blocks": "3ea3e667792b48271b79f870cea52634fe52a7ffab33123ee9f9a484a24ed8ab",
+    "reading_order": "7546b039f01d4b92be6ab7d686f0d37bcd702473b70c5aeb35cb57c9e77961ac"
   }
 }

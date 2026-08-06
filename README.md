@@ -95,7 +95,15 @@ python3 tools/validate_spine.py && python3 tools/build_site.py --check
 
 ## Provenance & license
 
-MIT. All 20 matters, every party, fact, and document are **original synthetic content**
+Original educational content in the paths enumerated by
+[CONTENT-LICENSE.md](CONTENT-LICENSE.md) is available under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); software and associated
+code remain under the [MIT License](LICENSE). The content attribution is:
+**Legal Practicum — John O. Sonsteng · Damien Riehl · with Roger S. Haydock**.
+
+All 20 matters, every party, fact, and document are **original synthetic content**
 (shapes mirror the Sonsteng course; nothing derives from Trialbook/NITA materials).
-Fonts and other third-party assets: `THIRD-PARTY.md`. Skills survey provenance:
+Third-party assets retain their own terms in [THIRD-PARTY.md](THIRD-PARTY.md), and
+taxonomy/research sources, uncleared recordings, and future separately licensed
+Midstate originals are excluded from the CC BY grant. Skills survey provenance:
 `docs/research/skills-survey.md`.
