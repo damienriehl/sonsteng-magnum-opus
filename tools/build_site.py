@@ -1863,13 +1863,14 @@ def build_license_pages():
             "filename": "content-license.html", "source": "CONTENT-LICENSE.md",
             "title": "Content License", "docket": "RIGHTS · CONTENT",
             "eyebrow": "CONTENT · CC BY 4.0",
-            "preface_html": ('<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
+            "preface_html": ('<h1>Content License</h1>'
+                             '<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
                              'Official Creative Commons Attribution 4.0 license</a></p>'),
         },
         {
             "filename": "code-license.html", "source": "LICENSE",
             "title": "Code License", "docket": "RIGHTS · CODE",
-            "eyebrow": "CODE · MIT", "preface_html": "",
+            "eyebrow": "CODE · MIT", "preface_html": "<h1>Code License</h1>",
         },
     )
     for page in pages:

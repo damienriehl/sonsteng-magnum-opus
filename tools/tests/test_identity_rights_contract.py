@@ -151,6 +151,11 @@ def test_public_surfaces_link_content_and_code_licenses(fresh_site):
     assert (fresh_site / "about/code-license.html").exists()
     content_page = (fresh_site / "about/content-license.html").read_text(encoding="utf-8")
     assert f'href="{CC_BY_URL}"' in content_page
+    assert content_page.count("<h1>") == 1
+    assert "<h1>Content License</h1>" in content_page
+    code_page = (fresh_site / "about/code-license.html").read_text(encoding="utf-8")
+    assert code_page.count("<h1>") == 1
+    assert "<h1>Code License</h1>" in code_page
     for rel in (
         "index.html",
         "matters/m01-arbitration-meridian/index.html",
