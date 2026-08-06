@@ -40,9 +40,13 @@
     "fullCard": {"type": "object", "required": ["meta", "title", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "title": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},
     "shortCard": {"type": "object", "required": ["meta", "title"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "title": {"$ref": "#/$defs/scalar"}}},
     "metaDescriptionCard": {"type": "object", "required": ["meta", "description"], "properties": {"meta": {"$ref": "#/$defs/scalar"}, "description": {"$ref": "#/$defs/scalar"}}},
+    "identity": {"type": "object", "required": ["title", "byline", "host"], "properties": {
+      "title": {"$ref": "#/$defs/scalar"}, "byline": {"$ref": "#/$defs/scalar"}, "host": {"$ref": "#/$defs/scalar"}
+    }},
     "home": {
-      "type": "object", "required": ["hero", "volumes", "explore"],
+      "type": "object", "required": ["identity", "hero", "volumes", "explore"],
       "properties": {
+        "identity": {"$ref": "#/$defs/identity"},
         "hero": {"$ref": "#/$defs/hero"},
         "volumes": {"type": "object", "required": ["eyebrow", "heading", "modules"], "properties": {
           "eyebrow": {"$ref": "#/$defs/scalar"}, "heading": {"$ref": "#/$defs/scalar"},

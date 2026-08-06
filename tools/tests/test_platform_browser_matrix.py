@@ -83,6 +83,6 @@ def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     # advances the editor-block and reading-order contracts, so pin their new
     # reviewed digests alongside the visual heading repair.
     baseline = json.loads((TOOLS / "tests/fixtures/platform-semantic-baseline.json").read_text())
-    assert baseline["fields"]["links"] == "7be8890c7a50456787215dff01b35c92844a0ac613648cbb8512272f992309e7"
-    assert baseline["fields"]["editor_blocks"] == "08c45f4277a0bdf5a98ec097442975e33139dfbf63add620cdf218a2026b7ee0"
-    assert baseline["fields"]["reading_order"] == "ea41efeca4ab6437164ff1e40f79ecb9c774d8a9299647b6cd1bb79ad9c12ead"
+    assert baseline["fields"]["links"] == "9e9083b2b2433db57f721bcd83aae4e46d148c2a777ddea8c611d2f57d97c4be"
+    assert baseline["fields"]["editor_blocks"] == "3ea3e667792b48271b79f870cea52634fe52a7ffab33123ee9f9a484a24ed8ab"
+    assert baseline["fields"]["reading_order"] == "7546b039f01d4b92be6ab7d686f0d37bcd702473b70c5aeb35cb57c9e77961ac"

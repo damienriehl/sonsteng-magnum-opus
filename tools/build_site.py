@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-build_site.py — Sonsteng Practicum platform site generator.
+build_site.py — Legal Practicum platform site generator.
 
 Renders the machine-readable data spine (data/) into a static, self-contained
 student-facing curriculum site under site/platform/, per:
@@ -544,7 +544,7 @@ def markdown(md, src=None, spans=None):
 # --------------------------------------------------------------------------- #
 # Page shell
 # --------------------------------------------------------------------------- #
-SITE_TITLE = "Sonsteng Practicum"
+PRODUCT_IDENTITY = load_json(os.path.join(DATA, "copy", "home.json"))["identity"]
 
 # Set once at the top of main(); stamped into every page's <meta name="spine-build">
 # so a served page can be checked against the editor map it was mapped from.
@@ -557,6 +557,11 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
     body:    inner HTML placed inside <main>.
     """
     up = up_prefix(relpath)
+    site_title = PRODUCT_IDENTITY["title"]
+    identity_origin = "data/copy/home.json#identity"
+    title_locked = _eb_locked_attr(identity_origin + ".title")
+    byline_locked = _eb_locked_attr(identity_origin + ".byline")
+    host_locked = _eb_locked_attr(identity_origin + ".host")
     crumb_html = []
     for idx, (label, href) in enumerate(crumbs):
         if idx:
@@ -573,7 +578,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{title} — {site}</title>
-<meta name="description" content="Sonsteng Practicum — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
+<meta name="description" content="{site} — a living casebook of 20 deep synthetic legal matters, a skills taxonomy, and a firm dashboard.">
 <meta name="spine-build" content="{spine_build}">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f4efe4'/%3E%3Crect y='1' width='16' height='2' fill='%23a9822f'/%3E%3Crect y='12' width='16' height='1' fill='%23a9822f'/%3E%3Crect x='2' y='6' width='3' height='4' fill='%237c1e2b'/%3E%3C/svg%3E">
 <script src="{up}assets/type-preference.js"></script>
@@ -585,7 +590,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="masthead">
   <div class="masthead__inner">
-    <a class="masthead__brand" href="{up}index.html">SONSTENG PRACTICUM</a>
+    <a class="masthead__brand" href="{up}index.html"{title_locked}>{site_upper}</a>
     <span class="masthead__docket mono">{docket}</span>
     <button type="button" class="type-toggle mono" id="type-toggle" aria-pressed="false" title="Toggle large type">A+ LARGE TYPE</button>
   </div>
@@ -597,12 +602,15 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <footer class="site-footer">
   <div class="site-footer__inner">
     <div>
-      <strong>Sonsteng Practicum</strong> — a living casebook.
-      <span class="mono">MIT-LICENSED</span> · no platform fees; bring your own key.
+      <strong{title_locked}>{site}</strong> — a living casebook.<br>
+      <span{byline_locked}>{byline}</span> · <span{host_locked}>{host}</span>.<br>
+      <span class="mono">CONTENT: CC BY 4.0 · CODE: MIT</span> · no platform fees; bring your own key.
     </div>
     <div class="site-footer__links mono">
       <a href="{up}data/index.json">DATA CATALOG</a>
       <a href="{up}index.html">HOME</a>
+      <a href="{up}about/content-license.html">CONTENT: CC BY 4.0</a>
+      <a href="{up}about/code-license.html">CODE: MIT</a>
       <a href="{up}about/third-party.html">THIRD-PARTY</a>
     </div>
   </div>
@@ -610,7 +618,11 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
 <script src="{up}platform.js" defer></script>
 </body>
 </html>""".format(
-        title=esc(title), site=esc(SITE_TITLE), up=up, docket=esc(docket),
+        title=esc(title), site=esc(site_title), site_upper=esc(site_title.upper()),
+        byline=esc(PRODUCT_IDENTITY["byline"]), host=esc(PRODUCT_IDENTITY["host"]),
+        title_locked=title_locked, byline_locked=byline_locked,
+        host_locked=host_locked,
+        up=up, docket=esc(docket),
         bodyclass=esc(body_class), crumb=crumb_bar, body=body,
         spine_build=esc(SPINE_BUILD_ID),
         root=up + "../",  # THIRD-PARTY.md lives at repo/site's parent; link is best-effort
@@ -1819,21 +1831,50 @@ def build_skills(corpus):
 # --------------------------------------------------------------------------- #
 # Page — about/third-party (footer target; content from repo THIRD-PARTY.md)
 # --------------------------------------------------------------------------- #
-def build_third_party():
-    rel = "about/third-party.html"
-    tp_path = os.path.join(ROOT, "THIRD-PARTY.md")
-    md = ""
-    if os.path.exists(tp_path):
-        with open(tp_path, "r", encoding="utf-8") as fh:
-            md = fh.read()
+def build_markdown_about_page(filename, source, title, docket, eyebrow,
+                              preface_html="", empty_html="", crumb_label=None):
+    """Render one repository Markdown document as a public About page."""
+    rel = "about/" + filename
+    content = load_text(os.path.join(ROOT, source))
+    rendered = markdown(content) if content else empty_html
     body = """
 <section class="reveal prose">
-  <p class="eyebrow">ATTRIBUTIONS</p>
-  <h1>Third-party components</h1>
+  <p class="eyebrow">{eyebrow}</p>
+{preface}
   {content}
-</section>""".format(content=markdown(md) if md else "<p>No third-party components recorded.</p>")
-    write_file(rel, page_shell(rel, "Third-Party", "ABOUT · THIRD-PARTY",
-                               [("Home", "../index.html"), ("Third-party", None)], body))
+</section>""".format(eyebrow=esc(eyebrow), preface=preface_html,
+                     content=rendered)
+    write_file(rel, page_shell(rel, title, docket,
+                               [("Home", "../index.html"), (crumb_label or title, None)], body))
+
+
+def build_third_party():
+    rel = "about/third-party.html"
+    build_markdown_about_page(
+        os.path.basename(rel), "THIRD-PARTY.md", "Third-Party", "ABOUT · THIRD-PARTY",
+        "ATTRIBUTIONS", preface_html="<h1>Third-party components</h1>",
+        empty_html="<p>No third-party components recorded.</p>", crumb_label="Third-party")
+
+
+def build_license_pages():
+    """Render the repo's layered rights documents into public, linkable pages."""
+    pages = (
+        {
+            "filename": "content-license.html", "source": "CONTENT-LICENSE.md",
+            "title": "Content License", "docket": "RIGHTS · CONTENT",
+            "eyebrow": "CONTENT · CC BY 4.0",
+            "preface_html": ('<h1>Content License</h1>'
+                             '<p><a class="link" href="https://creativecommons.org/licenses/by/4.0/">'
+                             'Official Creative Commons Attribution 4.0 license</a></p>'),
+        },
+        {
+            "filename": "code-license.html", "source": "LICENSE",
+            "title": "Code License", "docket": "RIGHTS · CODE",
+            "eyebrow": "CODE · MIT", "preface_html": "<h1>Code License</h1>",
+        },
+    )
+    for page in pages:
+        build_markdown_about_page(**page)
 
 # --------------------------------------------------------------------------- #
 # Page — matter library (shape-first, Meridian ⇄ real segmented toggle)
@@ -2986,7 +3027,7 @@ def build_data_catalog(corpus):
     catalog = {
         "schema_version": "1.0.0",
         "@id": "https://sonsteng.damienriehl.com/platform/data/index.json",
-        "title": "Sonsteng Practicum — machine catalog",
+        "title": PRODUCT_IDENTITY["title"] + " — machine catalog",
         "description": ("Agent/LMS entry point for the practicum data spine. All paths are "
                         "relative to this file. Instructor-side materials (master fact patterns, "
                         "instructor notes, persona disclosure tiers) are intentionally absent."),
@@ -3658,11 +3699,13 @@ def write_build_stamp(spine_build_id):
 # --------------------------------------------------------------------------- #
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
 
-# The site is otherwise fully self-contained (zero external requests). The ONE
-# sanctioned external dependency is the Cloudflare Turnstile bot-gate (WP6): its
-# api.js and challenge iframe MUST load from Cloudflare's edge — the token cannot
-# be self-hosted. Any OTHER external http(s) request is still a link-check error.
-_EXTERNAL_ALLOW = ("https://challenges.cloudflare.com/",)
+# The site is otherwise fully self-contained. Turnstile is the only sanctioned
+# external runtime dependency; the CC BY URL is a navigational license link.
+# Every other external http(s) request remains a link-check error.
+_EXTERNAL_ALLOW = (
+    "https://challenges.cloudflare.com/",
+    "https://creativecommons.org/licenses/by/4.0/",
+)
 _ID_RE = re.compile(r'id="([^"]+)"')
 
 def check_links():
@@ -3798,13 +3841,14 @@ def main(argv):
     do_check = "--check" in argv or True   # link check always runs; --check makes it fatal
     strict = "--check" in argv
 
-    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES
+    global SPINE_BUILD_ID, PASSIVE_OCCURRENCES, PRODUCT_IDENTITY
     SPINE_BUILD_ID = spine_stamp.compute(DATA)   # stamped into every page + bundles
     EDMAP.reset()
     PASSIVE_OCCURRENCES = {}
     EDMAP.enabled = True                         # record editable blocks while rendering
 
     corpus = load_corpus()
+    PRODUCT_IDENTITY = dict(corpus["copy"]["home"]["identity"])
     # Make the skills taxonomy addressable by id for every chip renderer.
     SKILLS_BY_ID.update({sk["id"]: sk for sk in corpus["skills"]["skills"]})
     TASKS_BY_ID.update({t["id"]: t for t in corpus["tasks"]["tasks"]})
@@ -3822,6 +3866,7 @@ def main(argv):
     build_law_pages(corpus)
     build_firm_dashboard(corpus)
     build_third_party()
+    build_license_pages()
     catalog = build_data_catalog(corpus)
 
     # ---- editor map + parity stamp (post-build: walk DOM, then strip anchors) ----
@@ -3893,7 +3938,7 @@ def main(argv):
             for e in errors:
                 print("  BROKEN: " + e)
         else:
-            print("all internal links resolve; no external requests except the sanctioned Turnstile bot-gate.")
+            print("all internal links resolve; external requests limited to sanctioned Turnstile and CC BY license URLs.")
         leaks = check_no_instructor_leaks(corpus)
         print("== instructor-leak sweep ==")
         if leaks:

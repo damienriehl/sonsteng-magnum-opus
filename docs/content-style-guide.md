@@ -9,9 +9,16 @@ binding: true
 
 # Content Style Guide — The Fleet Briefing
 
-This is the binding briefing for every agent that authors case-file content in the Sonsteng Practicum corpus. It exists so that ~20 parallel agents produce **one coherent volume**, not twenty dialects. Read it fully before writing a single fact. Where this guide and a JSON Schema disagree on structure, the schema wins; where they disagree on *voice, naming, depth, citation policy, or dates*, this guide wins.
+This is the binding briefing for every agent that authors case-file content in the Legal Practicum corpus. It exists so that ~20 parallel agents produce **one coherent volume**, not twenty dialects. Read it fully before writing a single fact. Where this guide and a JSON Schema disagree on structure, the schema wins; where they disagree on *voice, naming, depth, citation policy, or dates*, this guide wins.
 
 The single interface you author against is `data/matters/manifest.json` (the frozen 20-matter registry) plus the canons: `data/jurisdictions/meridian.json` and `data/jurisdictions/real/<st>.json`. Your matter's `id`, `slug`, shape, sides, `client_id`, jurisdiction, fee_type, caption, and party surnames are **frozen** in the manifest — do not change them.
+
+Original project-authored educational content in `data/curriculum/`,
+`data/jurisdictions/`, and `data/matters/` is governed by `CONTENT-LICENSE.md`
+(CC BY 4.0). Do not copy third-party text into those paths: a citation or a short
+properly attributed quotation does not become CC BY merely because it appears in
+the corpus. Separately licensed originals and uncleared recordings must remain in
+their own explicitly marked perimeter.
 
 ---
 
