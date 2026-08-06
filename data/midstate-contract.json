@@ -1,0 +1,13 @@
+{
+  "matter": "Midstate/Rogers",
+  "postures": {
+    "arbitration": {
+      "title": "Midstate and Rogers",
+      "remedy": "reinstatement"
+    },
+    "court": {
+      "title": "Rogers v. Midstate",
+      "remedy": "money damages"
+    }
+  }
+}

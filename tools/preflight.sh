@@ -42,6 +42,7 @@ skip() { results+=("SKIP  $1 — $2"); skipped=$((skipped+1)); printf '\n\033[2m
 # ---- headless gates --------------------------------------------------------
 run "spine integrity (validate_spine)"      python3 tools/validate_spine.py
 run "site build + link/leak sweeps"         python3 tools/build_site.py --check
+run "Midstate naming/remedy contract"       python3 tools/midstate_contract.py
 run "bundle parity"                         python3 tools/check_build_parity.py
 run "python unit tests"                     python3 -m pytest tools/tests/ -q
 run "worker unit tests"                     bash -c 'cd app/worker && node --test test/*.test.js >/dev/null 2>&1'
