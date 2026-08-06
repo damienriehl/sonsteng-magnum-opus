@@ -34,6 +34,6 @@ The narrative is the craft of the time sheet. A good entry states **what you did
 - Avoid block-billing: if you did three distinct things, write three entries (or itemize within one) rather than one four-hour "attention to file." {#b:56ef0014}
 - Never disclose privileged strategy in a line a client statement will reproduce. {#b:ffe62e07}
 
-## How it's graded {#b:600f0d65}
+## Assessment and feedback {#b:600f0d65}
 
 The time sheet is scored on **completeness, increment discipline, and narrative quality**, and it is a gating input to the business layer of every matter. The rubric checks that entries exist for the work actually done, that hours are recorded in true 0.1 increments, and that each narrative is specific, active, and client-appropriate. Critically, the numbers must **reconcile**: on hourly and retainer matters, the sum of (hours × rate) across your time sheets must tie to the client billing statement to the penny, and a retainer's entries must draw against a real trust deposit without ever pushing the ledger negative. Late or reconstructed sheets lose points under the same timeliness rule that governs every deliverable. The time sheet is worth little on its own, but it is load-bearing: a matter whose money does not reconcile fails its integrity check no matter how good the memos are. {#b:d4535f12}

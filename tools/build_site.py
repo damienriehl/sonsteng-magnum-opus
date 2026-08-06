@@ -1605,7 +1605,7 @@ def build_modules(corpus):
   <h2 id="mod-tpl-h">Course templates</h2></div>
   <p>The deliverables named above — time sheets, engagement letters, interview plans,
   settlement plans, and the reflective portfolio — share a common set of handout templates,
-  each with its grading note.</p>
+  each presented as a Planning Guide and Checklist with assessment and feedback notes.</p>
   <p><a class="btn" href="../templates/index.html">Open the deliverable templates</a></p>
 </section>""".format(prose=markdown(volume_md, src=data_relpath(CURRICULUM_DIR, code.lower() + ".md")))
 
@@ -1677,7 +1677,7 @@ def build_templates(corpus):
   <p class="lede">The handout templates for the six recurring course deliverables — the time
   sheet, engagement-letter checklist, client-interview plan, settlement &amp; negotiation plan,
   learning portfolio, and reflective report. Each carries its own &ldquo;how it&rsquo;s
-  graded&rdquo; note. These pages are built to print; use your browser&rsquo;s print command for
+  assessment and feedback&rdquo; note. These pages are built to print; use your browser&rsquo;s print command for
   a clean, black-on-white handout.</p>
   <div class="chips" aria-label="Related modules">
     <a class="chip chip--matter" href="../modules/m1.html">M1 · FOUNDATIONAL</a>
@@ -2125,7 +2125,7 @@ def build_rubric_section(m, rel):
     <tbody>{rows}</tbody>
     <tfoot><tr><td>Total</td><td></td><td></td><td class="num">{tot}</td></tr></tfoot>
   </table></div>
-  <p class="mono" style="font-size:var(--fs-mono-xs);color:var(--ink-soft)">LETTER GRADES · {grades}</p>
+  <p class="mono" style="font-size:var(--fs-mono-xs);color:var(--ink-soft)">ASSESSMENT BANDS · {grades}</p>
 """.format(tot=esc(ru.get("declared_total", "")), rows="".join(rows), grades=grades)
 
 def build_packet_pages(corpus):

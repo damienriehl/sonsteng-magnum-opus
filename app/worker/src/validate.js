@@ -24,6 +24,20 @@ function isNum(v) { return typeof v === "number" && Number.isFinite(v); }
 function isArr(v) { return Array.isArray(v); }
 function isObj(v) { return v && typeof v === "object" && !Array.isArray(v); }
 
+const ALUMNI_ROUTE_FIELDS = new Set([
+  "alumni_assessor", "alumni_recipient", "alumni_notification",
+]);
+
+// Assessment, debrief, and critique return only to the requesting learner.
+// Reject proposed alumni routing explicitly instead of silently ignoring it.
+export function validateLearnerResultRequest(body) {
+  if (!isObj(body)) return { ok: false, error: "Request body must be an object." };
+  if (Object.keys(body).some((key) => ALUMNI_ROUTE_FIELDS.has(key))) {
+    return { ok: false, error: "Alumni routing fields are not supported." };
+  }
+  return { ok: true };
+}
+
 function checkRating(v, path, errs) {
   if (!isObj(v)) return errs.push(path + " must be an object");
   if (!isInt(v.score) || v.score < 0 || v.score > 10) errs.push(path + ".score must be int 0-10");

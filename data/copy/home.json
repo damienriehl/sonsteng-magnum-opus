@@ -37,7 +37,7 @@
       "sample": {
         "meta": "NO KEY REQUIRED",
         "title": "Watch a sample consultation ▸",
-        "description": "A recorded client interview — Devon Halvard, charged with DWI —\n      played back turn by turn, then graded. See the consultation room and the debrief in action\n      before you bring your own key. Scripted sample, not a live AI client."
+        "description": "A recorded client interview — Devon Halvard, charged with DWI —\n      played back turn by turn, then assessed with feedback. See the consultation room and the debrief in action\n      before you bring your own key. Scripted sample, not a live AI client."
       },
       "skills": {
         "meta": "TAXONOMY",
@@ -55,12 +55,12 @@
       "templates": {
         "meta": "COURSE DELIVERABLES",
         "title": "Deliverable templates",
-        "description": "The six recurring course handouts — time sheet, engagement\n      letter, interview plan, settlement plan, portfolio, and reflective report — each with its\n      grading note. Print-ready."
+        "description": "The six recurring course handouts — time sheet, engagement\n      letter, interview plan, settlement plan, portfolio, and reflective report — each presented as a\n      Planning Guide and Checklist with assessment and feedback notes. Print-ready."
       },
       "centaur": {
         "meta": "ABOUT THE METHOD",
         "title": "The centaur layer",
-        "description": "Every exercise here ships with a machine-readable rubric and a revise-and-repeat loop — the two halves of a human+AI (“centaur”) pedagogy. AI gives the first-pass rubric critique and unlimited reps; scarce faculty time is reserved for the high-value coaching only a human can give. The simulated client interviews, the rubric critiques, and the firm dashboard below are that layer, live."
+        "description": "Every exercise here ships with a machine-readable rubric and a revise-and-repeat loop — the two halves of a human+AI (“centaur”) pedagogy. AI is the default speaker and gives the first-pass assessment and feedback with unlimited reps; scarce faculty time is reserved for the high-value coaching only a human can give. The simulated client interviews, rubric critiques, and firm dashboard below are that layer, live."
       }
     }
   }

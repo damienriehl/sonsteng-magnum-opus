@@ -24,7 +24,7 @@ import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
 import { resolveUpstream } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
-import { validateDebriefScorecard, validateCritiqueScorecard, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
+import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
@@ -289,6 +289,8 @@ async function handleChat(request, env, origin) {
 async function handleDebrief(request, env, origin) {
   const body = await readJson(request);
   if (!body) return errorEnvelope("validation_error", "Malformed JSON body.", 400);
+  const routing = validateLearnerResultRequest(body);
+  if (!routing.ok) return errorEnvelope("validation_error", routing.error, 400);
 
   const session = await verifySession(env.SESSION_SIGNING_KEY, body.session_token);
   if (!session) return errorEnvelope("session_invalid", "Invalid or expired session token.", 401);
@@ -364,6 +366,8 @@ async function handleDebrief(request, env, origin) {
 async function handleCritique(request, env, origin) {
   const body = await readJson(request);
   if (!body) return errorEnvelope("validation_error", "Malformed JSON body.", 400);
+  const routing = validateLearnerResultRequest(body);
+  if (!routing.ok) return errorEnvelope("validation_error", routing.error, 400);
 
   const session = await verifySession(env.SESSION_SIGNING_KEY, body.session_token);
   if (!session) return errorEnvelope("session_invalid", "Invalid or expired session token.", 401);
