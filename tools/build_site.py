@@ -3749,11 +3749,13 @@ def write_build_stamp(spine_build_id):
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
 
 # The site is otherwise fully self-contained. Turnstile is the only sanctioned
-# external runtime dependency; the CC BY URL is a navigational license link.
-# Every other external http(s) request remains a link-check error.
+# external runtime dependency; the CC BY and public source-repository URLs are
+# navigational links. Every other external http(s) request remains a
+# link-check error.
 _EXTERNAL_ALLOW = (
     "https://challenges.cloudflare.com/",
     "https://creativecommons.org/licenses/by/4.0/",
+    "https://github.com/damienriehl/sonsteng-magnum-opus",
 )
 _ID_RE = re.compile(r'id="([^"]+)"')
 
@@ -3987,7 +3989,7 @@ def main(argv):
             for e in errors:
                 print("  BROKEN: " + e)
         else:
-            print("all internal links resolve; external requests limited to sanctioned Turnstile and CC BY license URLs.")
+            print("all internal links resolve; external requests limited to sanctioned Turnstile, CC BY, and public source URLs.")
         leaks = check_no_instructor_leaks(corpus)
         print("== instructor-leak sweep ==")
         if leaks:

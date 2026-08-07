@@ -75,6 +75,11 @@ def test_catalog_source_contract_has_histories_pagination_and_one_free_action():
     assert "catalog.js" in source
 
 
+def test_public_source_repository_is_a_sanctioned_navigation_link():
+    import build_site
+    assert "https://github.com/damienriehl/sonsteng-magnum-opus" in build_site._EXTERNAL_ALLOW
+
+
 def test_browser_matrix_pins_catalog_widths_and_print_all():
     matrix = json.loads((TOOLS / "platform_browser_matrix.json").read_text())
     widths = {item["width"] for item in matrix["viewports"]}
