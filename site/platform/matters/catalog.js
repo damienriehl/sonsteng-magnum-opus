@@ -5,7 +5,8 @@ var results=document.querySelector('[data-catalog-results]'),status=document.que
 var empty=document.querySelector('[data-catalog-empty]'),heading=document.getElementById('catalog-results');
 var esc=function(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
 fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');return r.json();}).then(function(index){
- function apply(push){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});
+ function syncForm(p){['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});}
+ function render(p,push){
   var page=Math.max(1,parseInt(p.get('page')||'1',10)||1),q=(p.get('q')||'').toLowerCase();
   var matches=index.matters.filter(function(m){return (!q||(m.caption+' '+m.history_summary+' '+m.shape_label+' '+m.jurisdiction).toLowerCase().includes(q))&&(!p.get('shape')||m.shape===p.get('shape'))&&(!p.get('tier')||m.tier===p.get('tier'))&&(!p.get('fee')||m.fee_type===p.get('fee'));});
   var pages=Math.max(1,Math.ceil(matches.length/index.page_size));page=Math.min(page,pages);p.set('page',page);
@@ -13,7 +14,9 @@ fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');retur
   empty.hidden=matches.length!==0;status.textContent=matches.length+' matters · page '+page+' of '+pages;
   if(push){history.pushState({},'',location.pathname+'?'+p.toString());heading.focus();}
  }
- var p=new URLSearchParams(location.search);['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});
- form.addEventListener('submit',function(e){e.preventDefault();apply(true);});window.addEventListener('popstate',function(){apply(false);});apply(false);
+ function paramsFromForm(){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});p.set('page','1');return p;}
+ var initial=new URLSearchParams(location.search);syncForm(initial);render(initial,false);
+ form.addEventListener('submit',function(e){e.preventDefault();render(paramsFromForm(),true);});
+ window.addEventListener('popstate',function(){var p=new URLSearchParams(location.search);syncForm(p);render(p,false);});
 }).catch(function(){status.textContent+=' · enhanced search unavailable; use page links.';});
 })();

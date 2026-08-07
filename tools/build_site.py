@@ -1902,7 +1902,8 @@ var results=document.querySelector('[data-catalog-results]'),status=document.que
 var empty=document.querySelector('[data-catalog-empty]'),heading=document.getElementById('catalog-results');
 var esc=function(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
 fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');return r.json();}).then(function(index){
- function apply(push){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});
+ function syncForm(p){['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});}
+ function render(p,push){
   var page=Math.max(1,parseInt(p.get('page')||'1',10)||1),q=(p.get('q')||'').toLowerCase();
   var matches=index.matters.filter(function(m){return (!q||(m.caption+' '+m.history_summary+' '+m.shape_label+' '+m.jurisdiction).toLowerCase().includes(q))&&(!p.get('shape')||m.shape===p.get('shape'))&&(!p.get('tier')||m.tier===p.get('tier'))&&(!p.get('fee')||m.fee_type===p.get('fee'));});
   var pages=Math.max(1,Math.ceil(matches.length/index.page_size));page=Math.min(page,pages);p.set('page',page);
@@ -1910,8 +1911,10 @@ fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');retur
   empty.hidden=matches.length!==0;status.textContent=matches.length+' matters · page '+page+' of '+pages;
   if(push){history.pushState({},'',location.pathname+'?'+p.toString());heading.focus();}
  }
- var p=new URLSearchParams(location.search);['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});
- form.addEventListener('submit',function(e){e.preventDefault();apply(true);});window.addEventListener('popstate',function(){apply(false);});apply(false);
+ function paramsFromForm(){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});p.set('page','1');return p;}
+ var initial=new URLSearchParams(location.search);syncForm(initial);render(initial,false);
+ form.addEventListener('submit',function(e){e.preventDefault();render(paramsFromForm(),true);});
+ window.addEventListener('popstate',function(){var p=new URLSearchParams(location.search);syncForm(p);render(p,false);});
 }).catch(function(){status.textContent+=' · enhanced search unavailable; use page links.';});
 })();"""
 
@@ -1925,6 +1928,14 @@ def paginate_catalog_records(records, page_size=CATALOG_PAGE_SIZE):
     return [records[start:start + page_size]
             for start in range(0, len(records), page_size)] or [[]]
 
+def catalog_history_summary(matter, limit=300):
+    """Return the shared, presentation-safe catalog history summary."""
+    text = strip_bid_markers(matter["_history"]["body_md"])
+    text = re.sub(r"\s+", " ", re.sub(r"[*_`#]", "", text)).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1].rsplit(" ", 1)[0] + "…"
+
 def build_matter_library(corpus):
     copy = corpus["copy"]["matters"]
     shape_labels = {}
@@ -1934,33 +1945,26 @@ def build_matter_library(corpus):
             "matters", copy, "shape_labels." + shape,
             "matter library · practice shapes")
 
-    def history_summary(m, limit=300):
-        text = strip_bid_markers(m["_history"]["body_md"])
-        text = re.sub(r"\s+", " ", re.sub(r"[*_`#]", "", text)).strip()
-        if len(text) <= limit:
-            return text
-        return text[:limit - 1].rsplit(" ", 1)[0] + "…"
-
     def record(m):
         tier = "meridian" if m.get("tier") == "meridian" else "real"
         return {"id": m["id"], "slug": m["_slug"], "caption": m.get("caption", ""),
-                "history_summary": history_summary(m), "shape": m.get("shape", ""),
+                "history_summary": catalog_history_summary(m), "shape": m.get("shape", ""),
                 "shape_label": shape_labels.get(m.get("shape"), m.get("shape", "")),
                 "tier": tier, "jurisdiction": m.get("jurisdiction", ""),
                 "fee_type": m.get("fee_type", ""), "shape_attr": shape_attrs.get(m.get("shape"), "")}
 
     records = [record(m) for m in corpus["matters"]]
 
-    def card(item, prefix="", annotate_shape=False):
+    def card(item, annotate_shape=False):
         shape_attr = item["shape_attr"] if annotate_shape else ""
         return """<article class="card catalog-card" data-catalog-id="{id}">
   <div class="chips"><span class="chip">{tier}</span><p class="chip"{shape_attr}>{shape}</p><span class="chip">{fee}</span></div>
-  <h2 class="matter-card__caption"><a href="{prefix}{slug}/index.html">{caption}</a></h2>
+  <h2 class="matter-card__caption"><a href="{slug}/index.html">{caption}</a></h2>
   <p class="matter-card__premise">{history}</p>
-  <p><a class="btn" href="{prefix}../downloads/{slug}-student-materials.zip" download>Download student materials (.zip)</a></p>
+  <p><a class="btn" href="../downloads/{slug}-student-materials.zip" download>Download student materials (.zip)</a></p>
 </article>""".format(id=esc(item["id"]), tier=esc(item["tier"].upper()),
         shape=esc(item["shape_label"]), shape_attr=shape_attr,
-        fee=esc(item["fee_type"].upper()), prefix=prefix,
+        fee=esc(item["fee_type"].upper()),
         slug=esc(item["slug"]), caption=esc(item["caption"]), history=esc(item["history_summary"]))
 
     hero = {}
@@ -1972,7 +1976,6 @@ def build_matter_library(corpus):
     total_pages = len(pages)
     for page_number in range(1, total_pages + 1):
         rel = "matters/index.html" if page_number == 1 else "matters/page-{n}.html".format(n=page_number)
-        prefix = "" if page_number == 1 else ""
         current = pages[page_number - 1]
         nav = " ".join('<a href="{href}" aria-current="{cur}">Page {n}</a>'.format(
             href="index.html" if n == 1 else "page-{n}.html".format(n=n),
@@ -1982,7 +1985,7 @@ def build_matter_library(corpus):
         for item in current:
             first_shape = item["shape"] not in seen_shapes
             seen_shapes.add(item["shape"])
-            rendered_cards.append(card(item, prefix, annotate_shape=first_shape))
+            rendered_cards.append(card(item, annotate_shape=first_shape))
         body = """<section><p class="eyebrow"{eyebrow_attr}>{eyebrow}</p><h1{heading_attr}>{heading}</h1><p class="lede"{lede_attr}>{lede}</p>
 <p><a class="arrow-link" href="{repo}">View complete public source repository (includes instructor materials and answer keys)</a></p></section>
 <form class="lib-toolbar" data-catalog-form role="search"><label for="catalog-search">Search matters</label><input id="catalog-search" name="q" type="search" aria-label="Search matters">
@@ -3054,7 +3057,7 @@ def build_data_catalog(corpus):
             "tier": "meridian" if m.get("tier") == "meridian" else "real",
             "jurisdiction": m.get("jurisdiction"),
             "fee_type": m.get("fee_type"),
-            "history_summary": re.sub(r"\s+", " ", strip_bid_markers(m["_history"]["body_md"])).strip()[:300],
+            "history_summary": catalog_history_summary(m),
             "student_materials": "../downloads/{s}-student-materials.zip".format(s=slug),
             "student_material_manifest_version": manifest["schema_version"],
             "sides": [{"role_id": s.get("role_id"), "label": s.get("label")}

@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import sys
 import zipfile
@@ -10,17 +9,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
-
-
-def load_builder():
-    spec = importlib.util.spec_from_file_location("student_archives", TOOLS / "student_archives.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+import student_archives as sa  # noqa: E402
 
 
 def test_student_archive_is_deterministic_and_exact(tmp_path):
-    sa = load_builder()
     matter = tmp_path / "m01-safe"
     (matter / "exercise").mkdir(parents=True)
     (matter / "case-file").mkdir()
@@ -56,7 +48,6 @@ def test_student_archive_is_deterministic_and_exact(tmp_path):
 
 
 def test_student_manifest_rejects_unsafe_members_and_missing_required(tmp_path):
-    sa = load_builder()
     matter = tmp_path / "m01-safe"
     (matter / "exercise").mkdir(parents=True)
     (matter / "matter.json").write_text("{}")
