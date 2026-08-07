@@ -112,3 +112,12 @@ def test_catalog_client_preserves_state_agrees_with_index_and_restores_focus():
     assert "heading.focus()" in source
     assert "aria-live=\"polite\"" in source
     assert "No matters match your search and filters." in source
+
+
+def test_catalog_filters_have_explicit_names_and_full_size_targets():
+    source = (TOOLS / "build_site.py").read_text()
+    for control in ("search", "shape", "tier", "fee"):
+        assert 'for="catalog-%s"' % control in source
+        assert 'id="catalog-%s"' % control in source
+    assert ".lib-toolbar input,.lib-toolbar select,.lib-toolbar button" in source
+    assert "min-height:44px" in source

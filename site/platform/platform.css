@@ -105,6 +105,13 @@
 /* ---- matter library ---- */
 .lib-toolbar{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;
   justify-content:space-between;margin:var(--sp-6) 0}
+.lib-toolbar label{display:grid;gap:var(--sp-2);font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);letter-spacing:.04em;color:var(--ink-soft)}
+.lib-toolbar input,.lib-toolbar select,.lib-toolbar button{box-sizing:border-box;min-height:44px;
+  max-width:100%;border:var(--rule) solid var(--line);border-radius:var(--radius);
+  background:var(--paper);color:var(--ink);font:inherit;padding:.55rem .7rem}
+.lib-toolbar input{min-width:min(18rem,100%)}
+.lib-toolbar button{cursor:pointer;background:var(--ink);color:var(--ink-invert)}
 .shape-row{display:grid;grid-template-columns:1fr;gap:var(--sp-6);margin:var(--sp-6) 0;
   padding-top:var(--sp-6);border-top:var(--rule) solid var(--line)}
 .shape-row__label{font-family:var(--font-display);font-weight:600;font-size:var(--fs-lg)}

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { suggestEndpoint, pendingEndpoint, heartbeatEndpoint } from "../src/editor-endpoints.js";
 import { resolveAuth } from "../src/editor-auth.js";
-import { EDITOR_MAP } from "../src/editor-map.js";
+import { EDITOR_MAP, lookupBlocks } from "../src/editor-map.js";
 
 const ENV_BASE = {
   SESSION_SIGNING_KEY: "test-signing-key-abc",
@@ -95,9 +95,8 @@ test("DIRECT_APPLY unset forwards { directApply:false } (classic suggestion mode
 
 test("a shared json_scalar suggestion stores one server-authoritative json_path", async () => {
   const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
-    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
-    return Object.values(EDITOR_MAP.pages).some((blocks) =>
-      blocks.some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+    const editable = lookupBlocks(ref, "edit");
+    return editable?.length > 1 && editable.every((block) => block.kind === "json_scalar");
   });
   const block = Object.values(EDITOR_MAP.pages).flat()
     .find((b) => b.source_ref === sharedRef);
@@ -141,9 +140,10 @@ test("a shared json_scalar suggestion stores one server-authoritative json_path"
 });
 
 test("page_override is accepted only for a genuinely shared block on its occurrence", async () => {
-  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) =>
-    EDITOR_MAP.occurrences[ref].length > 1 && Object.values(EDITOR_MAP.pages).flat()
-      .some((b) => b.source_ref === ref && b.kind === "json_scalar"));
+  const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
+    const editable = lookupBlocks(ref, "edit");
+    return editable?.length > 1 && editable.every((block) => block.kind === "json_scalar");
+  });
   const occurrence = EDITOR_MAP.occurrences[sharedRef][0];
   const cap = {};
   const env = envWith({}, cap);

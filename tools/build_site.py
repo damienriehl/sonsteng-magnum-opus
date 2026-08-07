@@ -1036,6 +1036,13 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 /* ---- matter library ---- */
 .lib-toolbar{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;
   justify-content:space-between;margin:var(--sp-6) 0}
+.lib-toolbar label{display:grid;gap:var(--sp-2);font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);letter-spacing:.04em;color:var(--ink-soft)}
+.lib-toolbar input,.lib-toolbar select,.lib-toolbar button{box-sizing:border-box;min-height:44px;
+  max-width:100%;border:var(--rule) solid var(--line);border-radius:var(--radius);
+  background:var(--paper);color:var(--ink);font:inherit;padding:.55rem .7rem}
+.lib-toolbar input{min-width:min(18rem,100%)}
+.lib-toolbar button{cursor:pointer;background:var(--ink);color:var(--ink-invert)}
 .shape-row{display:grid;grid-template-columns:1fr;gap:var(--sp-6);margin:var(--sp-6) 0;
   padding-top:var(--sp-6);border-top:var(--rule) solid var(--line)}
 .shape-row__label{font-family:var(--font-display);font-weight:600;font-size:var(--fs-lg)}
@@ -1978,10 +1985,10 @@ def build_matter_library(corpus):
             rendered_cards.append(card(item, prefix, annotate_shape=first_shape))
         body = """<section><p class="eyebrow"{eyebrow_attr}>{eyebrow}</p><h1{heading_attr}>{heading}</h1><p class="lede"{lede_attr}>{lede}</p>
 <p><a class="arrow-link" href="{repo}">View complete public source repository (includes instructor materials and answer keys)</a></p></section>
-<form class="lib-toolbar" data-catalog-form role="search"><label>Search matters <input name="q" type="search"></label>
-<label>Practice shape <select name="shape"><option value="">All shapes</option>{shapes}</select></label>
-<label>Tier <select name="tier"><option value="">Both tiers</option><option value="meridian">Meridian</option><option value="real">Real states</option></select></label>
-<label>Fee type <select name="fee"><option value="">All fee types</option>{fees}</select></label><button type="submit">Apply</button></form>
+<form class="lib-toolbar" data-catalog-form role="search"><label for="catalog-search">Search matters</label><input id="catalog-search" name="q" type="search" aria-label="Search matters">
+<label for="catalog-shape">Practice shape</label><select id="catalog-shape" name="shape"><option value="">All shapes</option>{shapes}</select>
+<label for="catalog-tier">Tier</label><select id="catalog-tier" name="tier"><option value="">Both tiers</option><option value="meridian">Meridian</option><option value="real">Real states</option></select>
+<label for="catalog-fee">Fee type</label><select id="catalog-fee" name="fee"><option value="">All fee types</option>{fees}</select><button type="submit">Apply filters</button></form>
 <p class="card__meta" aria-live="polite" data-catalog-status>{total} matters · page {page} of {pages}</p>
 <h2 id="catalog-results" tabindex="-1">Catalog results</h2><div data-catalog-results>{cards}</div>
 <p data-catalog-empty hidden>No matters match your search and filters.</p><nav class="pagination" aria-label="Catalog pages">{nav}</nav>
