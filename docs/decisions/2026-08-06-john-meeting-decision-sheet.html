@@ -1,0 +1,457 @@
+<title>Legal Practicum — decisions and to-do list, Aug 6</title>
+<style>
+  :root{
+    --bg:#f8f4ed; --panel:#ffffff; --panel2:#efe9e0; --ink:#201b16; --muted:#5f5448;
+    --teal:#08745f; --amber:#7a5200; --rose:#a3302a; --line:#c3b7a7; --on-teal:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12100e; --panel:#1c1916; --panel2:#242019; --ink:#f2ece1; --muted:#a89e8c;
+      --teal:#3fc1a8; --amber:#e8b04b; --rose:#e8746b; --line:#3a342b; --on-teal:#0d1512;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12100e; --panel:#1c1916; --panel2:#242019; --ink:#f2ece1; --muted:#a89e8c;
+    --teal:#3fc1a8; --amber:#e8b04b; --rose:#e8746b; --line:#3a342b; --on-teal:#0d1512;
+  }
+  :root[data-theme="light"]{
+    --bg:#f8f4ed; --panel:#ffffff; --panel2:#efe9e0; --ink:#201b16; --muted:#5f5448;
+    --teal:#08745f; --amber:#7a5200; --rose:#a3302a; --line:#c3b7a7; --on-teal:#ffffff;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{
+    background:var(--bg); color:var(--ink); min-height:100vh;
+    font:16px/1.55 "Space Grotesk","Avenir Next",Optima,system-ui,sans-serif;
+    background-image:
+      radial-gradient(1100px 480px at 12% -6%, color-mix(in srgb, var(--teal) 9%, transparent), transparent),
+      radial-gradient(900px 420px at 108% 12%, color-mix(in srgb, var(--amber) 8%, transparent), transparent);
+  }
+  .wrap{max-width:880px;margin:0 auto;padding:26px 18px 120px}
+
+  .themebar{display:flex;justify-content:flex-end;gap:5px;margin-bottom:16px}
+  .themebar button{min-height:34px;padding:5px 11px;color:var(--muted);background:var(--panel);
+    border:1px solid var(--line);border-radius:8px;font-family:inherit;font-weight:600;
+    font-size:.75rem;letter-spacing:.03em;cursor:pointer}
+  .themebar button[aria-pressed="true"]{color:var(--ink);border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal)}
+
+  .eyebrow{font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);font-weight:700;margin:0 0 8px}
+  h1{font-size:clamp(1.5rem,4.6vw,2rem);margin:0 0 .25em;letter-spacing:-.02em;line-height:1.15;text-wrap:balance}
+  .sub{color:var(--muted);margin:0 0 6px;font-size:.95rem;max-width:64ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
+  .chip{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;font-size:.74rem;
+    border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted);background:var(--panel)}
+  .chip b{color:var(--ink);font-weight:700}
+
+  h2.sec{font-size:1.2rem;margin:38px 0 2px;letter-spacing:-.01em}
+  p.lede{color:var(--muted);font-size:.9rem;margin:0 0 12px;max-width:64ch}
+
+  .revised{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--rose);
+    border-radius:0 12px 12px 0;padding:15px 17px;margin:20px 0 6px}
+  .revised h2{margin:0 0 4px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--rose)}
+  .revised p{margin:0 0 10px;color:var(--muted);font-size:.88rem}
+
+  .headline{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--teal);
+    border-radius:0 12px 12px 0;padding:16px 18px;margin:18px 0 6px}
+  .headline h2{margin:0 0 9px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--teal)}
+  .headline dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-items:baseline}
+  .headline dt{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;white-space:nowrap}
+  .headline dd{margin:0;font-size:1.02rem;font-weight:700}
+  .headline dd small{display:block;font-weight:400;font-size:.85rem;color:var(--muted);margin-top:2px}
+  @media (max-width:520px){ .headline dl{grid-template-columns:1fr;gap:2px} .headline dt{margin-top:8px} }
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px;margin:14px 0}
+  .card.changed{border-color:var(--rose);box-shadow:inset 3px 0 0 var(--rose)}
+  .hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+  .num{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.8rem;font-weight:700;
+    color:var(--on-teal);background:var(--teal);border-radius:6px;padding:2px 7px}
+  .card.changed .num{background:var(--rose);color:var(--bg)}
+  h3{margin:0;font-size:1.06rem;letter-spacing:-.01em;text-wrap:balance;flex:1 1 11em}
+  .tag{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.68rem;letter-spacing:.08em;
+    text-transform:uppercase;font-weight:700;border-radius:999px;padding:3px 9px;margin-left:auto;
+    white-space:nowrap;color:var(--teal);border:1px solid var(--teal)}
+  .card.changed .tag{color:var(--rose);border-color:var(--rose)}
+
+  .outcome{background:var(--panel2);border-radius:10px;padding:11px 13px;font-weight:700;font-size:.97rem;
+    border-left:3px solid var(--teal);line-height:1.4}
+  .card.changed .outcome{border-left-color:var(--rose)}
+
+  ul.body{list-style:none;margin:11px 0 0;padding:0;display:grid;gap:7px}
+  ul.body li{font-size:.9rem;color:var(--muted);line-height:1.5}
+  ul.body b{color:var(--ink);font-weight:700}
+  ul.body li.why > b{color:var(--teal)}
+  ul.body li.was > b{color:var(--rose)}
+  ul.body q{font-style:italic}
+  ul.body q::before{content:"\201C"} ul.body q::after{content:"\201D"}
+
+  .scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;margin:11px 0 0;font-size:.86rem}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  td.n{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;
+    color:var(--ink);font-weight:700;white-space:nowrap}
+  tr.floor td{background:color-mix(in srgb, var(--teal) 11%, transparent)}
+  tr.floor td.n{color:var(--teal)}
+
+  /* to-do */
+  .owner{display:flex;align-items:baseline;gap:9px;margin:22px 0 6px}
+  .owner h3{flex:0 0 auto;font-size:1rem}
+  .owner .rule{flex:1 1 auto;height:1px;background:var(--line)}
+  .owner .count{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.74rem;color:var(--muted)}
+  ul.todo{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  ul.todo li{display:flex;gap:10px;align-items:flex-start;background:var(--panel);
+    border:1px solid var(--line);border-radius:9px;padding:9px 12px}
+  ul.todo li.done{opacity:.62}
+  .box{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.85rem;font-weight:700;
+    color:var(--muted);flex:0 0 auto;line-height:1.5}
+  li.done .box{color:var(--teal)}
+  .tid{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.74rem;font-weight:700;
+    color:var(--muted);flex:0 0 2.6em;line-height:1.6}
+  .tbody{flex:1 1 auto;min-width:0}
+  .tbody .t{font-weight:700;font-size:.93rem;line-height:1.35}
+  li.done .tbody .t{text-decoration:line-through;text-decoration-thickness:1px}
+  .tbody .d{color:var(--muted);font-size:.85rem;margin-top:2px;line-height:1.45}
+  .when{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.68rem;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber);
+    border-radius:999px;padding:2px 7px;margin-left:8px;white-space:nowrap}
+
+  .outbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px;margin:34px 0 0}
+  .outbox h2{margin:0 0 4px;font-size:1.05rem}
+  .outbox p{color:var(--muted);font-size:.88rem;margin:0 0 10px}
+  button.copy{background:var(--teal);color:var(--on-teal);border:0;border-radius:12px;width:100%;
+    padding:19px 22px;font-family:inherit;font-weight:700;font-size:clamp(1.05rem,4vw,1.32rem);
+    line-height:1.05;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;-webkit-appearance:none}
+  button.copy:active{transform:translateY(1px)}
+  button.copy:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+  #copystatus{display:block;margin-top:9px;font-size:.85rem;color:var(--muted);min-height:1.3em}
+  label.note{display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;margin:12px 0 3px}
+  #out{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--ink);
+    padding:9px 11px;min-height:200px;resize:vertical;
+    font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;font-size:.78rem;line-height:1.5;white-space:pre}
+  #out:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+
+  footer{margin-top:30px;color:var(--muted);font-size:.8rem;line-height:1.6;
+    border-top:1px solid var(--line);padding-top:14px}
+  footer code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.92em;color:var(--amber)}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<div class="page"><div class="wrap">
+
+<div class="themebar">
+  <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+  <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+  <button type="button" data-theme-set="system" aria-pressed="true">Auto</button>
+</div>
+
+<p class="eyebrow">Decided &amp; tracked &middot; Thursday, August 6, 2026</p>
+<h1>Legal Practicum — the decisions, and the to-do list they created</h1>
+<p class="sub">Reconciled against the call recording. Five items came back different from the same-day notes — those are marked in red, and the recording governs. The to-do list below is tracked in the repo and reminds us on its own.</p>
+
+<div class="meta">
+  <span class="chip"><b>11</b> decided</span>
+  <span class="chip"><b>5</b> revised on the tape</span>
+  <span class="chip"><b>27</b> tracked tasks</span>
+  <span class="chip">Next: <b>1:00 PM</b> CD pickup</span>
+</div>
+
+<div class="revised">
+  <h2>What the recording changed</h2>
+  <p>The same-day notes were written from the sheet. The tape corrected these.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Item</th><th>The notes said</th><th>The recording says</th></tr></thead>
+    <tbody>
+      <tr><td class="n">01 Home</td><td>Mitchell Hamline adopts</td><td><b>Damien hosts.</b> Mitchell may adopt, no hosting byline. John had written them off.</td></tr>
+      <tr><td class="n">06 Briefings</td><td>AI plus a marquee human layer</td><td><b>AI outright.</b> Getting people camera-comfortable costs too much time.</td></tr>
+      <tr><td class="n">08 Catalog</td><td>Materials ordered through the site</td><td><b>No paywall.</b> Public repo, free download. The worry was clutter, not revenue.</td></tr>
+      <tr><td class="n">09 Credit</td><td>Floor of 3</td><td><b>Floor of 4 out of 7.</b> Redo below 6. Different numbers entirely.</td></tr>
+      <tr><td class="n">10 Alumni</td><td>Alumni assess; board in parallel</td><td><b>Alumni do not assess.</b> Board comes <b>after</b> the build.</td></tr>
+    </tbody>
+  </table></div>
+</div>
+
+<div class="headline">
+  <h2>The three that set everything else</h2>
+  <dl>
+    <dt>Title</dt>
+    <dd>Legal Practicum<small>Locked with a noted reservation — John: <q>it doesn't say enough… let's just stick with it.</q></small></dd>
+    <dt>Home</dt>
+    <dd>We host it<small>Mitchell may adopt and may help craft. No hosting byline for a reluctant school.</small></dd>
+    <dt>License</dt>
+    <dd>John keeps &copy;, attribution to use<small>He bought the Midstate materials from Anita — that is the chain of title.</small></dd>
+  </dl>
+</div>
+
+<h2 class="sec">The eleven decisions</h2>
+
+<div class="card changed">
+  <div class="hd"><span class="num">01</span><h3>Title and home</h3><span class="tag">Revised</span></div>
+  <div class="outcome">Title is &ldquo;Legal Practicum.&rdquo; Damien hosts it; Mitchell Hamline may adopt and may help craft, but gets no hosting byline.</div>
+  <ul class="body">
+    <li class="was"><b>Not what the notes said</b> — they had Mitchell adopting as the frame. On the tape Damien declined to give a reluctant institution a byline over the work, and John closed the question himself: <q>I don't think they're interested… I don't want to spend time. Okay, done.</q></li>
+    <li><b>The title is locked, not loved</b> — John: <q>I don't know, it doesn't say enough… let's just put legal practicum and just stick with it.</q> Revisiting later is allowed; shipping is not blocked.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="hd"><span class="num">02</span><h3>Byline</h3><span class="tag">Decided</span></div>
+  <div class="outcome">Sonsteng, then Riehl, then Haydock — with Roger now genuinely in.</div>
+  <ul class="body">
+    <li><b>Roger joined after the email</b> — he offered all of his books that are <i>not</i> collaborations with John. John on Roger: <q>the best writer I've met… an incredible mind.</q></li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="hd"><span class="num">03</span><h3>Copyright and license</h3><span class="tag">Decided</span></div>
+  <div class="outcome">John keeps copyright on his own work; joint work is all three. Platform users get an attribution license.</div>
+  <ul class="body">
+    <li class="why"><b>Chain of title, answered on the call</b> — John bought the Midstate materials <b>from Anita</b>. He began to say &ldquo;from Mitchell's&rdquo; and corrected himself. Worth one written line, since the grant rests on it.</li>
+    <li><b>It unblocks the originals</b> — Damien: <q>I was holding off on those because I didn't know about the copyright status.</q> Now he doesn't have to.</li>
+  </ul>
+</div>
+
+<div class="card changed">
+  <div class="hd"><span class="num">04</span><h3>Midstate and Rogers</h3><span class="tag">Corrected</span></div>
+  <div class="outcome">One case, an arbitration, named without a &ldquo;v.&rdquo; Build it first; the other four postures layer onto the same facts.</div>
+  <ul class="body">
+    <li class="was"><b>No versus</b> — John corrected it twice: <q>No, it's one case. It's Midstate and Rogers. It's an arbitration… arbitrations are not versus.</q></li>
+    <li><b>Court flips both</b> — it becomes <b>Rogers v. Midstate</b>, and the remedy changes from reinstatement to <b>money damages</b>.</li>
+    <li class="why"><b>The settlement is the syllabus</b> — if Rogers wins it resolves in a large negotiated settlement: <q>he gets so many years pay, the kids get to go to college.</q> John: <q>that's all in there, it's all about negotiations and mediation.</q> It sits in the case file and in the CD video.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="hd"><span class="num">05</span><h3>The CD</h3><span class="tag">Scheduled</span></div>
+  <div class="outcome">1:00 PM today, 401 Southeast Main, West Building. John meets Damien at the front on Main Street.</div>
+  <ul class="body">
+    <li><b>Damien goes to him</b> — John cannot drive right now.</li>
+    <li><b>Already prepared</b> — the print files, the video, and the needed case, all labeled. His only trouble was format: <q>I don't know how to convert that.</q></li>
+  </ul>
+</div>
+
+<div class="card changed">
+  <div class="hd"><span class="num">06</span><h3>Briefings</h3><span class="tag">Revised</span></div>
+  <div class="outcome">AI is the speaker. Human recordings stay possible and unplanned.</div>
+  <ul class="body">
+    <li class="was"><b>The marquee layer is gone</b> — the Aug 5 email proposed recording extraordinary speakers on a studio background. John chose AI outright, for a practical reason: <q>it takes so much time to get anybody comfortable in front of a camera.</q></li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="hd"><span class="num">07</span><h3>Vocabulary</h3><span class="tag">Locked</span></div>
+  <div class="outcome">&ldquo;Assessment and feedback,&rdquo; never &ldquo;grading.&rdquo; &ldquo;Planning Guide and Checklist&rdquo; as one term.</div>
+  <ul class="body"><li><b>Both halves failed alone</b> — <q>it works that way. It didn't work the other two ways.</q></li></ul>
+</div>
+
+<div class="card changed">
+  <div class="hd"><span class="num">08</span><h3>Catalog and distribution</h3><span class="tag">Revised</span></div>
+  <div class="outcome">Everything free. The practicum is a public repo; the catalog shows each case's procedural and factual history, and anyone downloads what they want.</div>
+  <ul class="body">
+    <li class="was"><b>There is no paywall</b> — &ldquo;ordering&rdquo; in the Aug 5 email meant downloading. John: <q>I'm ready to give it. I have no idea</q> — he had no position on money and no interest in taking one.</li>
+    <li class="why"><b>His worry was clutter</b> — <q>I didn't want to put all that into this. It's too cluttered.</q> So the constraint is an index that stays readable while the library grows toward a thousand items.</li>
+  </ul>
+</div>
+
+<div class="card changed">
+  <div class="hd"><span class="num">09</span><h3>Credit and assessment</h3><span class="tag">Numbers corrected</span></div>
+  <div class="outcome">Log the hours <em>and</em> write the competency-credit proposal. The scale is 7 points, and the floor is 4 — not 3.</div>
+  <ul class="body">
+    <li><b>Two tracks</b> — weekly hours worked and hours billable, while schools keep setting credits however they like; plus a competency-based proposal to schools and the ABA, evidenced by what students demonstrably learn quickly.</li>
+    <li class="was"><b>The earlier floor of 3 was wrong</b> — John's scale comes from the University of Minnesota.</li>
+    <li class="why"><b>Presentation matters</b> — students read a 4 as terrible <q>because that's a midline, you know, like a C.</q> Competent has to look competent.</li>
+  </ul>
+  <div class="scroll"><table>
+    <thead><tr><th>Score of 7</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="n">7</td><td>Rare — &ldquo;you're never going to get many sevens&rdquo;</td></tr>
+      <tr><td class="n">6</td><td>The redo target: anything under 6 may be redone to reach it</td></tr>
+      <tr class="floor"><td class="n">4</td><td><b>Average, therefore competent — the credit floor</b></td></tr>
+      <tr><td class="n">3</td><td>Failure</td></tr>
+      <tr><td class="n">1–2</td><td>Effectively never given</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="body"><li><b>Both are settings</b> — instructors and schools set whatever thresholds they want, so neither number ships as a constant.</li></ul>
+</div>
+
+<div class="card changed">
+  <div class="hd"><span class="num">10</span><h3>Alumni and the school</h3><span class="tag">Reversed</span></div>
+  <div class="outcome">Alumni do not assess — the AI does. And the school gets approached after the build, not alongside it.</div>
+  <ul class="body">
+    <li class="was"><b>Both halves flipped</b> — John, unprompted: <q>they wouldn't be giving feedback because you can't trust them. The AI is going to do it.</q> Alumni involvement survives only as a recommendation to schools for engagement.</li>
+    <li><b>Sequence is deliberate</b> — finish the practicum, get Midstate in and right, then go to Greg Buck, maybe Frank Harris, maybe the dean: here is what we built, get on board or we roll out with Stanford and others.</li>
+    <li class="why"><b>John named why it works</b> — <q>that's a good way to negotiate without negotiating. I didn't want to go behind their back. This is up front… a pleasant way rather than confrontational.</q> Don't front-run it; the leverage is the finished thing.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <div class="hd"><span class="num">11</span><h3>Copy</h3><span class="tag">One done, one open</span></div>
+  <div class="outcome">The hero now reads &ldquo;Training the next generation of lawyers.&rdquo; The bigger framing is still open.</div>
+  <ul class="body">
+    <li><b>Why not advocates</b> — John: readers see &ldquo;advocates&rdquo; and think trial advocacy, when the practicum is broader. The claret italic emphasis is preserved on the new word.</li>
+    <li class="why"><b>The line he actually wants</b> — <q>the lawyer as a trusted advisor… that's the only way we're going to make money, is if we're trusted advisors rather than the stuff that AI can do.</q> Candidate: &ldquo;the next generation of lawyers as trusted advisors.&rdquo; Being iterated in the editor rather than settled on the call.</li>
+  </ul>
+</div>
+
+<h2 class="sec">The to-do list</h2>
+<p class="lede">Twenty-seven items, tracked in <code>docs/TODO.md</code> in the repo. Git remembers them; a morning timer pushes a nudge when the open set changes or something goes overdue. Grouped by whose move it is.</p>
+
+<div class="owner"><h3>John</h3><span class="rule"></span><span class="count">3 open</span></div>
+<ul class="todo">
+  <li><span class="box">[ ]</span><span class="tid">T09</span><div class="tbody"><div class="t">Confirm the chain of title in writing</div><div class="d">He bought the Midstate materials from Anita. One line; the CC-BY grant rests on it.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T10</span><div class="tbody"><div class="t">Clear the other lawyers on the CD</div><div class="d">The short narrow-topic briefings are their copyrights until cleared.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T27</span><div class="tbody"><div class="t">Editor pass with the pencils</div><div class="d">He said there would not be many comments.</div></div></li>
+</ul>
+
+<div class="owner"><h3>Damien</h3><span class="rule"></span><span class="count">1 done &middot; 3 open</span></div>
+<ul class="todo">
+  <li class="done"><span class="box">[x]</span><span class="tid">T01</span><div class="tbody"><div class="t">Collect John's CD<span class="when">1 PM today</span></div><div class="d">401 Southeast Main, West Building — meet at the front on Main Street.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T03</span><div class="tbody"><div class="t">Decide the &ldquo;trusted advisors&rdquo; line</div><div class="d">John thinks it is the important framing. Iterating in the editor.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T24</span><div class="tbody"><div class="t">Get Roger's materials in</div><div class="d">His books that are not collaborations with John.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T25</span><div class="tbody"><div class="t">Approach the school only after it is built</div><div class="d">Buck, maybe Harris, maybe the dean. Do not front-run it.</div></div></li>
+</ul>
+
+<div class="owner"><h3>Build</h3><span class="rule"></span><span class="count">1 done &middot; 19 open</span></div>
+<ul class="todo">
+  <li class="done"><span class="box">[x]</span><span class="tid">T02</span><div class="tbody"><div class="t">Homepage: &ldquo;advocates&rdquo; &rarr; &ldquo;lawyers&rdquo;</div><div class="d">Hero H1, claret italic emphasis preserved.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T04</span><div class="tbody"><div class="t">Sweep the remaining &ldquo;advocates&rdquo;</div><div class="d">Two more on the pitch page, plus the README. Needs Damien's yes — beyond the quick edit.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T05</span><div class="tbody"><div class="t">Fix the site byline</div><div class="d">Sonsteng, Riehl, then &ldquo;with&rdquo; Haydock.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T06</span><div class="tbody"><div class="t">Adopt &ldquo;Legal Practicum&rdquo; throughout</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T07</span><div class="tbody"><div class="t">Drop any Mitchell hosting claim</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T08</span><div class="tbody"><div class="t">Add the CC-BY 4.0 content license</div><div class="d">Beside MIT, not replacing it. Separate directory for John's originals.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T11</span><div class="tbody"><div class="t">Ingest John's originals from the disc</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T12</span><div class="tbody"><div class="t">Enforce the naming rule</div><div class="d">No &ldquo;v.&rdquo; anywhere. Court variant flips caption and remedy.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T13</span><div class="tbody"><div class="t">Build the arbitration to full depth</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T14</span><div class="tbody"><div class="t">Capture the settlement layer</div><div class="d">The negotiation and mediation teaching material.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T15</span><div class="tbody"><div class="t">Add the other four postures</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T16</span><div class="tbody"><div class="t">Make AI the default speaker</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T17</span><div class="tbody"><div class="t">Enforce the locked vocabulary</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T18</span><div class="tbody"><div class="t">Catalog: histories free, everything downloadable</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T19</span><div class="tbody"><div class="t">Keep the catalog uncluttered</div><div class="d">Must survive growing toward a thousand items.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T20</span><div class="tbody"><div class="t">Ship the two named syllabi</div><div class="d">General Practice and Small Business.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T21</span><div class="tbody"><div class="t">Weekly hours log</div><div class="d">Hours worked and hours billable.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T22</span><div class="tbody"><div class="t">Competency-based credit proposal</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T23</span><div class="tbody"><div class="t">7-point scale, thresholds configurable</div><div class="d">Redo under 6, credit floor 4, both settable per school and instructor.</div></div></li>
+  <li><span class="box">[ ]</span><span class="tid">T26</span><div class="tbody"><div class="t">Alumni are not assessors</div><div class="d">Nothing routes student feedback to alumni.</div></div></li>
+</ul>
+
+<div class="outbox">
+  <h2>Copy the record</h2>
+  <p>Decisions and the full to-do list as plain text — for an email to John, or to paste anywhere else. If the copy is blocked, the text below is already selected: press &#8984;C or Ctrl+C.</p>
+  <button class="copy" type="button" id="copybtn">Copy the record</button>
+  <span id="copystatus" role="status" aria-live="polite"></span>
+  <label class="note" for="out">The record</label>
+  <textarea id="out" readonly></textarea>
+</div>
+
+<footer>
+  <p>Reconciled against the call recording of Aug 6, 2026. Quotations are John's own words, lightly repunctuated. Where the recording and the same-day notes disagree, the recording governs.</p>
+  <p>Full record: <code>docs/decisions/2026-08-06-john-meeting-outcomes.md</code>. Tracked work: <code>docs/TODO.md</code>, reminded by <code>tools/todo_report.py</code>. Unblocked by item 3: <code>docs/decisions/2026-07-18-midstate-deferred.md</code>.</p>
+</footer>
+
+</div></div>
+
+<script>
+(function(){
+  var root = document.documentElement;
+  var KEY = 'sonsteng.decisions.theme';
+  var media = window.matchMedia('(prefers-color-scheme: dark)');
+  var pref = 'system';
+  try { var s = localStorage.getItem(KEY); if (s === 'light' || s === 'dark' || s === 'system') pref = s; } catch (e) {}
+
+  function apply(){
+    var t = pref === 'system' ? (media.matches ? 'dark' : 'light') : pref;
+    root.setAttribute('data-theme', t);
+    root.style.colorScheme = t;
+    var btns = document.querySelectorAll('[data-theme-set]');
+    for (var i = 0; i < btns.length; i++){
+      btns[i].setAttribute('aria-pressed', String(btns[i].getAttribute('data-theme-set') === pref));
+    }
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest ? ev.target.closest('[data-theme-set]') : null;
+    if (!b) return;
+    pref = b.getAttribute('data-theme-set');
+    try { localStorage.setItem(KEY, pref); } catch (e) {}
+    apply();
+  });
+  if (media.addEventListener) media.addEventListener('change', function(){ if (pref === 'system') apply(); });
+  apply();
+
+  function flat(el){ return el.textContent.replace(/\s+/g, ' ').trim(); }
+
+  var L = [];
+  L.push('LEGAL PRACTICUM — DECISIONS AND TO-DO LIST');
+  L.push('John Sonsteng & Damien Riehl — Thursday, August 6, 2026');
+  L.push('Reconciled against the call recording.');
+  L.push('');
+  L.push('SET BY THE CALL');
+  L.push('  Title    Legal Practicum (locked, with John\'s noted reservation)');
+  L.push('  Home     We host it; Mitchell may adopt, no hosting byline');
+  L.push('  License  John keeps copyright; attribution license to use');
+  L.push('');
+  L.push('WHAT THE RECORDING CHANGED');
+  var rev = document.querySelectorAll('.revised tbody tr');
+  for (var r = 0; r < rev.length; r++){
+    var rc = rev[r].querySelectorAll('td');
+    L.push('  ' + flat(rc[0]) + ': was "' + flat(rc[1]) + '" -> ' + flat(rc[2]));
+  }
+  L.push('');
+  L.push('THE DECISIONS');
+  var cards = document.querySelectorAll('.wrap > .card');
+  for (var i = 0; i < cards.length; i++){
+    var c = cards[i];
+    var num = c.querySelector('.num'), h = c.querySelector('h3');
+    var tag = c.querySelector('.tag'), o = c.querySelector('.outcome');
+    L.push('');
+    L.push('[' + (num ? flat(num) : '--') + '] ' + (h ? flat(h) : '') +
+           (tag ? '  (' + flat(tag).toUpperCase() + ')' : ''));
+    if (o) L.push('  ' + flat(o));
+    var bl = c.querySelectorAll('ul.body > li');
+    for (var j = 0; j < bl.length; j++) L.push('  - ' + flat(bl[j]));
+    var rows = c.querySelectorAll('tbody tr');
+    for (var k = 0; k < rows.length; k++){
+      var cells = rows[k].querySelectorAll('td');
+      if (cells.length >= 2) L.push('  * ' + flat(cells[0]) + ': ' + flat(cells[1]));
+    }
+  }
+
+  L.push('');
+  L.push('TO-DO LIST (tracked in docs/TODO.md)');
+  var groups = document.querySelectorAll('.owner');
+  for (var g = 0; g < groups.length; g++){
+    var gh = groups[g].querySelector('h3');
+    var list = groups[g].nextElementSibling;
+    L.push('');
+    L.push('  ' + (gh ? flat(gh).toUpperCase() : ''));
+    if (!list) continue;
+    var items = list.querySelectorAll('li');
+    for (var m = 0; m < items.length; m++){
+      var it = items[m];
+      var box = it.querySelector('.box'), tid = it.querySelector('.tid');
+      var t = it.querySelector('.t'), d = it.querySelector('.d');
+      L.push('    ' + (box ? flat(box) : '[ ]') + ' ' + (tid ? flat(tid) : '') + ' ' + (t ? flat(t) : ''));
+      if (d) L.push('        ' + flat(d));
+    }
+  }
+  document.getElementById('out').value = L.join('\n');
+
+  var out = document.getElementById('out');
+  var status = document.getElementById('copystatus');
+  document.getElementById('copybtn').addEventListener('click', function(){
+    out.focus();
+    out.select();
+    try { out.setSelectionRange(0, out.value.length); } catch (e) {}
+    function done(msg){ status.textContent = msg; }
+    function fallback(){
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      done(ok ? 'Copied.' : 'Copy was blocked — the text below is selected. Press ⌘C or Ctrl+C.');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.value).then(function(){ done('Copied.'); }, fallback);
+    } else { fallback(); }
+  });
+})();
+</script>

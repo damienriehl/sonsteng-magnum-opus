@@ -123,7 +123,14 @@ Aim for realistic lengths; the depth floor is a minimum, not a target.
 
 ---
 
-## 9. Quick pre-flight checklist (run before you call your matter done)
+## 9. Platform vocabulary
+
+- Learner-facing educational copy uses **assessment and feedback**, never “grading.” Factual domain terms such as “creamery grader,” a road grade, or a statute that grades an offense remain accurate.
+- Name the combined planning instrument exactly **Planning Guide and Checklist**.
+- AI is the default speaker. Label prerecorded demonstrations accurately; a scripted sample is not a live AI client.
+- Assessment, debrief, and critique return to the requesting learner. Alumni are not assessors or notification recipients.
+
+## 10. Quick pre-flight checklist (run before you call your matter done)
 
 - [ ] Used the frozen manifest values (id, slug, shape, sides, client_id, jurisdiction, fee_type, caption, party surnames) unchanged.
 - [ ] All IDs carry only my matter's prefix (`mNN.*`); no other matter's prefix appears in my files.

@@ -18,7 +18,7 @@ def test_matrix_has_every_required_family_exactly_once():
 
 def test_matrix_pins_breakpoint_edges_and_both_type_modes():
     data = matrix()
-    assert {1280, 960, 959, 672, 671, 390} <= {v["width"] for v in data["viewports"]}
+    assert {1280, 960, 959, 672, 671, 480, 390} <= {v["width"] for v in data["viewports"]}
     assert data["typeModes"] == ["baseline", "large"]
 
 
@@ -26,7 +26,7 @@ def test_every_static_page_has_hierarchy_roles_and_document_families_print():
     data = matrix()
     static = [p for p in data["pages"] if not p.get("interactive")]
     assert all({"primary", "support", "section", "metadata"} <= set(p["hierarchy"]) for p in static)
-    assert {p["family"] for p in data["pages"] if p.get("print")} == {"packet", "facts", "law", "templates"}
+    assert {p["family"] for p in data["pages"] if p.get("print")} == {"catalog-print", "packet", "facts", "law", "templates"}
 
 
 def test_browser_gates_are_wired_into_preflight_and_never_soft_pass_launch_errors():
@@ -83,6 +83,6 @@ def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     # advances the editor-block and reading-order contracts, so pin their new
     # reviewed digests alongside the visual heading repair.
     baseline = json.loads((TOOLS / "tests/fixtures/platform-semantic-baseline.json").read_text())
-    assert baseline["fields"]["links"] == "9e9083b2b2433db57f721bcd83aae4e46d148c2a777ddea8c611d2f57d97c4be"
-    assert baseline["fields"]["editor_blocks"] == "3ea3e667792b48271b79f870cea52634fe52a7ffab33123ee9f9a484a24ed8ab"
-    assert baseline["fields"]["reading_order"] == "7546b039f01d4b92be6ab7d686f0d37bcd702473b70c5aeb35cb57c9e77961ac"
+    assert baseline["fields"]["links"] == "96a682b9834d1b99f3a54b48945bbfebd994c3bc644a86c7402bd5f171f70f7b"
+    assert baseline["fields"]["editor_blocks"] == "5da3b4773678fa1f96c3b9dc85c5e421fcdbdef0a06dc655a07bb960d11ebbf6"
+    assert baseline["fields"]["reading_order"] == "e36710803ae78b321bc3e3c906994bfb19c3432ad08c61a33e7b3db8f7a2d6f5"

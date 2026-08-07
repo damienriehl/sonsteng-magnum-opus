@@ -101,8 +101,8 @@ test("json_scalar path forgery is rejected (json_path must match the map)", () =
   // Use a genuinely shared json_scalar so the multi-occurrence lookup cannot
   // accidentally weaken the existing source_ref -> sole json_path guard.
   const sharedRef = Object.keys(EDITOR_MAP.occurrences).find((ref) => {
-    if (EDITOR_MAP.occurrences[ref].length < 2) return false;
-    return lookupBlock(ref, "edit")?.kind === "json_scalar";
+    const editable = lookupBlocks(ref, "edit");
+    return editable?.length > 1 && editable.every((block) => block.kind === "json_scalar");
   });
   const jsBlock = lookupBlock(sharedRef, "edit");
   assert.ok(jsBlock, "bundle must contain a shared json_scalar block");

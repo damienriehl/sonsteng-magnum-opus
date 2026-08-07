@@ -29,11 +29,13 @@ import shutil
 import csv
 import io
 import hashlib
+import zipfile
 from collections import defaultdict, OrderedDict
 from html.parser import HTMLParser
 
 import text_norm          # canonical normalization (shared with the Worker/editor)
 import spine_stamp        # deterministic spine_build_id + git traceability
+import student_archives
 
 # --------------------------------------------------------------------------- #
 # Paths
@@ -45,6 +47,8 @@ SITE = os.path.join(ROOT, "site")
 OUT = os.path.join(SITE, "platform")          # generation root
 MATTERS_DIR = os.path.join(DATA, "matters")
 CURRICULUM_DIR = os.path.join(DATA, "curriculum")   # handbook prose + deliverable templates
+CATALOG_PAGE_SIZE = 50
+PUBLIC_SOURCE_REPOSITORY = "https://github.com/damienriehl/sonsteng-magnum-opus"
 
 # --------------------------------------------------------------------------- #
 # Small helpers
@@ -699,6 +703,12 @@ def load_corpus():
         # exercise
         ex_path = os.path.join(mdir, "exercise", "exercise.json")
         m["_exercise"] = load_json(ex_path) if os.path.exists(ex_path) else None
+        sections = (m.get("_exercise") or {}).get("sections") or {}
+        history = sections.get("history") or {}
+        if not (history.get("body_md") or "").strip():
+            raise ValueError("matter %s requires exercise.sections.history.body_md" % m.get("id", mdir))
+        m["_history"] = history
+        m["_student_manifest"] = student_archives.student_material_manifest(mdir, m["_slug"])
         # rubric
         ru_path = os.path.join(mdir, "rubric.json")
         m["_rubric"] = load_json(ru_path) if os.path.exists(ru_path) else None
@@ -1027,6 +1037,13 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 /* ---- matter library ---- */
 .lib-toolbar{display:flex;flex-wrap:wrap;gap:var(--sp-6);align-items:center;
   justify-content:space-between;margin:var(--sp-6) 0}
+.lib-toolbar label{display:grid;gap:var(--sp-2);font-family:var(--font-mono);
+  font-size:var(--fs-mono-xs);letter-spacing:.04em;color:var(--ink-soft)}
+.lib-toolbar input,.lib-toolbar select,.lib-toolbar button{box-sizing:border-box;min-height:44px;
+  max-width:100%;border:var(--rule) solid var(--line);border-radius:var(--radius);
+  background:var(--paper);color:var(--ink);font:inherit;padding:.55rem .7rem}
+.lib-toolbar input{min-width:min(18rem,100%)}
+.lib-toolbar button{cursor:pointer;background:var(--ink);color:var(--ink-invert)}
 .shape-row{display:grid;grid-template-columns:1fr;gap:var(--sp-6);margin:var(--sp-6) 0;
   padding-top:var(--sp-6);border-top:var(--rule) solid var(--line)}
 .shape-row__label{font-family:var(--font-display);font-weight:600;font-size:var(--fs-lg)}
@@ -1605,7 +1622,7 @@ def build_modules(corpus):
   <h2 id="mod-tpl-h">Course templates</h2></div>
   <p>The deliverables named above — time sheets, engagement letters, interview plans,
   settlement plans, and the reflective portfolio — share a common set of handout templates,
-  each with its grading note.</p>
+  each presented as a Planning Guide and Checklist with assessment and feedback notes.</p>
   <p><a class="btn" href="../templates/index.html">Open the deliverable templates</a></p>
 </section>""".format(prose=markdown(volume_md, src=data_relpath(CURRICULUM_DIR, code.lower() + ".md")))
 
@@ -1677,7 +1694,7 @@ def build_templates(corpus):
   <p class="lede">The handout templates for the six recurring course deliverables — the time
   sheet, engagement-letter checklist, client-interview plan, settlement &amp; negotiation plan,
   learning portfolio, and reflective report. Each carries its own &ldquo;how it&rsquo;s
-  graded&rdquo; note. These pages are built to print; use your browser&rsquo;s print command for
+  assessment and feedback&rdquo; note. These pages are built to print; use your browser&rsquo;s print command for
   a clean, black-on-white handout.</p>
   <div class="chips" aria-label="Related modules">
     <a class="chip chip--matter" href="../modules/m1.html">M1 · FOUNDATIONAL</a>
@@ -1877,94 +1894,125 @@ def build_license_pages():
         build_markdown_about_page(**page)
 
 # --------------------------------------------------------------------------- #
-# Page — matter library (shape-first, Meridian ⇄ real segmented toggle)
+# Page — matter library
 # --------------------------------------------------------------------------- #
+CATALOG_JS = r"""(function(){
+'use strict';
+var form=document.querySelector('[data-catalog-form]');if(!form)return;
+var results=document.querySelector('[data-catalog-results]'),status=document.querySelector('[data-catalog-status]');
+var empty=document.querySelector('[data-catalog-empty]'),heading=document.getElementById('catalog-results');
+var nav=document.querySelector('.pagination');
+var esc=function(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+function locationParams(){var p=new URLSearchParams(location.search),m=location.pathname.match(/page-(\d+)\.html$/);if(!p.has('page')&&m)p.set('page',m[1]);return p;}
+function syncForm(p){['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});}
+var initial=locationParams();syncForm(initial);
+fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');return r.json();}).then(function(index){
+ function render(p,push){
+  var page=Math.max(1,parseInt(p.get('page')||'1',10)||1),q=(p.get('q')||'').toLowerCase();
+  var matches=index.matters.filter(function(m){return (!q||(m.caption+' '+m.history_summary+' '+m.shape_label+' '+m.jurisdiction).toLowerCase().includes(q))&&(!p.get('shape')||m.shape===p.get('shape'))&&(!p.get('tier')||m.tier===p.get('tier'))&&(!p.get('fee')||m.fee_type===p.get('fee'));});
+  var pages=Math.max(1,Math.ceil(matches.length/index.page_size));page=Math.min(page,pages);p.set('page',page);
+  results.innerHTML=matches.slice((page-1)*index.page_size,page*index.page_size).map(function(m){return '<article class="card catalog-card" data-catalog-id="'+esc(m.id)+'"><div class="chips"><span class="chip">'+esc(m.tier.toUpperCase())+'</span><span class="chip">'+esc(m.shape_label)+'</span><span class="chip">'+esc(m.fee_type.toUpperCase())+'</span></div><h2 class="matter-card__caption"><a href="'+encodeURIComponent(m.slug)+'/index.html">'+esc(m.caption)+'</a></h2><p class="matter-card__premise">'+esc(m.history_summary)+'</p><p><a class="btn" download href="../downloads/'+encodeURIComponent(m.slug)+'-student-materials.zip">Download student materials (.zip)</a></p></article>';}).join('');
+  nav.innerHTML=Array.from({length:pages},function(_,i){var n=i+1,next=new URLSearchParams(p);next.set('page',n);var path=n===1?'index.html':'page-'+n+'.html';return '<a href="'+path+'?'+esc(next.toString())+'" aria-current="'+(n===page?'page':'false')+'">Page '+n+'</a>';}).join(' ');
+  empty.hidden=matches.length!==0;status.textContent=matches.length+' matters · page '+page+' of '+pages;
+  if(push){var canonical=location.pathname.replace(/page-\d+\.html$/,'index.html');history.pushState({},'',canonical+'?'+p.toString());heading.focus();}
+ }
+ function paramsFromForm(){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});p.set('page','1');return p;}
+ render(initial,false);
+ form.addEventListener('submit',function(e){e.preventDefault();render(paramsFromForm(),true);});
+ window.addEventListener('popstate',function(){var p=locationParams();syncForm(p);render(p,false);});
+}).catch(function(){status.textContent+=' · enhanced search unavailable; use page links.';});
+})();"""
+
+def paginate_catalog_records(records, page_size=CATALOG_PAGE_SIZE):
+    """Pure scale contract used by production and the synthetic 1,000 fixture."""
+    ids = [item["id"] for item in records]
+    if len(ids) != len(set(ids)):
+        raise ValueError("catalog matter IDs must be unique")
+    if page_size < 1:
+        raise ValueError("catalog page size must be positive")
+    return [records[start:start + page_size]
+            for start in range(0, len(records), page_size)] or [[]]
+
+def catalog_history_summary(matter, limit=300):
+    """Return the shared, presentation-safe catalog history summary."""
+    text = strip_bid_markers(matter["_history"]["body_md"])
+    text = re.sub(r"\s+", " ", re.sub(r"[*_`#]", "", text)).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1].rsplit(" ", 1)[0] + "…"
+
 def build_matter_library(corpus):
-    rel = "matters/index.html"
     copy = corpus["copy"]["matters"]
-    shape_labels = copy["shape_labels"]
-    man_by_id = {m["id"]: m for m in corpus["manifest"]["matters"]}
-    by_shape = OrderedDict((k, {"meridian": None, "real": None}) for k in shape_labels)
-    for m in corpus["matters"]:
-        tier = "meridian" if m.get("tier") == "meridian" else "real"
-        if m.get("shape") in by_shape:
-            by_shape[m["shape"]][tier] = m
-
-    def matter_card(m, tier):
-        man = man_by_id.get(m["id"], {})
-        premise = man.get("premise", "")
-        if len(premise) > 260:
-            premise = premise[:257].rsplit(" ", 1)[0] + "…"
-        side_chips = " ".join(
-            '<span class="chip">{l}</span>'.format(l=esc(s.get("label", s.get("role_id", ""))[:38]))
-            for s in (m.get("sides") or []))
-        two_sided_conf = any((s.get("confidential_fact_refs") for s in (m.get("sides") or [])))
-        lock = ('<div class="split-rule" role="presentation"></div>'
-                '<p class="card__meta">⚿ TWO-SIDED · PER-SIDE CONFIDENTIAL FACTS</p>') if two_sided_conf else ""
-        return """
-      <article class="card" data-tier-card="{tier}">
-        <div class="chips">{tc} <span class="chip">{fee}</span> <span class="chip chip--folio">{mid}</span></div>
-        <p class="matter-card__caption">{cap}</p>
-        <p class="matter-card__premise">{prem}</p>
-        <div class="chips">{sides}</div>
-        {lock}
-        <p style="margin-top:var(--sp-3)"><a class="arrow-link" href="{slug}/index.html">OPEN PACKET</a></p>
-      </article>""".format(
-            tier=tier, tc=tier_chip(m.get("tier") if m.get("tier") == "meridian" else "real", m.get("jurisdiction")),
-            fee=esc((m.get("fee_type") or "").upper()), mid=esc(m["id"].upper()),
-            cap=esc(m.get("caption", "")), prem=esc(premise), sides=side_chips, lock=lock,
-            slug=esc(m["_slug"]))
-
-    rows = []
-    for shape, pair in by_shape.items():
-        label, label_eb = _copy_scalar(
+    shape_labels = {}
+    shape_attrs = {}
+    for shape in copy["shape_labels"]:
+        shape_labels[shape], shape_attrs[shape] = _copy_scalar(
             "matters", copy, "shape_labels." + shape,
             "matter library · practice shapes")
-        cards = []
-        for tier in ("meridian", "real"):
-            m = pair[tier]
-            if m:
-                cards.append(matter_card(m, tier))
-        rows.append("""
-  <div class="shape-row">
-    <div>
-      <p class="eyebrow">SHAPE</p>
-      <h2 class="shape-row__label" style="font-size:var(--fs-lg)"{label_eb}>{label}</h2>
-    </div>
-    <div class="shape-row__cards">{cards}</div>
-  </div>""".format(label=esc(label), label_eb=label_eb, cards="".join(cards)))
+
+    def record(m):
+        tier = "meridian" if m.get("tier") == "meridian" else "real"
+        return {"id": m["id"], "slug": m["_slug"], "caption": m.get("caption", ""),
+                "history_summary": catalog_history_summary(m), "shape": m.get("shape", ""),
+                "shape_label": shape_labels.get(m.get("shape"), m.get("shape", "")),
+                "tier": tier, "jurisdiction": m.get("jurisdiction", ""),
+                "fee_type": m.get("fee_type", "")}
+
+    records = [record(m) for m in corpus["matters"]]
+
+    def card(item, annotate_shape=False):
+        shape_attr = shape_attrs.get(item["shape"], "") if annotate_shape else ""
+        return """<article class="card catalog-card" data-catalog-id="{id}">
+  <div class="chips"><span class="chip">{tier}</span><p class="chip"{shape_attr}>{shape}</p><span class="chip">{fee}</span></div>
+  <h2 class="matter-card__caption"><a href="{slug}/index.html">{caption}</a></h2>
+  <p class="matter-card__premise">{history}</p>
+  <p><a class="btn" href="../downloads/{slug}-student-materials.zip" download>Download student materials (.zip)</a></p>
+</article>""".format(id=esc(item["id"]), tier=esc(item["tier"].upper()),
+        shape=esc(item["shape_label"]), shape_attr=shape_attr,
+        fee=esc(item["fee_type"].upper()),
+        slug=esc(item["slug"]), caption=esc(item["caption"]), history=esc(item["history_summary"]))
 
     hero = {}
-    hero_eb = {}
+    hero_attrs = {}
     for field in ("eyebrow", "heading", "lede"):
-        hero[field], hero_eb[field] = _copy_scalar(
+        hero[field], hero_attrs[field] = _copy_scalar(
             "matters", copy, "hero." + field, "matter library · hero")
+    pages = paginate_catalog_records(records)
+    total_pages = len(pages)
+    for page_number in range(1, total_pages + 1):
+        rel = "matters/index.html" if page_number == 1 else "matters/page-{n}.html".format(n=page_number)
+        current = pages[page_number - 1]
+        nav = " ".join('<a href="{href}" aria-current="{cur}">Page {n}</a>'.format(
+            href="index.html" if n == 1 else "page-{n}.html".format(n=n),
+            cur="page" if n == page_number else "false", n=n) for n in range(1, total_pages + 1))
+        seen_shapes = set()
+        rendered_cards = []
+        for item in current:
+            first_shape = item["shape"] not in seen_shapes
+            seen_shapes.add(item["shape"])
+            rendered_cards.append(card(item, annotate_shape=first_shape))
+        body = """<section><p class="eyebrow"{eyebrow_attr}>{eyebrow}</p><h1{heading_attr}>{heading}</h1><p class="lede"{lede_attr}>{lede}</p>
+<p><a class="arrow-link" href="{repo}">View complete public source repository (includes instructor materials and answer keys)</a></p></section>
+<form class="lib-toolbar" data-catalog-form role="search"><label for="catalog-search">Search matters</label><input id="catalog-search" name="q" type="search" aria-label="Search matters">
+<label for="catalog-shape">Practice shape</label><select id="catalog-shape" name="shape"><option value="">All shapes</option>{shapes}</select>
+<label for="catalog-tier">Tier</label><select id="catalog-tier" name="tier"><option value="">Both tiers</option><option value="meridian">Meridian</option><option value="real">Real states</option></select>
+<label for="catalog-fee">Fee type</label><select id="catalog-fee" name="fee"><option value="">All fee types</option>{fees}</select><button type="submit">Apply filters</button></form>
+<p class="card__meta" aria-live="polite" data-catalog-status>{total} matters · page {page} of {pages}</p>
+<h2 id="catalog-results" tabindex="-1">Catalog results</h2><div data-catalog-results>{cards}</div>
+<p data-catalog-empty hidden>No matters match your search and filters.</p><nav class="pagination" aria-label="Catalog pages">{nav}</nav>
+<p><a href="print-all.html">Print all matters</a></p><script src="catalog.js" defer></script>""".format(
+            repo=esc(PUBLIC_SOURCE_REPOSITORY), total=len(records), page=page_number, pages=total_pages,
+            cards="".join(rendered_cards), nav=nav,
+            shapes="".join('<option value="{v}">{l}</option>'.format(v=esc(k), l=esc(v)) for k, v in shape_labels.items()),
+            fees="".join('<option value="{v}">{v}</option>'.format(v=esc(v)) for v in sorted({r["fee_type"] for r in records})),
+            eyebrow_attr=hero_attrs["eyebrow"], heading_attr=hero_attrs["heading"], lede_attr=hero_attrs["lede"], **hero)
+        write_file(rel, page_shell(rel, "Matter Library", "MATTERS · LIBRARY",
+                                   [("Home", "../index.html"), ("Matters", None)], body))
 
-    body = """
-<section class="reveal">
-  <p class="eyebrow"{hero_eyebrow_eb}>{hero_eyebrow}</p>
-  <h1{hero_heading_eb}>{hero_heading}</h1>
-  <p class="lede"{hero_lede_eb}>{hero_lede}</p>
-</section>
-
-<div class="lib-toolbar">
-  <p class="card__meta" style="margin:0">SHOWING <span data-tier-count>ALL 20</span> MATTERS</p>
-  <div class="segmented-toggle" data-tier-toggle role="group" aria-label="Jurisdiction tier">
-    <button type="button" data-tier="all" aria-pressed="true">BOTH TIERS</button>
-    <button type="button" data-tier="meridian" aria-pressed="false">⌘ MERIDIAN</button>
-    <button type="button" data-tier="real" aria-pressed="false">REAL STATES</button>
-  </div>
-</div>
-<div class="brass-rule" role="presentation"></div>
-
-<div data-tier-active="all">
-{rows}
-</div>
-""".format(rows="".join(rows),
-           **{"hero_" + k: esc(v) for k, v in hero.items()},
-           **{"hero_" + k + "_eb": v for k, v in hero_eb.items()})
-    write_file(rel, page_shell(rel, "Matter Library", "MATTERS · LIBRARY",
-                               [("Home", "../index.html"), ("Matters", None)], body))
+    print_body = "<section><p class=\"eyebrow\">MATTER LIBRARY · PRINT ALL</p><h1>All matter histories</h1><p class=\"lede\">Unfiltered catalog.</p></section>" + "".join(card(i) for i in records)
+    write_file("matters/print-all.html", page_shell("matters/print-all.html", "All Matter Histories", "MATTERS · PRINT ALL", [("Matters", "index.html")], print_body))
+    write_file("matters/catalog-index.json", json.dumps({"schema_version": "1.0.0", "page_size": CATALOG_PAGE_SIZE, "matters": records}, ensure_ascii=False, separators=(",", ":")) + "\n")
+    write_file("matters/catalog.js", CATALOG_JS)
 
 # --------------------------------------------------------------------------- #
 # Packet pages
@@ -2125,7 +2173,7 @@ def build_rubric_section(m, rel):
     <tbody>{rows}</tbody>
     <tfoot><tr><td>Total</td><td></td><td></td><td class="num">{tot}</td></tr></tfoot>
   </table></div>
-  <p class="mono" style="font-size:var(--fs-mono-xs);color:var(--ink-soft)">LETTER GRADES · {grades}</p>
+  <p class="mono" style="font-size:var(--fs-mono-xs);color:var(--ink-soft)">ASSESSMENT BANDS · {grades}</p>
 """.format(tot=esc(ru.get("declared_total", "")), rows="".join(rows), grades=grades)
 
 def build_packet_pages(corpus):
@@ -2178,7 +2226,9 @@ def build_one_packet(corpus, m, man):
         anchor = "part-" + key.replace("_", "-")
         toc_items.append('<a href="#{a}">{n} · {t}</a>'.format(a=anchor, n=num, t=esc(title)))
         if key == "case_file":
-            files = sec.get("files") or []
+            # The same manifest controls packet exhibits, public copying, and ZIPs.
+            files = [item["path"]
+                     for item in student_archives.learner_exhibit_members(m["_student_manifest"])]
             case_file_cards = render_case_file_cards(m, files)
             inner = ('<p>The case file contains {n} documents — witness statements and exhibits. '
                      'Work only from these materials and from what you develop in your interviews.</p>'
@@ -2976,13 +3026,14 @@ def build_data_catalog(corpus):
         slug = m["_slug"]
         mdir = os.path.join(OUT, "data", "matters", slug)
         os.makedirs(mdir, exist_ok=True)
-        # student-safe copies
-        copy_student_safe(os.path.join(m["_dir"], "matter.json"), os.path.join(mdir, "matter.json"))
-        if m.get("_exercise") is not None:
-            copy_student_safe(os.path.join(m["_dir"], "exercise", "exercise.json"),
-                              os.path.join(mdir, "exercise.json"))
-        if m.get("_rubric") is not None:
-            copy_student_safe(os.path.join(m["_dir"], "rubric.json"), os.path.join(mdir, "rubric.json"))
+        manifest = m["_student_manifest"]
+        for item in student_archives.public_data_members(manifest):
+            source = os.path.join(m["_dir"], *item["path"].split("/"))
+            public_name = "exercise.json" if item["path"] == "exercise/exercise.json" else item["path"]
+            copy_student_safe(source, os.path.join(mdir, public_name))
+        student_archives.write_student_archive(
+            manifest, os.path.join(OUT, "downloads", slug + "-student-materials.zip"),
+            transform=lambda _name, raw: strip_bid_markers(raw.decode("utf-8")).encode("utf-8"))
 
         personas_cat = []
         for p in m["_personas"].values():
@@ -3011,6 +3062,9 @@ def build_data_catalog(corpus):
             "tier": "meridian" if m.get("tier") == "meridian" else "real",
             "jurisdiction": m.get("jurisdiction"),
             "fee_type": m.get("fee_type"),
+            "history_summary": catalog_history_summary(m),
+            "student_materials": "../downloads/{s}-student-materials.zip".format(s=slug),
+            "student_material_manifest_version": manifest["schema_version"],
             "sides": [{"role_id": s.get("role_id"), "label": s.get("label")}
                       for s in (m.get("sides") or [])],
             "personas": personas_cat,
@@ -3700,11 +3754,13 @@ def write_build_stamp(spine_build_id):
 _HREF_RE = re.compile(r'(?:href|src)="([^"]+)"')
 
 # The site is otherwise fully self-contained. Turnstile is the only sanctioned
-# external runtime dependency; the CC BY URL is a navigational license link.
-# Every other external http(s) request remains a link-check error.
+# external runtime dependency; the CC BY and public source-repository URLs are
+# navigational links. Every other external http(s) request remains a
+# link-check error.
 _EXTERNAL_ALLOW = (
     "https://challenges.cloudflare.com/",
     "https://creativecommons.org/licenses/by/4.0/",
+    "https://github.com/damienriehl/sonsteng-magnum-opus",
 )
 _ID_RE = re.compile(r'id="([^"]+)"')
 
@@ -3792,9 +3848,24 @@ def check_no_instructor_leaks(corpus):
         if "assets" in dirs and os.path.relpath(root, OUT) == ".":
             dirs.remove("assets")
         for fn in files:
+            fpath = os.path.join(root, fn)
+            if fn.lower().endswith(".zip"):
+                try:
+                    with zipfile.ZipFile(fpath) as archive:
+                        for info in archive.infolist():
+                            member = info.filename
+                            if os.path.basename(member) in INSTRUCTOR_FILENAMES:
+                                leaks.append("instructor file present in archive: {z}!{m}".format(
+                                    z=os.path.relpath(fpath, OUT), m=member))
+                            if member.lower().endswith(_LEAK_SCAN_EXT):
+                                hay.append((os.path.relpath(fpath, OUT) + "!" + member,
+                                            archive.read(info).decode("utf-8", errors="replace")))
+                except (OSError, zipfile.BadZipFile) as exc:
+                    leaks.append("unreadable student archive {z}: {e}".format(
+                        z=os.path.relpath(fpath, OUT), e=exc))
+                continue
             if not fn.lower().endswith(_LEAK_SCAN_EXT):
                 continue
-            fpath = os.path.join(root, fn)
             try:
                 with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
                     hay.append((os.path.relpath(fpath, OUT), fh.read()))
@@ -3938,14 +4009,14 @@ def main(argv):
             for e in errors:
                 print("  BROKEN: " + e)
         else:
-            print("all internal links resolve; external requests limited to sanctioned Turnstile and CC BY license URLs.")
+            print("all internal links resolve; external requests limited to sanctioned Turnstile, CC BY, and public source URLs.")
         leaks = check_no_instructor_leaks(corpus)
         print("== instructor-leak sweep ==")
         if leaks:
             for l in leaks:
                 print("  LEAK: " + l)
         else:
-            print("no instructor-side content in any generated page.")
+            print("no instructor-side content in any generated output or student archive.")
 
         # Durable-ID markers are editorial identity, never content: nothing
         # under site/ may carry one (pages render them away; verbatim catalog

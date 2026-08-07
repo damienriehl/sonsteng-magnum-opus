@@ -18,7 +18,7 @@ function relUrl(p) { return 'file://' + path.join(SITE, p); }
 function matrixErrors(m) {
   const found = new Set(m.pages.map((p) => p.family));
   const errors = m.requiredFamilies.filter((f) => !found.has(f)).map((f) => `matrix missing required family: ${f}`);
-  for (const w of [1280,960,959,672,671,390]) if (!m.viewports.some((v) => v.width === w)) errors.push(`matrix missing required viewport: ${w}`);
+  for (const w of [1280,960,959,672,671,480,390]) if (!m.viewports.some((v) => v.width === w)) errors.push(`matrix missing required viewport: ${w}`);
   for (const mode of ['baseline','large']) if (!m.typeModes.includes(mode)) errors.push(`matrix missing type mode: ${mode}`);
   return errors;
 }
