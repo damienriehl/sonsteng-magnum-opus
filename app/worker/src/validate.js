@@ -25,7 +25,8 @@ function isArr(v) { return Array.isArray(v); }
 function isObj(v) { return v && typeof v === "object" && !Array.isArray(v); }
 
 const ALUMNI_ROUTE_FIELDS = new Set([
-  "alumni_assessor", "alumni_recipient", "alumni_notification",
+  "alumni_assessor", "alumni_reviewer", "alumni_recipient",
+  "alumni_notification", "alumni_feedback_destination",
 ]);
 
 // Assessment, debrief, and critique return only to the requesting learner.

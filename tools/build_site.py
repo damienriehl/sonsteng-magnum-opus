@@ -29,6 +29,7 @@ import shutil
 import csv
 import io
 import hashlib
+import zipfile
 from collections import defaultdict, OrderedDict
 from html.parser import HTMLParser
 
@@ -1900,21 +1901,25 @@ CATALOG_JS = r"""(function(){
 var form=document.querySelector('[data-catalog-form]');if(!form)return;
 var results=document.querySelector('[data-catalog-results]'),status=document.querySelector('[data-catalog-status]');
 var empty=document.querySelector('[data-catalog-empty]'),heading=document.getElementById('catalog-results');
+var nav=document.querySelector('.pagination');
 var esc=function(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+function locationParams(){var p=new URLSearchParams(location.search),m=location.pathname.match(/page-(\d+)\.html$/);if(!p.has('page')&&m)p.set('page',m[1]);return p;}
+function syncForm(p){['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});}
+var initial=locationParams();syncForm(initial);
 fetch('catalog-index.json').then(function(r){if(!r.ok)throw Error('index');return r.json();}).then(function(index){
- function syncForm(p){['q','shape','tier','fee'].forEach(function(k){if(form.elements[k])form.elements[k].value=p.get(k)||'';});}
  function render(p,push){
   var page=Math.max(1,parseInt(p.get('page')||'1',10)||1),q=(p.get('q')||'').toLowerCase();
   var matches=index.matters.filter(function(m){return (!q||(m.caption+' '+m.history_summary+' '+m.shape_label+' '+m.jurisdiction).toLowerCase().includes(q))&&(!p.get('shape')||m.shape===p.get('shape'))&&(!p.get('tier')||m.tier===p.get('tier'))&&(!p.get('fee')||m.fee_type===p.get('fee'));});
   var pages=Math.max(1,Math.ceil(matches.length/index.page_size));page=Math.min(page,pages);p.set('page',page);
   results.innerHTML=matches.slice((page-1)*index.page_size,page*index.page_size).map(function(m){return '<article class="card catalog-card" data-catalog-id="'+esc(m.id)+'"><div class="chips"><span class="chip">'+esc(m.tier.toUpperCase())+'</span><span class="chip">'+esc(m.shape_label)+'</span><span class="chip">'+esc(m.fee_type.toUpperCase())+'</span></div><h2 class="matter-card__caption"><a href="'+encodeURIComponent(m.slug)+'/index.html">'+esc(m.caption)+'</a></h2><p class="matter-card__premise">'+esc(m.history_summary)+'</p><p><a class="btn" download href="../downloads/'+encodeURIComponent(m.slug)+'-student-materials.zip">Download student materials (.zip)</a></p></article>';}).join('');
+  nav.innerHTML=Array.from({length:pages},function(_,i){var n=i+1,next=new URLSearchParams(p);next.set('page',n);var path=n===1?'index.html':'page-'+n+'.html';return '<a href="'+path+'?'+esc(next.toString())+'" aria-current="'+(n===page?'page':'false')+'">Page '+n+'</a>';}).join(' ');
   empty.hidden=matches.length!==0;status.textContent=matches.length+' matters · page '+page+' of '+pages;
-  if(push){history.pushState({},'',location.pathname+'?'+p.toString());heading.focus();}
+  if(push){var canonical=location.pathname.replace(/page-\d+\.html$/,'index.html');history.pushState({},'',canonical+'?'+p.toString());heading.focus();}
  }
  function paramsFromForm(){var p=new URLSearchParams(location.search),fd=new FormData(form);['q','shape','tier','fee'].forEach(function(k){var v=String(fd.get(k)||'').trim();if(v)p.set(k,v);else p.delete(k);});p.set('page','1');return p;}
- var initial=new URLSearchParams(location.search);syncForm(initial);render(initial,false);
+ render(initial,false);
  form.addEventListener('submit',function(e){e.preventDefault();render(paramsFromForm(),true);});
- window.addEventListener('popstate',function(){var p=new URLSearchParams(location.search);syncForm(p);render(p,false);});
+ window.addEventListener('popstate',function(){var p=locationParams();syncForm(p);render(p,false);});
 }).catch(function(){status.textContent+=' · enhanced search unavailable; use page links.';});
 })();"""
 
@@ -1951,12 +1956,12 @@ def build_matter_library(corpus):
                 "history_summary": catalog_history_summary(m), "shape": m.get("shape", ""),
                 "shape_label": shape_labels.get(m.get("shape"), m.get("shape", "")),
                 "tier": tier, "jurisdiction": m.get("jurisdiction", ""),
-                "fee_type": m.get("fee_type", ""), "shape_attr": shape_attrs.get(m.get("shape"), "")}
+                "fee_type": m.get("fee_type", "")}
 
     records = [record(m) for m in corpus["matters"]]
 
     def card(item, annotate_shape=False):
-        shape_attr = item["shape_attr"] if annotate_shape else ""
+        shape_attr = shape_attrs.get(item["shape"], "") if annotate_shape else ""
         return """<article class="card catalog-card" data-catalog-id="{id}">
   <div class="chips"><span class="chip">{tier}</span><p class="chip"{shape_attr}>{shape}</p><span class="chip">{fee}</span></div>
   <h2 class="matter-card__caption"><a href="{slug}/index.html">{caption}</a></h2>
@@ -3843,9 +3848,24 @@ def check_no_instructor_leaks(corpus):
         if "assets" in dirs and os.path.relpath(root, OUT) == ".":
             dirs.remove("assets")
         for fn in files:
+            fpath = os.path.join(root, fn)
+            if fn.lower().endswith(".zip"):
+                try:
+                    with zipfile.ZipFile(fpath) as archive:
+                        for info in archive.infolist():
+                            member = info.filename
+                            if os.path.basename(member) in INSTRUCTOR_FILENAMES:
+                                leaks.append("instructor file present in archive: {z}!{m}".format(
+                                    z=os.path.relpath(fpath, OUT), m=member))
+                            if member.lower().endswith(_LEAK_SCAN_EXT):
+                                hay.append((os.path.relpath(fpath, OUT) + "!" + member,
+                                            archive.read(info).decode("utf-8", errors="replace")))
+                except (OSError, zipfile.BadZipFile) as exc:
+                    leaks.append("unreadable student archive {z}: {e}".format(
+                        z=os.path.relpath(fpath, OUT), e=exc))
+                continue
             if not fn.lower().endswith(_LEAK_SCAN_EXT):
                 continue
-            fpath = os.path.join(root, fn)
             try:
                 with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
                     hay.append((os.path.relpath(fpath, OUT), fh.read()))
@@ -3996,7 +4016,7 @@ def main(argv):
             for l in leaks:
                 print("  LEAK: " + l)
         else:
-            print("no instructor-side content in any generated page.")
+            print("no instructor-side content in any generated output or student archive.")
 
         # Durable-ID markers are editorial identity, never content: nothing
         # under site/ may carry one (pages render them away; verbatim catalog

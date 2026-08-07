@@ -62,6 +62,44 @@ def test_student_manifest_rejects_unsafe_members_and_missing_required(tmp_path):
         sa.student_material_manifest(matter, "m01-safe")
 
 
+@pytest.mark.parametrize("member", [
+    "case-file/answer-key.md", "case-file/instructor-notes.md", "case-file/facts.md",
+])
+def test_student_manifest_rejects_instructor_basenames_under_allowed_root(tmp_path, member):
+    matter = tmp_path / "m01-safe"
+    (matter / "exercise").mkdir(parents=True)
+    (matter / "case-file").mkdir()
+    (matter / "matter.json").write_text("{}")
+    (matter / "rubric.json").write_text("{}")
+    (matter / member).write_text("INSTRUCTOR-ONLY\nanswer\n")
+    (matter / "exercise" / "exercise.json").write_text(json.dumps({
+        "sections": {"case_file": {"files": [member]}}
+    }))
+    with pytest.raises(sa.StudentArchiveError, match="instructor-only"):
+        sa.student_material_manifest(matter, "m01-safe")
+
+
+@pytest.mark.parametrize("parent_symlink", [False, True])
+def test_student_manifest_rejects_direct_and_parent_symlinks(tmp_path, parent_symlink):
+    matter = tmp_path / "m01-safe"
+    (matter / "exercise").mkdir(parents=True)
+    (matter / "matter.json").write_text("{}")
+    (matter / "rubric.json").write_text("{}")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "exhibit.md").write_text("not contained\n")
+    if parent_symlink:
+        (matter / "case-file").symlink_to(outside, target_is_directory=True)
+    else:
+        (matter / "case-file").mkdir()
+        (matter / "case-file" / "exhibit.md").symlink_to(outside / "exhibit.md")
+    (matter / "exercise" / "exercise.json").write_text(json.dumps({
+        "sections": {"case_file": {"files": ["case-file/exhibit.md"]}}
+    }))
+    with pytest.raises(sa.StudentArchiveError, match="symlinks"):
+        sa.student_material_manifest(matter, "m01-safe")
+
+
 def test_catalog_source_contract_has_histories_pagination_and_one_free_action():
     source = (TOOLS / "build_site.py").read_text()
     assert "CATALOG_PAGE_SIZE = 50" in source
@@ -80,12 +118,30 @@ def test_public_source_repository_is_a_sanctioned_navigation_link():
     assert "https://github.com/damienriehl/sonsteng-magnum-opus" in build_site._EXTERNAL_ALLOW
 
 
+def test_machine_catalog_omits_renderer_only_attributes():
+    catalog = json.loads((ROOT / "site/platform/matters/catalog-index.json").read_text())
+    assert all("shape_attr" not in matter for matter in catalog["matters"])
+
+
+def test_leak_sweep_reads_student_archive_members(tmp_path, monkeypatch):
+    import build_site
+    archive_path = tmp_path / "student-materials.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("case-file/renamed-guide.md", "INSTRUCTOR-ONLY\nanswer\n")
+    monkeypatch.setattr(build_site, "OUT", str(tmp_path))
+    leaks = build_site.check_no_instructor_leaks({"matters": []})
+    assert any("INSTRUCTOR-ONLY sentinel" in leak for leak in leaks)
+
+
 def test_browser_matrix_pins_catalog_widths_and_print_all():
     matrix = json.loads((TOOLS / "platform_browser_matrix.json").read_text())
     widths = {item["width"] for item in matrix["viewports"]}
     assert {390, 480, 1280} <= widths
     assert any(page["path"] == "matters/print-all.html" and page.get("print")
                for page in matrix["pages"])
+    preflight = (TOOLS / "preflight.sh").read_text()
+    assert "verify_catalog_client.js" in preflight
+    assert "public source repository (anonymous)" in preflight
 
 
 def test_synthetic_thousand_is_complete_unique_and_page_bounded():

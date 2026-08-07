@@ -11,6 +11,7 @@ SCHEMA_VERSION = "1.0.0"
 REQUIRED = ("matter.json", "exercise/exercise.json", "rubric.json")
 OPTIONAL = ("business/business.json", "business/engagement-letter.md")
 EXCLUDED_AUTHORED = {"facts.md", "exercise/instructor-notes.md", "exercise/answer-key.md"}
+INSTRUCTOR_BASENAMES = {"facts.md", "instructor-notes.md", "answer-key.md"}
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 
 
@@ -22,6 +23,8 @@ def _safe_member(root: Path, relative: str) -> Path:
     posix = PurePosixPath(relative)
     if posix.is_absolute() or ".." in posix.parts or not posix.parts:
         raise StudentArchiveError("unsafe archive member: %s" % relative)
+    if posix.name in INSTRUCTOR_BASENAMES:
+        raise StudentArchiveError("instructor-only archive member: %s" % relative)
     allowed = relative in REQUIRED or relative in OPTIONAL or relative.startswith("case-file/")
     if not allowed:
         raise StudentArchiveError("member outside student-material allowlist: %s" % relative)

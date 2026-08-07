@@ -42,6 +42,7 @@ skip() { results+=("SKIP  $1 — $2"); skipped=$((skipped+1)); printf '\n\033[2m
 # ---- headless gates --------------------------------------------------------
 run "spine integrity (validate_spine)"      python3 tools/validate_spine.py
 run "site build + link/leak sweeps"         python3 tools/build_site.py --check
+run "public source repository (anonymous)"  curl -fsSIL https://github.com/damienriehl/sonsteng-magnum-opus
 run "bundle parity"                         python3 tools/check_build_parity.py
 run "python unit tests"                     python3 -m pytest tools/tests/ -q
 run "worker unit tests"                     bash -c 'cd app/worker && node --test test/*.test.js >/dev/null 2>&1'
@@ -68,6 +69,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     fi
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     run "platform layout matrix"                 node tools/verify_platform_layout.js
+    run "catalog client behavior"                node tools/verify_catalog_client.js
     run "platform print matrix"                  node tools/verify_platform_layout.js --print
     run "interview + critique matrix"            node tools/verify_chat_critique.js
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
@@ -91,6 +93,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "accessibility audit"  "no reachable X display"
     skip "rail placement"       "no reachable X display"
     skip "platform layout"      "no reachable X display"
+    skip "catalog client"       "no reachable X display"
     skip "platform print"       "no reachable X display"
     skip "interview + critique" "no reachable X display"
   fi
@@ -99,6 +102,7 @@ else
   skip "accessibility audit"  "--no-browser"
   skip "rail placement"       "--no-browser"
   skip "platform layout"      "--no-browser"
+  skip "catalog client"       "--no-browser"
   skip "platform print"       "--no-browser"
   skip "interview + critique" "--no-browser"
 fi
