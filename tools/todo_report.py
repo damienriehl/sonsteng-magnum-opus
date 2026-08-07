@@ -159,11 +159,13 @@ def build_report(tasks, today):
 def signature(report, today):
     """Identity of the *state*, not the prose.
 
-    Open-set membership plus which items are overdue or due today, plus the date
-    so an overdue pile re-nudges once per day. Retitling a task does not re-fire.
+    Open-set membership and due dates, plus which items are overdue or due today,
+    plus the date so an overdue pile re-nudges once per day. Retitling a task does
+    not re-fire, but changing a due date does.
     """
     parts = [
         ",".join(sorted(t.id for t in report["open"])),
+        ",".join(sorted("%s=%s" % (t.id, t.due or "") for t in report["open"])),
         ",".join(sorted(t.id for t in report["overdue"])),
         ",".join(sorted(t.id for t in report["due_today"])),
     ]
@@ -297,7 +299,7 @@ def publish_ntfy(topic, title, body, click_url, timeout=15, server=None, priorit
 
 
 def run(*, todo_path=None, dry_run=False, force=False, state_path=None,
-        publish=publish_ntfy, today=None, out=sys.stdout):
+        publish=publish_ntfy, topic=None, today=None, out=sys.stdout):
     todo_path = todo_path or os.environ.get(ENV_TODO_FILE) or DEFAULT_TODO
     if not os.path.exists(todo_path):
         print("ERROR: no task file at %s" % todo_path, file=sys.stderr)
@@ -341,7 +343,8 @@ def run(*, todo_path=None, dry_run=False, force=False, state_path=None,
                   % (title, priority, click, body))
         return 0
 
-    topic = resolve_topic()
+    if topic is None:
+        topic = resolve_topic()
     if not topic:
         print("ERROR: no ntfy topic (%s or %s)" % (ENV_TOPIC, DEFAULT_TOPIC_FILE),
               file=sys.stderr)

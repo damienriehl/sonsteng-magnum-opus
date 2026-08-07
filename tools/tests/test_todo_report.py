@@ -201,6 +201,14 @@ class SignatureTests(unittest.TestCase):
         text = "## X\n\n- [ ] **T10 — Undated** `@agent`\n"
         self.assertEqual(self.sig(text, "2026-08-06"), self.sig(text, "2026-09-30"))
 
+    def test_due_date_change_refires_before_it_is_due(self):
+        later = SAMPLE.replace(
+            "**T03 — Due today** `@john` `due:2026-08-06`",
+            "**T03 — Due today** `@john` `due:2026-08-20`",
+        )
+        self.assertNotEqual(self.sig(SAMPLE, "2026-08-05"),
+                            self.sig(later, "2026-08-05"))
+
 
 class RunTests(unittest.TestCase):
     def setUp(self):
@@ -217,6 +225,7 @@ class RunTests(unittest.TestCase):
     def go(self, **kw):
         out = io.StringIO()
         code = tr.run(todo_path=self.todo, state_path=self.state, publish=self.pub,
+                      topic="test-topic",
                       today="2026-08-06", out=out, **kw)
         return code, out.getvalue()
 

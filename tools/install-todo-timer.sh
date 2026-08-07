@@ -20,7 +20,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sonsteng-todo/env"
 SERVICE="sonsteng-todo.service"
 TIMER="sonsteng-todo.timer"
-ONCALENDAR="${SONSTENG_TODO_ONCALENDAR:-*-*-* 09:00:00}"
+ONCALENDAR="${SONSTENG_TODO_ONCALENDAR:-*-*-* 09:00:00 America/Chicago}"
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   systemctl --user disable --now "$TIMER" 2>/dev/null || true
@@ -84,7 +84,7 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable --now "$TIMER"
 
-echo "[todo] installed. Schedule: $ONCALENDAR (system timezone)."
+echo "[todo] installed. Schedule: $ONCALENDAR."
 systemctl --user list-timers "$TIMER" --no-pager || true
 echo
 echo "Check it now without notifying:  python3 $REPO_ROOT/tools/todo_report.py --dry-run"
