@@ -1959,13 +1959,18 @@
         s.el.classList.add('eb--has-margin');
         marginBubbles.push(b);
       } else {
-        var pill = s._pendingStatuses.length ? el('span', 'eb-status') : statusPill(s);
-        if (s._pendingStatuses.length) {
+        // A restored draft is newer than any server-side pending item. Keep its
+        // unsent warning as the session's primary status and render older
+        // suggestion history in a separate pill; otherwise "Pending" can make
+        // John's unsent wording look submitted.
+        var preserveDraftStatus = draftPresent(s);
+        var pill = (s._pendingStatuses.length || preserveDraftStatus) ? el('span', 'eb-status') : statusPill(s);
+        if (s._pendingStatuses.length || preserveDraftStatus) {
           pill.setAttribute('aria-live', 'polite');
           (s._tools || toolsEl(s)).appendChild(pill);
         }
         s._pendingStatuses.push(pill);
-        s._status = pill;
+        if (!preserveDraftStatus) s._status = pill;
         // prose/json_scalar suggestion — paint the new_text into the block
         // (WYSIWYG) when it's safe, else fall back to the pill-only status
         // (today's behavior). Attribution rides on the pill either way.

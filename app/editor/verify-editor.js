@@ -396,6 +396,17 @@ async function run() {
       recoveredDraft.block.suggestionId === refreshId && recoveredDraft.block.dirty === true,
       'text-restored=' + (recoveredDraft.text === 'A draft John expects to survive refresh.') +
       ' id-preserved=' + (recoveredDraft.block.suggestionId === refreshId));
+    await page.evaluate(() => window.SonstengEditor.applyPending([{
+      block_index: 1, status: 'pending', kind: 'prose',
+      new_text: 'An older server-side suggestion.', base_hash: 'hash-idx1-v1', attribution: 'JOS'
+    }]));
+    const draftVsPending = await page.evaluate(() => ({
+      text: window.SonstengEditor.blockText(1), status: window.SonstengEditor.statusText(1)
+    }));
+    assert('R8c an older pending suggestion cannot overwrite the restored-draft warning',
+      draftVsPending.text === 'A draft John expects to survive refresh.' &&
+      /Draft restored/.test(draftVsPending.status) && !/^Pending/.test(draftVsPending.status),
+      'text="' + draftVsPending.text + '" status="' + draftVsPending.status + '"');
     await page.evaluate(() => window.SonstengEditor.clickCancel(1));
     // page.reload removes the request-radius mock installed above; restore it
     // before the later scoped-change ceiling/confirmation contract exercises it.
