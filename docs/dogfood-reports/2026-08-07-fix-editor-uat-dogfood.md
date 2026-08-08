@@ -75,7 +75,7 @@ flowchart TD
 | 11 | Recovery | Expired auth preserves draft and stable request identity | Pass | | | |
 | 12 | Recovery | Network failure and rate limit preserve retryable work | Pass | | | |
 | 13 | Recovery | Stale page fails closed with actionable recovery | Fixed | Rejected wording remained visible and looked saved. | Restore the last authoritative baseline, including formatting. | `6048ae5` |
-| 14 | Re-entry | Refresh/back reconciles draft and server status without duplicate mutation | Fixed | A valid unsent draft survived in storage but was not restored visibly; a closed tab lost the session copy. | Rehydrate valid drafts and fall back to the durable local mirror with the same idempotency ID. | `6048ae5` |
+| 14 | Re-entry | Refresh/back reconciles draft and server status without duplicate mutation | Fixed | A valid unsent draft survived in storage but was not restored visibly; a closed tab lost the session copy; older pending history could overwrite the restored-draft warning. | Rehydrate valid drafts, fall back to the durable local mirror with the same idempotency ID, and keep the unsent warning authoritative over older pending history. | `6048ae5`, `7cf97ab` |
 | 15 | Responsive | Desktop, 390px phone, large type, keyboard focus, and contrast remain usable | Fixed | Pending status contrast, one action target, and editor type-size preference integration failed the expanded audit. | Corrected tokens/target sizing, unified the preference key, and added the editor to the audit matrix. | `5706ae5` |
 | 16 | Public | Homepage, catalog, print-all, filters/history, and representative content are sound | Pass | | | |
 | 17 | Security | Editor-only markers, instructor content, and auth details do not leak publicly | Pass | | | |
@@ -83,6 +83,7 @@ flowchart TD
 ## What Was Fixed
 
 - Restored unsent drafts visibly after refresh or tab loss, retaining the same idempotency ID.
+- Kept the restored-draft warning authoritative when an older server-side suggestion also exists.
 - Reverted stale-page rejections to the last authoritative copy instead of leaving rejected wording on screen.
 - Preserved inline markup when an edit is cancelled or rejected.
 - Corrected review-mode copy so it says changes go to Damien, not directly live.
@@ -121,4 +122,4 @@ See `docs/decisions/2026-08-07-editor-uat-decision-sheet.md`:
 
 ## Final Status
 
-**Ready after one human verification:** all automatable journeys pass and all discovered mechanical defects are fixed. The only blocked scenario is John's real email/OTP login, which correctly requires his identity. Verification evidence: editor harness 85/85; Python 458 tests plus 18,993 subtests; Worker 362/362; accessibility 0 failures across 22 cases; responsive corpus 282/282; interview/critique 28/28; catalog, print, leak, and rail gates pass.
+**Ready after one human verification:** all automatable journeys pass and all discovered mechanical defects are fixed. The only blocked scenario is John's real email/OTP login, which correctly requires his identity. Verification evidence: editor harness 86/86; Python 458 tests plus 18,993 subtests; Worker 362/362; accessibility 0 failures across 22 cases; responsive corpus 282/282; interview/critique 28/28; catalog, print, leak, and rail gates pass.
