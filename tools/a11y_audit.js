@@ -49,6 +49,7 @@ const REPO = path.resolve(__dirname, '..');
 const SITE = path.join(REPO, 'site', 'platform');
 const MATRIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'platform_browser_matrix.json'), 'utf8'));
 const DEFAULT_PAGES = MATRIX.pages.filter((p) => !p.interactive).map((p) => p.path);
+const EDITOR_HARNESS = 'file://' + path.join(REPO, 'app', 'editor', 'test-harness.html');
 
 const AUDIT = function () {
   /* ---- colour helpers (run INSIDE the page) ---- */
@@ -222,7 +223,8 @@ const AUDIT = function () {
 (async () => {
   const args = process.argv.slice(2);
   const explicitTargets = args.length > 0;
-  const targets = explicitTargets ? args : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p));
+  const targets = explicitTargets ? args
+    : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p)).concat([EDITOR_HARNESS]);
   const browser = await puppeteer.launch({
     headless: process.env.HEADLESS === '1', args: ['--no-sandbox', '--window-size=1280,900'],
     executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium', defaultViewport: { width: 1280, height: 900 },

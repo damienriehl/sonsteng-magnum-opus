@@ -230,13 +230,17 @@ html.type-lg .eb-act__label { max-width: 7rem; opacity: 1; font-size: .8rem; }
   padding: .2em .1em;
 }
 .eb-status--draft { color: var(--brass, #a9822f); }
-.eb-status--pending { color: var(--brass, #a9822f); }
+.eb-status--pending { color: var(--brass-text, #75531e); }
 .eb-status--sending { color: var(--ink-faint, #8a7f6d); }        /* "Saving…" in-flight */
 .eb-status--live { color: var(--green, #2c4636); }               /* "Going live…" (accepted/in_flight) */
 .eb-status--ok, .eb-status--sent { color: var(--green, #2c4636); }
 .eb-status--warn { color: var(--brass, #a9822f); }
 .eb-status--stop, .eb-status--err { color: var(--claret, #7c1e2b); }
 .eb-status--faint { color: var(--ink-faint, #8a7f6d); }
+
+/* This action is injected inside generated page typography, whose compact
+   button defaults can otherwise fall below WCAG 2.5.8's 24px minimum. */
+.eb-overrides__row .btn { min-height: 24px; }
 
 /* gentle notes ("Damien will apply wording here", hash-moved, etc.) */
 .eb-note {
@@ -299,7 +303,7 @@ html.type-lg .eb-note { font-size: .95rem; }
   font-weight: 700;
   letter-spacing: .1em;
   text-transform: uppercase;
-  color: var(--brass-lite, #c19a44);
+  color: var(--brass-lite-text, #d3ae5c);
   border: 1px solid var(--brass, #a9822f);
   border-radius: var(--radius, 3px);
   padding: .2em .5em;
@@ -339,7 +343,7 @@ html.type-lg .eb-note { font-size: .95rem; }
 }
 /* Pressed: near-black on brass = 4.89:1. Unpressed inherits the banner's cream
    on green = 8.99:1. Both clear 4.5:1 for the small uppercase label. */
-.editor-banner .segmented-toggle button[aria-pressed="true"] { background: var(--brass, #a9822f); color: var(--ink, #1d1a16); }
+.editor-banner .segmented-toggle button[aria-pressed="true"] { background: var(--brass-lite, #c19a44); color: var(--ink, #1d1a16); }
 .editor-banner .segmented-toggle button[aria-pressed="false"] { color: var(--ink-invert, #f4efe4); }
 .editor-banner .segmented-toggle button[aria-pressed="false"]:hover { background: rgba(255, 255, 255, .14); }
 /* Visible focus ring on the type-size toggle (design-direction §9 — a ring on
@@ -383,7 +387,7 @@ html.type-lg .editor-bar__status { font-size: 1.2rem; }
   font-size: .72rem;
   text-transform: uppercase;
   letter-spacing: .08em;
-  color: var(--ink-faint, #8a7f6d);
+  color: var(--ink-faint-text, #6b5b50);
   margin-bottom: .4rem;
 }
 .editor-bar__preview-text {
@@ -599,7 +603,7 @@ html.type-lg .comment-bubble textarea { font-size: 1.25rem; }
   font-size: .68rem;
   text-transform: uppercase;
   letter-spacing: .06em;
-  color: var(--ink-faint, #8a7f6d);
+  color: var(--ink-faint-text, #6b5b50);
 }
 .eb-comment-bubble__status {
   font-family: var(--font-mono, ui-monospace, monospace);

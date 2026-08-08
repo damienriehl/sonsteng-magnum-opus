@@ -278,6 +278,7 @@
       occurrences: Array.isArray(desc.occurrences) ? desc.occurrences.slice() : [],
       shared: Array.isArray(desc.occurrences) && desc.occurrences.length > 1,
       originalText: desc.original_text != null ? desc.original_text : (elx.textContent || ''),
+      originalHtml: elx.innerHTML,
       originalHash: desc.original_hash || '',
       suggestionId: null, snapshot: null, state: ST.IDLE, dirty: false,
       _debounce: null, _retry: null, _retryDelay: 0, _queued: false, // auto-save
@@ -295,9 +296,13 @@
     var rec = { page: PAGE, source_ref: s.ref, original_hash: s.originalHash,
                 suggestion_id: s.suggestionId, new_text: s.snapshot, ts: Date.now() };
     SS.set(draftKey(s), JSON.stringify(rec));
-    LS.set(draftKey(s), JSON.stringify(rec));   // recovery-only mirror, never the live read
+    LS.set(draftKey(s), JSON.stringify(rec));   // survives a closed tab/browser restart
   }
-  function loadDraft(s) { try { return JSON.parse(SS.get(draftKey(s)) || 'null'); } catch (e) { return null; } }
+  function loadDraft(s) {
+    try {
+      return JSON.parse(SS.get(draftKey(s)) || LS.get(draftKey(s)) || 'null');
+    } catch (e) { return null; }
+  }
   function clearDraft(s) { SS.del(draftKey(s)); LS.del(draftKey(s)); }
 
   /* ---------- reconcile a draft against the block's CURRENT hash (R8) ------- */
@@ -310,15 +315,38 @@
       s.snapshot = s.originalText;
       s.dirty = false;
       s.state = ST.IDLE;
-      setBlockText(s, s.originalText);
+      restoreOriginal(s);
       s.el.classList.remove('editing', 'dirty');
       if (activeRef === s.ref) hideBar();
       showNote(s, 'This paragraph was updated on the site, so your unsent draft here was set aside. Nothing was lost anywhere else — just start fresh.');
       log('DRAFT discarded (hash moved) ref=' + s.ref);
+      return;
     }
+    if (typeof rec.new_text !== 'string' || rec.new_text === s.originalText) {
+      clearDraft(s);
+      return;
+    }
+    // A valid draft is newer user intent than both the rendered source and any
+    // pending overlay. Put it back on screen immediately after refresh, with an
+    // explicit unsent status, and preserve the original id for an idempotent
+    // retry. Previously the record existed but was never rehydrated, leaving
+    // John's wording stranded invisibly in storage.
+    s.suggestionId = rec.suggestion_id || s.suggestionId || uuid();
+    s.snapshot = rec.new_text;
+    s.dirty = true;
+    setBlockText(s, rec.new_text);
+    s.el.classList.add('dirty');
+    setLocalStatus(s, 'Draft restored — not sent yet', 'err');
+    log('DRAFT restored ref=' + s.ref + ' id=' + s.suggestionId.slice(0, 8));
   }
 
   function setBlockText(s, text) { s.el.textContent = text; }   // never innerHTML
+  function restoreOriginal(s) { s.el.innerHTML = s.originalHtml; }
+  function htmlForText(text) {
+    var holder = document.createElement('span');
+    holder.textContent = text == null ? '' : String(text);
+    return holder.innerHTML;
+  }
 
   /* ---------- computed values: locked, but never a dead end -------------- */
   var lockedDialogEl = null;
@@ -1151,6 +1179,7 @@
         s._retryDelay = 0;
         clearDraft(s);
         s.originalText = textAtClick;               // the sent text is now the baseline
+        s.originalHtml = htmlForText(textAtClick);  // keep rollback DOM in step with it
         s.suggestionId = null;                      // rotate: next burst mints a fresh id
         // Honest status from the STORE (accepted "Going live…" under DIRECT_APPLY,
         // else "Pending review") — never an optimistic "Saved".
@@ -1230,7 +1259,7 @@
       original_hash: s.originalHash, op: 'page_override', page: PAGE
     }}).then(function (out) {
       if (!out.ok) { handleSendError(s, out, { pageOverride: true }); return; }
-      clearDraft(s); s.originalText = textAtClick; s.suggestionId = null;
+      clearDraft(s); s.originalText = textAtClick; s.originalHtml = htmlForText(textAtClick); s.suggestionId = null;
       var stillDirty = normalize(s.snapshot) !== normalize(textAtClick);
       s.dirty = stillDirty;
       if (stillDirty) {
@@ -1355,6 +1384,11 @@
       // reload THIS block: the source moved under John — discard draft gently.
       s.state = ST.IDLE; barDisable(false);
       clearDraft(s); s.suggestionId = null; s.snapshot = s.originalText; s.dirty = false;
+      // The server rejected this draft because the rendered source is stale.
+      // Do not leave the rejected wording on screen looking successfully saved.
+      // Restore the original DOM (not textContent) so inline formatting survives
+      // until the requested page reload fetches the new authoritative version.
+      restoreOriginal(s);
       s.el.classList.remove('editing', 'dirty'); s.el.removeAttribute('contenteditable');
       hideBar();
       showNote(s, 'This paragraph was just updated on the site. Please reload the page and make your change again — your other edits are safe.');
@@ -1383,7 +1417,7 @@
     clearTimers(s);                                 // cancel any pending auto-send/retry
     s.state = ST.IDLE;
     s.snapshot = s.originalText;
-    setBlockText(s, s.originalText);
+    restoreOriginal(s);
     s.el.classList.remove('editing', 'dirty');
     s.el.removeAttribute('contenteditable');
     s.dirty = false;
@@ -1482,7 +1516,9 @@
   function syncBar(s) {
     if (!bar || bar.hidden || active() !== s) return;
     setBarStatus(s.dirty
-      ? 'Saving automatically — your change goes live on its own.'
+      ? (DIRECT_APPLY
+          ? 'Saving automatically — your change goes live on its own.'
+          : 'Saving automatically — your change goes to Damien for review.')
       : 'Click into the paragraph and edit the wording.');
   }
   function setBarStatus(msg) { if (barStatusEl) barStatusEl.textContent = msg || ''; }
@@ -1923,13 +1959,18 @@
         s.el.classList.add('eb--has-margin');
         marginBubbles.push(b);
       } else {
-        var pill = s._pendingStatuses.length ? el('span', 'eb-status') : statusPill(s);
-        if (s._pendingStatuses.length) {
+        // A restored draft is newer than any server-side pending item. Keep its
+        // unsent warning as the session's primary status and render older
+        // suggestion history in a separate pill; otherwise "Pending" can make
+        // John's unsent wording look submitted.
+        var preserveDraftStatus = draftPresent(s);
+        var pill = (s._pendingStatuses.length || preserveDraftStatus) ? el('span', 'eb-status') : statusPill(s);
+        if (s._pendingStatuses.length || preserveDraftStatus) {
           pill.setAttribute('aria-live', 'polite');
           (s._tools || toolsEl(s)).appendChild(pill);
         }
         s._pendingStatuses.push(pill);
-        s._status = pill;
+        if (!preserveDraftStatus) s._status = pill;
         // prose/json_scalar suggestion — paint the new_text into the block
         // (WYSIWYG) when it's safe, else fall back to the pill-only status
         // (today's behavior). Attribution rides on the pill either way.
@@ -2000,11 +2041,13 @@
       document.documentElement.classList.toggle('type-lg', on);
       bLg.setAttribute('aria-pressed', on ? 'true' : 'false');
       bStd.setAttribute('aria-pressed', on ? 'false' : 'true');
-      LS.set('sonsteng_type_lg', on ? '1' : '0');
+      LS.set('sonsteng-type-lg', on ? '1' : '0');
     }
     bStd.addEventListener('click', function () { setTypeLg(false); });
     bLg.addEventListener('click', function () { setTypeLg(true); });
-    if (LS.get('sonsteng_type_lg') === '1') setTypeLg(true);
+    // Use the same preference key as the public platform. Read the old editor-
+    // only spelling once so existing users keep their choice during migration.
+    if (LS.get('sonsteng-type-lg') === '1' || LS.get('sonsteng_type_lg') === '1') setTypeLg(true);
     updateBanner();
     // Let the banner degrade to "paused" locally even if a re-poll never lands.
     setInterval(updateBanner, 30000);
@@ -2119,6 +2162,7 @@
       var editable = !commentOnly;
       var s = makeSession(desc, elx, editable, commentOnly);
       wireBlock(s);
+      reconcileDraft(s);
     });
     if (missing.length) log('WALKER MISMATCH: ' + missing.length + ' block index(es) not found — map/page drift');
 

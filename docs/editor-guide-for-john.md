@@ -1,15 +1,19 @@
 # Editing the Practicum — a one-page guide for Prof. Sonsteng
 
-*Your edits publish themselves — usually within two minutes — and **every version is kept**,
-so any change can be undone with one click. You can never break anything. Edit freely.
+*Your edits publish themselves to the editing site — usually within two minutes — and
+**every version is kept**, so any change can be undone with one click. You can never break
+anything. Edit freely. Damien publishes the reviewed production release separately.*
 Bigger changes — adding or removing paragraphs, or anything you ask for across many pages —
 go to Damien first, so those waiting a little longer is normal.*
 
-## Your edits go live on their own — in about 2 minutes
+## Your edits appear on the editing site on their own — in about 2 minutes
 
-On the practice site, you no longer have to wait for Damien. When you **Save my change**,
-it publishes to the live practicum **automatically within ~2 minutes**. You still can't break
-anything — every version is kept, and any change can be undone with one click (below).
+On the editing site, you no longer have to wait for Damien to record a wording change. Click
+**Edit**, type directly in the paragraph, and pause for a moment: the editor saves as you type.
+Click **Done** when you have finished that paragraph. Your wording appears on the editing site
+**automatically within ~2 minutes**. Damien remains the publisher of the public production site.
+You still can't break anything — every version is kept, and any change can be undone with one
+click (below).
 
 - **The pills tell you where a change stands.** Right after you save, a small label shows
   **"Going live…"**; once it's published it clears. If something couldn't be applied cleanly,
@@ -55,9 +59,11 @@ any time to make everything bigger.
 ## The things you can do
 
 **1. Fix the words (edit in place).**
-Click any paragraph. It becomes editable, like a Word document. Change a word, add a sentence,
-delete one. When you're happy, click **Save my change**. You'll see **Sent ✓**, then
-**"Going live…"** — and about two minutes later your wording *is* the website.
+Click the **Edit** pencil beside a paragraph. It becomes editable, like a Word document. Change
+a word, add a sentence, or delete one. The editor saves after you pause; click **Done** when you
+have finished that paragraph. You'll see **"Going live…"** — and about two minutes later your
+wording appears on the editing site. If you refresh or close the tab before it sends, the editor
+restores the draft and labels it **"Draft restored — not sent yet."**
 
 **2. Leave a note (comment).**
 Select some text with your mouse (drag across it), and a small **Comment** button appears. Click
@@ -97,8 +103,9 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 
 ## What happens next
 
-- **Your edit publishes itself.** The system double-checks it, rebuilds the site, and puts it
-  live — no waiting on Damien. He sees every change, and Roger sees it too.
+- **Your edit publishes itself to the editing site.** The system double-checks it, rebuilds that
+  site, and keeps the source and history. Damien publishes the public production release under
+  the separate publisher role. He sees every change, and Roger sees it too.
 - **Your wording is right there when you come back.** Open your link again and the page shows
   what you wrote, exactly as you left it. Click the paragraph to keep refining it.
 - **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not
