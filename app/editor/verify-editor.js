@@ -176,6 +176,13 @@ async function run() {
       b3after.state === 'EDITING' && b3after.dirty === true && !!b3after.suggestionId,
       'state=' + b3after.state + ' dirty=' + b3after.dirty);
     await page.evaluate(() => window.SonstengEditor.clickCancel(3));
+    const formattedRestored = await page.evaluate(() => ({
+      strong: document.querySelectorAll('[data-eb-index="3"] strong').length,
+      text: window.SonstengEditor.blockText(3)
+    }));
+    assert('C3a cancelling a formatted edit restores the original inline markup',
+      formattedRestored.strong === 1 && /Written objectives/.test(formattedRestored.text),
+      'strong=' + formattedRestored.strong + ' text="' + formattedRestored.text.slice(0, 32) + '"');
 
     /* --- MX: authored and computed text share one visual sentence (U7) ---- */
     const mixedBefore = await page.evaluate(() => {
@@ -363,12 +370,46 @@ async function run() {
       c && c.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true, cancelable: true }));
     });
 
+    /* --- R8 valid unsent draft survives a real page refresh --------------- */
+    await page.evaluate(() => window.SonstengEditor.typeInto(1, 'A draft John expects to survive refresh.'));
+    const refreshId = await page.evaluate(() => window.SonstengEditor.block(1).suggestionId);
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+    const refreshedDraft = await page.evaluate(() => ({
+      block: window.SonstengEditor.block(1),
+      text: window.SonstengEditor.blockText(1),
+      status: window.SonstengEditor.statusText(1)
+    }));
+    assert('R8 a valid unsent draft is visible after refresh with the same id and an honest status',
+      refreshedDraft.text === 'A draft John expects to survive refresh.' &&
+      refreshedDraft.block.dirty === true && refreshedDraft.block.suggestionId === refreshId &&
+      /Draft restored/.test(refreshedDraft.status),
+      'restored=' + refreshedDraft.text + ' id-preserved=' + (refreshedDraft.block.suggestionId === refreshId));
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
+    const recoveredDraft = await page.evaluate(() => ({
+      block: window.SonstengEditor.block(1), text: window.SonstengEditor.blockText(1)
+    }));
+    assert('R8b the local recovery mirror restores a draft after session storage is lost',
+      recoveredDraft.text === 'A draft John expects to survive refresh.' &&
+      recoveredDraft.block.suggestionId === refreshId && recoveredDraft.block.dirty === true,
+      'text-restored=' + (recoveredDraft.text === 'A draft John expects to survive refresh.') +
+      ' id-preserved=' + (recoveredDraft.block.suggestionId === refreshId));
+    await page.evaluate(() => window.SonstengEditor.clickCancel(1));
+    // page.reload removes the request-radius mock installed above; restore it
+    // before the later scoped-change ceiling/confirmation contract exercises it.
+    await installRadiusMock(page);
+
     /* --- E: edit -> autocorrect preview -> Send -> Sent ✓ -> inline status - */
     const EDIT1 = 'You are an attorney for Devon Halvard, arrested after a late-night stop on an icy road.';
     await page.evaluate((t) => window.SonstengEditor.typeInto(1, t), EDIT1);
     let s1 = await page.evaluate(() => window.SonstengEditor.block(1));
     assert('E1 editable prose enters edit + mints one suggestion_id on input',
       s1.state === 'EDITING' && !!s1.suggestionId && s1.dirty === true, 'state=' + s1.state + ' id=' + (s1.suggestionId || '').slice(0, 8));
+    const reviewBar = await page.evaluate(() => window.SonstengEditor.barStatus());
+    assert('E1b review-mode save copy says the edit goes to Damien, never that it is already going live',
+      /Damien for review/i.test(reviewBar) && !/goes live/i.test(reviewBar), 'bar="' + reviewBar + '"');
     await page.evaluate(() => window.SonstengEditor.openPreview(1));
     const prev = await page.evaluate(() => ({ vis: window.SonstengEditor.previewVisible(), text: window.SonstengEditor.previewText() }));
     assert('E2 autocorrect preview shows EXACTLY what will be sent (before submit)',
@@ -419,6 +460,32 @@ async function run() {
     const idOnSrvAfter = await page.evaluate((id) => window.__MOCK_CTRL__.server().ids.indexOf(id) !== -1, idA);
     assert('A3 resend after re-auth reuses the SAME id (idempotent)', idOnSrvAfter === true, 'server has id ' + (idA || '').slice(0, 8));
     await page.evaluate(() => window.__MOCK_CTRL__.setSlow(0));
+
+    /* --- A4: stale rejection restores authoritative copy ----------------- */
+    const staleOriginal = await page.evaluate(() => window.SonstengEditor.block(1).originalText);
+    const staleCallsBefore = await page.evaluate(() => window.__MOCK_CTRL__.server().calls);
+    await page.evaluate(() => {
+      window.__MOCK_CTRL__.forceOnce('stale_page');
+      window.SonstengEditor.typeInto(1, 'Rejected stale wording must not look live.');
+      window.SonstengEditor.clickSave(1);
+    });
+    await page.waitForFunction((callsBefore) =>
+      window.__MOCK_CTRL__.server().calls > callsBefore &&
+      window.SonstengEditor.block(1).state === 'IDLE' &&
+      /updated on the site/.test(window.SonstengEditor.noteText(1)),
+    { timeout: 4000 }, staleCallsBefore);
+    const staleResult = await page.evaluate(() => ({
+      text: window.SonstengEditor.blockText(1),
+      block: window.SonstengEditor.block(1),
+      editable: document.querySelector('[data-eb-index="1"]').hasAttribute('contenteditable')
+    }));
+    assert('A4 stale rejection restores authoritative copy instead of displaying an unsaved draft',
+      staleResult.block.dirty === false && staleResult.editable === false &&
+      await page.evaluate((actual, expected) =>
+        window.SonstengEditor.normalize(actual) === window.SonstengEditor.normalize(expected),
+      staleResult.text, staleOriginal),
+      'text="' + staleResult.text.slice(0, 48) + '" original="' + staleOriginal.slice(0, 48) +
+      '" dirty=' + staleResult.block.dirty);
 
     /* --- S: selection-comment on a prose block (block 4) ------------------- */
     const full4 = await page.evaluate(() => window.SonstengEditor.blockText(4));
