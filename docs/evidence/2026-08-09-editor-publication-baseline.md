@@ -54,3 +54,8 @@ it is not a merge target.
 2. Require the dedicated daemon checkout to be clean and at the expected canonical SHA.
 3. Rebuild the site/editor map and require generated-map parity.
 4. Stop rather than migrate if any unresolved row, dirty checkout, or map mismatch appears.
+
+The immediate pre-migration recheck completed at `2026-08-09T17:00:26.223821+00:00` through the
+aggregate digest endpoint using the daemon's configured environment: **30 total rows, 0 unresolved**.
+No suggestion content or credential value was printed. The migration fence passed; all rows were
+terminal.
