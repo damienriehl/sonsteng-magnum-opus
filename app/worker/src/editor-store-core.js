@@ -656,7 +656,7 @@ export class EditorStoreCore {
     if (this._one("SELECT id FROM production_releases WHERE id=?", input.id))
       return { ok:false, reason:"release_exists" };
 
-    if (this._one("SELECT id FROM production_releases WHERE state IN ('prepared','authorized','executing') LIMIT 1"))
+    if (this._one("SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') LIMIT 1"))
       return { ok:false, reason:"active_release" };
 
     const frontier = this._one(
@@ -676,8 +676,11 @@ export class EditorStoreCore {
     if (!batches.length) return { ok:false, reason:"empty_membership" };
     if (batches.some((b) => !b.commit_sha || b.generator_id !== input.generator_id))
       return { ok:false, reason:"stale_batch_evidence" };
+    if (batches[batches.length - 1].commit_sha !== input.candidate_sha)
+      return { ok:false, reason:"stale_candidate" };
 
     const members = [];
+    const groups = new Map();
     for (const batch of batches) {
       const rows = this._all(
         "SELECT id,group_id,status FROM suggestions WHERE apply_batch_id=? ORDER BY id", batch.batch_id);
@@ -685,8 +688,9 @@ export class EditorStoreCore {
         return { ok:false, reason:"stale_member" };
       for (const row of rows) {
         if (row.group_id) {
-          const group = this._all(
-            "SELECT apply_batch_id,status FROM suggestions WHERE group_id=?", row.group_id);
+          if (!groups.has(row.group_id)) groups.set(row.group_id, this._all(
+            "SELECT apply_batch_id,status FROM suggestions WHERE group_id=?", row.group_id));
+          const group = groups.get(row.group_id);
           if (group.some((g) => g.apply_batch_id !== batch.batch_id || g.status !== STATUS.APPLIED))
             return { ok:false, reason:"partial_group" };
         }
@@ -850,6 +854,17 @@ export class EditorStoreCore {
       "SELECT id,editor,origin,kind,page,source_ref,original_text,new_text,comment,group_id,status,apply_batch_id,created_at,updated_at FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
       batch.batch_id, STATUS.APPLIED) }));
     return { release, batches };
+  }
+
+  publisherSummary() {
+    const frontier = this._one(
+      "SELECT b.created_at,b.batch_id FROM production_releases r JOIN apply_batches b ON b.batch_id=r.target_batch_id WHERE r.state IN ('verified','complete') ORDER BY r.updated_at DESC,r.id DESC LIMIT 1");
+    const row = frontier ? this._one(
+      "SELECT COUNT(*) AS count FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done' AND (b.created_at>? OR (b.created_at=? AND b.batch_id>?))",
+      STATUS.APPLIED,frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
+      "SELECT COUNT(*) AS count FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done'",
+      STATUS.APPLIED);
+    return { eligible:Number(row?.count || 0) };
   }
 
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is

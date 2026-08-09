@@ -97,7 +97,7 @@ test("publisher assets bind the immutable payload, announce results, restore foc
 
 test("publisher route is distinct, human Publisher-only, and review links to it", async () => {
   const response = await editorFetch(new Request("https://edit.example/edit/publish"), {
-    EDIT_ENVIRONMENT: "production", EDIT_ORIGIN: "https://edit.example",
+    PROD_RELEASE_LEDGER: "true", EDIT_ORIGIN: "https://edit.example",
     EDITOR: { getByName: () => ({ publisherContext: async () => context }) },
     ACCESS_EMAIL_SLOTS: JSON.stringify({ "damien@example.com": { slot: "damien", scopes: ["publisher"] } }),
     CF_ACCESS_AUD: "aud", CF_ACCESS_TEAM_DOMAIN: "team.example",

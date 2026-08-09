@@ -154,7 +154,8 @@
     // DR attribution without widening the token path: the invariant in
     // editor-auth.js ("admin is NEVER reachable from an edit/instructor token,
     // separate secret, separate record") stays literally true for ?t= tokens.
-    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1},\"admin\":{\"admin\":1}}",
+    "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1,\"publisher\":1},\"admin\":{\"admin\":1}}",
+    "PROD_RELEASE_LEDGER": "true",
     // Suggestion ceilings (see docs/research/editor-apply-spec.md §Ceilings).
     "EDIT_MAX_PENDING_PER_EDITOR": "200",
     "EDIT_MAX_DAILY_PER_EDITOR": "500",
@@ -203,7 +204,8 @@
         "EDIT_ACCESS_AUD": "ff942be4e3b4957a8106266e057dc916ac4153f8f28a7698186e8725d5c54ecc",
         "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
         "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
-        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1},\"admin\":{\"admin\":1}}",
+        "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1,\"publisher\":1},\"admin\":{\"admin\":1}}",
+        "PROD_RELEASE_LEDGER": "true",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",
@@ -265,6 +267,7 @@
         // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).
         "EDIT_ORIGIN": "https://sonsteng-chat-production.damienriehl.workers.dev",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",
+        "PROD_RELEASE_LEDGER": "false",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",

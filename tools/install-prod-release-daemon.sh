@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DAEMON_ROOT="${SONSTENG_DAEMON_ROOT:-$HOME/.local/share/sonsteng-daemon/checkout}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sonsteng-prod-release/env"
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/sonsteng-prod-release"
 SERVICE="sonsteng-prod-release.service"
 TIMER="sonsteng-prod-release.timer"
 
@@ -24,14 +25,14 @@ fi
   exit 1
 }
 
-mkdir -p "$UNIT_DIR" "$(dirname "$ENV_FILE")" "$DAEMON_ROOT/.locks"
+mkdir -p "$UNIT_DIR" "$(dirname "$ENV_FILE")" "$STATE_ROOT" "$DAEMON_ROOT/.locks"
 if [[ ! -f "$ENV_FILE" ]]; then
   umask 077
   cat > "$ENV_FILE" <<EOF
 # Config-off by design. Keep false until the migration, known-good manifest,
 # credential separation, live canary, and recovery drills are recorded.
 SONSTENG_PROD_RELEASE_ENABLED=false
-SONSTENG_PROD_LEDGER_URL=https://sonsteng-chat-production.damienriehl.workers.dev
+SONSTENG_PROD_LEDGER_URL=https://sonsteng-chat.damienriehl.workers.dev
 SONSTENG_PROD_RELEASE_BEARER=
 SONSTENG_PROD_PAGES_PROJECT=sonsteng
 SONSTENG_PROD_PAGES_ARTIFACT=$DAEMON_ROOT/site
@@ -39,7 +40,7 @@ SONSTENG_PROD_PAGES_PROVENANCE_URL=https://sonsteng.damienriehl.com/platform/
 SONSTENG_PROD_WORKER_CONFIG=$DAEMON_ROOT/app/worker/wrangler.jsonc
 SONSTENG_PROD_WORKER_PROVENANCE_URL=https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance
 SONSTENG_PROD_REPO=$DAEMON_ROOT
-SONSTENG_PROD_MANIFEST=$DAEMON_ROOT/.release/authorized-manifest.json
+SONSTENG_PROD_MANIFEST=$STATE_ROOT/authorized-manifest.json
 SONSTENG_PROD_LOCK=$DAEMON_ROOT/.locks/daemon.lock
 # Set exactly one to true only after the transient pairing has been proven.
 SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES=false

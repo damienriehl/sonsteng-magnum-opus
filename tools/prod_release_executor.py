@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import pathlib
 import subprocess
 import urllib.request
 from collections.abc import Callable
@@ -118,6 +119,14 @@ class GitRefAdapter:
                            check=True, capture_output=True, text=True)
         return result.stdout.strip()
 
+    def require_clean_candidate(self, sha):
+        head = self._run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+                         capture_output=True, text=True).stdout.strip()
+        status = self._run(["git", "status", "--porcelain", "--untracked-files=all"],
+                           cwd=self.repo, check=True, capture_output=True, text=True).stdout
+        if head != sha or status.strip():
+            raise ReleaseError("candidate checkout is not the clean frozen commit")
+
 
 class CandidateValidator:
     """Prove that the frozen manifest reproduces the authorized git frontier."""
@@ -138,6 +147,7 @@ class CandidateValidator:
             raise ReleaseError("candidate is not descended from production base")
         if self.git.tree(release.candidate_sha) != self.manifest.get("candidate_tree"):
             raise ReleaseError("candidate tree mismatch")
+        self.git.require_clean_candidate(release.candidate_sha)
 
 
 class WranglerPagesAdapter:
@@ -145,15 +155,20 @@ class WranglerPagesAdapter:
 
     name = "pages"
 
-    def __init__(self, project, artifact_dir, provenance_url, run=subprocess.run,
-                 opener=urllib.request.urlopen):
+    def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
+                 run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
         self.project, self.artifact_dir = project, artifact_dir
-        self.provenance_url, self._run, self._opener = provenance_url, run, opener
+        self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
+        self.provenance_url, self._run, self._opener, self.timeout = provenance_url, run, opener, timeout
 
     def deploy(self, manifest):
+        artifact = pathlib.Path(self.artifact_dir).resolve()
+        if not artifact.is_relative_to(self.candidate_root):
+            raise ReleaseError("Pages artifact is outside the frozen candidate checkout")
         result = self._run(["npx", "wrangler", "pages", "deploy", self.artifact_dir,
             "--project-name", self.project, "--commit-hash", manifest.candidate_sha],
-            check=True, capture_output=True, text=True)
+            cwd=self.candidate_root, check=True, capture_output=True, text=True,
+            timeout=self.timeout)
         # Store an opaque digest, not raw CLI output (which may include URLs or account data).
         return {"provider_id": hashlib.sha256(result.stdout.encode()).hexdigest()[:24]}
 
@@ -167,19 +182,25 @@ class WranglerWorkerAdapter:
 
     name = "worker"
 
-    def __init__(self, config, provenance_url, run=subprocess.run,
-                 opener=urllib.request.urlopen):
-        self.config, self.provenance_url, self._run, self._opener = config, provenance_url, run, opener
+    def __init__(self, config, provenance_url, candidate_root=None, run=subprocess.run,
+                 opener=urllib.request.urlopen, timeout=240):
+        self.config, self.provenance_url = config, provenance_url
+        self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(config).parents[2]).resolve()
+        self._run, self._opener, self.timeout = run, opener, timeout
 
     def deploy(self, manifest):
+        config = pathlib.Path(self.config).resolve()
+        if not config.is_relative_to(self.candidate_root):
+            raise ReleaseError("Worker config is outside the frozen candidate checkout")
         uploaded = self._run(["npx", "wrangler", "versions", "upload", "--config", self.config,
             "--message", "release:" + manifest.candidate_sha], check=True,
-            capture_output=True, text=True)
+            cwd=self.candidate_root, capture_output=True, text=True, timeout=self.timeout)
         version = uploaded.stdout.strip().splitlines()[-1].strip()
         if not version or len(version) > 256:
             raise ReleaseError("Worker upload did not return a bounded version identifier")
         self._run(["npx", "wrangler", "versions", "deploy", version, "--config", self.config,
-                   "--yes"], check=True, capture_output=True, text=True)
+                   "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
+                  text=True, timeout=self.timeout)
         return {"provider_id": hashlib.sha256(version.encode()).hexdigest()[:24]}
 
     def provenance(self):
@@ -201,7 +222,9 @@ class ProductionExecutor:
         # credentials never enter journals or provider receipts.
         safe = {key: value for key, value in detail.items()
                 if key in {"manifest_hash", "candidate_sha", "pages_id", "worker_id", "reason"}}
-        self.ledger.transition(release.id, state, safe, release.fencing_token)
+        result = self.ledger.transition(release.id, state, safe, release.fencing_token)
+        if not result or result.get("ok") is not True:
+            raise ReleaseError("ledger rejected transition: " + str((result or {}).get("reason", "unknown")))
 
     def run_once(self):
         release = self.ledger.claim_authorized()
@@ -231,7 +254,10 @@ class ProductionExecutor:
                         candidate_sha=release.candidate_sha)
             return {"id": release.id, "state": "complete", "receipts": receipts}
         except Exception as exc:
-            self._event(release, "failed_fenced", reason=type(exc).__name__)
+            try:
+                self._event(release, "failed_fenced", reason=type(exc).__name__)
+            except ReleaseError:
+                pass
             reason = str(exc) if isinstance(exc, ReleaseError) else "provider operation failed"
             raise ReleaseError(f"{reason}; release is fenced") from exc
 

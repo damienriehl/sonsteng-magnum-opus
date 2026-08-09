@@ -11,8 +11,9 @@ verification, and recorded-pair recovery. The executor and timer remain config-o
 enablement gate in that runbook is recorded.
 
 The Access-door operations below remain authoritative for login, identity mapping, routing, and
-revocation. They do not grant production publication authority: Publisher is an independent scope,
-and only the frozen release workflow may publish.
+revocation. The Access-only `damienadmin` slot carries the independent Publisher scope on this
+canonical DEV/apply ledger. The separate production Worker carries neither Access nor Publisher
+scope. These grants do not themselves publish; only the frozen release workflow may do so.
 
 ---
 

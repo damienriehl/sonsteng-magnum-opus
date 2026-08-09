@@ -5,6 +5,10 @@ content, and visible on DEV without changing public production. Production chang
 human Publisher authorizes an immutable prepared batch and the separate release executor verifies
 that exact batch on both Pages and the production Worker/editor map.
 
+The release ledger lives in the canonical editor Durable Object on the Access-protected editing
+Worker, because that store owns the completed DEV apply batches. The production Worker is a release
+target and provenance source; its separate editor store is never publication authority.
+
 ## Writer inventory and closed bypasses
 
 | Possible writer | Repository contract |

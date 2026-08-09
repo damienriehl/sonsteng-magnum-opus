@@ -441,6 +441,15 @@ test("PROD carries no Access config, so its door is closed by construction (R7)"
     "the combined-scope slot must not exist in PROD");
 });
 
+test("the Access-only Damien slot is the Publisher on the canonical DEV ledger", () => {
+  const cfg = wranglerConfig();
+  for (const vars of [cfg.vars, cfg.env.dev.vars]) {
+    assert.equal(JSON.parse(vars.EDIT_TOKEN_SCOPES).damienadmin.publisher, 1);
+    assert.equal(vars.PROD_RELEASE_LEDGER, "true");
+  }
+  assert.equal(cfg.env.production.vars.PROD_RELEASE_LEDGER, "false");
+});
+
 test("both browser origins are on the DEV allowlist while the tokens live (KTD6)", () => {
   const cfg = wranglerConfig();
   for (const [name, vars] of [["top-level", cfg.vars], ["env.dev", cfg.env.dev.vars]]) {

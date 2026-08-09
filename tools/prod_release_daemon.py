@@ -44,8 +44,10 @@ def main(argv=None):
     with open(args.lock, "a", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         ledger = LedgerHTTP(args.ledger_url, token)
-        pages = WranglerPagesAdapter(args.pages_project,args.pages_artifact,args.pages_provenance_url)
-        worker = WranglerWorkerAdapter(args.worker_config,args.worker_provenance_url)
+        pages = WranglerPagesAdapter(args.pages_project,args.pages_artifact,args.pages_provenance_url,
+                                     candidate_root=args.repo)
+        worker = WranglerWorkerAdapter(args.worker_config,args.worker_provenance_url,
+                                       candidate_root=args.repo)
         gate = CompatibilityGate(args.old_worker_accepts_new_pages,
                                  args.new_worker_accepts_old_pages)
         with open(args.manifest, encoding="utf-8") as source:

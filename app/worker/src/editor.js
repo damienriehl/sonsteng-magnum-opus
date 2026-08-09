@@ -187,11 +187,11 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await heartbeatEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/authorize" && request.method === "POST")
     return wrap(await publisherAuthorizeEndpoint(request, env, auth));
-  if (path === "/edit/v1/prod/releases/prepare" && request.method === "POST")
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/prepare" && request.method === "POST")
     return wrap(await productionPrepareEndpoint(request, env, auth));
-  if (path === "/edit/v1/prod/releases/claim" && request.method === "POST")
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/claim" && request.method === "POST")
     return wrap(await productionClaimEndpoint(request, env, auth));
-  if (path === "/edit/v1/prod/releases/transition" && request.method === "POST")
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/transition" && request.method === "POST")
     return wrap(await productionTransitionEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/status" && request.method === "GET")
     return wrap(await publisherReleaseEndpoint(request, env, auth));
@@ -275,17 +275,18 @@ export async function editorFetch(request, env, ctx) {
   if (path === "/edit/review") {
     if (request.method !== "GET" || !auth.scopes.admin.granted) return wrap(uniform404());
     const stub = editorStub(env);
-    const items = await stub.listAll();
-    const reverts = await stub.listRevertRequests(null);
-    const publisher = typeof stub.publisherContext === "function" ? await stub.publisherContext() : { batches: [] };
-    const eligible = (publisher.batches || []).reduce((n, b) => n + (b.changes || []).length, 0);
+    const [items, reverts, publisher] = await Promise.all([
+      stub.listAll(), stub.listRevertRequests(null),
+      typeof stub.publisherSummary === "function" ? stub.publisherSummary() : Promise.resolve({ eligible: 0 }),
+    ]);
+    const eligible = Number(publisher.eligible || 0);
     return wrap(renderReviewPage(items, reverts, eligible));
   }
 
   // Distinct human publication gate. Admin authority is intentionally not a
   // substitute for Publisher authority; insufficient scope stays uniform 404.
   if (path === "/edit/publish") {
-    if (request.method !== "GET" || env.EDIT_ENVIRONMENT !== "production" ||
+    if (request.method !== "GET" || env.PROD_RELEASE_LEDGER !== "true" ||
         !auth.scopes.publisher.granted || auth.credential_channel !== "access" || auth.service)
       return wrap(uniform404());
     const context = await editorStub(env).publisherContext();

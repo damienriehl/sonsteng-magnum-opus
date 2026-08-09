@@ -15,6 +15,8 @@ from prod_release_executor import (  # noqa: E402
     ReleaseError,
     LedgerHTTP,
     RecordedPairRestorer,
+    WranglerPagesAdapter,
+    WranglerWorkerAdapter,
 )
 
 
@@ -28,6 +30,7 @@ class Ledger:
 
     def transition(self, release_id, state, detail, fencing_token=None):
         self.events.append((release_id, state, detail))
+        return {"ok": True}
 
 
 class Target:
@@ -110,6 +113,21 @@ def test_live_provenance_mismatch_fences():
     assert ledger.events[-1][1] == "failed_fenced"
 
 
+def test_rejected_fence_halts_before_second_provider():
+    item = release()
+    class RejectingLedger(Ledger):
+        def transition(self, release_id, state, detail, fencing_token=None):
+            self.events.append((release_id, state, detail))
+            return {"ok": state == "executing", "reason": "stale_fence"}
+    ledger = RejectingLedger(item)
+    pages = Target("pages", observed=item.candidate_sha)
+    worker = Target("worker", observed=item.candidate_sha)
+    with pytest.raises(ReleaseError, match="ledger rejected transition"):
+        ProductionExecutor(ledger, pages, worker).run_once()
+    assert pages.deployed == [item.candidate_sha]
+    assert worker.deployed == []
+
+
 def test_manifest_rejects_frontier_gaps_and_changed_membership():
     with pytest.raises(ValueError, match="candidate frontier"):
         release(batch_commits=("c" * 40, "d" * 40))
@@ -128,6 +146,7 @@ def test_candidate_validator_binds_git_tree_ancestry_frontier_and_membership():
     class Git:
         def is_ancestor(self, base, candidate): return True
         def tree(self, candidate): return "tree-1"
+        def require_clean_candidate(self, candidate): return None
     manifest = {"base_sha":"a" * 40,"candidate_sha":"b" * 40,
                 "candidate_tree":"tree-1","suggestion_ids":["s1","s2"],
                 "batch_commits":["c" * 40,"b" * 40]}
@@ -168,3 +187,28 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert LedgerHTTP("https://edit.example", "secret", opener).claim_authorized() is None
     assert seen["X-edit-request"] == "1"
     assert seen["Authorization"] == "Bearer secret"
+
+
+def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
+    root = tmp_path / "candidate"
+    site = root / "site"
+    config = root / "app" / "worker" / "wrangler.jsonc"
+    site.mkdir(parents=True)
+    config.parent.mkdir(parents=True)
+    config.write_text("{}", encoding="utf-8")
+    calls = []
+    class Result:
+        stdout = "worker-version\n"
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return Result()
+    item = release()
+    WranglerPagesAdapter("sonsteng", site, "https://pages.example", root,
+                         run=run, timeout=17).deploy(item)
+    WranglerWorkerAdapter(config, "https://worker.example", root,
+                          run=run, timeout=19).deploy(item)
+    assert [call[1]["timeout"] for call in calls] == [17, 19, 19]
+    assert all(call[1]["cwd"] == root.resolve() for call in calls)
+    with pytest.raises(ReleaseError, match="outside"):
+        WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
+                             root, run=run).deploy(item)

@@ -19,7 +19,7 @@ function seedApplied(core, batchId, ids, at) {
 function release(over = {}) {
   return { id:"release-1", idempotency_key:"idem-1", request_digest:"digest-1",
     actor:"service:builder", credential_channel:"bearer", target_environment:"production",
-    target_batch_id:"batch-2", base_sha:"prod-base", candidate_sha:"candidate-sha",
+    target_batch_id:"batch-2", base_sha:"prod-base", candidate_sha:"commit-batch-2",
     generator_id:"generator-v1", evidence_hash:"evidence-1", manifest_hash:"manifest-1",
     ancestry_verified:true, ...over };
 }
@@ -123,7 +123,8 @@ test("ledger executor contract resumes pages crash through exact completion", ()
 test("authorization is immutable and idempotent only for the identical binding", () => {
   const core = makeCore();
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
-  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1" })).release;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
   const input = authorize(draft);
   assert.equal(core.authorizeProductionRelease(input).ok, true);
   assert.equal(core.authorizeProductionRelease(input).replay, true);
@@ -137,7 +138,8 @@ test("authorization is immutable and idempotent only for the identical binding",
 test("Publisher cannot authorize a mutated prepared draft", () => {
   const core = makeCore();
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
-  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1" })).release;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
   assert.equal(core.authorizeProductionRelease(authorize(draft, {
     manifest_hash:"client-mutated-manifest" })).reason, "stale_draft");
   assert.equal(core.getProductionRelease(draft.id).state, "prepared");
@@ -155,6 +157,22 @@ test("partial, stale, nonancestor, and skipped apply-batch membership fail close
     ["suggestion-0001", "suggestion-0003"] })).reason, "membership_mismatch");
   core.sql.exec("UPDATE suggestions SET status='drift' WHERE id=?", "suggestion-0003");
   assert.equal(core.prepareProductionRelease(release()).reason, "stale_member");
+});
+
+test("preparation rejects mismatched frontier and every active release state", () => {
+  const core = makeCore();
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  assert.equal(core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"not-the-batch-commit" })).reason, "stale_candidate");
+  const prepared = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  for (const state of ["prepared","authorized","executing","pages_deployed","worker_deployed",
+    "verified","failed_fenced","restoring"]) {
+    core.sql.exec("UPDATE production_releases SET state=? WHERE id=?", state, prepared.id);
+    assert.equal(core.prepareProductionRelease(release({ id:`release-${state}`,
+      idempotency_key:`idem-${state}`, target_batch_id:"batch-1",
+      candidate_sha:"commit-batch-1" })).reason, "active_release", state);
+  }
 });
 
 function post(body) {

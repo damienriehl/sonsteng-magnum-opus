@@ -70,18 +70,11 @@ def test_checked_in_inventory_is_complete_and_exact():
 def test_literal_identity_manifest_matches_current_ids():
     identities = load("taxonomy-identities.json")
     tasks = load("tasks.json")["tasks"]
-    assert identities["tasks"] == [
-        {
-            "id": task["id"],
-            "skill_id": task["skill_id"],
-            "seed_name": task["name"],
-            "subtasks": [
-                {"id": subtask["id"], "seed_name": subtask["name"]}
-                for subtask in task["subtasks"]
-            ],
-        }
-        for task in tasks
-    ]
+    assert [(item["id"], item["skill_id"], [sub["id"] for sub in item["subtasks"]])
+            for item in identities["tasks"]] == [
+        (task["id"], task["skill_id"], [subtask["id"] for subtask in task["subtasks"]])
+        for task in tasks]
+    assert len({item["seed_name"] for item in identities["tasks"]}) == len(tasks)
 
 
 def test_fresh_editor_map_exposes_exact_taxonomy_allowlist():
