@@ -866,3 +866,53 @@ export async function publisherReleaseEndpoint(request, env, auth) {
   const release = await editorStub(env).getProductionRelease(id);
   return release ? json({ ok:true, release }) : editError("not_found", "Not found.", 404);
 }
+
+function releaseService(auth) {
+  return auth?.credential_channel === "bearer" && auth?.scopes?.admin?.granted;
+}
+
+export async function productionPrepareEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const allowed = ["id","idempotency_key","target_batch_id","base_sha","candidate_sha",
+    "generator_id","evidence_hash","manifest_hash"];
+  if (allowed.some((key) => typeof body[key] !== "string" || !body[key] || body[key].length > 256))
+    return editError("validation_error", "Incomplete release binding.", 400);
+  const binding = Object.fromEntries(allowed.map((key) => [key,body[key]]));
+  const result = await editorStub(env).prepareProductionRelease({ ...binding,
+    request_digest:await sha256Hex(JSON.stringify(binding)), actor:auth.editor || "service:release",
+    credential_channel:"bearer",target_environment:"production",ancestry_verified:body.ancestry_verified === true,
+    expected_batch_ids:Array.isArray(body.expected_batch_ids) ? body.expected_batch_ids : undefined,
+    expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined });
+  return result.ok ? json(result, result.replay ? 200 : 201) :
+    editError(result.reason || "validation_error", "Release preparation rejected.", 409);
+}
+
+export async function productionClaimEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  const body = await readJson(request) || {};
+  const result = await editorStub(env).claimAuthorizedProductionRelease({
+    id:typeof body.id === "string" ? body.id : undefined,
+    lease_ms:Number.isInteger(body.lease_ms) ? body.lease_ms : undefined,
+    actor:auth.editor || "service:release",credential_channel:"bearer" });
+  return result.ok ? json(result) : editError(result.reason || "conflict", "Release claim rejected.", 409);
+}
+
+export async function productionTransitionEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string" || typeof body.state !== "string" ||
+      typeof body.fencing_token !== "string")
+    return editError("validation_error", "Incomplete transition.", 400);
+  const result = await editorStub(env).transitionProductionRelease({ id:body.id,state:body.state,
+    fencing_token:body.fencing_token,detail:body.detail,actor:auth.editor || "service:release",
+    credential_channel:"bearer" });
+  return result.ok ? json(result) : editError(result.reason || "conflict", "Release transition rejected.", 409);
+}

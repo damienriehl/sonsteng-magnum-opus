@@ -23,7 +23,8 @@ import {
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
-  publisherAuthorizeEndpoint, publisherReleaseEndpoint,
+  publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
+  productionClaimEndpoint, productionTransitionEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -186,6 +187,12 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await heartbeatEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/authorize" && request.method === "POST")
     return wrap(await publisherAuthorizeEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/releases/prepare" && request.method === "POST")
+    return wrap(await productionPrepareEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/releases/claim" && request.method === "POST")
+    return wrap(await productionClaimEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/releases/transition" && request.method === "POST")
+    return wrap(await productionTransitionEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/status" && request.method === "GET")
     return wrap(await publisherReleaseEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-request" && request.method === "POST")

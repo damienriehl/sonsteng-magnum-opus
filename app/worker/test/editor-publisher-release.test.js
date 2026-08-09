@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCore } from "./editor-sql-helper.mjs";
-import { publisherAuthorizeEndpoint, publisherReleaseEndpoint } from "../src/editor-endpoints.js";
+import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
+  productionClaimEndpoint, productionTransitionEndpoint } from "../src/editor-endpoints.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -43,6 +44,80 @@ test("Publisher freezes every complete apply batch through the chosen frontier",
     ["suggestion-0001", "suggestion-0002", "suggestion-0003"]);
   assert.equal(made.release.state, "authorized");
   assert.deepEqual(made.release.events.map((e) => e.type), ["prepared", "authorized"]);
+});
+
+test("executor claims only authorization and stale fences cannot advance it", () => {
+  const core = makeCore(() => 2000);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  assert.equal(core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer" }).release, null);
+  core.authorizeProductionRelease(authorize(draft));
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer" }).release;
+  assert.equal(claimed.state, "executing");
+  assert.ok(claimed.fencing_token);
+  assert.equal(core.claimAuthorizedProductionRelease({ id:claimed.id,actor:"service:other",
+    credential_channel:"bearer" }).reason, "lease_active");
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"pages_deployed",
+    fencing_token:"stale",actor:"service:release",credential_channel:"bearer" }).reason,
+    "stale_fence");
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"pages_deployed",
+    fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer",
+    detail:{ pages_id:"pages-1" } }).ok, true);
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"pages_deployed",
+    fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer",
+    detail:{ pages_id:"different" } }).reason, "idempotency_conflict");
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"verified",
+    fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer" }).reason,
+    "targets_incomplete");
+});
+
+test("completion marks exactly frozen applied IDs once", () => {
+  const core = makeCore(() => 2000);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  core.authorizeProductionRelease(authorize(draft));
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer" }).release;
+  const advance = (state) => core.transitionProductionRelease({ id:claimed.id,state,
+    fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer" });
+  assert.equal(advance("pages_deployed").ok, true);
+  assert.equal(advance("worker_deployed").ok, true);
+  assert.equal(advance("verified").ok, true);
+  assert.equal(advance("complete").ok, true);
+  const row = core.sql.exec("SELECT production_release_id FROM suggestions WHERE id=?",
+    "suggestion-0001").toArray()[0];
+  assert.equal(row.production_release_id, draft.id);
+  assert.equal(advance("complete").replay, true);
+});
+
+test("ledger executor contract resumes pages crash through exact completion", () => {
+  let now = 2000;
+  const core = makeCore(() => now);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  core.now = () => now;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  core.authorizeProductionRelease(authorize(draft));
+  const service = { actor:"service:release",credential_channel:"bearer",lease_ms:1000 };
+  const first = core.claimAuthorizedProductionRelease(service).release;
+  const move = (token,state,detail={}) => core.transitionProductionRelease({ id:draft.id,state,detail,
+    fencing_token:token,actor:service.actor,credential_channel:"bearer" });
+  assert.equal(move(first.fencing_token,"pages_deployed",{ pages_id:"pages-exact" }).ok,true);
+  now += 5 * 60 * 1000 + 1;
+  const resumed = core.claimAuthorizedProductionRelease(service).release;
+  assert.equal(resumed.state,"pages_deployed");
+  assert.notEqual(resumed.fencing_token,first.fencing_token);
+  assert.equal(move(first.fencing_token,"worker_deployed",{ worker_id:"stale" }).reason,"stale_fence");
+  assert.equal(move(resumed.fencing_token,"worker_deployed",{ worker_id:"worker-exact" }).ok,true);
+  assert.equal(move(resumed.fencing_token,"verified",{ candidate_sha:"commit-batch-1" }).ok,true);
+  assert.equal(move(resumed.fencing_token,"complete",{ candidate_sha:"commit-batch-1" }).ok,true);
+  const final = core.getProductionRelease(draft.id);
+  assert.equal(final.state,"complete");
+  assert.deepEqual(final.events.filter((event) => event.type === "pages_deployed").length,1);
 });
 
 test("authorization is immutable and idempotent only for the identical binding", () => {
@@ -120,4 +195,29 @@ test("authorized membership and audit are machine-readable without edited conten
     { scopes:scopes(false, true), credential_channel:"bearer" });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).release, release);
+});
+
+test("trusted release service alone can prepare, claim, and transition", async () => {
+  const calls = [];
+  const stub = {
+    prepareProductionRelease:async (x) => (calls.push(["prepare",x]), { ok:true,release:{id:x.id} }),
+    claimAuthorizedProductionRelease:async (x) => (calls.push(["claim",x]), { ok:true,release:null }),
+    transitionProductionRelease:async (x) => (calls.push(["transition",x]), { ok:true }),
+  };
+  const env = { EDIT_ORIGIN:"https://edit.example", EDIT_ENVIRONMENT:"production",
+    EDITOR:{ getByName:() => stub } };
+  const auth = { editor:"service:release", credential_channel:"bearer", scopes:scopes(false,true) };
+  const req = (path, body) => new Request("https://edit.example" + path, { method:"POST",
+    headers:{ "Content-Type":"application/json", "X-Edit-Request":"1",
+      Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" }, body:JSON.stringify(body) });
+  const binding = { id:"release-1",idempotency_key:"prepare-1",target_batch_id:"batch-1",
+    base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
+    manifest_hash:"manifest",ancestry_verified:true };
+  assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare", binding),env,auth)).status,201);
+  assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
+  assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
+    { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
+  const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
+  assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
+  assert.deepEqual(calls.map((x) => x[0]), ["prepare","claim","transition"]);
 });

@@ -210,6 +210,11 @@ export class EditorStoreCore {
     this._ensureColumn("apply_batches", "generator_id", "TEXT");
     this._ensureColumn("production_releases", "authorization_key", "TEXT");
     this._ensureColumn("production_releases", "authorization_digest", "TEXT");
+    this._ensureColumn("production_releases", "fencing_token", "TEXT");
+    this._ensureColumn("production_releases", "lease_expires_at", "INTEGER");
+    this._ensureColumn("production_releases", "provider_json", "TEXT");
+    this._ensureColumn("suggestions", "production_release_id", "TEXT");
+    this._ensureColumn("suggestions", "production_published_at", "INTEGER");
   }
 
   _ensureColumn(table, col, type) {
@@ -753,6 +758,76 @@ export class EditorStoreCore {
       .map((event) => ({ type:event.type, actor:event.actor,
         detail:JSON.parse(event.detail_json), created_at:event.created_at }));
     return { ...row, batches, suggestion_ids, events };
+  }
+
+  // Production execution is a separate lifecycle. This claim can consume only
+  // a release carrying a prior human authorization; it never scans accepted or
+  // applied suggestions and therefore cannot enlarge frozen membership.
+  claimAuthorizedProductionRelease(input = {}) {
+    if (!input.actor || input.credential_channel !== "bearer")
+      return { ok:false, reason:"service_bearer_required" };
+    const now = this.now();
+    let release = input.id ? this._one("SELECT * FROM production_releases WHERE id=?", input.id) :
+      this._one("SELECT * FROM production_releases WHERE state='authorized' OR (state IN ('executing','pages_deployed','worker_deployed') AND lease_expires_at<=?) ORDER BY updated_at,id LIMIT 1", now);
+    if (!release) return { ok:true, release:null };
+    if (['executing','pages_deployed','worker_deployed'].includes(release.state) &&
+        release.lease_expires_at > now)
+      return { ok:false, reason:"lease_active" };
+    if (!['authorized','executing','pages_deployed','worker_deployed'].includes(release.state))
+      return { ok:false, reason:"not_authorized" };
+    const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
+    const lease = now + Math.max(1000, Math.min(input.lease_ms || CEILINGS.leaseMs, CEILINGS.leaseMs));
+    this.sql.exec("UPDATE production_releases SET state=?,fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
+      release.state === "authorized" ? "executing" : release.state,token,lease,now,release.id);
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      release.id,"executing",input.actor,JSON.stringify({ fencing_token:token,
+        manifest_hash:release.manifest_hash }),now);
+    return { ok:true, release:this.getProductionRelease(release.id) };
+  }
+
+  transitionProductionRelease(input = {}) {
+    const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id || "");
+    if (!release) return { ok:false, reason:"not_found" };
+    if (input.credential_channel !== "bearer" || !input.actor)
+      return { ok:false, reason:"service_bearer_required" };
+    if (!input.fencing_token || input.fencing_token !== release.fencing_token)
+      return { ok:false, reason:"stale_fence" };
+    const replayable = new Set(["executing","pages_deployed","worker_deployed","verified","complete"]);
+    const prior = replayable.has(input.state) && this._one(
+      "SELECT detail_json FROM production_release_events WHERE release_id=? AND type=? LIMIT 1", release.id,input.state);
+    if (prior) {
+      const requested = JSON.stringify(input.detail && typeof input.detail === "object" ? input.detail : {});
+      if (prior.detail_json !== requested) return { ok:false, reason:"idempotency_conflict" };
+      return { ok:true, replay:true, release:this.getProductionRelease(release.id) };
+    }
+    if (input.state === "verified") {
+      const pages = this._one("SELECT id FROM production_release_events WHERE release_id=? AND type='pages_deployed'", release.id);
+      const worker = this._one("SELECT id FROM production_release_events WHERE release_id=? AND type='worker_deployed'", release.id);
+      if (!pages || !worker) return { ok:false, reason:"targets_incomplete" };
+    }
+    const allowed = {
+      executing:new Set(["pages_deployed","worker_deployed","failed_fenced"]),
+      pages_deployed:new Set(["worker_deployed","verified","failed_fenced"]),
+      worker_deployed:new Set(["pages_deployed","verified","failed_fenced"]),
+      verified:new Set(["complete","failed_fenced"]),
+      failed_fenced:new Set(["restoring"]), restoring:new Set(["restored","failed_fenced"]),
+    };
+    if (!allowed[release.state]?.has(input.state)) return { ok:false, reason:"invalid_transition" };
+    const detail = input.detail && typeof input.detail === "object" ? input.detail : {};
+    const forbidden = JSON.stringify(detail).match(/new_text|original_text|authorization|credential|token/i);
+    if (forbidden) return { ok:false, reason:"unsafe_evidence" };
+    const now = this.now();
+    this.sql.exec("UPDATE production_releases SET state=?,provider_json=?,lease_expires_at=?,updated_at=? WHERE id=?",
+      input.state,JSON.stringify(detail),input.state === "complete" ? null : now + CEILINGS.leaseMs,now,release.id);
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      release.id,input.state,input.actor,JSON.stringify(detail),now);
+    if (input.state === "complete") {
+      const members = this._all("SELECT suggestion_id FROM production_release_members WHERE release_id=?", release.id);
+      for (const member of members) this.sql.exec(
+        "UPDATE suggestions SET production_release_id=?,production_published_at=? WHERE id=? AND status=? AND (production_release_id IS NULL OR production_release_id=?)",
+        release.id,now,member.suggestion_id,STATUS.APPLIED,release.id);
+    }
+    return { ok:true, release:this.getProductionRelease(release.id) };
   }
 
   // Read-only projection for the human Publisher surface. A selectable target
