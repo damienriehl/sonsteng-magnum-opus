@@ -11,6 +11,7 @@ import dataclasses
 import hashlib
 import json
 import pathlib
+import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -248,10 +249,22 @@ class WranglerPagesAdapter:
         artifact = pathlib.Path(self.artifact_dir).resolve()
         if not artifact.is_relative_to(self.candidate_root):
             raise ReleaseError("Pages artifact is outside the frozen candidate checkout")
-        result = self._run(["npx", "wrangler", "pages", "deploy", self.artifact_dir,
-            "--project-name", self.project, "--commit-hash", manifest.candidate_sha],
-            cwd=self.candidate_root, check=True, capture_output=True, text=True,
-            timeout=self.timeout)
+        # Pages has no runtime environment for static responses. Stage the exact
+        # frozen artifact and add a deployment-only response header so the live
+        # origin can prove which authorized candidate it is serving.
+        with tempfile.TemporaryDirectory(prefix="sonsteng-pages-release-") as staging:
+            staged = pathlib.Path(staging) / "site"
+            shutil.copytree(artifact, staged)
+            headers = staged / "_headers"
+            existing = headers.read_text(encoding="utf-8") if headers.exists() else ""
+            if existing and not existing.endswith("\n"):
+                existing += "\n"
+            headers.write_text(existing + "/*\n  X-Release-SHA: " +
+                               manifest.candidate_sha + "\n", encoding="utf-8")
+            result = self._run(["npx", "wrangler", "pages", "deploy", str(staged),
+                "--project-name", self.project, "--commit-hash", manifest.candidate_sha],
+                cwd=self.candidate_root, check=True, capture_output=True, text=True,
+                timeout=self.timeout)
         # Store an opaque digest, not raw CLI output (which may include URLs or account data).
         return {"provider_id": hashlib.sha256(result.stdout.encode()).hexdigest()[:24]}
 
@@ -276,7 +289,8 @@ class WranglerWorkerAdapter:
         if not config.is_relative_to(self.candidate_root):
             raise ReleaseError("Worker config is outside the frozen candidate checkout")
         uploaded = self._run(["npx", "wrangler", "versions", "upload", "--config", self.config,
-            "--message", "release:" + manifest.candidate_sha], check=True,
+            "--message", "release:" + manifest.candidate_sha,
+            "--var", "RELEASE_SHA:" + manifest.candidate_sha], check=True,
             cwd=self.candidate_root, capture_output=True, text=True, timeout=self.timeout)
         version = uploaded.stdout.strip().splitlines()[-1].strip()
         if not version or len(version) > 256:

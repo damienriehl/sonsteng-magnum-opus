@@ -200,8 +200,11 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     calls = []
     class Result:
         stdout = "worker-version\n"
+    staged_headers = []
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
+        if argv[2:4] == ["pages", "deploy"]:
+            staged_headers.append((pathlib.Path(argv[4]) / "_headers").read_text())
         return Result()
     item = release()
     WranglerPagesAdapter("sonsteng", site, "https://pages.example", root,
@@ -210,6 +213,9 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
                           run=run, timeout=19).deploy(item)
     assert [call[1]["timeout"] for call in calls] == [17, 19, 19]
     assert all(call[1]["cwd"] == root.resolve() for call in calls)
+    assert staged_headers == ["/*\n  X-Release-SHA: " + item.candidate_sha + "\n"]
+    assert not (site / "_headers").exists()
+    assert calls[1][0][-2:] == ["--var", "RELEASE_SHA:" + item.candidate_sha]
     with pytest.raises(ReleaseError, match="outside"):
         WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
                              root, run=run).deploy(item)

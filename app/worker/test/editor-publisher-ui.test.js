@@ -57,6 +57,25 @@ test("publisher context offers complete DEV apply batches and their exact redlin
   assert.equal(projected.batches[0].changes[0].new_text, "After");
 });
 
+test("publisher context keeps partially deployed releases visible", () => {
+  const core = makeCore(() => 1000);
+  for (const state of ["pages_deployed", "worker_deployed"]) {
+    core.sql.exec(
+      `INSERT INTO production_releases
+        (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+         target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+         membership_hash,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `release-${state}`, `idem-${state}`, `digest-${state}`, state, "service:release",
+      "bearer", "production", "batch-1", "base", "candidate", "generator-v1",
+      "evidence", "manifest", "membership", 1000, state === "pages_deployed" ? 1000 : 2000,
+    );
+    const projected = core.publisherContext();
+    assert.equal(projected.release?.state, state);
+    core.sql.exec("DELETE FROM production_releases WHERE id=?", `release-${state}`);
+  }
+});
+
 test("prepared page discloses exact immutable release before one deliberate control", async () => {
   const html = await renderPublisherPage(context, "DR").text();
   assert.match(html, /Production Publisher/);

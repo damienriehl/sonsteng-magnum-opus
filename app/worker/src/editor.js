@@ -115,6 +115,23 @@ export async function editorFetch(request, env, ctx) {
   const reqOrigin = request.headers.get("Origin");
   const wrap = (resp) => withEditHeaders(resp, env, reqOrigin);
 
+  // Public, read-only deployment attestation used by the production executor.
+  // RELEASE_SHA is injected by the candidate-bound Wrangler upload; an absent
+  // or malformed value fails closed instead of claiming ambient provenance.
+  if (path === "/edit/release-provenance" && request.method === "GET") {
+    const sha = typeof env.RELEASE_SHA === "string" ? env.RELEASE_SHA : "";
+    if (!/^[0-9a-f]{40}$/.test(sha)) {
+      return wrap(new Response("Release provenance unavailable.\n", {
+        status: 503,
+        headers: { "content-type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+      }));
+    }
+    return wrap(new Response(null, {
+      status: 204,
+      headers: { "X-Release-SHA": sha, "Cache-Control": "no-store" },
+    }));
+  }
+
   // ---- CORS preflight for /edit/v1 XHRs (edit origin only) ------------------
   if (request.method === "OPTIONS") {
     return wrap(new Response(null, { status: 204 }));

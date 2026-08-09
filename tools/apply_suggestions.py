@@ -288,7 +288,8 @@ class HttpRpcClient:
       * POST /reconcile                       -> { ok, ... }
       * POST /claim   {batch_id, base_sha?}   -> { ok, batch_id, claimed:[id...], lease_expires_at }
       * GET  /review                          -> { ok, items:[<full suggestion rows>] }  (admin)
-      * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?}
+      * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?,
+                        commit_sha?, generator_id?}
       * POST /system-suggest {id, source_ref, origin, ...} -> SYSTEM proposer
             (origin=companion|ai_rewrite, pending). Admin scope only; the human
             /suggest endpoint hardcodes origin:human and is edit/instructor-scoped,
@@ -348,12 +349,17 @@ class HttpRpcClient:
         return self._req("POST", "/system-suggest", companion)
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
-                 needs_human=None, drift=None, base_sha=None):
+                 needs_human=None, drift=None, base_sha=None, commit_sha=None,
+                 generator_id=None):
         body = {"batch_id": batch_id}
         if phase is not None:
             body["phase"] = phase
         if base_sha is not None:
             body["base_sha"] = base_sha
+        if commit_sha is not None:
+            body["commit_sha"] = commit_sha
+        if generator_id is not None:
+            body["generator_id"] = generator_id
         for key, val in (("applied", applied), ("accepted_blocked", accepted_blocked),
                          ("needs_human", needs_human), ("drift", drift)):
             if val:
@@ -420,6 +426,25 @@ class SubprocessPipeline:
         rc, out = self._run(
             [sys.executable, os.path.join(worktree, "tools", "check_build_parity.py")], worktree)
         return rc == 0, {"stdout": out}
+
+    def generator_identity(self, worktree):
+        """Content identity of the code that materializes deployable bundles.
+
+        This stays equal across content-only apply batches, but changes whenever
+        any authoritative generator or its shared spine-stamp contract changes.
+        """
+        digest = hashlib.sha256()
+        for relpath in (
+            "tools/build_site.py",
+            "tools/build_worker_personas.py",
+            "tools/build_instructor_bundle.py",
+            "tools/spine_stamp.py",
+        ):
+            digest.update(relpath.encode("utf-8") + b"\0")
+            with open(os.path.join(worktree, relpath), "rb") as fh:
+                digest.update(fh.read())
+            digest.update(b"\0")
+        return "sha256:" + digest.hexdigest()
 
     def deploy(self, worktree, branch, plan_only):
         """Deploy the site (Hetzner DEV) + Worker (wrangler). GATED: only executes
@@ -1583,7 +1608,9 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         client.finalize(batch_id, phase=PHASE_DONE,
                         applied=[p.suggestion_id for p in applied_patches],
                         drift=[_id(r) for r in drift],
-                        needs_human=[_id(r) for r in needs_human])
+                        needs_human=[_id(r) for r in needs_human],
+                        commit_sha=head_sha(canonical_root),
+                        generator_id=pipeline.generator_identity(canonical_root))
         return ApplyResult(batch_id, base_sha, applied_patches, drift, needs_human,
                            [], companions, deploy_info, digest, True)
     finally:
