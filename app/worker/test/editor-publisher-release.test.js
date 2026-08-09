@@ -161,7 +161,7 @@ test("Publisher cannot authorize a mutated prepared draft", () => {
   assert.equal(core.getProductionRelease(draft.id).state, "prepared");
 });
 
-test("partial, stale, nonancestor, and skipped apply-batch membership fail closed", () => {
+test("partial batches publish applied members and terminal no-op batches do not block the frontier", () => {
   const core = makeCore();
   seedApplied(core, "batch-1", ["suggestion-0001", "suggestion-0002"], 1100);
   seedApplied(core, "batch-2", ["suggestion-0003"], 1200);
@@ -171,8 +171,17 @@ test("partial, stale, nonancestor, and skipped apply-batch membership fail close
     "membership_mismatch");
   assert.equal(core.prepareProductionRelease(release({ expected_suggestion_ids:
     ["suggestion-0001", "suggestion-0003"] })).reason, "membership_mismatch");
-  core.sql.exec("UPDATE suggestions SET status='drift' WHERE id=?", "suggestion-0003");
-  assert.equal(core.prepareProductionRelease(release()).reason, "stale_member");
+  core.sql.exec("UPDATE suggestions SET status='drift' WHERE id=?", "suggestion-0001");
+  const partial = core.prepareProductionRelease(release()).release;
+  assert.deepEqual(partial.suggestion_ids, ["suggestion-0002", "suggestion-0003"]);
+
+  const empty = makeCore();
+  seedApplied(empty, "batch-1", ["suggestion-0101"], 1100);
+  seedApplied(empty, "batch-2", ["suggestion-0102"], 1200);
+  empty.sql.exec("UPDATE suggestions SET status='drift' WHERE id=?", "suggestion-0101");
+  const context = empty.productionPreparationContext();
+  assert.deepEqual(context.batches.map((batch) => batch.batch_id), ["batch-2"]);
+  assert.deepEqual(context.batches[0].suggestion_ids, ["suggestion-0102"]);
 });
 
 test("preparation rejects mismatched frontier and every active release state", () => {

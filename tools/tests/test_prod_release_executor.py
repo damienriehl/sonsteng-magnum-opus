@@ -200,7 +200,7 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     config.write_text("{}", encoding="utf-8")
     calls = []
     class Result:
-        stdout = "worker-version\n"
+        stdout = "Uploaded sonsteng-chat-production\nWorker Version ID: 12345678-1234-4234-8234-123456789abc\n"
     staged_headers = []
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
@@ -219,9 +219,16 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     assert ["--env", "production"] == calls[1][0][6:8]
     assert calls[1][0][-2:] == ["--var", "RELEASE_SHA:" + item.candidate_sha]
     assert ["--env", "production"] == calls[2][0][-3:-1]
+    assert calls[2][0][4] == "12345678-1234-4234-8234-123456789abc"
     with pytest.raises(ReleaseError, match="outside"):
         WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
                              root, run=run).deploy(item)
+
+    class BadResult:
+        stdout = "Uploaded, but no machine-readable version identity\n"
+    with pytest.raises(ReleaseError, match="version identifier"):
+        WranglerWorkerAdapter(config, "https://worker.example", root,
+            run=lambda *_args, **_kwargs: BadResult()).deploy(item)
 
 
 def test_git_adapter_materializes_frozen_sha_away_from_advancing_checkout(tmp_path):

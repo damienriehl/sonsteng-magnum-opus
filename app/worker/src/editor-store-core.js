@@ -661,8 +661,11 @@ export class EditorStoreCore {
 
     const frontier = this._one(
       "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
-    const done = this._all(
+    const allDone = this._all(
       "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    const done = allDone.filter((batch) => this._one(
+      "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
+      batch.batch_id, STATUS.APPLIED));
     let start = 0;
     if (frontier) {
       if (frontier.candidate_sha !== input.base_sha) return { ok:false, reason:"stale_base" };
@@ -683,9 +686,9 @@ export class EditorStoreCore {
     const groups = new Map();
     for (const batch of batches) {
       const rows = this._all(
-        "SELECT id,group_id,status FROM suggestions WHERE apply_batch_id=? ORDER BY id", batch.batch_id);
-      if (!rows.length || rows.some((r) => r.status !== STATUS.APPLIED))
-        return { ok:false, reason:"stale_member" };
+        "SELECT id,group_id,status FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+        batch.batch_id, STATUS.APPLIED);
+      if (!rows.length) return { ok:false, reason:"stale_member" };
       for (const row of rows) {
         if (row.group_id) {
           if (!groups.has(row.group_id)) groups.set(row.group_id, this._all(
@@ -876,8 +879,11 @@ export class EditorStoreCore {
     if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
     const frontier = this._one(
       "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
-    const done = this._all(
+    const allDone = this._all(
       "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    const done = allDone.filter((batch) => this._one(
+      "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
+      batch.batch_id, STATUS.APPLIED));
     let start = 0;
     if (frontier) {
       const at = done.findIndex((batch) => batch.batch_id === frontier.target_batch_id);

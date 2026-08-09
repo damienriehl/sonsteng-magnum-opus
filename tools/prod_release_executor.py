@@ -11,6 +11,7 @@ import dataclasses
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -310,8 +311,11 @@ class WranglerWorkerAdapter:
             "--message", "release:" + manifest.candidate_sha,
             "--var", "RELEASE_SHA:" + manifest.candidate_sha], check=True,
             cwd=self.candidate_root, capture_output=True, text=True, timeout=self.timeout)
-        version = uploaded.stdout.strip().splitlines()[-1].strip()
-        if not version or len(version) > 256:
+        match = re.search(
+            r"(?:^|\n)\s*Worker Version ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\s*(?:\n|$)",
+            uploaded.stdout, re.IGNORECASE)
+        version = match.group(1) if match else ""
+        if not version:
             raise ReleaseError("Worker upload did not return a bounded version identifier")
         self._run(["npx", "wrangler", "versions", "deploy", version, "--config", self.config,
                    "--env", "production", "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
