@@ -650,6 +650,8 @@ export class EditorStoreCore {
     if (input.target_environment !== "production") return { ok:false, reason:"wrong_target" };
     if (input.credential_channel !== "bearer") return { ok:false, reason:"service_bearer_required" };
     if (input.ancestry_verified !== true) return { ok:false, reason:"nonancestor_candidate" };
+    if (this._one("SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' LIMIT 1"))
+      return { ok:false, reason:"missing_batch_evidence" };
 
     const priorKey = this._one(
       "SELECT id,request_digest FROM production_releases WHERE idempotency_key=?", input.idempotency_key);
@@ -890,6 +892,10 @@ export class EditorStoreCore {
     const activeRow = this._one(
       "SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 1");
     if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
+    const missing = this._one(
+      "SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' ORDER BY created_at,batch_id LIMIT 1");
+    if (missing) return { active_release:null, batches:[], blocked_reason:"missing_batch_evidence",
+      blocked_batch_id:missing.batch_id };
     const frontier = this._one(
       "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
     const allDone = this._all(

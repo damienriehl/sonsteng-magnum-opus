@@ -221,13 +221,18 @@ class ProductionCandidateBuilder:
             return {"ok": True, "replay": True, "release": active}
 
         batches = context.get("batches") or []
+        if context.get("blocked_reason"):
+            raise ReleaseError("production frontier blocked: " + context["blocked_reason"])
         if not batches:
             return None
         if any(not batch.get("suggestion_ids") for batch in batches):
             raise ReleaseError("eligible batch has no applied membership")
-        generators = {batch.get("generator_id") for batch in batches}
-        if None in generators or len(generators) != 1:
-            raise ReleaseError("eligible batches do not share generator evidence")
+        generator_id = batches[0].get("generator_id")
+        if not generator_id:
+            raise ReleaseError("eligible batch lacks generator evidence")
+        boundary = next((index for index, batch in enumerate(batches)
+                         if batch.get("generator_id") != generator_id), len(batches))
+        batches = batches[:boundary]
         base_sha = context.get("base_sha") or self.bootstrap_base_sha
         if not base_sha:
             raise ReleaseError("first release requires a recorded production base SHA")
@@ -238,7 +243,6 @@ class ProductionCandidateBuilder:
         batch_ids = [batch["batch_id"] for batch in batches]
         batch_commits = [batch["commit_sha"] for batch in batches]
         suggestion_ids = sorted(item for batch in batches for item in batch["suggestion_ids"])
-        generator_id = generators.pop()
         manifest = self._manifest(base_sha, candidate_sha, self.git.tree(candidate_sha),
             generator_id, batch_ids, batch_commits, suggestion_ids)
         manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()

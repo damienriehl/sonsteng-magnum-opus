@@ -350,3 +350,27 @@ def test_candidate_builder_requires_recorded_first_base_and_reproduces_active(tm
     path = tmp_path / "active.json"
     assert ProductionCandidateBuilder(ActiveLedger(),Git(),path).prepare_latest()["replay"]
     assert json.loads(path.read_text()) == manifest
+
+
+def test_candidate_builder_stops_at_generator_boundary_and_honors_evidence_fence(tmp_path):
+    class Git:
+        def require_clean_candidate(self, _sha): pass
+        def is_ancestor(self, _base, _candidate): return True
+        def tree(self, _sha): return "tree"
+    class Ledger:
+        binding = None
+        def preparation_context(self):
+            return {"base_sha":"a" * 40,"active_release":None,"batches":[
+                {"batch_id":"b1","commit_sha":"b" * 40,"generator_id":"g1","suggestion_ids":["s1"]},
+                {"batch_id":"b2","commit_sha":"c" * 40,"generator_id":"g2","suggestion_ids":["s2"]}]}
+        def prepare(self, binding): self.binding = binding; return {"ok":True,"release":binding}
+    ledger = Ledger()
+    ProductionCandidateBuilder(ledger,Git(),tmp_path / "manifest.json").prepare_latest()
+    assert ledger.binding["expected_batch_ids"] == ["b1"]
+    assert ledger.binding["candidate_sha"] == "b" * 40
+
+    class Blocked(Ledger):
+        def preparation_context(self):
+            return {"active_release":None,"batches":[],"blocked_reason":"missing_batch_evidence"}
+    with pytest.raises(ReleaseError, match="missing_batch_evidence"):
+        ProductionCandidateBuilder(Blocked(),Git(),tmp_path / "blocked.json").prepare_latest()

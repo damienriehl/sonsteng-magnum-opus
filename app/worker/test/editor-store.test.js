@@ -248,6 +248,7 @@ test("reconcile completes a post-merged crashed batch (in_flight -> applied)", (
   assert.equal(core.sql.exec("SELECT phase FROM apply_batches WHERE batch_id='b-merged'").toArray()[0].phase,
     "evidence_missing");
   assert.deepEqual(core.productionPreparationContext().batches, []);
+  assert.equal(core.productionPreparationContext().blocked_reason, "missing_batch_evidence");
 });
 
 test("drift -> pending only via re-anchor (never straight to accepted)", () => {
