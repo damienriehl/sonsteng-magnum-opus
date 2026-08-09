@@ -2055,7 +2055,8 @@
 
   /* ---------- SL6 banner honesty: fresh / paused auto-apply -----------------
      Only DIRECT_APPLY (auto-apply) mode makes freshness claims. Fresh (<5 min)
-     → subtle "edits go live automatically (~2 min)"; stale (>10 min, or the
+     → subtle "edits appear on the editing site automatically (~2 min)";
+     stale (>10 min, or the
      daemon has never checked in) → warning "auto-apply paused — last run N min
      ago; edits are safe and queued". In classic suggestion mode the banner keeps
      its original "changes go to Damien for review" copy. */
@@ -2075,10 +2076,10 @@
         : 'Auto-apply paused — last run ' + mins + ' min ago. Your edits are safe and queued.';
     } else if (age < 300) {
       bannerEl.classList.remove('editor-banner--warn');
-      bannerMsgEl.textContent = 'Your edits go live automatically (~2 min).';
+      bannerMsgEl.textContent = 'Your edits appear on the editing site automatically (~2 min).';
     } else {
       bannerEl.classList.remove('editor-banner--warn');
-      bannerMsgEl.textContent = 'Your edits go live automatically.';
+      bannerMsgEl.textContent = 'Your edits appear on the editing site automatically.';
     }
   }
 

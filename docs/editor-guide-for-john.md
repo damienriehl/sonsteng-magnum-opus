@@ -19,9 +19,10 @@ click (below).
   **"Going live…"**; once it's published it clears. If something couldn't be applied cleanly,
   the paragraph shows your text with a warning outline and a **"Needs attention — not applied"**
   pill, so nothing is ever silently lost.
-- **The green bar is honest about the service.** When auto-publishing is healthy it reads
-  *"Your edits go live automatically (~2 min)."* If the home service is momentarily paused it
-  says so — *"Auto-apply paused … your edits are safe and queued"* — and your work waits safely.
+- **The green bar is honest about the editing service.** When DEV auto-apply is healthy it reads
+  *"Your edits appear on the editing site automatically (~2 min)."* If the home service is
+  momentarily paused it says so — *"Auto-apply paused … your edits are safe and queued"* — and
+  your work waits safely.
 - **History + one-click undo.** A **"History"** link in the top bar opens the change history for
   every document: who changed what, a redline of each revision, and a **Request revert** button
   to roll a change back. (Damien's link executes reverts immediately; yours files the request.)
@@ -39,7 +40,7 @@ choose, no account to create. Use the same address Damien put on the list; if a 
 is typed in, the code never arrives.
 
 Once you're in, it opens the real practicum website, but now you can change it. A green bar
-across the top reads **"You're editing — your edits go live automatically (~2 min)."** If you
+across the top reads **"Your edits appear on the editing site automatically (~2 min)."** If you
 ever don't see that bar, you're on the normal site; go to the address again.
 
 *Your old personal link still works too, for now — nothing you have bookmarked has stopped

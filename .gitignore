@@ -7,6 +7,8 @@ tools/__pycache__/
 build/
 # Host-local apply-engine flock (runtime state; DO lease is the true cross-host mutex)
 .locks/
+# Repo-local isolated worktrees are live checkouts, not project inputs.
+.worktrees/
 .DS_Store
 node_modules/
 .wrangler/
