@@ -890,10 +890,11 @@ def folio_obj(dec):
 
 def load_existing(name):
     path = os.path.join(HERE, name)
-    if not os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
         return None
-    with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
 
 
 identity_doc = load_existing("taxonomy-identities.json")

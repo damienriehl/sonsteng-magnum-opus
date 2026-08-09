@@ -835,7 +835,7 @@ export class EditorStoreCore {
   // frontier; each target implicitly encloses every earlier returned batch.
   publisherContext() {
     const activeRow = this._one(
-      "SELECT id FROM production_releases WHERE state IN ('prepared','authorized','executing','delayed','failed_fenced','failed-fenced','restoring','verified') ORDER BY updated_at DESC LIMIT 1");
+      "SELECT id FROM production_releases WHERE state IN ('prepared','authorized','executing','delayed','failed_fenced','restoring','verified') ORDER BY updated_at DESC LIMIT 1");
     const release = activeRow ? this.getProductionRelease(activeRow.id) : null;
     const frontier = this._one(
       "SELECT target_batch_id FROM production_releases WHERE state IN ('verified','complete') ORDER BY updated_at DESC,id DESC LIMIT 1");

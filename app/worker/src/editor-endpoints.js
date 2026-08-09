@@ -12,6 +12,7 @@ import {
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
+import { sha256Hex } from "./text-norm.js";
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 
@@ -106,12 +107,6 @@ async function readJson(request) {
 
 function byteLen(...strs) {
   return new TextEncoder().encode(strs.filter(Boolean).join("")).length;
-}
-
-async function sha256Hex(value) {
-  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",
-    new TextEncoder().encode(value)));
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ---- POST /edit/v1/suggest (edit OR instructor scope) -----------------------

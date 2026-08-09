@@ -11,7 +11,6 @@ const STATE = Object.freeze({
   executing: ["Publishing", "Automation is releasing the authorized manifest. No further Publisher action is available."],
   delayed: ["Delayed", "The authorized release is waiting. Its membership remains frozen."],
   failed_fenced: ["Failed and fenced", "Publishing stopped and later releases are fenced. An operator must reconcile the recorded manifest."],
-  "failed-fenced": ["Failed and fenced", "Publishing stopped and later releases are fenced. An operator must reconcile the recorded manifest."],
   restoring: ["Restoring", "Automation is restoring the recorded production manifest."],
   restored: ["Restored", "Production was restored. Publishing a different target requires a new Publisher authorization."],
   verified: ["Verified", "Pages and the production Worker agree on the authorized release identity."],

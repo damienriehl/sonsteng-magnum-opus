@@ -26,7 +26,7 @@ class Ledger:
     def claim_authorized(self):
         return self.release
 
-    def transition(self, release_id, state, detail):
+    def transition(self, release_id, state, detail, fencing_token=None):
         self.events.append((release_id, state, detail))
 
 

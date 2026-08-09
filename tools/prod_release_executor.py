@@ -140,32 +140,6 @@ class CandidateValidator:
             raise ReleaseError("candidate tree mismatch")
 
 
-class CloudflarePagesAdapter:
-    def __init__(self, client, project):
-        self.client, self.project, self.name = client, project, "pages"
-
-    def deploy(self, manifest):
-        return self.client.deploy_pages(self.project, manifest.candidate_sha,
-                                        manifest.manifest_hash)
-
-    def provenance(self):
-        return self.client.pages_provenance(self.project)
-
-
-class CloudflareWorkerAdapter:
-    def __init__(self, client, script):
-        self.client, self.script, self.name = client, script, "worker"
-
-    def deploy(self, manifest):
-        version = self.client.create_worker_version(self.script, manifest.candidate_sha,
-                                                    manifest.manifest_hash)
-        self.client.activate_worker_version(self.script, version["id"])
-        return {"provider_id": version["id"]}
-
-    def provenance(self):
-        return self.client.worker_provenance(self.script)
-
-
 class WranglerPagesAdapter:
     """Concrete Pages CLI contract. Wrangler reads injected process credentials."""
 
@@ -227,10 +201,7 @@ class ProductionExecutor:
         # credentials never enter journals or provider receipts.
         safe = {key: value for key, value in detail.items()
                 if key in {"manifest_hash", "candidate_sha", "pages_id", "worker_id", "reason"}}
-        try:
-            self.ledger.transition(release.id, state, safe, release.fencing_token)
-        except TypeError:  # small in-memory test ledgers predating HTTP adapter
-            self.ledger.transition(release.id, state, safe)
+        self.ledger.transition(release.id, state, safe, release.fencing_token)
 
     def run_once(self):
         release = self.ledger.claim_authorized()

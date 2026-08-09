@@ -65,7 +65,7 @@ function parseScopeConfig(env) {
   for (const [slot, scopes] of Object.entries(cfg)) {
     if (!/^[a-z0-9_]+$/i.test(slot)) continue; // slot names are simple identifiers
     const rec = {};
-    for (const s of ["edit", "instructor", "admin", "publisher"]) {
+    for (const s of Object.keys(EMPTY_SCOPES)) {
       if (scopes && typeof scopes[s] === "number") rec[s] = scopes[s];
     }
     out.set(slot.toLowerCase(), rec);
@@ -75,13 +75,9 @@ function parseScopeConfig(env) {
 
 // Build the { edit, instructor, admin } record from a slot's granted scopes.
 function scopeRecord(grants) {
-  const rec = {
-    edit: { granted: false, ver: 0 },
-    instructor: { granted: false, ver: 0 },
-    admin: { granted: false, ver: 0 },
-    publisher: { granted: false, ver: 0 },
-  };
-  for (const s of ["edit", "instructor", "admin", "publisher"]) {
+  const rec = Object.fromEntries(Object.keys(EMPTY_SCOPES)
+    .map((scope) => [scope, { granted: false, ver: 0 }]));
+  for (const s of Object.keys(EMPTY_SCOPES)) {
     if (grants && typeof grants[s] === "number") rec[s] = { granted: true, ver: grants[s] };
   }
   return rec;
