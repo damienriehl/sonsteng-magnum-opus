@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint, productionClaimEndpoint,
-  productionTransitionEndpoint } from "../src/editor-endpoints.js";
+  productionRenewEndpoint, productionTransitionEndpoint } from "../src/editor-endpoints.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -88,6 +88,58 @@ test("executor claims only authorization and stale fences cannot advance it", ()
   assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"verified",
     fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer" }).reason,
     "targets_incomplete");
+});
+
+test("lease heartbeat prevents failover and expires closed", () => {
+  let now = 2000;
+  const core = makeCore(() => now);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  core.now = () => now;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  core.authorizeProductionRelease(authorize(draft));
+  const service = { actor:"service:release",credential_channel:"bearer",lease_ms:5000 };
+  const first = core.claimAuthorizedProductionRelease(service).release;
+  const originalExpiry = first.lease_expires_at;
+  now += 4000;
+  const renewed = core.renewProductionReleaseLease({ id:first.id,
+    fencing_token:first.fencing_token,...service });
+  assert.equal(renewed.ok,true);
+  assert.ok(renewed.lease_expires_at > originalExpiry);
+  now = originalExpiry + 1;
+  assert.equal(core.claimAuthorizedProductionRelease({ id:first.id,actor:"service:other",
+    credential_channel:"bearer" }).reason,"lease_active");
+  now = renewed.lease_expires_at;
+  assert.equal(core.renewProductionReleaseLease({ id:first.id,
+    fencing_token:first.fencing_token,...service }).reason,"lease_expired");
+  const failover = core.claimAuthorizedProductionRelease({ id:first.id,actor:"service:other",
+    credential_channel:"bearer" }).release;
+  assert.notEqual(failover.fencing_token,first.fencing_token);
+  assert.equal(core.renewProductionReleaseLease({ id:first.id,
+    fencing_token:first.fencing_token,...service }).reason,"stale_fence");
+});
+
+test("a worst-case Worker lease remains exclusive beyond five minutes but is bounded", () => {
+  let now = 2000;
+  const core = makeCore(() => now);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  core.now = () => now;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  core.authorizeProductionRelease(authorize(draft));
+  const service = { actor:"service:release",credential_channel:"bearer" };
+  const first = core.claimAuthorizedProductionRelease(service).release;
+  const requested = (2 * 240 + 60) * 1000;
+  const renewed = core.renewProductionReleaseLease({ id:first.id,
+    fencing_token:first.fencing_token,lease_ms:requested,...service });
+  assert.equal(renewed.lease_expires_at,now + requested);
+  now += 5 * 60 * 1000 + 1;
+  assert.equal(core.claimAuthorizedProductionRelease({ id:first.id,actor:"service:other",
+    credential_channel:"bearer" }).reason,"lease_active");
+  now = renewed.lease_expires_at;
+  const failover = core.claimAuthorizedProductionRelease({ id:first.id,actor:"service:other",
+    credential_channel:"bearer" }).release;
+  assert.notEqual(failover.fencing_token,first.fencing_token);
 });
 
 test("completion marks exactly frozen applied IDs once", () => {
@@ -270,6 +322,7 @@ test("trusted release service alone can prepare, claim, and transition", async (
     prepareProductionRelease:async (x) => (calls.push(["prepare",x]), { ok:true,release:{id:x.id} }),
     productionPreparationContext:async () => (calls.push(["frontier"]), { batches:[] }),
     claimAuthorizedProductionRelease:async (x) => (calls.push(["claim",x]), { ok:true,release:null }),
+    renewProductionReleaseLease:async (x) => (calls.push(["renew",x]), { ok:true }),
     transitionProductionRelease:async (x) => (calls.push(["transition",x]), { ok:true }),
   };
   const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
@@ -285,11 +338,14 @@ test("trusted release service alone can prepare, claim, and transition", async (
   assert.equal((await productionPreparationContextEndpoint(
     new Request("https://edit.example/edit/v1/prod/releases/frontier"),env,auth)).status,200);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
+  assert.equal((await productionRenewEndpoint(req("/edit/v1/prod/releases/renew",
+    { id:"release-1",fencing_token:"fence" }),env,auth)).status,200);
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
   const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
-  assert.deepEqual(calls.map((x) => x[0]), ["prepare","frontier","claim","transition"]);
+  assert.deepEqual(calls.map((x) => x[0]),
+    ["prepare","frontier","claim","renew","transition"]);
 });

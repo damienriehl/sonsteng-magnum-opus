@@ -942,7 +942,8 @@ for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:
                              "branch":br,"mapping_confidence":folio[1]})
     else:
         cross_skills.append({"id":sid,"no_folio_equivalent":True,"note":note})
-    preserve(cross_skills[-1], old_cross_skills.get(sid, {}), ("note",))
+    if cross_skills[-1].get("no_folio_equivalent"):
+        preserve(cross_skills[-1], old_cross_skills.get(sid, {}), ("note",))
 
 tasks_out, cross_tasks = [], []
 for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:  # preserve skill order
@@ -976,7 +977,8 @@ for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:  # preserve skill order
         if refs: obj["exercise_refs"]=refs
         preserve(obj, old_tasks.get(tid, {}), ("name", "description"))
         tasks_out.append(obj)
-        preserve(cross_tasks[-1], old_cross_tasks.get(tid, {}), ("note",))
+        if cross_tasks[-1].get("no_folio_equivalent"):
+            preserve(cross_tasks[-1], old_cross_tasks.get(tid, {}), ("note",))
 
 skills_doc={"schema_version":SV,"@id":f"{BASE}/taxonomy/skills","spine_version":SV,
     "description":"Sonsteng's 17 Legal Practice + 9 Law Practice Management skills (exact survey names, both phrasings preserved) plus a clearly-marked AI-era extension set. Survey importance/preparedness from reliable tables in docs/research/skills-survey.md (Table 4 management-importance percentages deliberately omitted as unreliable).",

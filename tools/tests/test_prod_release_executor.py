@@ -2,6 +2,7 @@ import pathlib
 import sys
 import hashlib
 import json
+import time
 
 import pytest
 
@@ -27,6 +28,8 @@ class Ledger:
     def __init__(self, release=None):
         self.release = release
         self.events = []
+        self.renewals = 0
+        self.renewal_leases = []
 
     def claim_authorized(self):
         return self.release
@@ -34,6 +37,11 @@ class Ledger:
     def transition(self, release_id, state, detail, fencing_token=None):
         self.events.append((release_id, state, detail))
         return {"ok": True}
+
+    def renew(self, release_id, fencing_token, lease_ms=None):
+        self.renewals += 1
+        self.renewal_leases.append(lease_ms)
+        return {"ok": True, "lease_expires_at": lease_ms}
 
 
 class Target:
@@ -129,6 +137,75 @@ def test_rejected_fence_halts_before_second_provider():
         ProductionExecutor(ledger, pages, worker).run_once()
     assert pages.deployed == [item.candidate_sha]
     assert worker.deployed == []
+
+
+def test_provider_operations_are_heartbeated_while_blocked():
+    item = release()
+    ledger = Ledger(item)
+
+    class SlowTarget(Target):
+        def deploy(self, manifest):
+            deadline = time.monotonic() + 1
+            while ledger.renewals < 2 and time.monotonic() < deadline:
+                time.sleep(.002)
+            return super().deploy(manifest)
+
+    pages = SlowTarget("pages", observed=item.candidate_sha)
+    worker = Target("worker", observed=item.candidate_sha)
+    ProductionExecutor(ledger, pages, worker, heartbeat_interval=.005).run_once()
+    # Before + during + after the slow call, plus bracketing the second provider.
+    assert ledger.renewals >= 5
+
+
+def test_lost_provider_heartbeat_fails_closed_before_next_provider():
+    item = release()
+
+    class LosingLedger(Ledger):
+        def renew(self, release_id, fencing_token, lease_ms=None):
+            self.renewals += 1
+            self.renewal_leases.append(lease_ms)
+            return {"ok": self.renewals < 2, "reason": "stale_fence"}
+
+    ledger = LosingLedger(item)
+
+    class SlowTarget(Target):
+        max_operation_seconds = 2 * 240
+
+        def deploy(self, manifest):
+            deadline = time.monotonic() + 1
+            while ledger.renewals < 2 and time.monotonic() < deadline:
+                time.sleep(.002)
+            return super().deploy(manifest)
+
+    pages = SlowTarget("pages", observed=item.candidate_sha)
+    worker = Target("worker", observed=item.candidate_sha)
+    with pytest.raises(ReleaseError, match="renewal lost"):
+        ProductionExecutor(ledger, pages, worker, heartbeat_interval=.005).run_once()
+    # One successful renewal alone covers both maximum-length Worker commands
+    # plus the executor's one-minute scheduling margin.
+    assert ledger.renewal_leases[0] == (2 * 240 + 60) * 1000
+    assert pages.deployed == [item.candidate_sha]
+    assert worker.deployed == []
+
+
+def test_worker_adapter_reports_complete_two_command_bound():
+    adapter = WranglerWorkerAdapter("/candidate/app/worker/wrangler.jsonc",
+        "https://edit.example/provenance", candidate_root="/candidate", timeout=240)
+    assert adapter.max_operation_seconds == 480
+
+
+def test_provider_bound_larger_than_lease_cap_fails_before_mutation():
+    item = release()
+    ledger = Ledger(item)
+
+    class UnboundedTarget(Target):
+        max_operation_seconds = 15 * 60
+
+    pages = UnboundedTarget("pages", observed=item.candidate_sha)
+    worker = Target("worker", observed=item.candidate_sha)
+    with pytest.raises(ReleaseError, match="exceeds maximum"):
+        ProductionExecutor(ledger, pages, worker).run_once()
+    assert not pages.deployed and not worker.deployed
 
 
 def test_manifest_rejects_frontier_gaps_and_changed_membership():

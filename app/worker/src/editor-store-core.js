@@ -37,6 +37,7 @@ export const CEILINGS = {
   globalPending: 5000,
   maxBytes: 16 * 1024, // 16KB new_text + comment, pre-insert
   leaseMs: 5 * 60 * 1000, // apply lease window
+  productionLeaseMs: 15 * 60 * 1000, // bounded provider-operation fence
 };
 
 export const SCHEMA_SQL = `
@@ -794,13 +795,33 @@ export class EditorStoreCore {
     if (!['authorized','executing','pages_deployed','worker_deployed','verified'].includes(release.state))
       return { ok:false, reason:"not_authorized" };
     const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
-    const lease = now + Math.max(1000, Math.min(input.lease_ms || CEILINGS.leaseMs, CEILINGS.leaseMs));
+    const lease = now + Math.max(1000, Math.min(
+      input.lease_ms || CEILINGS.leaseMs, CEILINGS.productionLeaseMs));
     this.sql.exec("UPDATE production_releases SET state=?,fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
       release.state === "authorized" ? "executing" : release.state,token,lease,now,release.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
       release.id,"executing",input.actor,JSON.stringify({ fencing_token:token,
         manifest_hash:release.manifest_hash }),now);
     return { ok:true, release:this.getProductionRelease(release.id) };
+  }
+
+  renewProductionReleaseLease(input = {}) {
+    const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id || "");
+    if (!release) return { ok:false, reason:"not_found" };
+    if (input.credential_channel !== "bearer" || !input.actor)
+      return { ok:false, reason:"service_bearer_required" };
+    if (!input.fencing_token || input.fencing_token !== release.fencing_token)
+      return { ok:false, reason:"stale_fence" };
+    if (!['executing','pages_deployed','worker_deployed','verified'].includes(release.state))
+      return { ok:false, reason:"not_executing" };
+    const now = this.now();
+    if (!release.lease_expires_at || release.lease_expires_at <= now)
+      return { ok:false, reason:"lease_expired" };
+    const lease = now + Math.max(1000,
+      Math.min(input.lease_ms || CEILINGS.productionLeaseMs, CEILINGS.productionLeaseMs));
+    this.sql.exec("UPDATE production_releases SET lease_expires_at=?,updated_at=? WHERE id=? AND fencing_token=?",
+      lease,now,release.id,release.fencing_token);
+    return { ok:true, lease_expires_at:lease };
   }
 
   transitionProductionRelease(input = {}) {
@@ -810,6 +831,9 @@ export class EditorStoreCore {
       return { ok:false, reason:"service_bearer_required" };
     if (!input.fencing_token || input.fencing_token !== release.fencing_token)
       return { ok:false, reason:"stale_fence" };
+    if (['executing','pages_deployed','worker_deployed','verified'].includes(release.state) &&
+        (!release.lease_expires_at || release.lease_expires_at <= this.now()))
+      return { ok:false, reason:"lease_expired" };
     const replayable = new Set(["executing","pages_deployed","worker_deployed","verified","complete"]);
     const prior = replayable.has(input.state) && this._one(
       "SELECT detail_json FROM production_release_events WHERE release_id=? AND type=? LIMIT 1", release.id,input.state);
@@ -837,7 +861,8 @@ export class EditorStoreCore {
     const now = this.now();
     this.transactionSync(() => {
     this.sql.exec("UPDATE production_releases SET state=?,provider_json=?,lease_expires_at=?,updated_at=? WHERE id=?",
-      input.state,JSON.stringify(detail),input.state === "complete" ? null : now + CEILINGS.leaseMs,now,release.id);
+      input.state,JSON.stringify(detail),input.state === "complete" ? null :
+        now + CEILINGS.leaseMs,now,release.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
       release.id,input.state,input.actor,JSON.stringify(detail),now);
     if (input.state === "complete") {

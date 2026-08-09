@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import urllib.request
 import urllib.parse
 from collections.abc import Callable
@@ -23,6 +24,9 @@ from contextlib import contextmanager
 
 class ReleaseError(RuntimeError):
     pass
+
+
+MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
 
 
 def _canonical(value) -> bytes:
@@ -118,6 +122,12 @@ class LedgerHTTP:
         return self._request("/edit/v1/prod/releases/transition",
             {"id": release_id, "state": state, "detail": detail,
              "fencing_token": fencing_token})
+
+    def renew(self, release_id, fencing_token, lease_ms=None):
+        body = {"id": release_id, "fencing_token": fencing_token}
+        if lease_ms is not None:
+            body["lease_ms"] = lease_ms
+        return self._request("/edit/v1/prod/releases/renew", body)
 
 
 class GitRefAdapter:
@@ -285,6 +295,10 @@ class WranglerPagesAdapter:
         self.production_branch = production_branch
         self.provenance_url, self._run, self._opener, self.timeout = provenance_url, run, opener, timeout
 
+    @property
+    def max_operation_seconds(self):
+        return self.timeout
+
     def deploy(self, manifest):
         artifact = pathlib.Path(self.artifact_dir).resolve()
         if not artifact.is_relative_to(self.candidate_root):
@@ -335,6 +349,11 @@ class WranglerWorkerAdapter:
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(config).parents[2]).resolve()
         self._run, self._opener, self.timeout = run, opener, timeout
 
+    @property
+    def max_operation_seconds(self):
+        # Upload and activation are separate, sequential bounded commands.
+        return self.timeout * 2
+
     def deploy(self, manifest):
         config = pathlib.Path(self.config).resolve()
         if not config.is_relative_to(self.candidate_root):
@@ -369,12 +388,16 @@ class WranglerWorkerAdapter:
 class ProductionExecutor:
     def __init__(self, ledger, pages, worker, compatibility=None,
                  candidate_validator: Callable[[FrozenRelease], None] | None = None,
-                 restorer=None, recovery_registry=None):
+                 restorer=None, recovery_registry=None, heartbeat_interval=60,
+                 lease_ms=5 * 60 * 1000, operation_margin_seconds=60):
         self.ledger, self.pages, self.worker = ledger, pages, worker
         self.compatibility = compatibility or CompatibilityGate(True, False)
         self.candidate_validator = candidate_validator
         self.restorer = restorer
         self.recovery_registry = recovery_registry
+        self.heartbeat_interval = heartbeat_interval
+        self.lease_ms = lease_ms
+        self.operation_margin_seconds = operation_margin_seconds
 
     def _event(self, release, state, **detail):
         # Evidence is deliberately identifiers/hashes only; edited text and
@@ -384,6 +407,46 @@ class ProductionExecutor:
         result = self.ledger.transition(release.id, state, safe, release.fencing_token)
         if not result or result.get("ok") is not True:
             raise ReleaseError("ledger rejected transition: " + str((result or {}).get("reason", "unknown")))
+
+    def _renew(self, release, lease_ms=None):
+        result = self.ledger.renew(
+            release.id, release.fencing_token, lease_ms or self.lease_ms)
+        if not result or result.get("ok") is not True:
+            raise ReleaseError("release lease renewal rejected: " +
+                               str((result or {}).get("reason", "unknown")))
+
+    def _provider_operation(self, release, target, operation):
+        """Fence the full provider bound, then heartbeat while it blocks."""
+        operation_seconds = getattr(target, "max_operation_seconds", 0)
+        operation_lease_ms = max(
+            self.lease_ms,
+            int((operation_seconds + self.operation_margin_seconds) * 1000),
+        )
+        if operation_lease_ms > MAX_PRODUCTION_LEASE_MS:
+            raise ReleaseError("provider operation bound exceeds maximum production lease")
+        self._renew(release, operation_lease_ms)
+        stopped = threading.Event()
+        failures = []
+
+        def heartbeat():
+            while not stopped.wait(self.heartbeat_interval):
+                try:
+                    self._renew(release, operation_lease_ms)
+                except Exception as exc:
+                    failures.append(exc)
+                    return
+
+        thread = threading.Thread(target=heartbeat, name="prod-release-lease", daemon=True)
+        thread.start()
+        try:
+            result = operation()
+        finally:
+            stopped.set()
+            thread.join()
+        if failures:
+            raise ReleaseError("release lease renewal lost during provider operation") from failures[0]
+        self._renew(release, operation_lease_ms)
+        return result
 
     def run_once(self, release=None):
         release = release or self.ledger.claim_authorized()
@@ -410,7 +473,9 @@ class ProductionExecutor:
                     self._event(release, name + "_deployed",
                         **{name + "_id": hashlib.sha256(recorded.encode()).hexdigest()[:24]})
                     continue
-                receipts[name] = targets[name].deploy(release)
+                receipts[name] = self._provider_operation(
+                    release, targets[name],
+                    lambda target=targets[name]: target.deploy(release))
                 if self.recovery_registry:
                     self.recovery_registry.record_target(
                         release.candidate_sha, name, receipts[name].get("deployable_id", ""))

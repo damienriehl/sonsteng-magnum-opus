@@ -107,16 +107,22 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
         tasks_path = os.path.join(tax, "tasks.json")
         skills = json.load(open(skills_path, encoding="utf-8"))
         tasks = json.load(open(tasks_path, encoding="utf-8"))
+        crosswalk_path = os.path.join(tax, "folio-crosswalk.json")
+        crosswalk = json.load(open(crosswalk_path, encoding="utf-8"))
         identities_path = os.path.join(tax, "taxonomy-identities.json")
         identities_before = json.load(open(identities_path, encoding="utf-8"))
         skills["skills"][0]["name"] = "Edited <script>alert(1)</script> skill"
         tasks["tasks"][0]["name"] = "Edited task wording"
         tasks["tasks"][0]["subtasks"][0]["name"] = "Edited subtask wording"
         tasks["tasks"][0]["subtasks"][0]["description"] = "Edited subtask wording"
+        crosswalk["skills"][1]["note"] = "Edited still-unmapped skill note"
+        crosswalk["tasks"][38]["note"] = "Edited still-unmapped task note"
         with open(skills_path, "w", encoding="utf-8") as fh:
             json.dump(skills, fh, ensure_ascii=False, indent=2)
         with open(tasks_path, "w", encoding="utf-8") as fh:
             json.dump(tasks, fh, ensure_ascii=False, indent=2)
+        with open(crosswalk_path, "w", encoding="utf-8") as fh:
+            json.dump(crosswalk, fh, ensure_ascii=False, indent=2)
 
         before_ids = [
             (task["id"], [sub["id"] for sub in task["subtasks"]])
@@ -135,14 +141,60 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
                        check=True, cwd=tmp, capture_output=True, text=True)
         regenerated_skills = json.load(open(skills_path, encoding="utf-8"))
         regenerated_tasks = json.load(open(tasks_path, encoding="utf-8"))
+        regenerated_crosswalk = json.load(open(crosswalk_path, encoding="utf-8"))
         assert regenerated_skills["skills"][0]["name"] == "Edited <script>alert(1)</script> skill"
         assert regenerated_tasks["tasks"][0]["name"] == "Edited task wording"
         assert regenerated_tasks["tasks"][0]["subtasks"][0]["name"] == "Edited subtask wording"
         assert regenerated_tasks["tasks"][0]["subtasks"][0]["description"] == "Edited subtask wording"
+        assert regenerated_crosswalk["skills"][1]["note"] == "Edited still-unmapped skill note"
+        assert regenerated_crosswalk["tasks"][38]["note"] == "Edited still-unmapped task note"
         assert [
             (task["id"], [sub["id"] for sub in task["subtasks"]])
             for task in regenerated_tasks["tasks"]
         ] == before_ids
+
+
+def test_generator_drops_obsolete_notes_when_authoritative_mapping_is_added():
+    import shutil
+    with tempfile.TemporaryDirectory(prefix="taxonomy-mapping-transition-") as tmp:
+        data = os.path.join(tmp, "data")
+        tax = os.path.join(data, "taxonomy")
+        shutil.copytree(TAXONOMY, tax)
+        shutil.copytree(os.path.join(REPO, "data", "schemas"), os.path.join(data, "schemas"))
+        os.makedirs(os.path.join(data, "matters"))
+        shutil.copy2(os.path.join(REPO, "data", "matters", "manifest.json"),
+                     os.path.join(data, "matters", "manifest.json"))
+
+        crosswalk_path = os.path.join(tax, "folio-crosswalk.json")
+        crosswalk = json.load(open(crosswalk_path, encoding="utf-8"))
+        crosswalk["skills"][1]["note"] = "Obsolete authored skill note"
+        crosswalk["tasks"][38]["note"] = "Obsolete authored task note"
+        with open(crosswalk_path, "w", encoding="utf-8") as fh:
+            json.dump(crosswalk, fh, ensure_ascii=False, indent=2)
+
+        generator_path = os.path.join(tax, "_build_taxonomy.py")
+        source = open(generator_path, encoding="utf-8").read()
+        source = source.replace(
+            '("SK-LP-02","Ability in legal analysis and reasoning",None,"legal_practice",False,None,',
+            '("SK-LP-02","Ability in legal analysis and reasoning",None,"legal_practice",False,'
+            '("R8Gc3Ce7YAbKZLOUs4pCQuA","near"),',
+            1,
+        )
+        source = source.replace(
+            'NONE("Establishing credibility before a tribunal is an interpersonal skill with no FOLIO service concept."),',
+            '("R9p98NogvwJk1MnJgYzuiZd","near"),',
+            1,
+        )
+        with open(generator_path, "w", encoding="utf-8") as fh:
+            fh.write(source)
+
+        subprocess.run([sys.executable, generator_path], check=True, cwd=tmp,
+                       capture_output=True, text=True)
+        regenerated = json.load(open(crosswalk_path, encoding="utf-8"))
+        for entry in (regenerated["skills"][1], regenerated["tasks"][38]):
+            assert "folio_iri" in entry
+            assert "note" not in entry
+            assert "no_folio_equivalent" not in entry
 
 
 def test_hostile_taxonomy_wording_is_contextually_escaped_as_inert_text():
