@@ -108,6 +108,12 @@ function byteLen(...strs) {
   return new TextEncoder().encode(strs.filter(Boolean).join("")).length;
 }
 
+async function sha256Hex(value) {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(value)));
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ---- POST /edit/v1/suggest (edit OR instructor scope) -----------------------
 export async function suggestEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Missing edit request header or bad origin.", 403);
@@ -799,6 +805,7 @@ export async function finalizeEndpoint(request, env, auth) {
     phase: body.phase,
     applied: body.applied, accepted_blocked: body.accepted_blocked,
     needs_human: body.needs_human, drift: body.drift, base_sha: body.base_sha,
+    commit_sha: body.commit_sha, generator_id: body.generator_id,
   });
   return json(result, result.ok ? 200 : 409);
 }
@@ -808,4 +815,54 @@ export async function reconcileEndpoint(request, env, auth) {
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
   const result = await editorStub(env).reconcile();
   return json(result);
+}
+
+// Human-only publication authority. Bearer credentials remain valid for the
+// later executor API, but cannot mint or enlarge a production authorization.
+export async function publisherAuthorizeEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (!auth?.editor || !auth?.scopes?.publisher?.granted ||
+      auth.credential_channel !== "access" || auth.service)
+    return editError("forbidden", "A human Publisher using Access is required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const text = (key) => typeof body[key] === "string" ? body[key] : "";
+  const id = text("id");
+  const idempotency_key = text("idempotency_key");
+  const target_batch_id = text("target_batch_id");
+  const base_sha = text("base_sha");
+  const candidate_sha = text("candidate_sha");
+  const generator_id = text("generator_id");
+  const evidence_hash = text("evidence_hash");
+  const manifest_hash = text("manifest_hash");
+  const membership_hash = text("membership_hash");
+  if ([id,idempotency_key,target_batch_id,base_sha,candidate_sha,generator_id,
+      evidence_hash,manifest_hash,membership_hash].some((value) => !value || value.length > 256))
+    return editError("validation_error", "Incomplete release binding.", 400);
+  const digestPayload = JSON.stringify({ id,target_batch_id,base_sha,candidate_sha,
+    generator_id,evidence_hash,manifest_hash,membership_hash });
+  const result = await editorStub(env).authorizeProductionRelease({
+    id,idempotency_key,request_digest:await sha256Hex(digestPayload), actor:auth.editor,
+    credential_channel:auth.credential_channel,target_environment:"production",target_batch_id,
+    base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+    membership_hash,
+  });
+  if (!result.ok) {
+    const status = ["idempotency_conflict","release_exists","membership_mismatch","stale_member",
+      "partial_group","stale_frontier","stale_target","stale_batch_evidence",
+      "nonancestor_candidate","active_release","stale_base"].includes(result.reason) ? 409 : 400;
+    return editError(result.reason || "validation_error", "Release authorization was rejected.", status);
+  }
+  return json(result, result.replay ? 200 : 201);
+}
+
+export async function publisherReleaseEndpoint(request, env, auth) {
+  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.admin?.granted)
+    return editError("forbidden", "Publisher or release-service scope required.", 403);
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id) return editError("validation_error", "id required.", 400);
+  const release = await editorStub(env).getProductionRelease(id);
+  return release ? json({ ok:true, release }) : editError("not_found", "Not found.", 404);
 }

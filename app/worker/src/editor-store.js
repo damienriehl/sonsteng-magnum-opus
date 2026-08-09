@@ -46,4 +46,7 @@ export class EditorStore extends DurableObject {
   claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
   resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
+  prepareProductionRelease(input) { return this.core.prepareProductionRelease(input); }
+  authorizeProductionRelease(input) { return this.core.authorizeProductionRelease(input); }
+  getProductionRelease(id) { return this.core.getProductionRelease(id); }
 }
