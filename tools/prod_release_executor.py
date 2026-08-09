@@ -92,7 +92,8 @@ class LedgerHTTP:
         request = urllib.request.Request(self.base_url + path, data=data,
             method="GET" if body is None else "POST",
             headers={"Authorization": "Bearer " + self._bearer,
-                     "Content-Type": "application/json", "X-Edit-Request": "1"})
+                     "Content-Type": "application/json", "X-Edit-Request": "1",
+                     "User-Agent": "sonsteng-prod-release/1.0"})
         with self._opener(request, timeout=30) as response:
             return json.load(response)
 
@@ -372,6 +373,14 @@ class ProductionExecutor:
             for name in self.compatibility.deployment_order():
                 if name + "_deployed" in release.completed_phases:
                     continue
+                recorded = self.recovery_registry.target(release.candidate_sha, name) \
+                    if self.recovery_registry else None
+                if recorded:
+                    if targets[name].provenance() != release.candidate_sha:
+                        raise ReleaseError("recorded target does not match live provenance")
+                    self._event(release, name + "_deployed",
+                        **{name + "_id": hashlib.sha256(recorded.encode()).hexdigest()[:24]})
+                    continue
                 receipts[name] = targets[name].deploy(release)
                 if self.recovery_registry:
                     self.recovery_registry.record_target(
@@ -457,3 +466,7 @@ class RecoveryRegistry:
             temporary = pathlib.Path(target_file.name)
         temporary.chmod(0o600)
         temporary.replace(self.path)
+
+    def target(self, sha, target):
+        key = "pages_deployment_id" if target == "pages" else "worker_version_id"
+        return self._read().get(sha, {}).get(key)

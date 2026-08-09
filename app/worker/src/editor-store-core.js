@@ -935,9 +935,12 @@ export class EditorStoreCore {
             swept.completed.push(it.id);
           }
         }
+        const evidence = this._one(
+          "SELECT commit_sha,generator_id FROM apply_batches WHERE batch_id=?", b.batch_id);
+        const terminalPhase = evidence?.commit_sha && evidence?.generator_id ? "done" : "evidence_missing";
         this.sql.exec(
-          "UPDATE apply_batches SET phase='done', updated_at=? WHERE batch_id=?",
-          now, b.batch_id
+          "UPDATE apply_batches SET phase=?, updated_at=? WHERE batch_id=?",
+          terminalPhase, now, b.batch_id
         );
       }
     }

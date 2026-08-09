@@ -190,6 +190,7 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert LedgerHTTP("https://edit.example", "secret", opener).claim_authorized() is None
     assert seen["X-edit-request"] == "1"
     assert seen["Authorization"] == "Bearer secret"
+    assert seen["User-agent"] == "sonsteng-prod-release/1.0"
 
 
 def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
@@ -244,8 +245,25 @@ def test_recovery_registry_persists_exact_pair_atomically(tmp_path):
         "pages_deployment_id":"pagesdeploy123",
         "worker_version_id":"12345678-1234-4234-8234-123456789abc"}
     assert path.stat().st_mode & 0o777 == 0o600
+    assert registry.target(sha, "pages") == "pagesdeploy123"
     with pytest.raises(ReleaseError, match="conflict"):
         registry.record_target(sha, "worker", "different")
+
+
+def test_registry_reconciles_crash_before_ledger_receipt_without_redeploy(tmp_path):
+    item = release()
+    registry = RecoveryRegistry(tmp_path / "known-good.json")
+    registry.record_target(item.candidate_sha, "pages", "pagesdeploy123")
+    registry.record_target(item.candidate_sha, "worker",
+                           "12345678-1234-4234-8234-123456789abc")
+    ledger = Ledger(item)
+    pages = Target("pages", observed=item.candidate_sha)
+    worker = Target("worker", observed=item.candidate_sha)
+    result = ProductionExecutor(ledger, pages, worker,
+        recovery_registry=registry).run_once()
+    assert result["state"] == "complete"
+    assert pages.deployed == []
+    assert worker.deployed == []
 
 
 def test_git_adapter_materializes_frozen_sha_away_from_advancing_checkout(tmp_path):
