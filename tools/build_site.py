@@ -209,6 +209,7 @@ def pct(n, digits=1):
 #   block WITHOUT a marker still renders but is absent from the map (read-only)
 #   and reported in EDMAP.unmarked / build/editor-unmarked.generated.json.
 _CANDIDATE_TAGS = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
+_CANDIDATE_CLASS = "eb-candidate"
 
 # The durable-block-ID marker: trailing "{#b:xxxxxxxx}" (8 lowercase hex chars)
 # on the block's last source line. Stripped from every rendering; minted only by
@@ -720,6 +721,7 @@ def load_corpus():
     matters.sort(key=lambda x: x["id"])
     skills = load_json(os.path.join(DATA, "taxonomy", "skills.json"))
     tasks = load_json(os.path.join(DATA, "taxonomy", "tasks.json"))
+    taxonomy_crosswalk = load_json(os.path.join(DATA, "taxonomy", "folio-crosswalk.json"))
     firm = load_json(os.path.join(DATA, "firm", "firm.json"))
     copy = {page: load_json(os.path.join(DATA, "copy", page + ".json"))
             for page in ("home", "matters", "firm")}
@@ -737,7 +739,8 @@ def load_corpus():
     curriculum = load_curriculum()
     return {
         "manifest": manifest, "matters": matters, "by_id": by_id,
-        "juris": juris, "skills": skills, "tasks": tasks, "firm": firm,
+        "juris": juris, "skills": skills, "tasks": tasks,
+        "taxonomy_crosswalk": taxonomy_crosswalk, "firm": firm,
         "curriculum": curriculum, "copy": copy,
     }
 
@@ -1730,20 +1733,21 @@ def build_skills(corpus):
     for t in corpus["tasks"]["tasks"]:
         tasks_by_skill[t["skill_id"]].append(t)
 
-    # U3 (editable coverage): task names and descriptions are authored prose and
-    # register as json_scalar blocks. The json_path is positional into the
-    # tasks.json list ("tasks.<i>.name") — the only dotted path json_get can
-    # address a list entry by. That identity holds because taxonomy files are
-    # never reordered by any editor operation; a manual insert/reorder of
-    # tasks.json entries would require regenerating the map in the same change.
-    # READ-ONLY by design: skill/task/subtask IDs, Bloom levels, module chips,
-    # FOLIO crosswalk chips and "no FOLIO equivalent" flags (join keys other
-    # pages resolve against), skill names (rendered in <summary>, which is not
-    # a walker candidate — Tier B, a deliberate decision point), alt_name and
-    # subtask <li>s (their candidate elements mix generated framing or IDs
-    # with more than one authored field).
+    # U2: every authored taxonomy scalar is explicitly registered while all
+    # identity, crosswalk, numeric, and structural fields remain absent.
     tasks_rel = data_relpath(DATA, "taxonomy", "tasks.json")
+    skills_rel = data_relpath(DATA, "taxonomy", "skills.json")
+    cross_rel = data_relpath(DATA, "taxonomy", "folio-crosswalk.json")
     task_pos = {t["id"]: i for i, t in enumerate(corpus["tasks"]["tasks"])}
+    skill_pos = {s["id"]: i for i, s in enumerate(skills)}
+    cross = corpus["taxonomy_crosswalk"]
+    cross_skill_pos = {x["id"]: i for i, x in enumerate(cross["skills"])}
+    cross_task_pos = {x["id"]: i for i, x in enumerate(cross["tasks"])}
+    cross_skills = {x["id"]: x for x in cross["skills"]}
+    cross_tasks = {x["id"]: x for x in cross["tasks"]}
+
+    def scalar(relpath, path, value, context):
+        return _eb_scalar_attr(relpath + "#" + path, value, path, context)
 
     def render_skill(s, open_first=False):
         sid = s["id"]
@@ -1763,11 +1767,27 @@ def build_skills(corpus):
                 '<a class="chip chip--matter" href="../matters/{slug}/index.html">{mid}</a>'.format(
                     slug=esc(corpus["by_id"][r]["_slug"]), mid=esc(r.upper()))
                 for r in refs if r in corpus["by_id"])
-            subs = "".join(
-                '<li class="subtask"><strong>{n}</strong> — {d} <span class="skill-id">{i}</span></li>'.format(
-                    n=esc(st["name"]), d=esc(st.get("description", "")), i=esc(st["id"]))
-                for st in (t.get("subtasks") or []))
+            subs = []
+            for sub_i, st in enumerate(t.get("subtasks") or []):
+                base = "tasks.{i}.subtasks.{j}".format(i=task_pos[t["id"]], j=sub_i)
+                sn_eb = scalar(tasks_rel, base + ".name", st["name"], t["name"])
+                sd_eb = scalar(tasks_rel, base + ".description",
+                               st.get("description", ""), t["name"])
+                subs.append(
+                    '<div class="subtask"><p style="margin:.4rem 0 0"{sn}><strong>{n}</strong></p>'
+                    '<p style="margin:.1rem 0 .4rem"{sd}>{d}</p>'
+                    '<span class="skill-id">{i}</span></div>'.format(
+                        sn=sn_eb, sd=sd_eb, n=esc(st["name"]),
+                        d=esc(st.get("description", "")), i=esc(st["id"])))
             tf = folio_chip(t.get("folio"), t.get("no_folio_equivalent"))
+            task_note = ""
+            cross_entry = cross_tasks.get(t["id"]) or {}
+            if cross_entry.get("note"):
+                ci = cross_task_pos[t["id"]]
+                path = "tasks.{i}.note".format(i=ci)
+                note_eb = scalar(cross_rel, path, cross_entry["note"], t["name"])
+                task_note = '<p class="subtask"{eb}>{note}</p>'.format(
+                    eb=note_eb, note=esc(cross_entry["note"]))
             # The editable element must contain ONLY the authored string (KTD3):
             # the ID + Bloom chips move into the read-only chips row so the name
             # <p> and description <p> — both already walker candidates — carry
@@ -1783,24 +1803,39 @@ def build_skills(corpus):
         <p style="margin:0"{name_eb}><span class="task-name">{name}</span></p>
         <p class="subtask" style="margin:.2rem 0 .4rem"{desc_eb}>{desc}</p>
         <div class="chips"><span class="skill-id">{tid}</span> <span class="bloom">BLOOM · {bloom} · {mod}</span> {tf} {chips}</div>
-        <ul style="margin:.4rem 0 0">{subs}</ul>
+        {task_note}
+        <div class="subtasks" style="margin:.4rem 0 0">{subs}</div>
       </div>""".format(name=esc(t["name"]), tid=esc(t["id"]), bloom=esc(t.get("bloom_level", "")),
                        mod=esc(t.get("module", "")), desc=esc(t.get("description", "")),
                        name_eb=name_eb, desc_eb=desc_eb,
-                       tf=tf, chips=chips, subs=subs))
-        alt = ('<p class="subtask" style="margin:.2rem 0 0">Survey phrasing also recorded as: '
-               '<em>{a}</em></p>'.format(a=esc(s["alt_name"]))) if s.get("alt_name") else ""
+                       tf=tf, chips=chips, task_note=task_note, subs="".join(subs)))
+        si = skill_pos[sid]
+        name_path = "skills.{i}.name".format(i=si)
+        name_eb = scalar(skills_rel, name_path, s["name"], "Skill name")
+        alt = ""
+        if s.get("alt_name"):
+            alt_path = "skills.{i}.alt_name".format(i=si)
+            alt_eb = scalar(skills_rel, alt_path, s["alt_name"], s["name"])
+            alt = ('<p class="skill-id" style="margin:.2rem 0 0">Survey phrasing also recorded as:</p>'
+                   '<p class="subtask" style="margin:.1rem 0 .4rem"{eb}>{a}</p>'.format(
+                       eb=alt_eb, a=esc(s["alt_name"])))
+        note = ""
+        cross_entry = cross_skills.get(sid) or {}
+        if cross_entry.get("note"):
+            ci = cross_skill_pos[sid]
+            path = "skills.{i}.note".format(i=ci)
+            note_eb = scalar(cross_rel, path, cross_entry["note"], s["name"])
+            note = '<p class="subtask"{eb}>{note}</p>'.format(
+                eb=note_eb, note=esc(cross_entry["note"]))
         return """
   <details class="card skill-card" id="{sid}"{op}>
-    <summary>
-      <span class="skill-card__name">{name}</span>
-      <span class="skill-id">{sid}</span>
-      {fol} {surv}
-    </summary>
+    <summary class="skill-card__name eb-candidate"{name_eb}>{name}</summary>
+    <div class="chips"><span class="skill-id">{sid}</span> {fol} {surv}</div>
     {alt}
+    {note}
     {tasks}
   </details>""".format(sid=esc(sid), op=" open" if open_first else "", name=esc(s["name"]),
-                       fol=fol, surv=surv, alt=alt,
+                       name_eb=name_eb, fol=fol, surv=surv, alt=alt, note=note,
                        tasks="".join(task_html) or '<p class="subtask">No decomposed tasks recorded.</p>')
 
     lp = [s for s in skills if not s.get("extension") and s["category"] == "legal_practice"]
@@ -1814,6 +1849,11 @@ def build_skills(corpus):
   <p class="lede">Sonsteng&rsquo;s seventeen Legal Practice skills and nine Law Practice Management
   skills, decomposed into the tasks most lawyers most often perform — each mapped into the FOLIO
   ontology where a sound mapping exists, and cross-linked to the matters that exercise it.</p>
+</section>
+<section aria-label="Taxonomy source descriptions">
+  <p{skills_desc_eb}>{skills_desc}</p>
+  <p{tasks_desc_eb}>{tasks_desc}</p>
+  <p{cross_desc_eb}>{cross_desc}</p>
 </section>
 <div class="brass-rule" role="presentation"></div>
 
@@ -1839,9 +1879,16 @@ def build_skills(corpus):
   {ext}
 </section>
 """.format(n=len(lp) + len(pm), title_render=_eb_render_attr(title_ref, rel),
+           skills_desc=esc(corpus["skills"]["description"]),
+           skills_desc_eb=scalar(skills_rel, "description", corpus["skills"]["description"], "Taxonomy"),
+           tasks_desc=esc(corpus["tasks"]["description"]),
+           tasks_desc_eb=scalar(tasks_rel, "description", corpus["tasks"]["description"], "Taxonomy"),
+           cross_desc=esc(cross["description"]),
+           cross_desc_eb=scalar(cross_rel, "description", cross["description"], "Taxonomy"),
            lp="".join(render_skill(s, open_first=(i == 0)) for i, s in enumerate(lp)),
            pm="".join(render_skill(s) for s in pm),
            ext="".join(render_skill(s) for s in ext))
+    body = "\n".join(line.rstrip() for line in body.splitlines()) + "\n"
     write_file(rel, page_shell(rel, "Skills Browser", "TAXONOMY · SKILLS",
                                [("Home", "../index.html"), ("Skills", None)], body))
 
@@ -3153,7 +3200,7 @@ class _BlockWalker(HTMLParser):
             if tag == self._cur_tag:
                 self._depth += 1
             return
-        if tag in _CANDIDATE_TAGS:
+        if tag in _CANDIDATE_TAGS or _CANDIDATE_CLASS in d.get("class", "").split():
             self._cur = {"tag": tag, "ebsrc": d.get("data-ebsrc"), "text": []}
             self._cur_tag = tag
             self._depth = 1
@@ -3711,7 +3758,8 @@ def build_editor_map(spine_build_id, scope_index=None):
         "git_base_sha": spine_stamp.git_base_sha(),
         "walker_contract": (
             "Within <main>, candidate elements in document order are "
-            "p, li, h1-h6, blockquote (outermost). index = 0-based position in "
+            "p, li, h1-h6, blockquote, plus explicit .eb-candidate leaves "
+            "(outermost). index = 0-based position in "
             "that list. Editable blocks are candidates whose index is present here; "
             "all other candidates are read-only. Mirror byte-for-byte in the injector."),
         "normalization": ("original_hash = sha256(normalize(rendered_text)); "

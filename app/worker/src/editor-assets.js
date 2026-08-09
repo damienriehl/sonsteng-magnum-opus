@@ -37,7 +37,7 @@ export const EDITOR_JS = `(() => {
   const edits = island("edits-data") || { items: [] };
 
   // Walker contract (mirror of tools/build_site.py): candidate elements within
-  // <main>, in document order — p,li,h1-h6,blockquote (outermost). Assign index.
+  // <main>, in document order — block tags plus explicit .eb-candidate leaves.
   const TAGS = new Set(["P","LI","H1","H2","H3","H4","H5","H6","BLOCKQUOTE"]);
   const editable = new Map((map.blocks||[]).map(b => [b.index, b]));
   const main = document.querySelector("main");
@@ -45,7 +45,7 @@ export const EDITOR_JS = `(() => {
     const candidates = [];
     (function walk(node){
       for (const child of node.children){
-        if (TAGS.has(child.tagName)) { candidates.push(child); }
+        if (TAGS.has(child.tagName) || child.classList.contains("eb-candidate")) { candidates.push(child); }
         else walk(child);
       }
     })(main);

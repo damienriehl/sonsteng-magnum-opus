@@ -238,10 +238,10 @@
   /* ============================================================================
      2. THE WALKER CONTRACT — mirror the generator's block-walk byte-for-byte.
         Within <main>, candidate tags in document order are p, li, h1-h6,
-        blockquote; take the OUTERMOST (a candidate that is not a descendant of
+        blockquote, plus explicit .eb-candidate leaves; take the OUTERMOST (a candidate that is not a descendant of
         another candidate). index = 0-based position in that ordered list.
      ============================================================================ */
-  var CANDIDATE_SEL = 'p,li,h1,h2,h3,h4,h5,h6,blockquote';
+  var CANDIDATE_SEL = 'p,li,h1,h2,h3,h4,h5,h6,blockquote,.eb-candidate';
   function outermostCandidates(main) {
     if (!main) return [];
     var all = main.querySelectorAll(CANDIDATE_SEL);   // document order

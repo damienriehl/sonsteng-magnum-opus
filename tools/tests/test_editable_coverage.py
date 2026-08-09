@@ -199,10 +199,11 @@ class NewCoverageTest(unittest.TestCase):
 
     def test_skills_page_moves_off_zero(self):
         blocks = self.pages["skills/index.html"]
-        tasks = json.load(open(os.path.join(REPO, "data", "taxonomy", "tasks.json"),
-                               encoding="utf-8"))["tasks"]
-        # one name + one description per task, and nothing else
-        self.assertEqual(len(blocks), 2 * len(tasks))
+        inventory = json.load(open(
+            os.path.join(REPO, "data", "taxonomy", "editable-fields.json"),
+            encoding="utf-8"))
+        # U2's reviewed allowlist is the exact taxonomy coverage contract.
+        self.assertEqual(len(blocks), len(inventory["editable"]))
         self.assertGreater(len(blocks), 0)
 
     def test_firm_page_moves_off_zero(self):
@@ -320,6 +321,14 @@ class StabilityTest(unittest.TestCase):
             )
             for b in blocks:
                 with self.subTest(page=page, ref=b["source_ref"]):
+                    # U2 deliberately migrates this page's walker indices behind
+                    # the live empty-queue fence. Durable source_refs, not old
+                    # positional indices, are the preservation contract here.
+                    if page == "skills/index.html":
+                        by_ref = {item["source_ref"]: item for item in fresh_blocks}
+                        self.assertIn(b["source_ref"], by_ref)
+                        self.assertEqual(by_ref[b["source_ref"]]["kind"], b["kind"])
+                        continue
                     expected_index = b["index"]
                     if (shape_indices and not baseline_has_shape
                             and expected_index >= shape_indices[0]):

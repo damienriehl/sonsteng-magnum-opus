@@ -19,6 +19,14 @@ const DEFAULT_MAX_BYTES = 16 * 1024;
 // enter any suggested text (a payload carrying one could forge or corrupt block
 // identity at apply time).
 const RESERVED_MARKER = "{#b:";
+const UNSAFE_PLAIN_TEXT = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
+
+export function normalizeTaxonomyPlainText(sourceRef, value) {
+  if (!String(sourceRef || "").startsWith("data/taxonomy/")) return value;
+  if (typeof value !== "string" || UNSAFE_PLAIN_TEXT.test(value)) return null;
+  const normalized = value.normalize("NFC").replace(/\r\n?/g, "\n").trim();
+  return normalized ? normalized : null;
+}
 
 // A structural payload is ONE block's plain text: single line, non-empty, no
 // reserved marker bytes.
@@ -118,7 +126,7 @@ export async function suggestEndpoint(request, env, auth) {
   const id = body.id;
   const source_ref = body.source_ref;
   const json_path = body.json_path != null ? String(body.json_path) : null;
-  const new_text = typeof body.new_text === "string" ? body.new_text : null;
+  let new_text = typeof body.new_text === "string" ? body.new_text : null;
   const comment = typeof body.comment === "string" ? body.comment : null;
   const clientHash = typeof body.original_hash === "string" ? body.original_hash : null;
   const op = typeof body.op === "string" ? body.op : null;
@@ -238,6 +246,9 @@ export async function suggestEndpoint(request, env, auth) {
   if (new_text != null && block.kind === "json_scalar") {
     if (!validateJsonScalar(source_ref, json_path, scope))
       return editError("validation_error", "That field cannot be edited that way.", 400);
+    new_text = normalizeTaxonomyPlainText(source_ref, new_text);
+    if (new_text == null)
+      return editError("validation_error", "Taxonomy wording must be safe plain text.", 400);
   }
   // comment-only blocks accept comments only; prose/json_scalar accept new_text.
   if (block.kind === "comment_only" && new_text != null)
@@ -324,7 +335,7 @@ export async function systemSuggestEndpoint(request, env, auth) {
   const id = body.id;
   const source_ref = body.source_ref;
   const json_path = body.json_path != null ? String(body.json_path) : null;
-  const new_text = typeof body.new_text === "string" ? body.new_text : null;
+  let new_text = typeof body.new_text === "string" ? body.new_text : null;
   const comment = typeof body.comment === "string" ? body.comment : null;
   const origin = typeof body.origin === "string" ? body.origin : null;
   const group_id = typeof body.group_id === "string" ? body.group_id : null;
@@ -362,6 +373,9 @@ export async function systemSuggestEndpoint(request, env, auth) {
   if (new_text != null && block.kind === "json_scalar") {
     if (!validateJsonScalar(source_ref, json_path, scope))
       return editError("validation_error", "That field cannot be edited that way.", 400);
+    new_text = normalizeTaxonomyPlainText(source_ref, new_text);
+    if (new_text == null)
+      return editError("validation_error", "Taxonomy wording must be safe plain text.", 400);
   }
   // comment-only blocks accept comments only.
   if (block.kind === "comment_only" && new_text != null)

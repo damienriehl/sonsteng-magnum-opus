@@ -1,0 +1,4548 @@
+{
+  "schema_version": "1.0.0",
+  "generated_by": "tools/build_taxonomy_contract.py",
+  "editable": [
+    {
+      "source_ref": "data/taxonomy/skills.json#description",
+      "family": "document_description",
+      "record_id": "skills",
+      "authored_text": "Sonsteng's 17 Legal Practice + 9 Law Practice Management skills (exact survey names, both phrasings preserved) plus a clearly-marked AI-era extension set. Survey importance/preparedness from reliable tables in docs/research/skills-survey.md (Table 4 management-importance percentages deliberately omitted as unreliable)."
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.0.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-01",
+      "authored_text": "Ability to diagnose and plan solutions for legal problems"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.1.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-02",
+      "authored_text": "Ability in legal analysis and reasoning"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.2.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-03",
+      "authored_text": "Knowledge of substantive law"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.3.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-04",
+      "authored_text": "Knowledge of procedural law"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.4.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-05",
+      "authored_text": "Library legal research"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.4.alt_name",
+      "family": "skill_alt_name",
+      "record_id": "SK-LP-05",
+      "authored_text": "Skills to conduct legal library research"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.5.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-06",
+      "authored_text": "Computer legal research"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.5.alt_name",
+      "family": "skill_alt_name",
+      "record_id": "SK-LP-06",
+      "authored_text": "Knowledge of computer legal research"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.6.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-07",
+      "authored_text": "Fact gathering"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.7.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-08",
+      "authored_text": "Oral communication"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.8.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-09",
+      "authored_text": "Written communication"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.9.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-10",
+      "authored_text": "Counseling"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.10.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-11",
+      "authored_text": "Instilling others' confidence in you"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.10.alt_name",
+      "family": "skill_alt_name",
+      "record_id": "SK-LP-11",
+      "authored_text": "The ability to instill others' confidence in their work"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.11.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-12",
+      "authored_text": "Ability to obtain and keep clients"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.12.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-13",
+      "authored_text": "Negotiation"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.13.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-14",
+      "authored_text": "Litigation"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.13.alt_name",
+      "family": "skill_alt_name",
+      "record_id": "SK-LP-14",
+      "authored_text": "Understanding and conducting litigation"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.14.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-15",
+      "authored_text": "Organization and management of legal work"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.15.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-16",
+      "authored_text": "Sensitivity to professional and ethical concerns"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.16.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-17",
+      "authored_text": "Drafting legal documents"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.16.alt_name",
+      "family": "skill_alt_name",
+      "record_id": "SK-LP-17",
+      "authored_text": "Ability to draft legal documents"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.17.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-01",
+      "authored_text": "Fee arrangements, pricing, billing"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.18.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-02",
+      "authored_text": "Human resources, hiring, support staff"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.19.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-03",
+      "authored_text": "Capitalization, investment"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.20.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-04",
+      "authored_text": "Project and time management, efficiency"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.21.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-05",
+      "authored_text": "Planning, resource allocation, budgeting"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.22.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-06",
+      "authored_text": "Marketing, client development"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.23.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-07",
+      "authored_text": "Technology, computers, communications"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.24.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-08",
+      "authored_text": "Governance, decision-making, long-range strategic planning"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.25.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-09",
+      "authored_text": "Interpersonal communications, staff relations"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.26.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-18",
+      "authored_text": "Prompt formulation and iteration"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.27.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-19",
+      "authored_text": "AI-output verification and citation checking"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.28.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-20",
+      "authored_text": "Centaur workflow judgment"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.29.name",
+      "family": "skill_name",
+      "record_id": "SK-LP-21",
+      "authored_text": "Confidentiality and privilege protection in AI-assisted work"
+    },
+    {
+      "source_ref": "data/taxonomy/skills.json#skills.30.name",
+      "family": "skill_name",
+      "record_id": "SK-PM-10",
+      "authored_text": "Data and matter hygiene with AI tools"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#description",
+      "family": "document_description",
+      "record_id": "tasks",
+      "authored_text": "Primary-task -> subtask decomposition for each of the 26 surveyed skills and 5 AI-era extension skills, grounded in the master-outline deliverable set and standard practice-of-law task inventories. exercise_refs point to manifest matters that exercise the task."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.name",
+      "family": "task_name",
+      "record_id": "TSK-001",
+      "authored_text": "Conduct a preliminary case analysis"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.description",
+      "family": "task_description",
+      "record_id": "TSK-001",
+      "authored_text": "Analyze a new matter to identify governing law and the relative strengths and weaknesses of each side."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-001.01",
+      "authored_text": "Identify the governing law"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-001.01",
+      "authored_text": "Determine which statutes, rules, and cases control the matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-001.02",
+      "authored_text": "Assess strengths and weaknesses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-001.02",
+      "authored_text": "Weigh the strong and weak points of both sides."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-001.03",
+      "authored_text": "Frame the legal issues"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.0.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-001.03",
+      "authored_text": "State the dispositive issues the matter presents."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.name",
+      "family": "task_name",
+      "record_id": "TSK-002",
+      "authored_text": "Develop a case theory and strategy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.description",
+      "family": "task_description",
+      "record_id": "TSK-002",
+      "authored_text": "Synthesize the facts and law into a coherent theory of the case and a plan to prevail."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-002.01",
+      "authored_text": "Articulate theory and themes"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-002.01",
+      "authored_text": "State the persuasive theory and supporting themes."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-002.02",
+      "authored_text": "Identify elements to prevail"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-002.02",
+      "authored_text": "List the elements that must be proven or defeated."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-002.03",
+      "authored_text": "Map liabilities and remedies"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.1.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-002.03",
+      "authored_text": "Identify exposure and the remedies available."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.name",
+      "family": "task_name",
+      "record_id": "TSK-003",
+      "authored_text": "Create a strategic plan of action"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.description",
+      "family": "task_description",
+      "record_id": "TSK-003",
+      "authored_text": "Translate the case theory into a sequenced plan with objectives, steps, and deadlines."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-003.01",
+      "authored_text": "Define client objectives"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-003.01",
+      "authored_text": "Capture what the client wants to achieve."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-003.02",
+      "authored_text": "Sequence steps and deadlines"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-003.02",
+      "authored_text": "Order the tasks and key dates."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-003.03",
+      "authored_text": "Select the forum and approach"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.2.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-003.03",
+      "authored_text": "Choose litigation, negotiation, or transaction path."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.name",
+      "family": "task_name",
+      "record_id": "TSK-004",
+      "authored_text": "Diagnose the client's legal problem at intake"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.description",
+      "family": "task_description",
+      "record_id": "TSK-004",
+      "authored_text": "Classify the client's problem into the correct area(s) of law and spot threshold issues."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-004.01",
+      "authored_text": "Classify the problem"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-004.01",
+      "authored_text": "Place the problem within one or more areas of law."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-004.02",
+      "authored_text": "Spot threshold and jurisdiction issues"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.3.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-004.02",
+      "authored_text": "Identify limitations, standing, and forum questions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.name",
+      "family": "task_name",
+      "record_id": "TSK-005",
+      "authored_text": "Write a legal analysis memorandum"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.description",
+      "family": "task_description",
+      "record_id": "TSK-005",
+      "authored_text": "Produce a written IRAC analysis of a legal question in a matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-005.01",
+      "authored_text": "State the issue and rule"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-005.01",
+      "authored_text": "Frame the question and the controlling rule."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-005.02",
+      "authored_text": "Apply the law to the facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-005.02",
+      "authored_text": "Reason from rule to the matter's facts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-005.03",
+      "authored_text": "Reach a reasoned conclusion"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.4.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-005.03",
+      "authored_text": "State a supported conclusion and its confidence."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.name",
+      "family": "task_name",
+      "record_id": "TSK-006",
+      "authored_text": "Apply governing law to disputed facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.description",
+      "family": "task_description",
+      "record_id": "TSK-006",
+      "authored_text": "Match the elements of the governing law to the contested facts of the matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-006.01",
+      "authored_text": "Extract the legal elements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-006.01",
+      "authored_text": "Break the rule into its required elements."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-006.02",
+      "authored_text": "Match facts to elements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-006.02",
+      "authored_text": "Line up the facts against each element."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-006.03",
+      "authored_text": "Weigh counterarguments"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.5.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-006.03",
+      "authored_text": "Test the analysis against the opposing view."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.name",
+      "family": "task_name",
+      "record_id": "TSK-007",
+      "authored_text": "Construct and evaluate legal arguments"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.description",
+      "family": "task_description",
+      "record_id": "TSK-007",
+      "authored_text": "Build affirmative arguments and critically evaluate their strength against the opposition."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-007.01",
+      "authored_text": "Build the affirmative argument"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-007.01",
+      "authored_text": "Assemble facts and authority into an argument."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-007.02",
+      "authored_text": "Anticipate the opposing argument"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-007.02",
+      "authored_text": "Predict and address the counterposition."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-007.03",
+      "authored_text": "Assess relative strength"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.6.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-007.03",
+      "authored_text": "Judge which arguments are strongest."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.name",
+      "family": "task_name",
+      "record_id": "TSK-008",
+      "authored_text": "Synthesize authority into a working rule"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.description",
+      "family": "task_description",
+      "record_id": "TSK-008",
+      "authored_text": "Reconcile multiple, possibly conflicting, authorities into a usable statement of the rule."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-008.01",
+      "authored_text": "Reconcile conflicting authority"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-008.01",
+      "authored_text": "Harmonize or distinguish competing sources."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-008.02",
+      "authored_text": "Derive a rule statement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.7.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-008.02",
+      "authored_text": "State the synthesized rule for the file."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.name",
+      "family": "task_name",
+      "record_id": "TSK-009",
+      "authored_text": "Identify the controlling substantive rules"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.description",
+      "family": "task_description",
+      "record_id": "TSK-009",
+      "authored_text": "Locate and state the substantive rules that govern the matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-009.01",
+      "authored_text": "Locate governing statutes and code"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-009.01",
+      "authored_text": "Find the controlling primary law."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-009.02",
+      "authored_text": "Identify controlling elements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.8.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-009.02",
+      "authored_text": "State the substantive elements at issue."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.name",
+      "family": "task_name",
+      "record_id": "TSK-010",
+      "authored_text": "Analyze the elements of a claim or defense"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.description",
+      "family": "task_description",
+      "record_id": "TSK-010",
+      "authored_text": "Break a claim or defense into its prima facie elements and available defenses."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-010.01",
+      "authored_text": "Enumerate prima facie elements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-010.01",
+      "authored_text": "List each element of the claim."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-010.02",
+      "authored_text": "Identify affirmative defenses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.9.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-010.02",
+      "authored_text": "List defenses that may defeat the claim."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.name",
+      "family": "task_name",
+      "record_id": "TSK-011",
+      "authored_text": "Apply area-specific doctrine to the facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.description",
+      "family": "task_description",
+      "record_id": "TSK-011",
+      "authored_text": "Apply the doctrine of the matter's practice area to its particular facts, noting jurisdictional variation."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-011.01",
+      "authored_text": "Apply doctrine to matter facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-011.01",
+      "authored_text": "Work the doctrine through the facts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-011.02",
+      "authored_text": "Note jurisdictional variations"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.10.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-011.02",
+      "authored_text": "Flag differences across the real-tier states."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.name",
+      "family": "task_name",
+      "record_id": "TSK-012",
+      "authored_text": "Determine the governing procedural framework"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.description",
+      "family": "task_description",
+      "record_id": "TSK-012",
+      "authored_text": "Identify the court, forum, and rule set that will govern the matter's procedure."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-012.01",
+      "authored_text": "Identify court, forum, and rules"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-012.01",
+      "authored_text": "Determine the tribunal and its rules."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-012.02",
+      "authored_text": "Determine filing deadlines"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.11.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-012.02",
+      "authored_text": "Calendar the controlling deadlines."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.name",
+      "family": "task_name",
+      "record_id": "TSK-013",
+      "authored_text": "Apply the rules of civil procedure to a filing"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.description",
+      "family": "task_description",
+      "record_id": "TSK-013",
+      "authored_text": "Ensure a filing satisfies jurisdiction, venue, and service requirements."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-013.01",
+      "authored_text": "Confirm jurisdiction and venue"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-013.01",
+      "authored_text": "Verify the forum is proper."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-013.02",
+      "authored_text": "Comply with service requirements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.12.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-013.02",
+      "authored_text": "Effect and document proper service."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.name",
+      "family": "task_name",
+      "record_id": "TSK-014",
+      "authored_text": "Apply the rules of evidence in preparation"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.description",
+      "family": "task_description",
+      "record_id": "TSK-014",
+      "authored_text": "Assess admissibility and lay foundation for key evidence before a hearing or trial."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-014.01",
+      "authored_text": "Assess admissibility of exhibits"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-014.01",
+      "authored_text": "Test exhibits against the evidence rules."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-014.02",
+      "authored_text": "Prepare foundation for key evidence"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.13.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-014.02",
+      "authored_text": "Plan how each item will be admitted."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.name",
+      "family": "task_name",
+      "record_id": "TSK-015",
+      "authored_text": "Navigate appellate procedure"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.description",
+      "family": "task_description",
+      "record_id": "TSK-015",
+      "authored_text": "Comply with appellate rules, format, and deadlines for a review proceeding."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-015.01",
+      "authored_text": "Confirm appellate rules and format"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-015.01",
+      "authored_text": "Meet the format and length requirements."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-015.02",
+      "authored_text": "Calendar briefing deadlines"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.14.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-015.02",
+      "authored_text": "Track the appellate briefing schedule."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.name",
+      "family": "task_name",
+      "record_id": "TSK-016",
+      "authored_text": "Formulate a research plan"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.description",
+      "family": "task_description",
+      "record_id": "TSK-016",
+      "authored_text": "Plan a library research effort: issues, sources, and search terms."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-016.01",
+      "authored_text": "Identify issues to research"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-016.01",
+      "authored_text": "List the questions to answer."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-016.02",
+      "authored_text": "Select sources and search terms"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.15.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-016.02",
+      "authored_text": "Choose the tools and vocabulary."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.name",
+      "family": "task_name",
+      "record_id": "TSK-017",
+      "authored_text": "Locate and read primary authority in print"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.description",
+      "family": "task_description",
+      "record_id": "TSK-017",
+      "authored_text": "Find and read the controlling statutes and case law in library sources."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-017.01",
+      "authored_text": "Find controlling statutes"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-017.01",
+      "authored_text": "Locate the governing code sections."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-017.02",
+      "authored_text": "Find on-point case law"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.16.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-017.02",
+      "authored_text": "Locate cases on the issue."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.name",
+      "family": "task_name",
+      "record_id": "TSK-018",
+      "authored_text": "Validate and update authority"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.description",
+      "family": "task_description",
+      "record_id": "TSK-018",
+      "authored_text": "Confirm that authority is still good law and note subsequent history."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-018.01",
+      "authored_text": "Confirm authority is good law"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-018.01",
+      "authored_text": "Check that the source is still valid."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-018.02",
+      "authored_text": "Note subsequent history"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.17.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-018.02",
+      "authored_text": "Record later treatment of the source."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.name",
+      "family": "task_name",
+      "record_id": "TSK-019",
+      "authored_text": "Run electronic database searches"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.description",
+      "family": "task_description",
+      "record_id": "TSK-019",
+      "authored_text": "Search online legal databases with effective queries filtered to the jurisdiction."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-019.01",
+      "authored_text": "Build boolean and natural-language queries"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-019.01",
+      "authored_text": "Construct effective search strings."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-019.02",
+      "authored_text": "Filter by jurisdiction"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.18.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-019.02",
+      "authored_text": "Restrict results to the governing jurisdiction."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.name",
+      "family": "task_name",
+      "record_id": "TSK-020",
+      "authored_text": "Cite-check using online tools"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.description",
+      "family": "task_description",
+      "record_id": "TSK-020",
+      "authored_text": "Use citator tools to verify citations and check their treatment."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-020.01",
+      "authored_text": "Verify citation validity"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-020.01",
+      "authored_text": "Confirm each cite exists and is accurate."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-020.02",
+      "authored_text": "Check treatment flags"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.19.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-020.02",
+      "authored_text": "Review negative or cautionary treatment."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.name",
+      "family": "task_name",
+      "record_id": "TSK-021",
+      "authored_text": "Assemble a research trail and report"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.description",
+      "family": "task_description",
+      "record_id": "TSK-021",
+      "authored_text": "Record the sources found and summarize the findings for the file."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-021.01",
+      "authored_text": "Record sources found"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-021.01",
+      "authored_text": "Log the authorities located."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-021.02",
+      "authored_text": "Summarize findings for the file"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.20.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-021.02",
+      "authored_text": "Write a short research summary."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.name",
+      "family": "task_name",
+      "record_id": "TSK-022",
+      "authored_text": "Conduct a client intake interview"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.description",
+      "family": "task_description",
+      "record_id": "TSK-022",
+      "authored_text": "Interview a new client to elicit their story, goals, and concerns while building trust."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-022.01",
+      "authored_text": "Use open-ended then focused questions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-022.01",
+      "authored_text": "Move from broad to narrow (T-funnel)."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-022.02",
+      "authored_text": "Build rapport and trust"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-022.02",
+      "authored_text": "Establish a working relationship."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-022.03",
+      "authored_text": "Elicit the client's goals and concerns"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.21.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-022.03",
+      "authored_text": "Capture what the client wants and fears."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.name",
+      "family": "task_name",
+      "record_id": "TSK-023",
+      "authored_text": "Investigate and develop the facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.description",
+      "family": "task_description",
+      "record_id": "TSK-023",
+      "authored_text": "Gather documents and witness information and assess factual gaps and inconsistencies."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-023.01",
+      "authored_text": "Gather documents and records"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-023.01",
+      "authored_text": "Collect the relevant records."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-023.02",
+      "authored_text": "Identify and interview witnesses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-023.02",
+      "authored_text": "Find and question fact witnesses."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-023.03",
+      "authored_text": "Assess gaps and inconsistencies"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.22.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-023.03",
+      "authored_text": "Test the facts for holes and conflicts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.name",
+      "family": "task_name",
+      "record_id": "TSK-024",
+      "authored_text": "Interview fact witnesses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.description",
+      "family": "task_description",
+      "record_id": "TSK-024",
+      "authored_text": "Prepare for and conduct interviews of fact witnesses and memorialize their statements."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-024.01",
+      "authored_text": "Prepare a witness question outline"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-024.01",
+      "authored_text": "Plan the areas to cover."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-024.02",
+      "authored_text": "Capture and memorialize statements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.23.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-024.02",
+      "authored_text": "Record the witness account."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.name",
+      "family": "task_name",
+      "record_id": "TSK-025",
+      "authored_text": "Build and maintain a chronology of facts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.description",
+      "family": "task_description",
+      "record_id": "TSK-025",
+      "authored_text": "Order events into a timeline and link facts to the legal elements they support."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-025.01",
+      "authored_text": "Order events on a timeline"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-025.01",
+      "authored_text": "Place events in sequence."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-025.02",
+      "authored_text": "Link facts to legal elements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.24.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-025.02",
+      "authored_text": "Connect each fact to an element."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.name",
+      "family": "task_name",
+      "record_id": "TSK-026",
+      "authored_text": "Deliver an opening statement or oral argument"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.description",
+      "family": "task_description",
+      "record_id": "TSK-026",
+      "authored_text": "Present a structured, theme-driven oral argument and respond to questions from the bench."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-026.01",
+      "authored_text": "Structure the argument"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-026.01",
+      "authored_text": "Organize the oral presentation."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-026.02",
+      "authored_text": "Use theory and themes"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-026.02",
+      "authored_text": "Anchor the argument in the case theory."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-026.03",
+      "authored_text": "Respond to questions from the bench"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.25.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-026.03",
+      "authored_text": "Handle questioning under pressure."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.name",
+      "family": "task_name",
+      "record_id": "TSK-027",
+      "authored_text": "Conduct direct and cross-examination"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.description",
+      "family": "task_description",
+      "record_id": "TSK-027",
+      "authored_text": "Plan and deliver direct examination to elicit the story and cross to control the witness."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-027.01",
+      "authored_text": "Plan direct to elicit the story"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-027.01",
+      "authored_text": "Design questions that let the witness tell it."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-027.02",
+      "authored_text": "Plan cross to control the witness"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.26.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-027.02",
+      "authored_text": "Design leading questions that limit the witness."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.name",
+      "family": "task_name",
+      "record_id": "TSK-028",
+      "authored_text": "Counsel and communicate with the client orally"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.description",
+      "family": "task_description",
+      "record_id": "TSK-028",
+      "authored_text": "Explain options and confirm understanding in plain, accessible language."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-028.01",
+      "authored_text": "Explain options in plain language"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-028.01",
+      "authored_text": "Translate legal choices for the client."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-028.02",
+      "authored_text": "Confirm client understanding"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.27.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-028.02",
+      "authored_text": "Check that the client understood."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.name",
+      "family": "task_name",
+      "record_id": "TSK-029",
+      "authored_text": "Present a negotiation position orally"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.description",
+      "family": "task_description",
+      "record_id": "TSK-029",
+      "authored_text": "State interests and positions and make and respond to offers in real time."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-029.01",
+      "authored_text": "State interests and positions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-029.01",
+      "authored_text": "Present the client's goals and stance."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-029.02",
+      "authored_text": "Make and respond to offers"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.28.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-029.02",
+      "authored_text": "Advance and react to proposals."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.name",
+      "family": "task_name",
+      "record_id": "TSK-030",
+      "authored_text": "Draft client correspondence and letters"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.description",
+      "family": "task_description",
+      "record_id": "TSK-030",
+      "authored_text": "Write clear client-facing letters, including status and advice letters."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-030.01",
+      "authored_text": "Write an engagement or status letter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-030.01",
+      "authored_text": "Communicate scope or progress."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-030.02",
+      "authored_text": "Write a client advice letter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.29.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-030.02",
+      "authored_text": "Convey advice in writing."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.name",
+      "family": "task_name",
+      "record_id": "TSK-031",
+      "authored_text": "Draft correspondence to opposing counsel and the court"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.description",
+      "family": "task_description",
+      "record_id": "TSK-031",
+      "authored_text": "Write professional correspondence to opposing counsel and the clerk, with proof of service."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-031.01",
+      "authored_text": "Draft a meet-and-confer letter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-031.01",
+      "authored_text": "Communicate with opposing counsel."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-031.02",
+      "authored_text": "Include proof of service"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.30.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-031.02",
+      "authored_text": "Document service on the other side."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.name",
+      "family": "task_name",
+      "record_id": "TSK-032",
+      "authored_text": "Write a persuasive brief or memorandum of law"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.description",
+      "family": "task_description",
+      "record_id": "TSK-032",
+      "authored_text": "Draft a persuasive brief with organized argument headings and integrated citations."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-032.01",
+      "authored_text": "Organize argument headings"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-032.01",
+      "authored_text": "Structure the brief's point headings."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-032.02",
+      "authored_text": "Integrate authority and record cites"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.31.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-032.02",
+      "authored_text": "Weave in citations to law and record."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.name",
+      "family": "task_name",
+      "record_id": "TSK-033",
+      "authored_text": "Edit and revise written work against a rubric"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.description",
+      "family": "task_description",
+      "record_id": "TSK-033",
+      "authored_text": "Self-edit and revise a draft for clarity, concision, and page limits against the rubric."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-033.01",
+      "authored_text": "Self-edit for clarity and concision"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-033.01",
+      "authored_text": "Tighten and clarify the prose."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-033.02",
+      "authored_text": "Revise to meet page limits"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.32.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-033.02",
+      "authored_text": "Cut to the required length."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.name",
+      "family": "task_name",
+      "record_id": "TSK-034",
+      "authored_text": "Advise the client on options and risks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.description",
+      "family": "task_description",
+      "record_id": "TSK-034",
+      "authored_text": "Lay out the alternatives and their consequences and give a candid recommendation."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-034.01",
+      "authored_text": "Lay out alternatives and consequences"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-034.01",
+      "authored_text": "Present the realistic options."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-034.02",
+      "authored_text": "Give a candid recommendation"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.33.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-034.02",
+      "authored_text": "Recommend a course of action."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.name",
+      "family": "task_name",
+      "record_id": "TSK-035",
+      "authored_text": "Counsel on settlement versus proceeding"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.description",
+      "family": "task_description",
+      "record_id": "TSK-035",
+      "authored_text": "Help the client weigh settling against proceeding, using BATNA and cost-benefit."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-035.01",
+      "authored_text": "Evaluate the client's BATNA"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-035.01",
+      "authored_text": "Assess the best alternative to agreement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-035.02",
+      "authored_text": "Explain cost, benefit, and risk"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.34.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-035.02",
+      "authored_text": "Frame the tradeoffs clearly."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.name",
+      "family": "task_name",
+      "record_id": "TSK-036",
+      "authored_text": "Manage client expectations and decisions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.description",
+      "family": "task_description",
+      "record_id": "TSK-036",
+      "authored_text": "Clarify that the client owns key decisions and document the advice given."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-036.01",
+      "authored_text": "Clarify decision ownership"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-036.01",
+      "authored_text": "Confirm the client decides."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-036.02",
+      "authored_text": "Document the advice given"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.35.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-036.02",
+      "authored_text": "Memorialize the counseling."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.name",
+      "family": "task_name",
+      "record_id": "TSK-037",
+      "authored_text": "Counsel a distressed or vulnerable client"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.description",
+      "family": "task_description",
+      "record_id": "TSK-037",
+      "authored_text": "Acknowledge emotion, rebuild focus, and coordinate with a guardian or parent where needed."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-037.01",
+      "authored_text": "Acknowledge emotion and rebuild focus"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-037.01",
+      "authored_text": "Respond to distress and refocus."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-037.02",
+      "authored_text": "Coordinate with a guardian or parent"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.36.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-037.02",
+      "authored_text": "Involve a caregiver appropriately."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.name",
+      "family": "task_name",
+      "record_id": "TSK-038",
+      "authored_text": "Build client trust and rapport"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.description",
+      "family": "task_description",
+      "record_id": "TSK-038",
+      "authored_text": "Earn the client's confidence through competence, preparation, and reliable follow-through."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-038.01",
+      "authored_text": "Demonstrate competence and preparation"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-038.01",
+      "authored_text": "Show mastery of the matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-038.02",
+      "authored_text": "Communicate reliably and follow through"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.37.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-038.02",
+      "authored_text": "Do what you say, when you say it."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.name",
+      "family": "task_name",
+      "record_id": "TSK-039",
+      "authored_text": "Establish credibility with the tribunal and opposing counsel"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.description",
+      "family": "task_description",
+      "record_id": "TSK-039",
+      "authored_text": "Build a reputation for candor and preparedness before the court and opposing counsel."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-039.01",
+      "authored_text": "Demonstrate candor and preparedness"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-039.01",
+      "authored_text": "Be straight and ready."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-039.02",
+      "authored_text": "Honor commitments and deadlines"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.38.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-039.02",
+      "authored_text": "Keep your professional word."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.name",
+      "family": "task_name",
+      "record_id": "TSK-040",
+      "authored_text": "Maintain the attorney-client relationship over time"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.description",
+      "family": "task_description",
+      "record_id": "TSK-040",
+      "authored_text": "Keep an ongoing client informed and responsive to sustain the relationship."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-040.01",
+      "authored_text": "Keep the client informed"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-040.01",
+      "authored_text": "Provide regular updates."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-040.02",
+      "authored_text": "Respond promptly to communications"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.39.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-040.02",
+      "authored_text": "Answer the client quickly."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.name",
+      "family": "task_name",
+      "record_id": "TSK-041",
+      "authored_text": "Conduct a new-client intake and screening"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.description",
+      "family": "task_description",
+      "record_id": "TSK-041",
+      "authored_text": "Gather intake information and run a preliminary conflicts screen before accepting a client."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-041.01",
+      "authored_text": "Gather intake information"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-041.01",
+      "authored_text": "Collect the client and matter details."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-041.02",
+      "authored_text": "Run a preliminary conflicts check"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.40.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-041.02",
+      "authored_text": "Screen for conflicts before engaging."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.name",
+      "family": "task_name",
+      "record_id": "TSK-042",
+      "authored_text": "Develop business and generate referrals"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.description",
+      "family": "task_description",
+      "record_id": "TSK-042",
+      "authored_text": "Identify prospective clients and communicate the firm's value to win work."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-042.01",
+      "authored_text": "Identify prospective clients"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-042.01",
+      "authored_text": "Find likely sources of work."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-042.02",
+      "authored_text": "Communicate the firm's value"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.41.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-042.02",
+      "authored_text": "Explain why to hire the firm."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.name",
+      "family": "task_name",
+      "record_id": "TSK-043",
+      "authored_text": "Retain clients through service and relationship"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.description",
+      "family": "task_description",
+      "record_id": "TSK-043",
+      "authored_text": "Keep clients by delivering responsive service and acting on their feedback."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-043.01",
+      "authored_text": "Deliver responsive service"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-043.01",
+      "authored_text": "Serve clients promptly and well."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-043.02",
+      "authored_text": "Solicit and act on feedback"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.42.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-043.02",
+      "authored_text": "Ask for and use client feedback."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.name",
+      "family": "task_name",
+      "record_id": "TSK-044",
+      "authored_text": "Prepare a strategic settlement and negotiation plan (SSNP)"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.description",
+      "family": "task_description",
+      "record_id": "TSK-044",
+      "authored_text": "Plan a negotiation: interests, positions, BATNA, targets, and confidential concessions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-044.01",
+      "authored_text": "Identify interests, positions, and BATNA"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-044.01",
+      "authored_text": "Map the negotiation landscape."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-044.02",
+      "authored_text": "Set target and reservation points"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-044.02",
+      "authored_text": "Fix the goal and walk-away."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-044.03",
+      "authored_text": "Plan confidential concessions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.43.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-044.03",
+      "authored_text": "Decide what can be traded and when."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.name",
+      "family": "task_name",
+      "record_id": "TSK-045",
+      "authored_text": "Conduct a settlement or plea negotiation"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.description",
+      "family": "task_description",
+      "record_id": "TSK-045",
+      "authored_text": "Exchange and evaluate offers using principled bargaining and document the terms reached."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-045.01",
+      "authored_text": "Exchange and evaluate offers"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-045.01",
+      "authored_text": "Advance and assess proposals."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-045.02",
+      "authored_text": "Use principled bargaining"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-045.02",
+      "authored_text": "Negotiate on interests, not positions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-045.03",
+      "authored_text": "Document the terms reached"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.44.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-045.03",
+      "authored_text": "Record the agreement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.name",
+      "family": "task_name",
+      "record_id": "TSK-046",
+      "authored_text": "Negotiate a transaction to agreement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.description",
+      "family": "task_description",
+      "record_id": "TSK-046",
+      "authored_text": "Reconcile competing deal terms and draft the negotiated agreement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-046.01",
+      "authored_text": "Reconcile competing deal terms"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-046.01",
+      "authored_text": "Bridge the parties' positions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-046.02",
+      "authored_text": "Draft the negotiated agreement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.45.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-046.02",
+      "authored_text": "Reduce the deal to writing."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.name",
+      "family": "task_name",
+      "record_id": "TSK-047",
+      "authored_text": "Participate in mediation"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.description",
+      "family": "task_description",
+      "record_id": "TSK-047",
+      "authored_text": "Prepare a mediation position and engage the neutral to explore options."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-047.01",
+      "authored_text": "Prepare a mediation position or statement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-047.01",
+      "authored_text": "Set out the client's case for the neutral."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-047.02",
+      "authored_text": "Engage the neutral and explore options"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.46.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-047.02",
+      "authored_text": "Work with the mediator toward resolution."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.name",
+      "family": "task_name",
+      "record_id": "TSK-048",
+      "authored_text": "Draft pleadings to initiate or respond"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.description",
+      "family": "task_description",
+      "record_id": "TSK-048",
+      "authored_text": "Draft the complaint or petition and the answer and counterclaim."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-048.01",
+      "authored_text": "Draft the complaint or petition"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-048.01",
+      "authored_text": "Plead the claim."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-048.02",
+      "authored_text": "Draft the answer and counterclaim"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.47.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-048.02",
+      "authored_text": "Respond and assert counterclaims."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.name",
+      "family": "task_name",
+      "record_id": "TSK-049",
+      "authored_text": "Conduct discovery"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.description",
+      "family": "task_description",
+      "record_id": "TSK-049",
+      "authored_text": "Propound and respond to written discovery and take and defend depositions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-049.01",
+      "authored_text": "Draft interrogatories and document requests"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-049.01",
+      "authored_text": "Propound written discovery."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-049.02",
+      "authored_text": "Respond to written discovery"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-049.02",
+      "authored_text": "Answer the other side's requests."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-049.03",
+      "authored_text": "Take or defend a deposition"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.48.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-049.03",
+      "authored_text": "Conduct deposition practice."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.name",
+      "family": "task_name",
+      "record_id": "TSK-050",
+      "authored_text": "Engage in motion practice"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.description",
+      "family": "task_description",
+      "record_id": "TSK-050",
+      "authored_text": "Draft and argue a motion with supporting and opposing memoranda and a proposed order."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-050.01",
+      "authored_text": "Draft the motion and supporting memo"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-050.01",
+      "authored_text": "Write the moving papers."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-050.02",
+      "authored_text": "Draft the opposition"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-050.02",
+      "authored_text": "Write the responsive papers."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-050.03",
+      "authored_text": "Prepare a proposed order"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.49.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-050.03",
+      "authored_text": "Draft the order for the court."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.name",
+      "family": "task_name",
+      "record_id": "TSK-051",
+      "authored_text": "Try a case to verdict"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.description",
+      "family": "task_description",
+      "record_id": "TSK-051",
+      "authored_text": "Prepare and present a trial from openings through witnesses to closings and jury instructions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-051.01",
+      "authored_text": "Prepare the trial notebook"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-051.01",
+      "authored_text": "Assemble the trial materials."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-051.02",
+      "authored_text": "Present openings, witnesses, and closings"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-051.02",
+      "authored_text": "Deliver the trial presentation."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-051.03",
+      "authored_text": "Propose jury instructions and verdict form"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.50.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-051.03",
+      "authored_text": "Draft the instructions and verdict."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.name",
+      "family": "task_name",
+      "record_id": "TSK-052",
+      "authored_text": "Conduct an arbitration hearing"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.description",
+      "family": "task_description",
+      "record_id": "TSK-052",
+      "authored_text": "Draft the statement of the case and present evidence to the arbitrator."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-052.01",
+      "authored_text": "Draft the statement of the case"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-052.01",
+      "authored_text": "Prepare the arbitration statement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-052.02",
+      "authored_text": "Present evidence to the arbitrator"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.51.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-052.02",
+      "authored_text": "Try the matter before the arbitrator."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.name",
+      "family": "task_name",
+      "record_id": "TSK-053",
+      "authored_text": "Handle an appeal"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.description",
+      "family": "task_description",
+      "record_id": "TSK-053",
+      "authored_text": "Frame issues and standard of review, write the appellate brief, and argue the appeal."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-053.01",
+      "authored_text": "Frame issues and standard of review"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-053.01",
+      "authored_text": "Define the appellate questions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-053.02",
+      "authored_text": "Write the appellate brief"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-053.02",
+      "authored_text": "Draft the brief."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-053.03",
+      "authored_text": "Present oral argument"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.52.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-053.03",
+      "authored_text": "Argue before the court."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.name",
+      "family": "task_name",
+      "record_id": "TSK-054",
+      "authored_text": "Manage the matter file and documents"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.description",
+      "family": "task_description",
+      "record_id": "TSK-054",
+      "authored_text": "Organize the case file, exhibits, and document versions for a matter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-054.01",
+      "authored_text": "Organize the case file and exhibits"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-054.01",
+      "authored_text": "Keep the file orderly."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-054.02",
+      "authored_text": "Track key documents and versions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.53.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-054.02",
+      "authored_text": "Control document versions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.name",
+      "family": "task_name",
+      "record_id": "TSK-055",
+      "authored_text": "Calendar deadlines and manage the docket"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.description",
+      "family": "task_description",
+      "record_id": "TSK-055",
+      "authored_text": "Docket court and discovery deadlines with reminders and buffers."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-055.01",
+      "authored_text": "Docket court and discovery deadlines"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-055.01",
+      "authored_text": "Enter every controlling date."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-055.02",
+      "authored_text": "Set reminders and buffers"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.54.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-055.02",
+      "authored_text": "Add lead-time alerts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.name",
+      "family": "task_name",
+      "record_id": "TSK-056",
+      "authored_text": "Coordinate the two-person firm's division of labor"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.description",
+      "family": "task_description",
+      "record_id": "TSK-056",
+      "authored_text": "Allocate tasks between the two partners and balance the workload realistically."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-056.01",
+      "authored_text": "Allocate tasks between partners"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-056.01",
+      "authored_text": "Split the work fairly."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-056.02",
+      "authored_text": "Balance the workload realistically"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.55.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-056.02",
+      "authored_text": "Avoid overloading either partner."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.name",
+      "family": "task_name",
+      "record_id": "TSK-057",
+      "authored_text": "Track time and prepare for billing"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.description",
+      "family": "task_description",
+      "record_id": "TSK-057",
+      "authored_text": "Record contemporaneous time entries and categorize the work for the invoice."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-057.01",
+      "authored_text": "Record contemporaneous time entries"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-057.01",
+      "authored_text": "Log time as work is done."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-057.02",
+      "authored_text": "Categorize work for the invoice"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.56.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-057.02",
+      "authored_text": "Code entries for billing."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.name",
+      "family": "task_name",
+      "record_id": "TSK-058",
+      "authored_text": "Identify and resolve conflicts of interest"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.description",
+      "family": "task_description",
+      "record_id": "TSK-058",
+      "authored_text": "Run a conflicts check and evaluate waiver or withdrawal where a conflict appears."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-058.01",
+      "authored_text": "Run a conflicts check"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-058.01",
+      "authored_text": "Screen the matter for conflicts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-058.02",
+      "authored_text": "Evaluate waiver or withdrawal options"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.57.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-058.02",
+      "authored_text": "Decide how to cure a conflict."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.name",
+      "family": "task_name",
+      "record_id": "TSK-059",
+      "authored_text": "Safeguard client confidences and privilege"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.description",
+      "family": "task_description",
+      "record_id": "TSK-059",
+      "authored_text": "Protect privileged material and avoid improper disclosures."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-059.01",
+      "authored_text": "Protect privileged material"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-059.01",
+      "authored_text": "Keep privileged content secure."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-059.02",
+      "authored_text": "Avoid improper disclosures"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.58.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-059.02",
+      "authored_text": "Prevent inadvertent waiver."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.name",
+      "family": "task_name",
+      "record_id": "TSK-060",
+      "authored_text": "Comply with the rules of professional conduct"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.description",
+      "family": "task_description",
+      "record_id": "TSK-060",
+      "authored_text": "Honor duties such as the no-contact rule and candor to the tribunal."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-060.01",
+      "authored_text": "Honor the no-contact (Rule 4.2) rule"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-060.01",
+      "authored_text": "Avoid contact with represented parties."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-060.02",
+      "authored_text": "Maintain candor to the tribunal"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.59.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-060.02",
+      "authored_text": "Be truthful with the court."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.name",
+      "family": "task_name",
+      "record_id": "TSK-061",
+      "authored_text": "Handle client funds and trust duties ethically"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.description",
+      "family": "task_description",
+      "record_id": "TSK-061",
+      "authored_text": "Keep client funds in trust, avoid commingling, and reconcile the trust ledger."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-061.01",
+      "authored_text": "Keep client funds in trust"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-061.01",
+      "authored_text": "Segregate client money."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-061.02",
+      "authored_text": "Avoid commingling and reconcile the ledger"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.60.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-061.02",
+      "authored_text": "Balance and separate the trust account."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.name",
+      "family": "task_name",
+      "record_id": "TSK-062",
+      "authored_text": "Draft transactional agreements"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.description",
+      "family": "task_description",
+      "record_id": "TSK-062",
+      "authored_text": "Draft a purchase or sale agreement and its protective clauses."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-062.01",
+      "authored_text": "Draft a purchase or sale agreement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-062.01",
+      "authored_text": "Reduce the deal to a contract."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-062.02",
+      "authored_text": "Draft protective clauses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.61.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-062.02",
+      "authored_text": "Add easement, warranty, or similar protections."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.name",
+      "family": "task_name",
+      "record_id": "TSK-063",
+      "authored_text": "Draft a will and estate-planning documents"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.description",
+      "family": "task_description",
+      "record_id": "TSK-063",
+      "authored_text": "Draft a will to the client's instructions with an explanatory client letter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-063.01",
+      "authored_text": "Draft the will per client instructions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-063.01",
+      "authored_text": "Prepare the testamentary document."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-063.02",
+      "authored_text": "Draft the explanatory client letter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.62.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-063.02",
+      "authored_text": "Explain the will to the client."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.name",
+      "family": "task_name",
+      "record_id": "TSK-064",
+      "authored_text": "Draft an engagement letter and fee agreement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.description",
+      "family": "task_description",
+      "record_id": "TSK-064",
+      "authored_text": "Draft the engagement letter stating scope, fee structure, and required billing terms."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-064.01",
+      "authored_text": "State scope and fee structure"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-064.01",
+      "authored_text": "Define the engagement and fee."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-064.02",
+      "authored_text": "Include required billing terms"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.63.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-064.02",
+      "authored_text": "Add the billing and payment terms."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.name",
+      "family": "task_name",
+      "record_id": "TSK-065",
+      "authored_text": "Draft pleadings and litigation documents"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.description",
+      "family": "task_description",
+      "record_id": "TSK-065",
+      "authored_text": "Draft pleadings, motions, affidavits, and proposed orders."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-065.01",
+      "authored_text": "Draft pleadings and motions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-065.01",
+      "authored_text": "Prepare the litigation papers."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-065.02",
+      "authored_text": "Draft affidavits and proposed orders"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.64.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-065.02",
+      "authored_text": "Prepare supporting documents."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.name",
+      "family": "task_name",
+      "record_id": "TSK-066",
+      "authored_text": "Draft discovery instruments"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.description",
+      "family": "task_description",
+      "record_id": "TSK-066",
+      "authored_text": "Draft interrogatories and requests for production."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-066.01",
+      "authored_text": "Draft interrogatories"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-066.01",
+      "authored_text": "Prepare written questions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-066.02",
+      "authored_text": "Draft requests for production"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.65.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-066.02",
+      "authored_text": "Prepare document requests."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.name",
+      "family": "task_name",
+      "record_id": "TSK-067",
+      "authored_text": "Select and structure the fee arrangement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.description",
+      "family": "task_description",
+      "record_id": "TSK-067",
+      "authored_text": "Match the fee type to the matter and document it in the agreement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-067.01",
+      "authored_text": "Match fee type to matter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-067.01",
+      "authored_text": "Choose hourly, flat, contingency, or retainer."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-067.02",
+      "authored_text": "Document the fee in the agreement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.66.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-067.02",
+      "authored_text": "Record the fee terms."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.name",
+      "family": "task_name",
+      "record_id": "TSK-068",
+      "authored_text": "Record time and expenses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.description",
+      "family": "task_description",
+      "record_id": "TSK-068",
+      "authored_text": "Keep contemporaneous time sheets and capture disbursements."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-068.01",
+      "authored_text": "Keep contemporaneous time sheets"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-068.01",
+      "authored_text": "Log time as it is spent."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-068.02",
+      "authored_text": "Capture disbursements and expenses"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.67.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-068.02",
+      "authored_text": "Record costs advanced."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.name",
+      "family": "task_name",
+      "record_id": "TSK-069",
+      "authored_text": "Prepare a client billing statement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.description",
+      "family": "task_description",
+      "record_id": "TSK-069",
+      "authored_text": "Compile time entries into an invoice, compute the balance due, and enclose a cover letter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-069.01",
+      "authored_text": "Compile time entries into an invoice"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-069.01",
+      "authored_text": "Assemble the billing statement."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-069.02",
+      "authored_text": "Compute fees, expenses, and balance due"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-069.02",
+      "authored_text": "Total the amounts owed."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.2.name",
+      "family": "subtask_name",
+      "record_id": "TSK-069.03",
+      "authored_text": "Enclose a billing cover letter"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.68.subtasks.2.description",
+      "family": "subtask_description",
+      "record_id": "TSK-069.03",
+      "authored_text": "Send the statement with a letter."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.name",
+      "family": "task_name",
+      "record_id": "TSK-070",
+      "authored_text": "Manage retainers and trust accounting"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.description",
+      "family": "task_description",
+      "record_id": "TSK-070",
+      "authored_text": "Deposit funds to trust and reconcile the trust ledger so it is never negative."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-070.01",
+      "authored_text": "Deposit funds to trust"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-070.01",
+      "authored_text": "Place advance funds in trust."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-070.02",
+      "authored_text": "Reconcile the trust ledger"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.69.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-070.02",
+      "authored_text": "Balance the trust account."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.name",
+      "family": "task_name",
+      "record_id": "TSK-071",
+      "authored_text": "Define staffing needs and roles"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.description",
+      "family": "task_description",
+      "record_id": "TSK-071",
+      "authored_text": "Identify the support-staff roles the firm needs and write role expectations."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-071.01",
+      "authored_text": "Identify support-staff roles"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-071.01",
+      "authored_text": "Determine needed positions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-071.02",
+      "authored_text": "Write role expectations"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.70.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-071.02",
+      "authored_text": "Define what each role does."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.name",
+      "family": "task_name",
+      "record_id": "TSK-072",
+      "authored_text": "Supervise and delegate to non-lawyer staff"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.description",
+      "family": "task_description",
+      "record_id": "TSK-072",
+      "authored_text": "Delegate appropriate tasks and supervise staff for competence and ethical compliance."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-072.01",
+      "authored_text": "Delegate appropriate tasks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-072.01",
+      "authored_text": "Assign suitable work to staff."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-072.02",
+      "authored_text": "Supervise for competence and ethics"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.71.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-072.02",
+      "authored_text": "Oversee quality and conduct."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.name",
+      "family": "task_name",
+      "record_id": "TSK-073",
+      "authored_text": "Onboard and manage support staff"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.description",
+      "family": "task_description",
+      "record_id": "TSK-073",
+      "authored_text": "Train new staff on firm systems and set performance expectations."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-073.01",
+      "authored_text": "Train on firm systems"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-073.01",
+      "authored_text": "Bring staff up to speed."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-073.02",
+      "authored_text": "Set performance expectations"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.72.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-073.02",
+      "authored_text": "Define success for the role."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.name",
+      "family": "task_name",
+      "record_id": "TSK-074",
+      "authored_text": "Plan the firm's startup capitalization"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.description",
+      "family": "task_description",
+      "record_id": "TSK-074",
+      "authored_text": "Estimate startup costs and identify sources of capital for the firm."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-074.01",
+      "authored_text": "Estimate startup costs"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-074.01",
+      "authored_text": "Project what launch will cost."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-074.02",
+      "authored_text": "Identify capital sources"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.73.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-074.02",
+      "authored_text": "Find funding options."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.name",
+      "family": "task_name",
+      "record_id": "TSK-075",
+      "authored_text": "Manage cash flow and reserves"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.description",
+      "family": "task_description",
+      "record_id": "TSK-075",
+      "authored_text": "Forecast cash flow and maintain operating reserves."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-075.01",
+      "authored_text": "Forecast cash flow"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-075.01",
+      "authored_text": "Project inflows and outflows."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-075.02",
+      "authored_text": "Maintain operating reserves"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.74.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-075.02",
+      "authored_text": "Hold a cushion for lean months."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.name",
+      "family": "task_name",
+      "record_id": "TSK-076",
+      "authored_text": "Evaluate investment in tools and growth"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.description",
+      "family": "task_description",
+      "record_id": "TSK-076",
+      "authored_text": "Assess the return on a purchase and prioritize investments."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-076.01",
+      "authored_text": "Assess ROI of a purchase"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-076.01",
+      "authored_text": "Weigh cost against benefit."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-076.02",
+      "authored_text": "Prioritize investments"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.75.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-076.02",
+      "authored_text": "Rank competing investments."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.name",
+      "family": "task_name",
+      "record_id": "TSK-077",
+      "authored_text": "Plan and scope a matter as a project"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.description",
+      "family": "task_description",
+      "record_id": "TSK-077",
+      "authored_text": "Define deliverables and milestones and estimate the effort and time required."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-077.01",
+      "authored_text": "Define deliverables and milestones"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-077.01",
+      "authored_text": "Set the outputs and checkpoints."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-077.02",
+      "authored_text": "Estimate effort and time"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.76.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-077.02",
+      "authored_text": "Project the work required."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.name",
+      "family": "task_name",
+      "record_id": "TSK-078",
+      "authored_text": "Manage personal and firm time"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.description",
+      "family": "task_description",
+      "record_id": "TSK-078",
+      "authored_text": "Prioritize tasks and track billable versus non-billable time."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-078.01",
+      "authored_text": "Prioritize tasks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-078.01",
+      "authored_text": "Order work by importance and deadline."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-078.02",
+      "authored_text": "Track billable versus non-billable time"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.77.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-078.02",
+      "authored_text": "Separate the two categories."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.name",
+      "family": "task_name",
+      "record_id": "TSK-079",
+      "authored_text": "Improve process efficiency"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.description",
+      "family": "task_description",
+      "record_id": "TSK-079",
+      "authored_text": "Identify bottlenecks and standardize repeatable work."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-079.01",
+      "authored_text": "Identify bottlenecks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-079.01",
+      "authored_text": "Find where work stalls."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-079.02",
+      "authored_text": "Standardize repeatable work"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.78.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-079.02",
+      "authored_text": "Templatize recurring tasks."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.name",
+      "family": "task_name",
+      "record_id": "TSK-080",
+      "authored_text": "Prepare a matter or firm budget"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.description",
+      "family": "task_description",
+      "record_id": "TSK-080",
+      "authored_text": "Estimate fees and costs and set a budget baseline."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-080.01",
+      "authored_text": "Estimate fees and costs"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-080.01",
+      "authored_text": "Project the numbers."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-080.02",
+      "authored_text": "Set a budget baseline"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.79.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-080.02",
+      "authored_text": "Fix the plan of record."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.name",
+      "family": "task_name",
+      "record_id": "TSK-081",
+      "authored_text": "Allocate resources across the docket"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.description",
+      "family": "task_description",
+      "record_id": "TSK-081",
+      "authored_text": "Match resources to matter priority and rebalance as needs change."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-081.01",
+      "authored_text": "Match resources to matter priority"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-081.01",
+      "authored_text": "Assign effort to what matters most."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-081.02",
+      "authored_text": "Rebalance as needs change"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.80.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-081.02",
+      "authored_text": "Adjust allocations over time."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.name",
+      "family": "task_name",
+      "record_id": "TSK-082",
+      "authored_text": "Monitor budget versus actuals"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.description",
+      "family": "task_description",
+      "record_id": "TSK-082",
+      "authored_text": "Compare actuals to budget and adjust the plan."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-082.01",
+      "authored_text": "Compare actuals to budget"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-082.01",
+      "authored_text": "Track variance."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-082.02",
+      "authored_text": "Adjust the plan"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.81.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-082.02",
+      "authored_text": "Revise the budget as needed."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.name",
+      "family": "task_name",
+      "record_id": "TSK-083",
+      "authored_text": "Develop a marketing and client-development plan"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.description",
+      "family": "task_description",
+      "record_id": "TSK-083",
+      "authored_text": "Define the target clients and niche and choose outreach channels."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-083.01",
+      "authored_text": "Define target clients and niche"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-083.01",
+      "authored_text": "Pick who to serve."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-083.02",
+      "authored_text": "Choose outreach channels"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.82.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-083.02",
+      "authored_text": "Select how to reach them."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.name",
+      "family": "task_name",
+      "record_id": "TSK-084",
+      "authored_text": "Build the firm's brand and network"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.description",
+      "family": "task_description",
+      "record_id": "TSK-084",
+      "authored_text": "Cultivate referral relationships and maintain a professional presence."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-084.01",
+      "authored_text": "Cultivate referral relationships"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-084.01",
+      "authored_text": "Grow a referral network."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-084.02",
+      "authored_text": "Maintain a professional presence"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.83.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-084.02",
+      "authored_text": "Keep a credible public profile."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.name",
+      "family": "task_name",
+      "record_id": "TSK-085",
+      "authored_text": "Prepare pitches and proposals"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.description",
+      "family": "task_description",
+      "record_id": "TSK-085",
+      "authored_text": "Scope a prospective engagement and present fees and value."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-085.01",
+      "authored_text": "Scope the prospective engagement"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-085.01",
+      "authored_text": "Define the proposed work."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-085.02",
+      "authored_text": "Present fees and value"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.84.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-085.02",
+      "authored_text": "Explain price and worth."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.name",
+      "family": "task_name",
+      "record_id": "TSK-086",
+      "authored_text": "Adopt and use practice technology"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.description",
+      "family": "task_description",
+      "record_id": "TSK-086",
+      "authored_text": "Select case-management tools and use document and billing software."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-086.01",
+      "authored_text": "Select case-management tools"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-086.01",
+      "authored_text": "Choose the firm's systems."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-086.02",
+      "authored_text": "Use document and billing software"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.85.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-086.02",
+      "authored_text": "Operate the core tools."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.name",
+      "family": "task_name",
+      "record_id": "TSK-087",
+      "authored_text": "Manage electronic communications and records"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.description",
+      "family": "task_description",
+      "record_id": "TSK-087",
+      "authored_text": "Organize email and files and retain records per policy."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-087.01",
+      "authored_text": "Organize email and files"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-087.01",
+      "authored_text": "Keep communications orderly."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-087.02",
+      "authored_text": "Retain records per policy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.86.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-087.02",
+      "authored_text": "Apply the retention schedule."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.name",
+      "family": "task_name",
+      "record_id": "TSK-088",
+      "authored_text": "Protect data security and client information"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.description",
+      "family": "task_description",
+      "record_id": "TSK-088",
+      "authored_text": "Secure devices and accounts and guard against data loss."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-088.01",
+      "authored_text": "Secure devices and accounts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-088.01",
+      "authored_text": "Lock down access."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-088.02",
+      "authored_text": "Guard against data loss"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.87.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-088.02",
+      "authored_text": "Back up and protect data."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.name",
+      "family": "task_name",
+      "record_id": "TSK-089",
+      "authored_text": "Establish firm governance and decision rules"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.description",
+      "family": "task_description",
+      "record_id": "TSK-089",
+      "authored_text": "Define partner decision rights and document firm policies."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-089.01",
+      "authored_text": "Define partner decision rights"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-089.01",
+      "authored_text": "Decide who decides what."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-089.02",
+      "authored_text": "Document firm policies"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.88.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-089.02",
+      "authored_text": "Write the firm's rules."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.name",
+      "family": "task_name",
+      "record_id": "TSK-090",
+      "authored_text": "Set long-range strategy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.description",
+      "family": "task_description",
+      "record_id": "TSK-090",
+      "authored_text": "Set multi-year goals and align resources to the strategy."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-090.01",
+      "authored_text": "Set multi-year goals"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-090.01",
+      "authored_text": "Define where the firm is going."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-090.02",
+      "authored_text": "Align resources to strategy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.89.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-090.02",
+      "authored_text": "Point resources at the goals."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.name",
+      "family": "task_name",
+      "record_id": "TSK-091",
+      "authored_text": "Make and review firm-level decisions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.description",
+      "family": "task_description",
+      "record_id": "TSK-091",
+      "authored_text": "Weigh options and risks and review outcomes to adjust."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-091.01",
+      "authored_text": "Weigh options and risks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-091.01",
+      "authored_text": "Assess the choices."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-091.02",
+      "authored_text": "Review outcomes and adjust"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.90.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-091.02",
+      "authored_text": "Learn from results."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.name",
+      "family": "task_name",
+      "record_id": "TSK-092",
+      "authored_text": "Communicate effectively within the firm"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.description",
+      "family": "task_description",
+      "record_id": "TSK-092",
+      "authored_text": "Hold regular partner check-ins and give constructive feedback."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-092.01",
+      "authored_text": "Hold regular partner check-ins"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-092.01",
+      "authored_text": "Keep the partnership aligned."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-092.02",
+      "authored_text": "Give constructive feedback"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.91.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-092.02",
+      "authored_text": "Coach and correct helpfully."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.name",
+      "family": "task_name",
+      "record_id": "TSK-093",
+      "authored_text": "Manage partner and staff relationships"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.description",
+      "family": "task_description",
+      "record_id": "TSK-093",
+      "authored_text": "Align on expectations and address friction early."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-093.01",
+      "authored_text": "Align on expectations"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-093.01",
+      "authored_text": "Set shared expectations."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-093.02",
+      "authored_text": "Address friction early"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.92.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-093.02",
+      "authored_text": "Handle tension before it grows."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.name",
+      "family": "task_name",
+      "record_id": "TSK-094",
+      "authored_text": "Resolve internal conflict"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.description",
+      "family": "task_description",
+      "record_id": "TSK-094",
+      "authored_text": "Surface disagreements constructively and reach a workable resolution."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-094.01",
+      "authored_text": "Surface disagreements constructively"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-094.01",
+      "authored_text": "Bring conflict into the open."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-094.02",
+      "authored_text": "Reach a workable resolution"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.93.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-094.02",
+      "authored_text": "Settle on a path forward."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.name",
+      "family": "task_name",
+      "record_id": "TSK-095",
+      "authored_text": "Formulate an effective legal prompt"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.description",
+      "family": "task_description",
+      "record_id": "TSK-095",
+      "authored_text": "Write a prompt that specifies role, task, context, and the governing facts and constraints."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-095.01",
+      "authored_text": "Specify role, task, and context"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-095.01",
+      "authored_text": "Frame the request precisely."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-095.02",
+      "authored_text": "Supply governing facts and constraints"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.94.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-095.02",
+      "authored_text": "Give the model what it needs."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.name",
+      "family": "task_name",
+      "record_id": "TSK-096",
+      "authored_text": "Iterate and refine prompts"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.description",
+      "family": "task_description",
+      "record_id": "TSK-096",
+      "authored_text": "Diagnose weak outputs and revise the prompt to improve results."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-096.01",
+      "authored_text": "Diagnose weak outputs"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-096.01",
+      "authored_text": "Identify what went wrong."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-096.02",
+      "authored_text": "Revise the prompt and re-test"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.95.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-096.02",
+      "authored_text": "Adjust and try again."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.name",
+      "family": "task_name",
+      "record_id": "TSK-097",
+      "authored_text": "Build reusable prompt templates for tasks"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.description",
+      "family": "task_description",
+      "record_id": "TSK-097",
+      "authored_text": "Template recurring prompts for memos or interviews and document their usage and limits."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-097.01",
+      "authored_text": "Template a memo or interview prompt"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-097.01",
+      "authored_text": "Create a reusable prompt."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-097.02",
+      "authored_text": "Document usage and limits"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.96.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-097.02",
+      "authored_text": "Note when and how to use it."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.name",
+      "family": "task_name",
+      "record_id": "TSK-098",
+      "authored_text": "Verify AI-asserted facts against the record"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.description",
+      "family": "task_description",
+      "record_id": "TSK-098",
+      "authored_text": "Cross-check AI claims to the case file and flag unsupported assertions."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-098.01",
+      "authored_text": "Cross-check claims to the case file"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-098.01",
+      "authored_text": "Verify against source facts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-098.02",
+      "authored_text": "Flag unsupported assertions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.97.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-098.02",
+      "authored_text": "Mark what cannot be verified."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.name",
+      "family": "task_name",
+      "record_id": "TSK-099",
+      "authored_text": "Check AI-provided citations and authority"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.description",
+      "family": "task_description",
+      "record_id": "TSK-099",
+      "authored_text": "Confirm each AI citation exists and says what the output claims."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-099.01",
+      "authored_text": "Confirm each citation exists"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-099.01",
+      "authored_text": "Verify the source is real."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-099.02",
+      "authored_text": "Confirm it says what is claimed"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.98.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-099.02",
+      "authored_text": "Read the source for support."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.name",
+      "family": "task_name",
+      "record_id": "TSK-100",
+      "authored_text": "Detect and correct hallucinations and errors"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.description",
+      "family": "task_description",
+      "record_id": "TSK-100",
+      "authored_text": "Identify fabricated content and correct it before relying on or filing the work."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-100.01",
+      "authored_text": "Identify fabricated content"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-100.01",
+      "authored_text": "Spot invented facts or law."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-100.02",
+      "authored_text": "Correct before relying or filing"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.99.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-100.02",
+      "authored_text": "Fix errors before use."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.name",
+      "family": "task_name",
+      "record_id": "TSK-101",
+      "authored_text": "Decide which tasks to delegate to AI versus retain"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.description",
+      "family": "task_description",
+      "record_id": "TSK-101",
+      "authored_text": "Assess task risk and reversibility and keep judgment-heavy work with the human."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-101.01",
+      "authored_text": "Assess task risk and reversibility"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-101.01",
+      "authored_text": "Judge what is safe to delegate."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-101.02",
+      "authored_text": "Keep judgment-heavy work human"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.100.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-101.02",
+      "authored_text": "Retain the hard calls."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.name",
+      "family": "task_name",
+      "record_id": "TSK-102",
+      "authored_text": "Integrate AI first-pass into the revise-and-repeat loop"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.description",
+      "family": "task_description",
+      "record_id": "TSK-102",
+      "authored_text": "Obtain an AI first-pass critique and revise the work against the rubric."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-102.01",
+      "authored_text": "Get an AI first-pass critique"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-102.01",
+      "authored_text": "Run the draft through AI."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-102.02",
+      "authored_text": "Revise against the rubric"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.101.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-102.02",
+      "authored_text": "Improve using the rubric."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.name",
+      "family": "task_name",
+      "record_id": "TSK-103",
+      "authored_text": "Supervise AI as you would a junior"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.description",
+      "family": "task_description",
+      "record_id": "TSK-103",
+      "authored_text": "Set the assignment clearly and review AI work before it leaves the firm."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-103.01",
+      "authored_text": "Set the assignment clearly"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-103.01",
+      "authored_text": "Give the model a clear brief."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-103.02",
+      "authored_text": "Review before it leaves the firm"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.102.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-103.02",
+      "authored_text": "Check the work before use."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.name",
+      "family": "task_name",
+      "record_id": "TSK-104",
+      "authored_text": "Avoid disclosing client confidences to AI tools"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.description",
+      "family": "task_description",
+      "record_id": "TSK-104",
+      "authored_text": "Strip or avoid identifiers and use only approved tools when working with AI."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-104.01",
+      "authored_text": "Strip or avoid PII and identifiers"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-104.01",
+      "authored_text": "Keep client identity out of prompts."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-104.02",
+      "authored_text": "Use approved tools only"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.103.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-104.02",
+      "authored_text": "Restrict to vetted systems."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.name",
+      "family": "task_name",
+      "record_id": "TSK-105",
+      "authored_text": "Preserve privilege when using AI"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.description",
+      "family": "task_description",
+      "record_id": "TSK-105",
+      "authored_text": "Assess waiver risk and document the safeguards taken."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-105.01",
+      "authored_text": "Assess waiver risk"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-105.01",
+      "authored_text": "Judge the privilege exposure."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-105.02",
+      "authored_text": "Document safeguards"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.104.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-105.02",
+      "authored_text": "Record the protections used."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.name",
+      "family": "task_name",
+      "record_id": "TSK-106",
+      "authored_text": "Maintain clean matter data for AI use"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.description",
+      "family": "task_description",
+      "record_id": "TSK-106",
+      "authored_text": "Keep the record complete and current and separate facts from work product."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-106.01",
+      "authored_text": "Keep the record complete and current"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-106.01",
+      "authored_text": "Maintain accurate matter data."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-106.02",
+      "authored_text": "Separate facts from work product"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.105.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-106.02",
+      "authored_text": "Distinguish source facts from analysis."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.name",
+      "family": "task_name",
+      "record_id": "TSK-107",
+      "authored_text": "Govern AI use across the firm"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.description",
+      "family": "task_description",
+      "record_id": "TSK-107",
+      "authored_text": "Set an AI-use policy and log the tools and data flows."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-107.01",
+      "authored_text": "Set an AI-use policy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-107.01",
+      "authored_text": "Define acceptable AI use."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-107.02",
+      "authored_text": "Log tools and data flows"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.106.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-107.02",
+      "authored_text": "Track what is used and how."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.name",
+      "family": "task_name",
+      "record_id": "TSK-108",
+      "authored_text": "Manage retention and deletion of AI interactions"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.description",
+      "family": "task_description",
+      "record_id": "TSK-108",
+      "authored_text": "Retain AI interactions per policy and delete transient prompts and outputs."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.subtasks.0.name",
+      "family": "subtask_name",
+      "record_id": "TSK-108.01",
+      "authored_text": "Retain per policy"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.subtasks.0.description",
+      "family": "subtask_description",
+      "record_id": "TSK-108.01",
+      "authored_text": "Keep what policy requires."
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.subtasks.1.name",
+      "family": "subtask_name",
+      "record_id": "TSK-108.02",
+      "authored_text": "Delete transient prompts and outputs"
+    },
+    {
+      "source_ref": "data/taxonomy/tasks.json#tasks.107.subtasks.1.description",
+      "family": "subtask_description",
+      "record_id": "TSK-108.02",
+      "authored_text": "Purge ephemeral data."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#description",
+      "family": "document_description",
+      "record_id": "folio-crosswalk",
+      "authored_text": "FOLIO crosswalk for every skill and every primary task. Each entry either records a verified FOLIO concept {folio_iri, folio_label (as retrieved), branch, mapping_confidence in exact|near|parent} or declares no_folio_equivalent with a note. This snapshot is the offline source of truth; the ship gate validates against it, not live MCP."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.1.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-02",
+      "authored_text": "FOLIO Services models delivered service types, not the cross-cutting cognitive skill of legal analysis and reasoning; the skill's concrete tasks map to Opinion Memo Practice and Legal Argument."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.2.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-03",
+      "authored_text": "Substantive-law knowledge spans FOLIO's areas_of_law branch generally rather than any single service concept; the skill's tasks map to specific practice and research concepts."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.3.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-04",
+      "authored_text": "Procedural-law knowledge is embodied across Litigation, Trial Court, and Appellate Practice; no single FOLIO concept captures the knowledge competency itself."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.7.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-08",
+      "authored_text": "Oral communication is a generic delivery skill with no FOLIO service equivalent; its tasks map to Trial Court Practice, Advisory Service, and Settlement/Demand/Collection Practice."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.8.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-09",
+      "authored_text": "Written communication is a generic skill; concrete tasks map to Letter Communication, Opinion Memo Practice, and Appellate Practice."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.10.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-11",
+      "authored_text": "Instilling confidence is an interpersonal skill with no FOLIO equivalent; the nearest adjacent firm concept is CRM Management."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.15.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-16",
+      "authored_text": "FOLIO has no legal-ethics / professional-responsibility service concept; the skill's tasks map to Conflicts Management, Risk Management, and Billing Management (trust duties)."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.16.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-17",
+      "authored_text": "FOLIO has no generic legal-drafting concept; drafting is embodied across Purchase and Sale, Estate Management, Engagement Letter, and litigation-document concepts to which the tasks map."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.19.note",
+      "family": "no_folio_note",
+      "record_id": "SK-PM-03",
+      "authored_text": "FOLIO's Business of Law branch has no firm-capitalization / investment concept; the nearest adjacent concept is Budgeting Management."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.23.note",
+      "family": "no_folio_note",
+      "record_id": "SK-PM-07",
+      "authored_text": "FOLIO's technology concepts (Records, Information Governance, Email Management) are narrow tooling categories, not the firm-IT competency; mapped no-equivalent at the skill level, with tasks mapping to those tooling concepts."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.26.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-18",
+      "authored_text": "AI-era competency not yet modeled in FOLIO; candidate for an upstream contribution to the FOLIO Services / Legal Use Cases branches."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.27.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-19",
+      "authored_text": "AI-era competency not yet modeled in FOLIO; adjacent to Legal Research (cite validation) but has no dedicated concept; candidate for upstream contribution."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.28.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-20",
+      "authored_text": "AI-era competency (deciding what to delegate to AI vs. retain for human judgment) not yet modeled in FOLIO; candidate for upstream contribution."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.29.note",
+      "family": "no_folio_note",
+      "record_id": "SK-LP-21",
+      "authored_text": "AI-era competency not yet modeled in FOLIO; adjacent to Risk Management and Information Governance Management but has no dedicated concept; candidate for upstream contribution."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#skills.30.note",
+      "family": "no_folio_note",
+      "record_id": "SK-PM-10",
+      "authored_text": "AI-era practice-management competency not yet modeled in FOLIO; adjacent to Records Management and Information Governance Management; candidate for upstream contribution."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.38.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-039",
+      "authored_text": "Establishing credibility before a tribunal is an interpersonal skill with no FOLIO service concept."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.59.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-060",
+      "authored_text": "FOLIO has no rules-of-professional-conduct service concept; compliance is embodied in the attorney-discipline matters as a Dispute Service."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.73.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-074",
+      "authored_text": "FOLIO has no firm-capitalization concept; this is a business-formation planning task with no service equivalent."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.75.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-076",
+      "authored_text": "Firm investment decisions have no FOLIO service equivalent; nearest adjacent is Budgeting Management."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.85.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-086",
+      "authored_text": "Selecting and using practice technology has no FOLIO service concept; FOLIO's technology concepts are narrow tooling categories."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.94.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-095",
+      "authored_text": "Prompt formulation is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.95.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-096",
+      "authored_text": "Prompt iteration is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.96.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-097",
+      "authored_text": "Prompt templating is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.97.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-098",
+      "authored_text": "AI-output fact verification is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.98.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-099",
+      "authored_text": "AI citation checking is an AI-era skill adjacent to Legal Research but with no dedicated FOLIO concept."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.99.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-100",
+      "authored_text": "Hallucination detection is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.100.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-101",
+      "authored_text": "Centaur delegation judgment is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.101.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-102",
+      "authored_text": "The AI-plus-human revise loop is an AI-era workflow not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.102.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-103",
+      "authored_text": "Supervising AI output is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.103.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-104",
+      "authored_text": "Confidentiality in AI use is an AI-era skill adjacent to Risk Management but with no dedicated FOLIO concept."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.104.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-105",
+      "authored_text": "Privilege preservation in AI use is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.105.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-106",
+      "authored_text": "AI-oriented matter-data hygiene is an AI-era skill adjacent to Records Management but with no dedicated FOLIO concept."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.106.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-107",
+      "authored_text": "Firm-wide AI governance is an AI-era skill not modeled in FOLIO."
+    },
+    {
+      "source_ref": "data/taxonomy/folio-crosswalk.json#tasks.107.note",
+      "family": "no_folio_note",
+      "record_id": "TSK-108",
+      "authored_text": "Retention of AI interactions is an AI-era skill adjacent to Records Management but with no dedicated FOLIO concept."
+    }
+  ],
+  "locked_field_names": [
+    "@id",
+    "branch",
+    "category",
+    "exercise_refs",
+    "extension",
+    "extension_count",
+    "folio",
+    "folio_iri",
+    "folio_label",
+    "id",
+    "mapping_confidence",
+    "module",
+    "no_folio_equivalent",
+    "schema_version",
+    "skill_id",
+    "source",
+    "spine_version",
+    "survey",
+    "surveyed_count",
+    "task_count",
+    "verified_at",
+    "bloom_level"
+  ]
+}

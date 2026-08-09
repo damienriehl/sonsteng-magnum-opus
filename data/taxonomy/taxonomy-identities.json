@@ -1,0 +1,1690 @@
+{
+  "schema_version": "1.0.0",
+  "note": "Literal preservation keys migrated from the 2026-08-09 positional taxonomy.",
+  "tasks": [
+    {
+      "id": "TSK-001",
+      "skill_id": "SK-LP-01",
+      "seed_name": "Conduct a preliminary case analysis",
+      "subtasks": [
+        {
+          "id": "TSK-001.01",
+          "seed_name": "Identify the governing law"
+        },
+        {
+          "id": "TSK-001.02",
+          "seed_name": "Assess strengths and weaknesses"
+        },
+        {
+          "id": "TSK-001.03",
+          "seed_name": "Frame the legal issues"
+        }
+      ]
+    },
+    {
+      "id": "TSK-002",
+      "skill_id": "SK-LP-01",
+      "seed_name": "Develop a case theory and strategy",
+      "subtasks": [
+        {
+          "id": "TSK-002.01",
+          "seed_name": "Articulate theory and themes"
+        },
+        {
+          "id": "TSK-002.02",
+          "seed_name": "Identify elements to prevail"
+        },
+        {
+          "id": "TSK-002.03",
+          "seed_name": "Map liabilities and remedies"
+        }
+      ]
+    },
+    {
+      "id": "TSK-003",
+      "skill_id": "SK-LP-01",
+      "seed_name": "Create a strategic plan of action",
+      "subtasks": [
+        {
+          "id": "TSK-003.01",
+          "seed_name": "Define client objectives"
+        },
+        {
+          "id": "TSK-003.02",
+          "seed_name": "Sequence steps and deadlines"
+        },
+        {
+          "id": "TSK-003.03",
+          "seed_name": "Select the forum and approach"
+        }
+      ]
+    },
+    {
+      "id": "TSK-004",
+      "skill_id": "SK-LP-01",
+      "seed_name": "Diagnose the client's legal problem at intake",
+      "subtasks": [
+        {
+          "id": "TSK-004.01",
+          "seed_name": "Classify the problem"
+        },
+        {
+          "id": "TSK-004.02",
+          "seed_name": "Spot threshold and jurisdiction issues"
+        }
+      ]
+    },
+    {
+      "id": "TSK-005",
+      "skill_id": "SK-LP-02",
+      "seed_name": "Write a legal analysis memorandum",
+      "subtasks": [
+        {
+          "id": "TSK-005.01",
+          "seed_name": "State the issue and rule"
+        },
+        {
+          "id": "TSK-005.02",
+          "seed_name": "Apply the law to the facts"
+        },
+        {
+          "id": "TSK-005.03",
+          "seed_name": "Reach a reasoned conclusion"
+        }
+      ]
+    },
+    {
+      "id": "TSK-006",
+      "skill_id": "SK-LP-02",
+      "seed_name": "Apply governing law to disputed facts",
+      "subtasks": [
+        {
+          "id": "TSK-006.01",
+          "seed_name": "Extract the legal elements"
+        },
+        {
+          "id": "TSK-006.02",
+          "seed_name": "Match facts to elements"
+        },
+        {
+          "id": "TSK-006.03",
+          "seed_name": "Weigh counterarguments"
+        }
+      ]
+    },
+    {
+      "id": "TSK-007",
+      "skill_id": "SK-LP-02",
+      "seed_name": "Construct and evaluate legal arguments",
+      "subtasks": [
+        {
+          "id": "TSK-007.01",
+          "seed_name": "Build the affirmative argument"
+        },
+        {
+          "id": "TSK-007.02",
+          "seed_name": "Anticipate the opposing argument"
+        },
+        {
+          "id": "TSK-007.03",
+          "seed_name": "Assess relative strength"
+        }
+      ]
+    },
+    {
+      "id": "TSK-008",
+      "skill_id": "SK-LP-02",
+      "seed_name": "Synthesize authority into a working rule",
+      "subtasks": [
+        {
+          "id": "TSK-008.01",
+          "seed_name": "Reconcile conflicting authority"
+        },
+        {
+          "id": "TSK-008.02",
+          "seed_name": "Derive a rule statement"
+        }
+      ]
+    },
+    {
+      "id": "TSK-009",
+      "skill_id": "SK-LP-03",
+      "seed_name": "Identify the controlling substantive rules",
+      "subtasks": [
+        {
+          "id": "TSK-009.01",
+          "seed_name": "Locate governing statutes and code"
+        },
+        {
+          "id": "TSK-009.02",
+          "seed_name": "Identify controlling elements"
+        }
+      ]
+    },
+    {
+      "id": "TSK-010",
+      "skill_id": "SK-LP-03",
+      "seed_name": "Analyze the elements of a claim or defense",
+      "subtasks": [
+        {
+          "id": "TSK-010.01",
+          "seed_name": "Enumerate prima facie elements"
+        },
+        {
+          "id": "TSK-010.02",
+          "seed_name": "Identify affirmative defenses"
+        }
+      ]
+    },
+    {
+      "id": "TSK-011",
+      "skill_id": "SK-LP-03",
+      "seed_name": "Apply area-specific doctrine to the facts",
+      "subtasks": [
+        {
+          "id": "TSK-011.01",
+          "seed_name": "Apply doctrine to matter facts"
+        },
+        {
+          "id": "TSK-011.02",
+          "seed_name": "Note jurisdictional variations"
+        }
+      ]
+    },
+    {
+      "id": "TSK-012",
+      "skill_id": "SK-LP-04",
+      "seed_name": "Determine the governing procedural framework",
+      "subtasks": [
+        {
+          "id": "TSK-012.01",
+          "seed_name": "Identify court, forum, and rules"
+        },
+        {
+          "id": "TSK-012.02",
+          "seed_name": "Determine filing deadlines"
+        }
+      ]
+    },
+    {
+      "id": "TSK-013",
+      "skill_id": "SK-LP-04",
+      "seed_name": "Apply the rules of civil procedure to a filing",
+      "subtasks": [
+        {
+          "id": "TSK-013.01",
+          "seed_name": "Confirm jurisdiction and venue"
+        },
+        {
+          "id": "TSK-013.02",
+          "seed_name": "Comply with service requirements"
+        }
+      ]
+    },
+    {
+      "id": "TSK-014",
+      "skill_id": "SK-LP-04",
+      "seed_name": "Apply the rules of evidence in preparation",
+      "subtasks": [
+        {
+          "id": "TSK-014.01",
+          "seed_name": "Assess admissibility of exhibits"
+        },
+        {
+          "id": "TSK-014.02",
+          "seed_name": "Prepare foundation for key evidence"
+        }
+      ]
+    },
+    {
+      "id": "TSK-015",
+      "skill_id": "SK-LP-04",
+      "seed_name": "Navigate appellate procedure",
+      "subtasks": [
+        {
+          "id": "TSK-015.01",
+          "seed_name": "Confirm appellate rules and format"
+        },
+        {
+          "id": "TSK-015.02",
+          "seed_name": "Calendar briefing deadlines"
+        }
+      ]
+    },
+    {
+      "id": "TSK-016",
+      "skill_id": "SK-LP-05",
+      "seed_name": "Formulate a research plan",
+      "subtasks": [
+        {
+          "id": "TSK-016.01",
+          "seed_name": "Identify issues to research"
+        },
+        {
+          "id": "TSK-016.02",
+          "seed_name": "Select sources and search terms"
+        }
+      ]
+    },
+    {
+      "id": "TSK-017",
+      "skill_id": "SK-LP-05",
+      "seed_name": "Locate and read primary authority in print",
+      "subtasks": [
+        {
+          "id": "TSK-017.01",
+          "seed_name": "Find controlling statutes"
+        },
+        {
+          "id": "TSK-017.02",
+          "seed_name": "Find on-point case law"
+        }
+      ]
+    },
+    {
+      "id": "TSK-018",
+      "skill_id": "SK-LP-05",
+      "seed_name": "Validate and update authority",
+      "subtasks": [
+        {
+          "id": "TSK-018.01",
+          "seed_name": "Confirm authority is good law"
+        },
+        {
+          "id": "TSK-018.02",
+          "seed_name": "Note subsequent history"
+        }
+      ]
+    },
+    {
+      "id": "TSK-019",
+      "skill_id": "SK-LP-06",
+      "seed_name": "Run electronic database searches",
+      "subtasks": [
+        {
+          "id": "TSK-019.01",
+          "seed_name": "Build boolean and natural-language queries"
+        },
+        {
+          "id": "TSK-019.02",
+          "seed_name": "Filter by jurisdiction"
+        }
+      ]
+    },
+    {
+      "id": "TSK-020",
+      "skill_id": "SK-LP-06",
+      "seed_name": "Cite-check using online tools",
+      "subtasks": [
+        {
+          "id": "TSK-020.01",
+          "seed_name": "Verify citation validity"
+        },
+        {
+          "id": "TSK-020.02",
+          "seed_name": "Check treatment flags"
+        }
+      ]
+    },
+    {
+      "id": "TSK-021",
+      "skill_id": "SK-LP-06",
+      "seed_name": "Assemble a research trail and report",
+      "subtasks": [
+        {
+          "id": "TSK-021.01",
+          "seed_name": "Record sources found"
+        },
+        {
+          "id": "TSK-021.02",
+          "seed_name": "Summarize findings for the file"
+        }
+      ]
+    },
+    {
+      "id": "TSK-022",
+      "skill_id": "SK-LP-07",
+      "seed_name": "Conduct a client intake interview",
+      "subtasks": [
+        {
+          "id": "TSK-022.01",
+          "seed_name": "Use open-ended then focused questions"
+        },
+        {
+          "id": "TSK-022.02",
+          "seed_name": "Build rapport and trust"
+        },
+        {
+          "id": "TSK-022.03",
+          "seed_name": "Elicit the client's goals and concerns"
+        }
+      ]
+    },
+    {
+      "id": "TSK-023",
+      "skill_id": "SK-LP-07",
+      "seed_name": "Investigate and develop the facts",
+      "subtasks": [
+        {
+          "id": "TSK-023.01",
+          "seed_name": "Gather documents and records"
+        },
+        {
+          "id": "TSK-023.02",
+          "seed_name": "Identify and interview witnesses"
+        },
+        {
+          "id": "TSK-023.03",
+          "seed_name": "Assess gaps and inconsistencies"
+        }
+      ]
+    },
+    {
+      "id": "TSK-024",
+      "skill_id": "SK-LP-07",
+      "seed_name": "Interview fact witnesses",
+      "subtasks": [
+        {
+          "id": "TSK-024.01",
+          "seed_name": "Prepare a witness question outline"
+        },
+        {
+          "id": "TSK-024.02",
+          "seed_name": "Capture and memorialize statements"
+        }
+      ]
+    },
+    {
+      "id": "TSK-025",
+      "skill_id": "SK-LP-07",
+      "seed_name": "Build and maintain a chronology of facts",
+      "subtasks": [
+        {
+          "id": "TSK-025.01",
+          "seed_name": "Order events on a timeline"
+        },
+        {
+          "id": "TSK-025.02",
+          "seed_name": "Link facts to legal elements"
+        }
+      ]
+    },
+    {
+      "id": "TSK-026",
+      "skill_id": "SK-LP-08",
+      "seed_name": "Deliver an opening statement or oral argument",
+      "subtasks": [
+        {
+          "id": "TSK-026.01",
+          "seed_name": "Structure the argument"
+        },
+        {
+          "id": "TSK-026.02",
+          "seed_name": "Use theory and themes"
+        },
+        {
+          "id": "TSK-026.03",
+          "seed_name": "Respond to questions from the bench"
+        }
+      ]
+    },
+    {
+      "id": "TSK-027",
+      "skill_id": "SK-LP-08",
+      "seed_name": "Conduct direct and cross-examination",
+      "subtasks": [
+        {
+          "id": "TSK-027.01",
+          "seed_name": "Plan direct to elicit the story"
+        },
+        {
+          "id": "TSK-027.02",
+          "seed_name": "Plan cross to control the witness"
+        }
+      ]
+    },
+    {
+      "id": "TSK-028",
+      "skill_id": "SK-LP-08",
+      "seed_name": "Counsel and communicate with the client orally",
+      "subtasks": [
+        {
+          "id": "TSK-028.01",
+          "seed_name": "Explain options in plain language"
+        },
+        {
+          "id": "TSK-028.02",
+          "seed_name": "Confirm client understanding"
+        }
+      ]
+    },
+    {
+      "id": "TSK-029",
+      "skill_id": "SK-LP-08",
+      "seed_name": "Present a negotiation position orally",
+      "subtasks": [
+        {
+          "id": "TSK-029.01",
+          "seed_name": "State interests and positions"
+        },
+        {
+          "id": "TSK-029.02",
+          "seed_name": "Make and respond to offers"
+        }
+      ]
+    },
+    {
+      "id": "TSK-030",
+      "skill_id": "SK-LP-09",
+      "seed_name": "Draft client correspondence and letters",
+      "subtasks": [
+        {
+          "id": "TSK-030.01",
+          "seed_name": "Write an engagement or status letter"
+        },
+        {
+          "id": "TSK-030.02",
+          "seed_name": "Write a client advice letter"
+        }
+      ]
+    },
+    {
+      "id": "TSK-031",
+      "skill_id": "SK-LP-09",
+      "seed_name": "Draft correspondence to opposing counsel and the court",
+      "subtasks": [
+        {
+          "id": "TSK-031.01",
+          "seed_name": "Draft a meet-and-confer letter"
+        },
+        {
+          "id": "TSK-031.02",
+          "seed_name": "Include proof of service"
+        }
+      ]
+    },
+    {
+      "id": "TSK-032",
+      "skill_id": "SK-LP-09",
+      "seed_name": "Write a persuasive brief or memorandum of law",
+      "subtasks": [
+        {
+          "id": "TSK-032.01",
+          "seed_name": "Organize argument headings"
+        },
+        {
+          "id": "TSK-032.02",
+          "seed_name": "Integrate authority and record cites"
+        }
+      ]
+    },
+    {
+      "id": "TSK-033",
+      "skill_id": "SK-LP-09",
+      "seed_name": "Edit and revise written work against a rubric",
+      "subtasks": [
+        {
+          "id": "TSK-033.01",
+          "seed_name": "Self-edit for clarity and concision"
+        },
+        {
+          "id": "TSK-033.02",
+          "seed_name": "Revise to meet page limits"
+        }
+      ]
+    },
+    {
+      "id": "TSK-034",
+      "skill_id": "SK-LP-10",
+      "seed_name": "Advise the client on options and risks",
+      "subtasks": [
+        {
+          "id": "TSK-034.01",
+          "seed_name": "Lay out alternatives and consequences"
+        },
+        {
+          "id": "TSK-034.02",
+          "seed_name": "Give a candid recommendation"
+        }
+      ]
+    },
+    {
+      "id": "TSK-035",
+      "skill_id": "SK-LP-10",
+      "seed_name": "Counsel on settlement versus proceeding",
+      "subtasks": [
+        {
+          "id": "TSK-035.01",
+          "seed_name": "Evaluate the client's BATNA"
+        },
+        {
+          "id": "TSK-035.02",
+          "seed_name": "Explain cost, benefit, and risk"
+        }
+      ]
+    },
+    {
+      "id": "TSK-036",
+      "skill_id": "SK-LP-10",
+      "seed_name": "Manage client expectations and decisions",
+      "subtasks": [
+        {
+          "id": "TSK-036.01",
+          "seed_name": "Clarify decision ownership"
+        },
+        {
+          "id": "TSK-036.02",
+          "seed_name": "Document the advice given"
+        }
+      ]
+    },
+    {
+      "id": "TSK-037",
+      "skill_id": "SK-LP-10",
+      "seed_name": "Counsel a distressed or vulnerable client",
+      "subtasks": [
+        {
+          "id": "TSK-037.01",
+          "seed_name": "Acknowledge emotion and rebuild focus"
+        },
+        {
+          "id": "TSK-037.02",
+          "seed_name": "Coordinate with a guardian or parent"
+        }
+      ]
+    },
+    {
+      "id": "TSK-038",
+      "skill_id": "SK-LP-11",
+      "seed_name": "Build client trust and rapport",
+      "subtasks": [
+        {
+          "id": "TSK-038.01",
+          "seed_name": "Demonstrate competence and preparation"
+        },
+        {
+          "id": "TSK-038.02",
+          "seed_name": "Communicate reliably and follow through"
+        }
+      ]
+    },
+    {
+      "id": "TSK-039",
+      "skill_id": "SK-LP-11",
+      "seed_name": "Establish credibility with the tribunal and opposing counsel",
+      "subtasks": [
+        {
+          "id": "TSK-039.01",
+          "seed_name": "Demonstrate candor and preparedness"
+        },
+        {
+          "id": "TSK-039.02",
+          "seed_name": "Honor commitments and deadlines"
+        }
+      ]
+    },
+    {
+      "id": "TSK-040",
+      "skill_id": "SK-LP-11",
+      "seed_name": "Maintain the attorney-client relationship over time",
+      "subtasks": [
+        {
+          "id": "TSK-040.01",
+          "seed_name": "Keep the client informed"
+        },
+        {
+          "id": "TSK-040.02",
+          "seed_name": "Respond promptly to communications"
+        }
+      ]
+    },
+    {
+      "id": "TSK-041",
+      "skill_id": "SK-LP-12",
+      "seed_name": "Conduct a new-client intake and screening",
+      "subtasks": [
+        {
+          "id": "TSK-041.01",
+          "seed_name": "Gather intake information"
+        },
+        {
+          "id": "TSK-041.02",
+          "seed_name": "Run a preliminary conflicts check"
+        }
+      ]
+    },
+    {
+      "id": "TSK-042",
+      "skill_id": "SK-LP-12",
+      "seed_name": "Develop business and generate referrals",
+      "subtasks": [
+        {
+          "id": "TSK-042.01",
+          "seed_name": "Identify prospective clients"
+        },
+        {
+          "id": "TSK-042.02",
+          "seed_name": "Communicate the firm's value"
+        }
+      ]
+    },
+    {
+      "id": "TSK-043",
+      "skill_id": "SK-LP-12",
+      "seed_name": "Retain clients through service and relationship",
+      "subtasks": [
+        {
+          "id": "TSK-043.01",
+          "seed_name": "Deliver responsive service"
+        },
+        {
+          "id": "TSK-043.02",
+          "seed_name": "Solicit and act on feedback"
+        }
+      ]
+    },
+    {
+      "id": "TSK-044",
+      "skill_id": "SK-LP-13",
+      "seed_name": "Prepare a strategic settlement and negotiation plan (SSNP)",
+      "subtasks": [
+        {
+          "id": "TSK-044.01",
+          "seed_name": "Identify interests, positions, and BATNA"
+        },
+        {
+          "id": "TSK-044.02",
+          "seed_name": "Set target and reservation points"
+        },
+        {
+          "id": "TSK-044.03",
+          "seed_name": "Plan confidential concessions"
+        }
+      ]
+    },
+    {
+      "id": "TSK-045",
+      "skill_id": "SK-LP-13",
+      "seed_name": "Conduct a settlement or plea negotiation",
+      "subtasks": [
+        {
+          "id": "TSK-045.01",
+          "seed_name": "Exchange and evaluate offers"
+        },
+        {
+          "id": "TSK-045.02",
+          "seed_name": "Use principled bargaining"
+        },
+        {
+          "id": "TSK-045.03",
+          "seed_name": "Document the terms reached"
+        }
+      ]
+    },
+    {
+      "id": "TSK-046",
+      "skill_id": "SK-LP-13",
+      "seed_name": "Negotiate a transaction to agreement",
+      "subtasks": [
+        {
+          "id": "TSK-046.01",
+          "seed_name": "Reconcile competing deal terms"
+        },
+        {
+          "id": "TSK-046.02",
+          "seed_name": "Draft the negotiated agreement"
+        }
+      ]
+    },
+    {
+      "id": "TSK-047",
+      "skill_id": "SK-LP-13",
+      "seed_name": "Participate in mediation",
+      "subtasks": [
+        {
+          "id": "TSK-047.01",
+          "seed_name": "Prepare a mediation position or statement"
+        },
+        {
+          "id": "TSK-047.02",
+          "seed_name": "Engage the neutral and explore options"
+        }
+      ]
+    },
+    {
+      "id": "TSK-048",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Draft pleadings to initiate or respond",
+      "subtasks": [
+        {
+          "id": "TSK-048.01",
+          "seed_name": "Draft the complaint or petition"
+        },
+        {
+          "id": "TSK-048.02",
+          "seed_name": "Draft the answer and counterclaim"
+        }
+      ]
+    },
+    {
+      "id": "TSK-049",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Conduct discovery",
+      "subtasks": [
+        {
+          "id": "TSK-049.01",
+          "seed_name": "Draft interrogatories and document requests"
+        },
+        {
+          "id": "TSK-049.02",
+          "seed_name": "Respond to written discovery"
+        },
+        {
+          "id": "TSK-049.03",
+          "seed_name": "Take or defend a deposition"
+        }
+      ]
+    },
+    {
+      "id": "TSK-050",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Engage in motion practice",
+      "subtasks": [
+        {
+          "id": "TSK-050.01",
+          "seed_name": "Draft the motion and supporting memo"
+        },
+        {
+          "id": "TSK-050.02",
+          "seed_name": "Draft the opposition"
+        },
+        {
+          "id": "TSK-050.03",
+          "seed_name": "Prepare a proposed order"
+        }
+      ]
+    },
+    {
+      "id": "TSK-051",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Try a case to verdict",
+      "subtasks": [
+        {
+          "id": "TSK-051.01",
+          "seed_name": "Prepare the trial notebook"
+        },
+        {
+          "id": "TSK-051.02",
+          "seed_name": "Present openings, witnesses, and closings"
+        },
+        {
+          "id": "TSK-051.03",
+          "seed_name": "Propose jury instructions and verdict form"
+        }
+      ]
+    },
+    {
+      "id": "TSK-052",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Conduct an arbitration hearing",
+      "subtasks": [
+        {
+          "id": "TSK-052.01",
+          "seed_name": "Draft the statement of the case"
+        },
+        {
+          "id": "TSK-052.02",
+          "seed_name": "Present evidence to the arbitrator"
+        }
+      ]
+    },
+    {
+      "id": "TSK-053",
+      "skill_id": "SK-LP-14",
+      "seed_name": "Handle an appeal",
+      "subtasks": [
+        {
+          "id": "TSK-053.01",
+          "seed_name": "Frame issues and standard of review"
+        },
+        {
+          "id": "TSK-053.02",
+          "seed_name": "Write the appellate brief"
+        },
+        {
+          "id": "TSK-053.03",
+          "seed_name": "Present oral argument"
+        }
+      ]
+    },
+    {
+      "id": "TSK-054",
+      "skill_id": "SK-LP-15",
+      "seed_name": "Manage the matter file and documents",
+      "subtasks": [
+        {
+          "id": "TSK-054.01",
+          "seed_name": "Organize the case file and exhibits"
+        },
+        {
+          "id": "TSK-054.02",
+          "seed_name": "Track key documents and versions"
+        }
+      ]
+    },
+    {
+      "id": "TSK-055",
+      "skill_id": "SK-LP-15",
+      "seed_name": "Calendar deadlines and manage the docket",
+      "subtasks": [
+        {
+          "id": "TSK-055.01",
+          "seed_name": "Docket court and discovery deadlines"
+        },
+        {
+          "id": "TSK-055.02",
+          "seed_name": "Set reminders and buffers"
+        }
+      ]
+    },
+    {
+      "id": "TSK-056",
+      "skill_id": "SK-LP-15",
+      "seed_name": "Coordinate the two-person firm's division of labor",
+      "subtasks": [
+        {
+          "id": "TSK-056.01",
+          "seed_name": "Allocate tasks between partners"
+        },
+        {
+          "id": "TSK-056.02",
+          "seed_name": "Balance the workload realistically"
+        }
+      ]
+    },
+    {
+      "id": "TSK-057",
+      "skill_id": "SK-LP-15",
+      "seed_name": "Track time and prepare for billing",
+      "subtasks": [
+        {
+          "id": "TSK-057.01",
+          "seed_name": "Record contemporaneous time entries"
+        },
+        {
+          "id": "TSK-057.02",
+          "seed_name": "Categorize work for the invoice"
+        }
+      ]
+    },
+    {
+      "id": "TSK-058",
+      "skill_id": "SK-LP-16",
+      "seed_name": "Identify and resolve conflicts of interest",
+      "subtasks": [
+        {
+          "id": "TSK-058.01",
+          "seed_name": "Run a conflicts check"
+        },
+        {
+          "id": "TSK-058.02",
+          "seed_name": "Evaluate waiver or withdrawal options"
+        }
+      ]
+    },
+    {
+      "id": "TSK-059",
+      "skill_id": "SK-LP-16",
+      "seed_name": "Safeguard client confidences and privilege",
+      "subtasks": [
+        {
+          "id": "TSK-059.01",
+          "seed_name": "Protect privileged material"
+        },
+        {
+          "id": "TSK-059.02",
+          "seed_name": "Avoid improper disclosures"
+        }
+      ]
+    },
+    {
+      "id": "TSK-060",
+      "skill_id": "SK-LP-16",
+      "seed_name": "Comply with the rules of professional conduct",
+      "subtasks": [
+        {
+          "id": "TSK-060.01",
+          "seed_name": "Honor the no-contact (Rule 4.2) rule"
+        },
+        {
+          "id": "TSK-060.02",
+          "seed_name": "Maintain candor to the tribunal"
+        }
+      ]
+    },
+    {
+      "id": "TSK-061",
+      "skill_id": "SK-LP-16",
+      "seed_name": "Handle client funds and trust duties ethically",
+      "subtasks": [
+        {
+          "id": "TSK-061.01",
+          "seed_name": "Keep client funds in trust"
+        },
+        {
+          "id": "TSK-061.02",
+          "seed_name": "Avoid commingling and reconcile the ledger"
+        }
+      ]
+    },
+    {
+      "id": "TSK-062",
+      "skill_id": "SK-LP-17",
+      "seed_name": "Draft transactional agreements",
+      "subtasks": [
+        {
+          "id": "TSK-062.01",
+          "seed_name": "Draft a purchase or sale agreement"
+        },
+        {
+          "id": "TSK-062.02",
+          "seed_name": "Draft protective clauses"
+        }
+      ]
+    },
+    {
+      "id": "TSK-063",
+      "skill_id": "SK-LP-17",
+      "seed_name": "Draft a will and estate-planning documents",
+      "subtasks": [
+        {
+          "id": "TSK-063.01",
+          "seed_name": "Draft the will per client instructions"
+        },
+        {
+          "id": "TSK-063.02",
+          "seed_name": "Draft the explanatory client letter"
+        }
+      ]
+    },
+    {
+      "id": "TSK-064",
+      "skill_id": "SK-LP-17",
+      "seed_name": "Draft an engagement letter and fee agreement",
+      "subtasks": [
+        {
+          "id": "TSK-064.01",
+          "seed_name": "State scope and fee structure"
+        },
+        {
+          "id": "TSK-064.02",
+          "seed_name": "Include required billing terms"
+        }
+      ]
+    },
+    {
+      "id": "TSK-065",
+      "skill_id": "SK-LP-17",
+      "seed_name": "Draft pleadings and litigation documents",
+      "subtasks": [
+        {
+          "id": "TSK-065.01",
+          "seed_name": "Draft pleadings and motions"
+        },
+        {
+          "id": "TSK-065.02",
+          "seed_name": "Draft affidavits and proposed orders"
+        }
+      ]
+    },
+    {
+      "id": "TSK-066",
+      "skill_id": "SK-LP-17",
+      "seed_name": "Draft discovery instruments",
+      "subtasks": [
+        {
+          "id": "TSK-066.01",
+          "seed_name": "Draft interrogatories"
+        },
+        {
+          "id": "TSK-066.02",
+          "seed_name": "Draft requests for production"
+        }
+      ]
+    },
+    {
+      "id": "TSK-067",
+      "skill_id": "SK-PM-01",
+      "seed_name": "Select and structure the fee arrangement",
+      "subtasks": [
+        {
+          "id": "TSK-067.01",
+          "seed_name": "Match fee type to matter"
+        },
+        {
+          "id": "TSK-067.02",
+          "seed_name": "Document the fee in the agreement"
+        }
+      ]
+    },
+    {
+      "id": "TSK-068",
+      "skill_id": "SK-PM-01",
+      "seed_name": "Record time and expenses",
+      "subtasks": [
+        {
+          "id": "TSK-068.01",
+          "seed_name": "Keep contemporaneous time sheets"
+        },
+        {
+          "id": "TSK-068.02",
+          "seed_name": "Capture disbursements and expenses"
+        }
+      ]
+    },
+    {
+      "id": "TSK-069",
+      "skill_id": "SK-PM-01",
+      "seed_name": "Prepare a client billing statement",
+      "subtasks": [
+        {
+          "id": "TSK-069.01",
+          "seed_name": "Compile time entries into an invoice"
+        },
+        {
+          "id": "TSK-069.02",
+          "seed_name": "Compute fees, expenses, and balance due"
+        },
+        {
+          "id": "TSK-069.03",
+          "seed_name": "Enclose a billing cover letter"
+        }
+      ]
+    },
+    {
+      "id": "TSK-070",
+      "skill_id": "SK-PM-01",
+      "seed_name": "Manage retainers and trust accounting",
+      "subtasks": [
+        {
+          "id": "TSK-070.01",
+          "seed_name": "Deposit funds to trust"
+        },
+        {
+          "id": "TSK-070.02",
+          "seed_name": "Reconcile the trust ledger"
+        }
+      ]
+    },
+    {
+      "id": "TSK-071",
+      "skill_id": "SK-PM-02",
+      "seed_name": "Define staffing needs and roles",
+      "subtasks": [
+        {
+          "id": "TSK-071.01",
+          "seed_name": "Identify support-staff roles"
+        },
+        {
+          "id": "TSK-071.02",
+          "seed_name": "Write role expectations"
+        }
+      ]
+    },
+    {
+      "id": "TSK-072",
+      "skill_id": "SK-PM-02",
+      "seed_name": "Supervise and delegate to non-lawyer staff",
+      "subtasks": [
+        {
+          "id": "TSK-072.01",
+          "seed_name": "Delegate appropriate tasks"
+        },
+        {
+          "id": "TSK-072.02",
+          "seed_name": "Supervise for competence and ethics"
+        }
+      ]
+    },
+    {
+      "id": "TSK-073",
+      "skill_id": "SK-PM-02",
+      "seed_name": "Onboard and manage support staff",
+      "subtasks": [
+        {
+          "id": "TSK-073.01",
+          "seed_name": "Train on firm systems"
+        },
+        {
+          "id": "TSK-073.02",
+          "seed_name": "Set performance expectations"
+        }
+      ]
+    },
+    {
+      "id": "TSK-074",
+      "skill_id": "SK-PM-03",
+      "seed_name": "Plan the firm's startup capitalization",
+      "subtasks": [
+        {
+          "id": "TSK-074.01",
+          "seed_name": "Estimate startup costs"
+        },
+        {
+          "id": "TSK-074.02",
+          "seed_name": "Identify capital sources"
+        }
+      ]
+    },
+    {
+      "id": "TSK-075",
+      "skill_id": "SK-PM-03",
+      "seed_name": "Manage cash flow and reserves",
+      "subtasks": [
+        {
+          "id": "TSK-075.01",
+          "seed_name": "Forecast cash flow"
+        },
+        {
+          "id": "TSK-075.02",
+          "seed_name": "Maintain operating reserves"
+        }
+      ]
+    },
+    {
+      "id": "TSK-076",
+      "skill_id": "SK-PM-03",
+      "seed_name": "Evaluate investment in tools and growth",
+      "subtasks": [
+        {
+          "id": "TSK-076.01",
+          "seed_name": "Assess ROI of a purchase"
+        },
+        {
+          "id": "TSK-076.02",
+          "seed_name": "Prioritize investments"
+        }
+      ]
+    },
+    {
+      "id": "TSK-077",
+      "skill_id": "SK-PM-04",
+      "seed_name": "Plan and scope a matter as a project",
+      "subtasks": [
+        {
+          "id": "TSK-077.01",
+          "seed_name": "Define deliverables and milestones"
+        },
+        {
+          "id": "TSK-077.02",
+          "seed_name": "Estimate effort and time"
+        }
+      ]
+    },
+    {
+      "id": "TSK-078",
+      "skill_id": "SK-PM-04",
+      "seed_name": "Manage personal and firm time",
+      "subtasks": [
+        {
+          "id": "TSK-078.01",
+          "seed_name": "Prioritize tasks"
+        },
+        {
+          "id": "TSK-078.02",
+          "seed_name": "Track billable versus non-billable time"
+        }
+      ]
+    },
+    {
+      "id": "TSK-079",
+      "skill_id": "SK-PM-04",
+      "seed_name": "Improve process efficiency",
+      "subtasks": [
+        {
+          "id": "TSK-079.01",
+          "seed_name": "Identify bottlenecks"
+        },
+        {
+          "id": "TSK-079.02",
+          "seed_name": "Standardize repeatable work"
+        }
+      ]
+    },
+    {
+      "id": "TSK-080",
+      "skill_id": "SK-PM-05",
+      "seed_name": "Prepare a matter or firm budget",
+      "subtasks": [
+        {
+          "id": "TSK-080.01",
+          "seed_name": "Estimate fees and costs"
+        },
+        {
+          "id": "TSK-080.02",
+          "seed_name": "Set a budget baseline"
+        }
+      ]
+    },
+    {
+      "id": "TSK-081",
+      "skill_id": "SK-PM-05",
+      "seed_name": "Allocate resources across the docket",
+      "subtasks": [
+        {
+          "id": "TSK-081.01",
+          "seed_name": "Match resources to matter priority"
+        },
+        {
+          "id": "TSK-081.02",
+          "seed_name": "Rebalance as needs change"
+        }
+      ]
+    },
+    {
+      "id": "TSK-082",
+      "skill_id": "SK-PM-05",
+      "seed_name": "Monitor budget versus actuals",
+      "subtasks": [
+        {
+          "id": "TSK-082.01",
+          "seed_name": "Compare actuals to budget"
+        },
+        {
+          "id": "TSK-082.02",
+          "seed_name": "Adjust the plan"
+        }
+      ]
+    },
+    {
+      "id": "TSK-083",
+      "skill_id": "SK-PM-06",
+      "seed_name": "Develop a marketing and client-development plan",
+      "subtasks": [
+        {
+          "id": "TSK-083.01",
+          "seed_name": "Define target clients and niche"
+        },
+        {
+          "id": "TSK-083.02",
+          "seed_name": "Choose outreach channels"
+        }
+      ]
+    },
+    {
+      "id": "TSK-084",
+      "skill_id": "SK-PM-06",
+      "seed_name": "Build the firm's brand and network",
+      "subtasks": [
+        {
+          "id": "TSK-084.01",
+          "seed_name": "Cultivate referral relationships"
+        },
+        {
+          "id": "TSK-084.02",
+          "seed_name": "Maintain a professional presence"
+        }
+      ]
+    },
+    {
+      "id": "TSK-085",
+      "skill_id": "SK-PM-06",
+      "seed_name": "Prepare pitches and proposals",
+      "subtasks": [
+        {
+          "id": "TSK-085.01",
+          "seed_name": "Scope the prospective engagement"
+        },
+        {
+          "id": "TSK-085.02",
+          "seed_name": "Present fees and value"
+        }
+      ]
+    },
+    {
+      "id": "TSK-086",
+      "skill_id": "SK-PM-07",
+      "seed_name": "Adopt and use practice technology",
+      "subtasks": [
+        {
+          "id": "TSK-086.01",
+          "seed_name": "Select case-management tools"
+        },
+        {
+          "id": "TSK-086.02",
+          "seed_name": "Use document and billing software"
+        }
+      ]
+    },
+    {
+      "id": "TSK-087",
+      "skill_id": "SK-PM-07",
+      "seed_name": "Manage electronic communications and records",
+      "subtasks": [
+        {
+          "id": "TSK-087.01",
+          "seed_name": "Organize email and files"
+        },
+        {
+          "id": "TSK-087.02",
+          "seed_name": "Retain records per policy"
+        }
+      ]
+    },
+    {
+      "id": "TSK-088",
+      "skill_id": "SK-PM-07",
+      "seed_name": "Protect data security and client information",
+      "subtasks": [
+        {
+          "id": "TSK-088.01",
+          "seed_name": "Secure devices and accounts"
+        },
+        {
+          "id": "TSK-088.02",
+          "seed_name": "Guard against data loss"
+        }
+      ]
+    },
+    {
+      "id": "TSK-089",
+      "skill_id": "SK-PM-08",
+      "seed_name": "Establish firm governance and decision rules",
+      "subtasks": [
+        {
+          "id": "TSK-089.01",
+          "seed_name": "Define partner decision rights"
+        },
+        {
+          "id": "TSK-089.02",
+          "seed_name": "Document firm policies"
+        }
+      ]
+    },
+    {
+      "id": "TSK-090",
+      "skill_id": "SK-PM-08",
+      "seed_name": "Set long-range strategy",
+      "subtasks": [
+        {
+          "id": "TSK-090.01",
+          "seed_name": "Set multi-year goals"
+        },
+        {
+          "id": "TSK-090.02",
+          "seed_name": "Align resources to strategy"
+        }
+      ]
+    },
+    {
+      "id": "TSK-091",
+      "skill_id": "SK-PM-08",
+      "seed_name": "Make and review firm-level decisions",
+      "subtasks": [
+        {
+          "id": "TSK-091.01",
+          "seed_name": "Weigh options and risks"
+        },
+        {
+          "id": "TSK-091.02",
+          "seed_name": "Review outcomes and adjust"
+        }
+      ]
+    },
+    {
+      "id": "TSK-092",
+      "skill_id": "SK-PM-09",
+      "seed_name": "Communicate effectively within the firm",
+      "subtasks": [
+        {
+          "id": "TSK-092.01",
+          "seed_name": "Hold regular partner check-ins"
+        },
+        {
+          "id": "TSK-092.02",
+          "seed_name": "Give constructive feedback"
+        }
+      ]
+    },
+    {
+      "id": "TSK-093",
+      "skill_id": "SK-PM-09",
+      "seed_name": "Manage partner and staff relationships",
+      "subtasks": [
+        {
+          "id": "TSK-093.01",
+          "seed_name": "Align on expectations"
+        },
+        {
+          "id": "TSK-093.02",
+          "seed_name": "Address friction early"
+        }
+      ]
+    },
+    {
+      "id": "TSK-094",
+      "skill_id": "SK-PM-09",
+      "seed_name": "Resolve internal conflict",
+      "subtasks": [
+        {
+          "id": "TSK-094.01",
+          "seed_name": "Surface disagreements constructively"
+        },
+        {
+          "id": "TSK-094.02",
+          "seed_name": "Reach a workable resolution"
+        }
+      ]
+    },
+    {
+      "id": "TSK-095",
+      "skill_id": "SK-LP-18",
+      "seed_name": "Formulate an effective legal prompt",
+      "subtasks": [
+        {
+          "id": "TSK-095.01",
+          "seed_name": "Specify role, task, and context"
+        },
+        {
+          "id": "TSK-095.02",
+          "seed_name": "Supply governing facts and constraints"
+        }
+      ]
+    },
+    {
+      "id": "TSK-096",
+      "skill_id": "SK-LP-18",
+      "seed_name": "Iterate and refine prompts",
+      "subtasks": [
+        {
+          "id": "TSK-096.01",
+          "seed_name": "Diagnose weak outputs"
+        },
+        {
+          "id": "TSK-096.02",
+          "seed_name": "Revise the prompt and re-test"
+        }
+      ]
+    },
+    {
+      "id": "TSK-097",
+      "skill_id": "SK-LP-18",
+      "seed_name": "Build reusable prompt templates for tasks",
+      "subtasks": [
+        {
+          "id": "TSK-097.01",
+          "seed_name": "Template a memo or interview prompt"
+        },
+        {
+          "id": "TSK-097.02",
+          "seed_name": "Document usage and limits"
+        }
+      ]
+    },
+    {
+      "id": "TSK-098",
+      "skill_id": "SK-LP-19",
+      "seed_name": "Verify AI-asserted facts against the record",
+      "subtasks": [
+        {
+          "id": "TSK-098.01",
+          "seed_name": "Cross-check claims to the case file"
+        },
+        {
+          "id": "TSK-098.02",
+          "seed_name": "Flag unsupported assertions"
+        }
+      ]
+    },
+    {
+      "id": "TSK-099",
+      "skill_id": "SK-LP-19",
+      "seed_name": "Check AI-provided citations and authority",
+      "subtasks": [
+        {
+          "id": "TSK-099.01",
+          "seed_name": "Confirm each citation exists"
+        },
+        {
+          "id": "TSK-099.02",
+          "seed_name": "Confirm it says what is claimed"
+        }
+      ]
+    },
+    {
+      "id": "TSK-100",
+      "skill_id": "SK-LP-19",
+      "seed_name": "Detect and correct hallucinations and errors",
+      "subtasks": [
+        {
+          "id": "TSK-100.01",
+          "seed_name": "Identify fabricated content"
+        },
+        {
+          "id": "TSK-100.02",
+          "seed_name": "Correct before relying or filing"
+        }
+      ]
+    },
+    {
+      "id": "TSK-101",
+      "skill_id": "SK-LP-20",
+      "seed_name": "Decide which tasks to delegate to AI versus retain",
+      "subtasks": [
+        {
+          "id": "TSK-101.01",
+          "seed_name": "Assess task risk and reversibility"
+        },
+        {
+          "id": "TSK-101.02",
+          "seed_name": "Keep judgment-heavy work human"
+        }
+      ]
+    },
+    {
+      "id": "TSK-102",
+      "skill_id": "SK-LP-20",
+      "seed_name": "Integrate AI first-pass into the revise-and-repeat loop",
+      "subtasks": [
+        {
+          "id": "TSK-102.01",
+          "seed_name": "Get an AI first-pass critique"
+        },
+        {
+          "id": "TSK-102.02",
+          "seed_name": "Revise against the rubric"
+        }
+      ]
+    },
+    {
+      "id": "TSK-103",
+      "skill_id": "SK-LP-20",
+      "seed_name": "Supervise AI as you would a junior",
+      "subtasks": [
+        {
+          "id": "TSK-103.01",
+          "seed_name": "Set the assignment clearly"
+        },
+        {
+          "id": "TSK-103.02",
+          "seed_name": "Review before it leaves the firm"
+        }
+      ]
+    },
+    {
+      "id": "TSK-104",
+      "skill_id": "SK-LP-21",
+      "seed_name": "Avoid disclosing client confidences to AI tools",
+      "subtasks": [
+        {
+          "id": "TSK-104.01",
+          "seed_name": "Strip or avoid PII and identifiers"
+        },
+        {
+          "id": "TSK-104.02",
+          "seed_name": "Use approved tools only"
+        }
+      ]
+    },
+    {
+      "id": "TSK-105",
+      "skill_id": "SK-LP-21",
+      "seed_name": "Preserve privilege when using AI",
+      "subtasks": [
+        {
+          "id": "TSK-105.01",
+          "seed_name": "Assess waiver risk"
+        },
+        {
+          "id": "TSK-105.02",
+          "seed_name": "Document safeguards"
+        }
+      ]
+    },
+    {
+      "id": "TSK-106",
+      "skill_id": "SK-PM-10",
+      "seed_name": "Maintain clean matter data for AI use",
+      "subtasks": [
+        {
+          "id": "TSK-106.01",
+          "seed_name": "Keep the record complete and current"
+        },
+        {
+          "id": "TSK-106.02",
+          "seed_name": "Separate facts from work product"
+        }
+      ]
+    },
+    {
+      "id": "TSK-107",
+      "skill_id": "SK-PM-10",
+      "seed_name": "Govern AI use across the firm",
+      "subtasks": [
+        {
+          "id": "TSK-107.01",
+          "seed_name": "Set an AI-use policy"
+        },
+        {
+          "id": "TSK-107.02",
+          "seed_name": "Log tools and data flows"
+        }
+      ]
+    },
+    {
+      "id": "TSK-108",
+      "skill_id": "SK-PM-10",
+      "seed_name": "Manage retention and deletion of AI interactions",
+      "subtasks": [
+        {
+          "id": "TSK-108.01",
+          "seed_name": "Retain per policy"
+        },
+        {
+          "id": "TSK-108.02",
+          "seed_name": "Delete transient prompts and outputs"
+        }
+      ]
+    }
+  ]
+}
