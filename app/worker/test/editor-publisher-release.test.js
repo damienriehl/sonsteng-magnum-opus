@@ -136,6 +136,29 @@ test("ledger executor contract resumes pages crash through exact completion", ()
   assert.deepEqual(final.events.filter((event) => event.type === "pages_deployed").length,1);
 });
 
+test("expired verified release is reclaimable and completes under a fresh fence", () => {
+  let now = 2000;
+  const core = makeCore(() => now);
+  seedApplied(core, "batch-1", ["suggestion-0201"], 1100);
+  core.now = () => now;
+  const draft = core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1" })).release;
+  core.authorizeProductionRelease(authorize(draft));
+  const service = { actor:"service:release",credential_channel:"bearer",lease_ms:1000 };
+  const first = core.claimAuthorizedProductionRelease(service).release;
+  const move = (token,state) => core.transitionProductionRelease({ id:draft.id,state,
+    detail:{ candidate_sha:"commit-batch-1" },fencing_token:token,
+    actor:service.actor,credential_channel:"bearer" });
+  assert.equal(move(first.fencing_token,"pages_deployed").ok,true);
+  assert.equal(move(first.fencing_token,"worker_deployed").ok,true);
+  assert.equal(move(first.fencing_token,"verified").ok,true);
+  now += 5 * 60 * 1000 + 1;
+  const resumed = core.claimAuthorizedProductionRelease(service).release;
+  assert.equal(resumed.state,"verified");
+  assert.notEqual(resumed.fencing_token,first.fencing_token);
+  assert.equal(move(resumed.fencing_token,"complete").ok,true);
+});
+
 test("authorization is immutable and idempotent only for the identical binding", () => {
   const core = makeCore();
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);

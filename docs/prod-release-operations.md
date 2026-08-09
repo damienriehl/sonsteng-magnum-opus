@@ -5,6 +5,10 @@ The executor uses a dedicated `EDIT_TOKEN_RELEASE` bearer granted only the
 authorized candidate is materialized in a detached temporary worktree, so DEV
 may continue advancing without changing the frozen release. Worker upload and
 activation always target Wrangler's explicit `production` environment.
+Pages deploys explicitly target the configured production branch (`main` by
+default). Each provider's bounded deployable ID is atomically recorded in the
+0600 `SONSTENG_PROD_RECOVERY_REGISTRY`; unbounded CLI output and credentials
+never enter either that registry or the release ledger.
 
 **Approval is not publication.** A wording edit may be saved, accepted, applied to canonical
 content, and visible on DEV without changing public production. Production changes only when a

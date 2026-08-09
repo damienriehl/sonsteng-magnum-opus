@@ -19,7 +19,7 @@ def main(argv=None):
         return 0
     from prod_release_executor import (CandidateValidator, CompatibilityGate, GitRefAdapter,
         LedgerHTTP, ProductionCandidateBuilder, ProductionExecutor,
-        WranglerPagesAdapter, WranglerWorkerAdapter)
+        RecoveryRegistry, WranglerPagesAdapter, WranglerWorkerAdapter)
     parser = argparse.ArgumentParser()
     env = os.environ.get
     argument = lambda name, key: parser.add_argument(  # noqa: E731
@@ -28,10 +28,12 @@ def main(argv=None):
     argument("--pages-project", "SONSTENG_PROD_PAGES_PROJECT")
     argument("--pages-artifact", "SONSTENG_PROD_PAGES_ARTIFACT")
     argument("--pages-provenance-url", "SONSTENG_PROD_PAGES_PROVENANCE_URL")
+    parser.add_argument("--pages-branch", default=env("SONSTENG_PROD_PAGES_BRANCH", "main"))
     argument("--worker-config", "SONSTENG_PROD_WORKER_CONFIG")
     argument("--worker-provenance-url", "SONSTENG_PROD_WORKER_PROVENANCE_URL")
     argument("--repo", "SONSTENG_PROD_REPO")
     argument("--manifest", "SONSTENG_PROD_MANIFEST")
+    argument("--recovery-registry", "SONSTENG_PROD_RECOVERY_REGISTRY")
     parser.add_argument("--bootstrap-base", default=env("SONSTENG_PROD_BOOTSTRAP_BASE_SHA"))
     parser.add_argument("--lock", default=env("SONSTENG_PROD_LOCK", "/tmp/sonsteng-prod-release.lock"))
     parser.add_argument("--new-worker-accepts-old-pages", action="store_true",
@@ -65,11 +67,14 @@ def main(argv=None):
             worker_config = candidate_root / pathlib.Path(args.worker_config).resolve().relative_to(
                 pathlib.Path(args.repo).resolve())
             pages = WranglerPagesAdapter(args.pages_project,pages_artifact,args.pages_provenance_url,
-                                         candidate_root=candidate_root)
+                                         candidate_root=candidate_root,
+                                         production_branch=args.pages_branch)
             worker = WranglerWorkerAdapter(worker_config,args.worker_provenance_url,
                                            candidate_root=candidate_root)
             validator = CandidateValidator(isolated_git, manifest)
-            ProductionExecutor(ledger,pages,worker,gate,validator).run_once(release)
+            registry = RecoveryRegistry(args.recovery_registry)
+            ProductionExecutor(ledger,pages,worker,gate,validator,
+                               recovery_registry=registry).run_once(release)
     return 0
 
 

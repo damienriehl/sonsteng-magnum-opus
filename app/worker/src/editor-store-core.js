@@ -775,12 +775,12 @@ export class EditorStoreCore {
       return { ok:false, reason:"service_bearer_required" };
     const now = this.now();
     let release = input.id ? this._one("SELECT * FROM production_releases WHERE id=?", input.id) :
-      this._one("SELECT * FROM production_releases WHERE state='authorized' OR (state IN ('executing','pages_deployed','worker_deployed') AND lease_expires_at<=?) ORDER BY updated_at,id LIMIT 1", now);
+      this._one("SELECT * FROM production_releases WHERE state='authorized' OR (state IN ('executing','pages_deployed','worker_deployed','verified') AND lease_expires_at<=?) ORDER BY updated_at,id LIMIT 1", now);
     if (!release) return { ok:true, release:null };
-    if (['executing','pages_deployed','worker_deployed'].includes(release.state) &&
+    if (['executing','pages_deployed','worker_deployed','verified'].includes(release.state) &&
         release.lease_expires_at > now)
       return { ok:false, reason:"lease_active" };
-    if (!['authorized','executing','pages_deployed','worker_deployed'].includes(release.state))
+    if (!['authorized','executing','pages_deployed','worker_deployed','verified'].includes(release.state))
       return { ok:false, reason:"not_authorized" };
     const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
     const lease = now + Math.max(1000, Math.min(input.lease_ms || CEILINGS.leaseMs, CEILINGS.leaseMs));

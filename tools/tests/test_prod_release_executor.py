@@ -17,6 +17,7 @@ from prod_release_executor import (  # noqa: E402
     LedgerHTTP,
     GitRefAdapter,
     RecordedPairRestorer,
+    RecoveryRegistry,
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
 )
@@ -200,7 +201,8 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     config.write_text("{}", encoding="utf-8")
     calls = []
     class Result:
-        stdout = "Uploaded sonsteng-chat-production\nWorker Version ID: 12345678-1234-4234-8234-123456789abc\n"
+        stdout = ("Deployment complete! https://pagesdeploy123.sonsteng.pages.dev\n"
+                  "Worker Version ID: 12345678-1234-4234-8234-123456789abc\n")
     staged_headers = []
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
@@ -216,6 +218,7 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     assert all(call[1]["cwd"] == root.resolve() for call in calls)
     assert staged_headers == ["/*\n  X-Release-SHA: " + item.candidate_sha + "\n"]
     assert not (site / "_headers").exists()
+    assert ["--branch", "main"] == calls[0][0][-4:-2]
     assert ["--env", "production"] == calls[1][0][6:8]
     assert calls[1][0][-2:] == ["--var", "RELEASE_SHA:" + item.candidate_sha]
     assert ["--env", "production"] == calls[2][0][-3:-1]
@@ -229,6 +232,20 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     with pytest.raises(ReleaseError, match="version identifier"):
         WranglerWorkerAdapter(config, "https://worker.example", root,
             run=lambda *_args, **_kwargs: BadResult()).deploy(item)
+
+
+def test_recovery_registry_persists_exact_pair_atomically(tmp_path):
+    path = tmp_path / "known-good.json"
+    registry = RecoveryRegistry(path)
+    sha = "b" * 40
+    registry.record_target(sha, "pages", "pagesdeploy123")
+    registry.record_target(sha, "worker", "12345678-1234-4234-8234-123456789abc")
+    assert json.loads(path.read_text())[sha] == {
+        "pages_deployment_id":"pagesdeploy123",
+        "worker_version_id":"12345678-1234-4234-8234-123456789abc"}
+    assert path.stat().st_mode & 0o777 == 0o600
+    with pytest.raises(ReleaseError, match="conflict"):
+        registry.record_target(sha, "worker", "different")
 
 
 def test_git_adapter_materializes_frozen_sha_away_from_advancing_checkout(tmp_path):

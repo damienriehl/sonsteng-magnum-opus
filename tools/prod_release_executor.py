@@ -43,7 +43,7 @@ class FrozenRelease:
 
     def __post_init__(self):
         if self.state not in {"authorized", "executing", "pages_deployed",
-                              "worker_deployed", "complete"}:
+                              "worker_deployed", "verified", "complete"}:
             raise ValueError("release is not executable")
         if len(set(self.suggestion_ids)) != len(self.suggestion_ids) or not self.suggestion_ids:
             raise ValueError("membership must contain unique suggestion IDs")
@@ -258,9 +258,11 @@ class WranglerPagesAdapter:
     name = "pages"
 
     def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
+                 production_branch="main",
                  run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
         self.project, self.artifact_dir = project, artifact_dir
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
+        self.production_branch = production_branch
         self.provenance_url, self._run, self._opener, self.timeout = provenance_url, run, opener, timeout
 
     def deploy(self, manifest):
@@ -280,11 +282,17 @@ class WranglerPagesAdapter:
             headers.write_text(existing + "/*\n  X-Release-SHA: " +
                                manifest.candidate_sha + "\n", encoding="utf-8")
             result = self._run(["npx", "wrangler", "pages", "deploy", str(staged),
-                "--project-name", self.project, "--commit-hash", manifest.candidate_sha],
+                "--project-name", self.project, "--branch", self.production_branch,
+                "--commit-hash", manifest.candidate_sha],
                 cwd=self.candidate_root, check=True, capture_output=True, text=True,
                 timeout=self.timeout)
-        # Store an opaque digest, not raw CLI output (which may include URLs or account data).
-        return {"provider_id": hashlib.sha256(result.stdout.encode()).hexdigest()[:24]}
+        match = re.search(r"https://([a-z0-9-]{8,})\.[a-z0-9-]+\.pages\.dev(?:/|\s|$)",
+                          result.stdout, re.IGNORECASE)
+        deployment = match.group(1) if match else ""
+        if not deployment:
+            raise ReleaseError("Pages deploy did not return a bounded deployment identifier")
+        return {"provider_id": hashlib.sha256(deployment.encode()).hexdigest()[:24],
+                "deployable_id": deployment}
 
     def provenance(self):
         with self._opener(self.provenance_url, timeout=30) as response:
@@ -320,7 +328,8 @@ class WranglerWorkerAdapter:
         self._run(["npx", "wrangler", "versions", "deploy", version, "--config", self.config,
                    "--env", "production", "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
                   text=True, timeout=self.timeout)
-        return {"provider_id": hashlib.sha256(version.encode()).hexdigest()[:24]}
+        return {"provider_id": hashlib.sha256(version.encode()).hexdigest()[:24],
+                "deployable_id": version}
 
     def provenance(self):
         with self._opener(self.provenance_url, timeout=30) as response:
@@ -330,11 +339,12 @@ class WranglerWorkerAdapter:
 class ProductionExecutor:
     def __init__(self, ledger, pages, worker, compatibility=None,
                  candidate_validator: Callable[[FrozenRelease], None] | None = None,
-                 restorer=None):
+                 restorer=None, recovery_registry=None):
         self.ledger, self.pages, self.worker = ledger, pages, worker
         self.compatibility = compatibility or CompatibilityGate(True, False)
         self.candidate_validator = candidate_validator
         self.restorer = restorer
+        self.recovery_registry = recovery_registry
 
     def _event(self, release, state, **detail):
         # Evidence is deliberately identifiers/hashes only; edited text and
@@ -349,7 +359,7 @@ class ProductionExecutor:
         release = release or self.ledger.claim_authorized()
         if release is None or release.state == "complete":
             return None
-        if release.state not in {"authorized", "executing", "pages_deployed", "worker_deployed"}:
+        if release.state not in {"authorized", "executing", "pages_deployed", "worker_deployed", "verified"}:
             return None
         try:
             if self.candidate_validator:
@@ -363,6 +373,9 @@ class ProductionExecutor:
                 if name + "_deployed" in release.completed_phases:
                     continue
                 receipts[name] = targets[name].deploy(release)
+                if self.recovery_registry:
+                    self.recovery_registry.record_target(
+                        release.candidate_sha, name, receipts[name].get("deployable_id", ""))
                 self._event(release, name + "_deployed",
                             **{name + "_id": receipts[name].get("provider_id", "")})
             observed = {name: target.provenance() for name, target in targets.items()}
@@ -413,3 +426,34 @@ class RecordedPairRestorer:
             raise ReleaseError("exact recorded known-good pair is unavailable")
         self.restore_pages(pair["pages_deployment_id"])
         self.restore_worker(pair["worker_version_id"])
+
+
+class RecoveryRegistry:
+    """0600 atomic registry of opaque deployable IDs keyed by candidate SHA."""
+
+    def __init__(self, path):
+        self.path = pathlib.Path(path)
+
+    def _read(self):
+        if not self.path.exists():
+            return {}
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def record_target(self, sha, target, deployable_id):
+        if target not in {"pages", "worker"} or not deployable_id:
+            raise ReleaseError("recovery registry requires an exact deployable identifier")
+        data = self._read()
+        pair = data.setdefault(sha, {})
+        key = "pages_deployment_id" if target == "pages" else "worker_version_id"
+        prior = pair.get(key)
+        if prior and prior != deployable_id:
+            raise ReleaseError("recovery registry identifier conflict")
+        pair[key] = deployable_id
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", dir=self.path.parent, delete=False,
+                                         encoding="utf-8") as target_file:
+            json.dump(data, target_file, sort_keys=True, separators=(",", ":"))
+            target_file.write("\n")
+            temporary = pathlib.Path(target_file.name)
+        temporary.chmod(0o600)
+        temporary.replace(self.path)

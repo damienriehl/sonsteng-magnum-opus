@@ -37,12 +37,14 @@ SONSTENG_PROD_RELEASE_BEARER=
 # This must be the distinct EDIT_TOKEN_RELEASE secret whose only grant is
 # release_service; never place the DEV apply/admin bearer here.
 SONSTENG_PROD_PAGES_PROJECT=sonsteng
+SONSTENG_PROD_PAGES_BRANCH=main
 SONSTENG_PROD_PAGES_ARTIFACT=$DAEMON_ROOT/site
 SONSTENG_PROD_PAGES_PROVENANCE_URL=https://sonsteng.damienriehl.com/platform/
 SONSTENG_PROD_WORKER_CONFIG=$DAEMON_ROOT/app/worker/wrangler.jsonc
 SONSTENG_PROD_WORKER_PROVENANCE_URL=https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance
 SONSTENG_PROD_REPO=$DAEMON_ROOT
 SONSTENG_PROD_MANIFEST=$STATE_ROOT/authorized-manifest.json
+SONSTENG_PROD_RECOVERY_REGISTRY=$STATE_ROOT/known-good-pairs.json
 SONSTENG_PROD_LOCK=$DAEMON_ROOT/.locks/daemon.lock
 # Required only for the first release: the SHA currently verified on both
 # public Pages and the production Worker. Later bases come from the ledger.
