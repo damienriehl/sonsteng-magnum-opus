@@ -10,6 +10,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 from prod_release_executor import (  # noqa: E402
     CompatibilityGate,
     CandidateValidator,
+    ProductionCandidateBuilder,
     FrozenRelease,
     ProductionExecutor,
     ReleaseError,
@@ -212,3 +213,56 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     with pytest.raises(ReleaseError, match="outside"):
         WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
                              root, run=run).deploy(item)
+
+
+def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):
+    class BuilderLedger:
+        def __init__(self): self.binding = None
+        def preparation_context(self):
+            return {"base_sha":"a" * 40,"active_release":None,"batches":[
+                {"batch_id":"batch-1","commit_sha":"c" * 40,
+                 "generator_id":"generator-1","suggestion_ids":["s2"]},
+                {"batch_id":"batch-2","commit_sha":"b" * 40,
+                 "generator_id":"generator-1","suggestion_ids":["s1"]}]}
+        def prepare(self, binding):
+            self.binding = binding
+            return {"ok":True,"release":{"id":binding["id"],"state":"prepared"}}
+    class Git:
+        def require_clean_candidate(self, candidate): assert candidate == "b" * 40
+        def is_ancestor(self, base, candidate): return True
+        def tree(self, candidate): return "tree-1"
+    ledger = BuilderLedger()
+    manifest_path = tmp_path / "state" / "manifest.json"
+    made = ProductionCandidateBuilder(ledger,Git(),manifest_path).prepare_latest()
+    manifest = json.loads(manifest_path.read_text())
+    assert made["release"]["state"] == "prepared"
+    assert manifest["batch_ids"] == ["batch-1","batch-2"]
+    assert manifest["suggestion_ids"] == ["s1","s2"]
+    assert ledger.binding["target_batch_id"] == "batch-2"
+    assert ledger.binding["candidate_sha"] == "b" * 40
+    assert ledger.binding["expected_suggestion_ids"] == ["s1","s2"]
+
+
+def test_candidate_builder_requires_recorded_first_base_and_reproduces_active(tmp_path):
+    class Git:
+        def tree(self, candidate): return "tree-1"
+    class EmptyBaseLedger:
+        def preparation_context(self):
+            return {"base_sha":None,"active_release":None,"batches":[{
+                "batch_id":"batch-1","commit_sha":"b" * 40,
+                "generator_id":"generator-1","suggestion_ids":["s1"]}]}
+    with pytest.raises(ReleaseError, match="recorded production base"):
+        ProductionCandidateBuilder(EmptyBaseLedger(),Git(),tmp_path / "manifest.json").prepare_latest()
+
+    manifest = ProductionCandidateBuilder._manifest("a" * 40,"b" * 40,"tree-1",
+        "generator-1",["batch-1"],["b" * 40],["s1"])
+    active = {"id":"release-1","state":"authorized","base_sha":"a" * 40,
+        "candidate_sha":"b" * 40,"generator_id":"generator-1",
+        "manifest_hash":hashlib.sha256(json.dumps(manifest,sort_keys=True,
+          separators=(",", ":")).encode()).hexdigest(),"suggestion_ids":["s1"],
+        "batches":[{"batch_id":"batch-1","commit_sha":"b" * 40}]}
+    class ActiveLedger:
+        def preparation_context(self): return {"active_release":active,"batches":[]}
+    path = tmp_path / "active.json"
+    assert ProductionCandidateBuilder(ActiveLedger(),Git(),path).prepare_latest()["replay"]
+    assert json.loads(path.read_text()) == manifest

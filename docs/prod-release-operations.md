@@ -75,10 +75,13 @@ manifest. Revocation never authorizes a different target.
 ## Preparation, authorization, execution
 
 The Publisher page may show eligible contiguous DEV batches, but its “Prepare immutable preview”
-control stays disabled. Preparation is a trusted release-service request because it must prove git
-ancestry, exact batch membership, generated evidence, candidate tree, and manifest hashes. It must
-not place a service bearer in browser code. Once a prepared ledger record exists, the human
-Publisher page becomes the read-only preview plus one explicit authorization action.
+control stays disabled. On each config-enabled service run, the trusted candidate builder reads the
+text-free contiguous frontier, proves the clean checkout, ancestry, exact membership, generator and
+candidate tree, writes the canonical manifest under the service state directory, and submits the
+immutable preparation. The first run also requires `SONSTENG_PROD_BOOTSTRAP_BASE_SHA`, recorded from
+the exact SHA already verified on both production targets; later bases come from the completed
+ledger frontier. No service bearer enters browser code. Once a prepared ledger record exists, the
+human Publisher page becomes the read-only preview plus one explicit authorization action.
 
 The executor may claim only `authorized` records. On ambiguity or partial failure it records a
 bounded error, fences later releases, and reconciles or restores the recorded pair; it never falls

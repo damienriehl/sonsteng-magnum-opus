@@ -388,12 +388,13 @@ immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
 ## Production release API (`/edit/v1/prod/releases/*`)
 
 These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
-CSRF guarded. `POST /prepare`, `/claim`, and `/transition` require the trusted
+CSRF guarded. `GET /frontier` and `POST /prepare`, `/claim`, and `/transition` require the trusted
 release service channel: a bearer credential with admin/service scope. The
 service may freeze evidence and execute an already-authorized release, but it
 cannot authorize one.
 
-`POST /prepare` binds the next complete contiguous DEV apply frontier through a
+`GET /frontier` returns the text-free complete contiguous DEV apply frontier for the isolated
+candidate builder. `POST /prepare` binds that frontier through a
 target batch to base/candidate SHA, generator ID, evidence/manifest hashes,
 exact batch/group/suggestion membership, target, and service actor. It is
 idempotent only for the identical binding. The browser has no service credential

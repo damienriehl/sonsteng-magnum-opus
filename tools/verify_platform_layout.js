@@ -60,7 +60,7 @@ async function run() {
   const viewports=printOnly?[m.viewports.find((v)=>v.width===1280)]:m.viewports;
   for(const spec of pages) for(const vp of viewports) for(const mode of m.typeModes){
     const page=await browser.newPage(); await page.setViewport(vp); await setMode(page,mode);
-    try { await page.goto(relUrl(spec.path),{waitUntil:'networkidle0',timeout:30000}); if(printOnly)await page.emulateMediaType('print');
+    try { await page.goto(relUrl(spec.path),{waitUntil:'domcontentloaded',timeout:30000}); if(printOnly)await page.emulateMediaType('print');
       const got=await inspect(page,spec.hierarchy); const errors=[];
       if(got.large!==(mode==='large'))errors.push(`type mode mismatch: expected ${mode}, class type-lg=${got.large}`);
       if(got.h1!==1)errors.push(`visible H1 count ${got.h1}`); if(got.jumps.length)errors.push(`heading jumps ${got.jumps.join(', ')}`);
@@ -75,7 +75,7 @@ async function run() {
   if(!printOnly){
     const corpus=walk(SITE).filter((p)=>p.endsWith('.html')).filter((p)=>{const rel=path.relative(SITE,p).replaceAll(path.sep,'/');return !m.generatedCorpus.exclude.includes(rel)&&!rel.startsWith('chat/');});
     const vp=m.viewports.find((v)=>v.width===390);
-    for(const file of corpus) for(const mode of m.typeModes){const page=await browser.newPage();await page.setViewport(vp);await setMode(page,mode);const rel=path.relative(SITE,file).replaceAll(path.sep,'/');try{await page.goto('file://'+file,{waitUntil:'networkidle0',timeout:30000});const state=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,large:document.documentElement.classList.contains('type-lg')}));const errors=[];if(state.large!==(mode==='large'))errors.push(`type mode mismatch: expected ${mode}, class type-lg=${state.large}`);if(state.overflow>1)errors.push(`corpus-overflow ${state.overflow}px`);checks++;if(errors.length){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${errors.join(' | ')}`);}}catch(e){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${e.message}`);}finally{await page.close();}}
+    for(const file of corpus) for(const mode of m.typeModes){const page=await browser.newPage();await page.setViewport(vp);await setMode(page,mode);const rel=path.relative(SITE,file).replaceAll(path.sep,'/');try{await page.goto('file://'+file,{waitUntil:'domcontentloaded',timeout:30000});const state=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,large:document.documentElement.classList.contains('type-lg')}));const errors=[];if(state.large!==(mode==='large'))errors.push(`type mode mismatch: expected ${mode}, class type-lg=${state.large}`);if(state.overflow>1)errors.push(`corpus-overflow ${state.overflow}px`);checks++;if(errors.length){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${errors.join(' | ')}`);}}catch(e){fails++;console.error(`FAIL corpus ${rel} ${mode} — ${e.message}`);}finally{await page.close();}}
     console.log(`CORPUS ${corpus.length} generated pages × ${m.typeModes.length} modes checked at 390px`);
   }
   fs.mkdirSync(path.join(REPO,'build'),{recursive:true});fs.writeFileSync(path.join(REPO,'build',printOnly?'platform-print-report.json':'platform-layout-report.json'),JSON.stringify(report,null,2));

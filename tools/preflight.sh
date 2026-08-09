@@ -70,6 +70,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     run "platform layout matrix"                 node tools/verify_platform_layout.js
     run "catalog client behavior"                node tools/verify_catalog_client.js
+    run "Publisher authorization client"         node tools/verify_publisher_client.mjs
     run "platform print matrix"                  node tools/verify_platform_layout.js --print
     run "interview + critique matrix"            node tools/verify_chat_critique.js
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
@@ -94,6 +95,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "rail placement"       "no reachable X display"
     skip "platform layout"      "no reachable X display"
     skip "catalog client"       "no reachable X display"
+    skip "Publisher client"     "no reachable X display"
     skip "platform print"       "no reachable X display"
     skip "interview + critique" "no reachable X display"
   fi
@@ -103,6 +105,7 @@ else
   skip "rail placement"       "--no-browser"
   skip "platform layout"      "--no-browser"
   skip "catalog client"       "--no-browser"
+  skip "Publisher client"     "--no-browser"
   skip "platform print"       "--no-browser"
   skip "interview + critique" "--no-browser"
 fi

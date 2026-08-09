@@ -867,6 +867,29 @@ export class EditorStoreCore {
     return { eligible:Number(row?.count || 0) };
   }
 
+  // Minimal, text-free projection for the trusted candidate builder.  The
+  // service receives immutable IDs and commit evidence; edited copy remains
+  // confined to the human Publisher preview.
+  productionPreparationContext() {
+    const activeRow = this._one(
+      "SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 1");
+    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
+    const frontier = this._one(
+      "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
+    const done = this._all(
+      "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    let start = 0;
+    if (frontier) {
+      const at = done.findIndex((batch) => batch.batch_id === frontier.target_batch_id);
+      start = at < 0 ? done.length : at + 1;
+    }
+    const batches = done.slice(start).map((batch) => ({ ...batch,
+      suggestion_ids:this._all(
+        "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+        batch.batch_id, STATUS.APPLIED).map((row) => row.id) }));
+    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches };
+  }
+
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is
   // not yet done, resolve limbo. pre-`merged` phases roll their in_flight items
   // BACK to accepted (re-queue); post-`merged` phases complete them to applied.

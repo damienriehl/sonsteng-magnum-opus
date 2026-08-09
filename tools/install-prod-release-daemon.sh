@@ -42,6 +42,9 @@ SONSTENG_PROD_WORKER_PROVENANCE_URL=https://sonsteng-chat-production.damienriehl
 SONSTENG_PROD_REPO=$DAEMON_ROOT
 SONSTENG_PROD_MANIFEST=$STATE_ROOT/authorized-manifest.json
 SONSTENG_PROD_LOCK=$DAEMON_ROOT/.locks/daemon.lock
+# Required only for the first release: the SHA currently verified on both
+# public Pages and the production Worker. Later bases come from the ledger.
+SONSTENG_PROD_BOOTSTRAP_BASE_SHA=
 # Set exactly one to true only after the transient pairing has been proven.
 SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES=false
 SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES=false

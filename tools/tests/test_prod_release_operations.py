@@ -46,6 +46,7 @@ def test_installer_uses_dedicated_checkout_shared_flock_and_config_off_template(
     assert ".local/share/sonsteng-daemon/checkout" in source
     assert ".locks/daemon.lock" in source
     assert "SONSTENG_PROD_RELEASE_ENABLED=false" in source
+    assert "SONSTENG_PROD_BOOTSTRAP_BASE_SHA=" in source
     assert "sonsteng-prod-release.service" in source
     assert "sonsteng-prod-release.timer" in source
     assert "systemctl --user enable --now" not in source
@@ -64,6 +65,7 @@ def test_operations_docs_cover_bypasses_credentials_and_real_uat():
         "rotation",
         "revocation",
         "Never copy credentials",
+        "trusted candidate builder",
     ]:
         assert phrase in operations
     for phrase in [

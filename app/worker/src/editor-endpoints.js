@@ -816,7 +816,7 @@ export async function reconcileEndpoint(request, env, auth) {
 // later executor API, but cannot mint or enlarge a production authorization.
 export async function publisherAuthorizeEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
-  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!auth?.editor || !auth?.scopes?.publisher?.granted ||
       auth.credential_channel !== "access" || auth.service)
     return editError("forbidden", "A human Publisher using Access is required.", 403);
@@ -853,7 +853,7 @@ export async function publisherAuthorizeEndpoint(request, env, auth) {
 }
 
 export async function publisherReleaseEndpoint(request, env, auth) {
-  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.admin?.granted)
     return editError("forbidden", "Publisher or release-service scope required.", 403);
   const id = new URL(request.url).searchParams.get("id");
@@ -868,7 +868,7 @@ function releaseService(auth) {
 
 export async function productionPrepareEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
-  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
@@ -886,9 +886,15 @@ export async function productionPrepareEndpoint(request, env, auth) {
     editError(result.reason || "validation_error", "Release preparation rejected.", 409);
 }
 
+export async function productionPreparationContextEndpoint(request, env, auth) {
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
+  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  return json({ ok:true, context:await editorStub(env).productionPreparationContext() });
+}
+
 export async function productionClaimEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
-  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
   const body = await readJson(request) || {};
   const result = await editorStub(env).claimAuthorizedProductionRelease({
@@ -900,7 +906,7 @@ export async function productionClaimEndpoint(request, env, auth) {
 
 export async function productionTransitionEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
-  if (env.EDIT_ENVIRONMENT !== "production") return editError("not_found", "Not found.", 404);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
   const body = await readJson(request);
   if (!body || typeof body.id !== "string" || typeof body.state !== "string" ||

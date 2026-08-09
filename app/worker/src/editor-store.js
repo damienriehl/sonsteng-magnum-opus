@@ -53,4 +53,5 @@ export class EditorStore extends DurableObject {
   transitionProductionRelease(input) { return this.core.transitionProductionRelease(input); }
   publisherContext() { return this.core.publisherContext(); }
   publisherSummary() { return this.core.publisherSummary(); }
+  productionPreparationContext() { return this.core.productionPreparationContext(); }
 }

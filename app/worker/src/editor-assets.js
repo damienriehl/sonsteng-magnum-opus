@@ -229,7 +229,7 @@ export const PUBLISHER_JS = `(() => {
   "use strict";
   const button=document.getElementById("pub-authorize"), confirm=document.getElementById("pub-confirm");
   if(!button||!confirm)return;
-  const live=document.getElementById("pub-live"); let binding={};
+  const live=document.getElementById("pub-live"); let binding={}, pending=false;
   try{binding=JSON.parse(document.getElementById("publisher-binding").textContent)}catch{}
   const required=["id","target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash"];
   const complete=required.every(k=>typeof binding[k]==="string"&&binding[k]);
@@ -238,19 +238,19 @@ export const PUBLISHER_JS = `(() => {
     const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(bound));
     return "publisher-"+Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("");
   }
-  confirm.addEventListener("change",()=>{button.disabled=!confirm.checked||!complete});
+  confirm.addEventListener("change",()=>{button.disabled=pending||!confirm.checked||!complete});
   button.addEventListener("click",async()=>{
-    if(button.disabled||!confirm.checked||!complete)return;
-    button.disabled=true; button.ariaBusy="true"; live.textContent="Authorizing the exact prepared release…";
+    if(pending||button.disabled||!confirm.checked||!complete)return;
+    pending=true;button.disabled=true; button.ariaBusy="true"; live.textContent="Authorizing the exact prepared release…";
     try{
       const body={...binding,idempotency_key:await authorizationKey()};
       const response=await fetch("/edit/v1/prod/releases/authorize",{method:"POST",credentials:"same-origin",
         headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});
       let result={};try{result=await response.json()}catch{}
       if(response.ok){live.textContent=result.replay?"This exact release was already authorized.":"Release authorized. Automation may now publish only this frozen batch.";button.textContent="Authorized";confirm.disabled=true;}
-      else{live.textContent=response.status===409?"The prepared preview changed or conflicts with an active release. Reload and review again.":response.status===403?"Authorization denied. A current human Publisher sign-in is required.":"Authorization failed. Production was not released.";button.disabled=false;}
-    }catch{live.textContent="Authorization could not be sent. Production was not released.";button.disabled=false;}
-    finally{button.ariaBusy="false";live.focus();}
+      else{live.textContent=response.status===409?"The prepared preview changed or conflicts with an active release. Reload and review again.":response.status===403?"Authorization denied. A current human Publisher sign-in is required.":"Authorization failed. Production was not released.";}
+    }catch{live.textContent="Authorization could not be sent. Production was not released.";}
+    finally{pending=false;button.ariaBusy="false";if(button.textContent!=="Authorized")button.disabled=!confirm.checked||!complete;live.focus();}
   });
 })();`;
 

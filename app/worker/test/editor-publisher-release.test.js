@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
-  productionClaimEndpoint, productionTransitionEndpoint } from "../src/editor-endpoints.js";
+  productionPreparationContextEndpoint, productionClaimEndpoint,
+  productionTransitionEndpoint } from "../src/editor-endpoints.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -44,6 +45,21 @@ test("Publisher freezes every complete apply batch through the chosen frontier",
     ["suggestion-0001", "suggestion-0002", "suggestion-0003"]);
   assert.equal(made.release.state, "authorized");
   assert.deepEqual(made.release.events.map((e) => e.type), ["prepared", "authorized"]);
+});
+
+test("trusted builder sees a text-free exact DEV frontier", () => {
+  const core = makeCore(() => 1000);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  seedApplied(core, "batch-2", ["suggestion-0002"], 1200);
+  const context = core.productionPreparationContext();
+  assert.equal(context.active_release, null);
+  assert.deepEqual(context.batches.map((batch) => ({ id:batch.batch_id,
+    commit:batch.commit_sha, members:batch.suggestion_ids })), [
+      { id:"batch-1",commit:"commit-batch-1",members:["suggestion-0001"] },
+      { id:"batch-2",commit:"commit-batch-2",members:["suggestion-0002"] },
+    ]);
+  assert.equal(JSON.stringify(context).includes("original_text"), false);
+  assert.equal(JSON.stringify(context).includes("new_text"), false);
 });
 
 test("executor claims only authorization and stale fences cannot advance it", () => {
@@ -186,7 +202,7 @@ const scopes = (publisher = false, admin = false) => ({ edit:{granted:false},
 
 test("only a human Access Publisher can authorize; bearer and admin-only cannot", async () => {
   let calls = 0;
-  const env = { EDIT_ORIGIN:"https://edit.example", EDIT_ENVIRONMENT:"production",
+  const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => ({ authorizeProductionRelease:async (x) =>
       (calls++, { ok:true, release:{ id:x.id } }) }) } };
   const body = { id:"release-1", idempotency_key:"idem-1", target_batch_id:"batch-1",
@@ -206,7 +222,7 @@ test("only a human Access Publisher can authorize; bearer and admin-only cannot"
 test("authorized membership and audit are machine-readable without edited content", async () => {
   const release = { id:"release-1", state:"authorized", suggestion_ids:["suggestion-0001"],
     events:[{ type:"authorized", actor:"slot:damien" }] };
-  const env = { EDIT_ENVIRONMENT:"production", EDITOR:{ getByName:() => ({
+  const env = { PROD_RELEASE_LEDGER:"true", EDITOR:{ getByName:() => ({
     getProductionRelease:async () => release }) } };
   const request = new Request("https://edit.example/edit/v1/prod/releases/status?id=release-1");
   const response = await publisherReleaseEndpoint(request, env,
@@ -219,10 +235,11 @@ test("trusted release service alone can prepare, claim, and transition", async (
   const calls = [];
   const stub = {
     prepareProductionRelease:async (x) => (calls.push(["prepare",x]), { ok:true,release:{id:x.id} }),
+    productionPreparationContext:async () => (calls.push(["frontier"]), { batches:[] }),
     claimAuthorizedProductionRelease:async (x) => (calls.push(["claim",x]), { ok:true,release:null }),
     transitionProductionRelease:async (x) => (calls.push(["transition",x]), { ok:true }),
   };
-  const env = { EDIT_ORIGIN:"https://edit.example", EDIT_ENVIRONMENT:"production",
+  const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => stub } };
   const auth = { editor:"service:release", credential_channel:"bearer", scopes:scopes(false,true) };
   const req = (path, body) => new Request("https://edit.example" + path, { method:"POST",
@@ -232,10 +249,12 @@ test("trusted release service alone can prepare, claim, and transition", async (
     base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
     manifest_hash:"manifest",ancestry_verified:true };
   assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare", binding),env,auth)).status,201);
+  assert.equal((await productionPreparationContextEndpoint(
+    new Request("https://edit.example/edit/v1/prod/releases/frontier"),env,auth)).status,200);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
-  assert.deepEqual(calls.map((x) => x[0]), ["prepare","claim","transition"]);
+  assert.deepEqual(calls.map((x) => x[0]), ["prepare","frontier","claim","transition"]);
 });

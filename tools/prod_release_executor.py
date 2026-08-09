@@ -12,6 +12,7 @@ import hashlib
 import json
 import pathlib
 import subprocess
+import tempfile
 import urllib.request
 from collections.abc import Callable
 
@@ -95,6 +96,9 @@ class LedgerHTTP:
     def prepare(self, binding):
         return self._request("/edit/v1/prod/releases/prepare", binding)
 
+    def preparation_context(self):
+        return self._request("/edit/v1/prod/releases/frontier")["context"]
+
     def claim_authorized(self):
         result = self._request("/edit/v1/prod/releases/claim", {})
         return FrozenRelease.from_ledger(result["release"]) if result.get("release") else None
@@ -148,6 +152,85 @@ class CandidateValidator:
         if self.git.tree(release.candidate_sha) != self.manifest.get("candidate_tree"):
             raise ReleaseError("candidate tree mismatch")
         self.git.require_clean_candidate(release.candidate_sha)
+
+
+class ProductionCandidateBuilder:
+    """Freeze the latest contiguous DEV frontier for human Publisher review."""
+
+    def __init__(self, ledger, git, manifest_path, bootstrap_base_sha=None):
+        self.ledger, self.git = ledger, git
+        self.manifest_path = pathlib.Path(manifest_path)
+        self.bootstrap_base_sha = bootstrap_base_sha
+
+    @staticmethod
+    def _manifest(base_sha, candidate_sha, candidate_tree, generator_id,
+                  batch_ids, batch_commits, suggestion_ids):
+        return {"schema_version": 1, "target_environment": "production",
+                "base_sha": base_sha, "candidate_sha": candidate_sha,
+                "candidate_tree": candidate_tree, "generator_id": generator_id,
+                "batch_ids": list(batch_ids), "batch_commits": list(batch_commits),
+                "suggestion_ids": list(suggestion_ids)}
+
+    def _write(self, manifest):
+        self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _canonical(manifest) + b"\n"
+        with tempfile.NamedTemporaryFile(dir=self.manifest_path.parent, delete=False) as target:
+            target.write(payload)
+            temporary = pathlib.Path(target.name)
+        temporary.replace(self.manifest_path)
+
+    def prepare_latest(self):
+        context = self.ledger.preparation_context()
+        active = context.get("active_release")
+        if active:
+            batches = active.get("batches") or []
+            manifest = self._manifest(active["base_sha"], active["candidate_sha"],
+                self.git.tree(active["candidate_sha"]), active["generator_id"],
+                [item["batch_id"] for item in batches],
+                [item["commit_sha"] for item in batches], active.get("suggestion_ids") or [])
+            if hashlib.sha256(_canonical(manifest)).hexdigest() != active["manifest_hash"]:
+                raise ReleaseError("active release manifest cannot be reproduced")
+            self._write(manifest)
+            return {"ok": True, "replay": True, "release": active}
+
+        batches = context.get("batches") or []
+        if not batches:
+            return None
+        if any(not batch.get("suggestion_ids") for batch in batches):
+            raise ReleaseError("eligible batch has no applied membership")
+        generators = {batch.get("generator_id") for batch in batches}
+        if None in generators or len(generators) != 1:
+            raise ReleaseError("eligible batches do not share generator evidence")
+        base_sha = context.get("base_sha") or self.bootstrap_base_sha
+        if not base_sha:
+            raise ReleaseError("first release requires a recorded production base SHA")
+        candidate_sha = batches[-1]["commit_sha"]
+        self.git.require_clean_candidate(candidate_sha)
+        if not self.git.is_ancestor(base_sha, candidate_sha):
+            raise ReleaseError("candidate is not descended from production base")
+        batch_ids = [batch["batch_id"] for batch in batches]
+        batch_commits = [batch["commit_sha"] for batch in batches]
+        suggestion_ids = sorted(item for batch in batches for item in batch["suggestion_ids"])
+        generator_id = generators.pop()
+        manifest = self._manifest(base_sha, candidate_sha, self.git.tree(candidate_sha),
+            generator_id, batch_ids, batch_commits, suggestion_ids)
+        manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
+        evidence_hash = hashlib.sha256(_canonical({"batch_ids":batch_ids,
+            "batch_commits":batch_commits,"generator_id":generator_id,
+            "suggestion_ids":suggestion_ids})).hexdigest()
+        release_id = "release-" + manifest_hash[:24]
+        binding = {"id":release_id, "idempotency_key":release_id,
+            "target_batch_id":batch_ids[-1], "base_sha":base_sha,
+            "candidate_sha":candidate_sha, "generator_id":generator_id,
+            "evidence_hash":evidence_hash, "manifest_hash":manifest_hash,
+            "ancestry_verified":True, "expected_batch_ids":batch_ids,
+            "expected_suggestion_ids":suggestion_ids}
+        result = self.ledger.prepare(binding)
+        if not result or result.get("ok") is not True:
+            raise ReleaseError("ledger rejected preparation: " +
+                               str((result or {}).get("reason", "unknown")))
+        self._write(manifest)
+        return result
 
 
 class WranglerPagesAdapter:
