@@ -10,6 +10,11 @@ default). Each provider's bounded deployable ID is atomically recorded in the
 0600 `SONSTENG_PROD_RECOVERY_REGISTRY`; unbounded CLI output and credentials
 never enter either that registry or the release ledger.
 
+For a fenced release, an operator may invoke the disabled-by-default service
+manually with `--restore-release-id RELEASE_ID`. The daemon loads only that
+release's recorded base pair and reactivates the exact Pages deployment and
+Worker version; it never restores from ambient `HEAD` or current build output.
+
 **Approval is not publication.** A wording edit may be saved, accepted, applied to canonical
 content, and visible on DEV without changing public production. Production changes only when a
 human Publisher authorizes an immutable prepared batch and the separate release executor verifies

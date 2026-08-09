@@ -19,7 +19,7 @@ def main(argv=None):
         return 0
     from prod_release_executor import (CandidateValidator, CompatibilityGate, GitRefAdapter,
         LedgerHTTP, ProductionCandidateBuilder, ProductionExecutor,
-        RecoveryRegistry, WranglerPagesAdapter, WranglerWorkerAdapter)
+        RecordedPairRestorer, RecoveryRegistry, WranglerPagesAdapter, WranglerWorkerAdapter)
     parser = argparse.ArgumentParser()
     env = os.environ.get
     argument = lambda name, key: parser.add_argument(  # noqa: E731
@@ -35,6 +35,7 @@ def main(argv=None):
     argument("--manifest", "SONSTENG_PROD_MANIFEST")
     argument("--recovery-registry", "SONSTENG_PROD_RECOVERY_REGISTRY")
     parser.add_argument("--bootstrap-base", default=env("SONSTENG_PROD_BOOTSTRAP_BASE_SHA"))
+    parser.add_argument("--restore-release-id", default=None)
     parser.add_argument("--lock", default=env("SONSTENG_PROD_LOCK", "/tmp/sonsteng-prod-release.lock"))
     parser.add_argument("--new-worker-accepts-old-pages", action="store_true",
         default=env("SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES") == "true")
@@ -51,6 +52,18 @@ def main(argv=None):
         gate = CompatibilityGate(args.old_worker_accepts_new_pages,
                                  args.new_worker_accepts_old_pages)
         git = GitRefAdapter(args.repo)
+        if args.restore_release_id:
+            release = ledger.get_release(args.restore_release_id)
+            registry = RecoveryRegistry(args.recovery_registry)
+            pages = WranglerPagesAdapter(args.pages_project,args.pages_artifact,
+                args.pages_provenance_url,candidate_root=args.repo,
+                production_branch=args.pages_branch)
+            worker = WranglerWorkerAdapter(args.worker_config,args.worker_provenance_url,
+                                           candidate_root=args.repo)
+            restorer = RecordedPairRestorer(registry.pairs(), pages.restore, worker.restore)
+            ProductionExecutor(ledger,pages,worker,gate,restorer=restorer,
+                               recovery_registry=registry).restore_recorded_base(release)
+            return 0
         ProductionCandidateBuilder(ledger, git, args.manifest,
                                    args.bootstrap_base).prepare_latest()
         if not pathlib.Path(args.manifest).is_file():

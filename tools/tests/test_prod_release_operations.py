@@ -50,6 +50,9 @@ def test_installer_uses_dedicated_checkout_shared_flock_and_config_off_template(
     assert "SONSTENG_PROD_BOOTSTRAP_BASE_SHA=" in source
     assert "SONSTENG_PROD_PAGES_BRANCH=main" in source
     assert "SONSTENG_PROD_RECOVERY_REGISTRY=" in source
+    daemon = (ROOT / "tools/prod_release_daemon.py").read_text(encoding="utf-8")
+    assert "--restore-release-id" in daemon
+    assert "RecordedPairRestorer" in daemon
     assert "sonsteng-prod-release.service" in source
     assert "sonsteng-prod-release.timer" in source
     assert "systemctl --user enable --now" not in source

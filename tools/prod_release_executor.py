@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
+import urllib.parse
 from collections.abc import Callable
 from contextlib import contextmanager
 
@@ -43,7 +44,8 @@ class FrozenRelease:
 
     def __post_init__(self):
         if self.state not in {"authorized", "executing", "pages_deployed",
-                              "worker_deployed", "verified", "complete"}:
+                              "worker_deployed", "verified", "failed_fenced", "restoring",
+                              "complete"}:
             raise ValueError("release is not executable")
         if len(set(self.suggestion_ids)) != len(self.suggestion_ids) or not self.suggestion_ids:
             raise ValueError("membership must contain unique suggestion IDs")
@@ -106,6 +108,11 @@ class LedgerHTTP:
     def claim_authorized(self):
         result = self._request("/edit/v1/prod/releases/claim", {})
         return FrozenRelease.from_ledger(result["release"]) if result.get("release") else None
+
+    def get_release(self, release_id):
+        result = self._request("/edit/v1/prod/releases/status?id=" +
+                               urllib.parse.quote(release_id, safe=""))
+        return FrozenRelease.from_ledger(result["release"])
 
     def transition(self, release_id, state, detail, fencing_token=None):
         return self._request("/edit/v1/prod/releases/transition",
@@ -299,6 +306,11 @@ class WranglerPagesAdapter:
         with self._opener(self.provenance_url, timeout=30) as response:
             return response.headers.get("X-Release-SHA", "")
 
+    def restore(self, deployment_id):
+        self._run(["npx", "wrangler", "pages", "deployment", "rollback", deployment_id,
+                   "--project-name", self.project, "--yes"], cwd=self.candidate_root,
+                  check=True, capture_output=True, text=True, timeout=self.timeout)
+
 
 class WranglerWorkerAdapter:
     """Concrete Worker version/activation CLI contract; no authorization path."""
@@ -335,6 +347,11 @@ class WranglerWorkerAdapter:
     def provenance(self):
         with self._opener(self.provenance_url, timeout=30) as response:
             return response.headers.get("X-Release-SHA", "")
+
+    def restore(self, version_id):
+        self._run(["npx", "wrangler", "versions", "deploy", version_id, "--config", self.config,
+                   "--env", "production", "--yes"], cwd=self.candidate_root, check=True,
+                  capture_output=True, text=True, timeout=self.timeout)
 
 
 class ProductionExecutor:
@@ -470,3 +487,6 @@ class RecoveryRegistry:
     def target(self, sha, target):
         key = "pages_deployment_id" if target == "pages" else "worker_version_id"
         return self._read().get(sha, {}).get(key)
+
+    def pairs(self):
+        return self._read()

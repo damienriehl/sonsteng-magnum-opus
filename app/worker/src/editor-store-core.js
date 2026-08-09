@@ -710,6 +710,8 @@ export class EditorStoreCore {
     const membershipHash = this._fingerprint(JSON.stringify(batchIds), JSON.stringify(memberIds),
       [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash].join("\0"));
     const now = this.now();
+    this.sql.exec("BEGIN IMMEDIATE");
+    try {
     this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       input.id,input.idempotency_key,input.request_digest,"prepared",input.actor,input.credential_channel,
       "production",input.target_batch_id,input.base_sha,input.candidate_sha,input.generator_id,
@@ -724,6 +726,11 @@ export class EditorStoreCore {
       input.id,"prepared",input.actor,JSON.stringify({ membership_hash:membershipHash,
         evidence_hash:input.evidence_hash, manifest_hash:input.manifest_hash,
         target_environment:"production" }),now);
+    this.sql.exec("COMMIT");
+    } catch (error) {
+      this.sql.exec("ROLLBACK");
+      throw error;
+    }
     return { ok:true, release:this.getProductionRelease(input.id) };
   }
 
@@ -853,7 +860,9 @@ export class EditorStoreCore {
       const at = done.findIndex((b) => b.batch_id === frontier.target_batch_id);
       start = at < 0 ? done.length : at + 1;
     }
-    const batches = done.slice(start).map((batch) => ({ ...batch, changes: this._all(
+    const visible = release ? release.batches.map((frozen) =>
+      done.find((batch) => batch.batch_id === frozen.batch_id)).filter(Boolean) : done.slice(start);
+    const batches = visible.map((batch) => ({ ...batch, changes: this._all(
       "SELECT id,editor,origin,kind,page,source_ref,original_text,new_text,comment,group_id,status,apply_batch_id,created_at,updated_at FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
       batch.batch_id, STATUS.APPLIED) }));
     return { release, batches };

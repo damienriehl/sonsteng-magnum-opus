@@ -76,6 +76,25 @@ test("publisher context keeps partially deployed releases visible", () => {
   }
 });
 
+test("verified recovery keeps the frozen member redlines visible", () => {
+  const core = makeCore(() => 1000);
+  core.suggest({ id:"verified-1",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+    source_ref:"data/x.json#verified",original_text:"Before",original_hash:"hash",
+    new_text:"After",map_version:"v1" }, {}, { directApply:true });
+  core.claimBatch("batch-verified", { base_sha:"base",ids:["verified-1"] });
+  core.finalize("batch-verified", { phase:"done",applied:["verified-1"],
+    commit_sha:"candidate",generator_id:"generator-v1" });
+  const draft = core.prepareProductionRelease({ id:"release-verified",idempotency_key:"idem",
+    request_digest:"digest",actor:"service:release",credential_channel:"bearer",
+    target_environment:"production",target_batch_id:"batch-verified",base_sha:"base",
+    candidate_sha:"candidate",generator_id:"generator-v1",evidence_hash:"evidence",
+    manifest_hash:"manifest",ancestry_verified:true }).release;
+  core.sql.exec("UPDATE production_releases SET state='verified' WHERE id=?", draft.id);
+  const projected = core.publisherContext();
+  assert.equal(projected.release.state,"verified");
+  assert.equal(projected.batches[0].changes[0].new_text,"After");
+});
+
 test("prepared page discloses exact immutable release before one deliberate control", async () => {
   const html = await renderPublisherPage(context, "DR").text();
   assert.match(html, /Production Publisher/);
