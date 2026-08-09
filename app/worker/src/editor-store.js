@@ -15,7 +15,8 @@ import { EditorStoreCore } from "./editor-store-core.js";
 export class EditorStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.core = new EditorStoreCore(ctx.storage.sql);
+    this.core = new EditorStoreCore(ctx.storage.sql, undefined,
+      ctx.storage.transactionSync.bind(ctx.storage));
     ctx.blockConcurrencyWhile(async () => {
       this.core.initSchema();
       // Crash reconciliation runs before the DO serves any claim: no limbo.

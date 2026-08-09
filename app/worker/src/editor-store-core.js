@@ -191,9 +191,14 @@ const SELECT_COLS =
   "created_at, updated_at";
 
 export class EditorStoreCore {
-  constructor(sql, now = () => Date.now()) {
+  constructor(sql, now = () => Date.now(), transactionSync = null) {
     this.sql = sql;
     this.now = now;
+    this.transactionSync = transactionSync || ((callback) => {
+      this.sql.exec("BEGIN IMMEDIATE");
+      try { const result = callback(); this.sql.exec("COMMIT"); return result; }
+      catch (error) { this.sql.exec("ROLLBACK"); throw error; }
+    });
   }
 
   initSchema() {
@@ -710,8 +715,7 @@ export class EditorStoreCore {
     const membershipHash = this._fingerprint(JSON.stringify(batchIds), JSON.stringify(memberIds),
       [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash].join("\0"));
     const now = this.now();
-    this.sql.exec("BEGIN IMMEDIATE");
-    try {
+    this.transactionSync(() => {
     this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       input.id,input.idempotency_key,input.request_digest,"prepared",input.actor,input.credential_channel,
       "production",input.target_batch_id,input.base_sha,input.candidate_sha,input.generator_id,
@@ -726,11 +730,7 @@ export class EditorStoreCore {
       input.id,"prepared",input.actor,JSON.stringify({ membership_hash:membershipHash,
         evidence_hash:input.evidence_hash, manifest_hash:input.manifest_hash,
         target_environment:"production" }),now);
-    this.sql.exec("COMMIT");
-    } catch (error) {
-      this.sql.exec("ROLLBACK");
-      throw error;
-    }
+    });
     return { ok:true, release:this.getProductionRelease(input.id) };
   }
 
@@ -831,6 +831,7 @@ export class EditorStoreCore {
     const forbidden = JSON.stringify(detail).match(/new_text|original_text|authorization|credential|token/i);
     if (forbidden) return { ok:false, reason:"unsafe_evidence" };
     const now = this.now();
+    this.transactionSync(() => {
     this.sql.exec("UPDATE production_releases SET state=?,provider_json=?,lease_expires_at=?,updated_at=? WHERE id=?",
       input.state,JSON.stringify(detail),input.state === "complete" ? null : now + CEILINGS.leaseMs,now,release.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
@@ -841,6 +842,7 @@ export class EditorStoreCore {
         "UPDATE suggestions SET production_release_id=?,production_published_at=? WHERE id=? AND status=? AND (production_release_id IS NULL OR production_release_id=?)",
         release.id,now,member.suggestion_id,STATUS.APPLIED,release.id);
     }
+    });
     return { ok:true, release:this.getProductionRelease(release.id) };
   }
 

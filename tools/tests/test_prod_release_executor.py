@@ -169,10 +169,10 @@ def test_restoration_uses_recorded_base_and_failure_remains_fenced():
       "worker_version_id":"w-old"}},lambda value:restored.append(value),lambda value:restored.append(value))
     # Provider probes observe the exact recorded base after restoration.
     class ProbeRestorer:
-        def restore(self, sha):
-            restorer.restore(sha); pages.observed = sha; worker.observed = sha
+        def restore(self, sha, order):
+            restorer.restore(sha, order); pages.observed = sha; worker.observed = sha
     assert ProductionExecutor(ledger,pages,worker,restorer=ProbeRestorer()).restore_recorded_base(item)["sha"] == item.base_sha
-    assert restored == ["p-old","w-old"]
+    assert restored == ["w-old","p-old"]
     assert ledger.events[-1][1] == "restored"
     with pytest.raises(ReleaseError, match="remains fenced"):
         ProductionExecutor(Ledger(item),Target("pages"),Target("worker")).restore_recorded_base(item)

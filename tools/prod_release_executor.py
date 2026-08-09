@@ -425,7 +425,8 @@ class ProductionExecutor:
             raise ReleaseError("recorded-pair restore adapter is required; release remains fenced")
         self._event(release, "restoring", candidate_sha=release.base_sha)
         try:
-            self.restorer.restore(release.base_sha)
+            self.restorer.restore(release.base_sha,
+                                  tuple(reversed(self.compatibility.deployment_order())))
             if any(target.provenance() != release.base_sha for target in (self.pages, self.worker)):
                 raise ReleaseError("restored provenance mismatch")
             self._event(release, "restored", candidate_sha=release.base_sha)
@@ -446,12 +447,14 @@ class RecordedPairRestorer:
         self.known_good = dict(known_good)
         self.restore_pages, self.restore_worker = restore_pages, restore_worker
 
-    def restore(self, sha):
+    def restore(self, sha, order=("pages", "worker")):
         pair = self.known_good.get(sha)
         if not pair or not pair.get("pages_deployment_id") or not pair.get("worker_version_id"):
             raise ReleaseError("exact recorded known-good pair is unavailable")
-        self.restore_pages(pair["pages_deployment_id"])
-        self.restore_worker(pair["worker_version_id"])
+        callbacks = {"pages": lambda: self.restore_pages(pair["pages_deployment_id"]),
+                     "worker": lambda: self.restore_worker(pair["worker_version_id"])}
+        for target in order:
+            callbacks[target]()
 
 
 class RecoveryRegistry:
