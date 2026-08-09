@@ -107,8 +107,11 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
         tasks_path = os.path.join(tax, "tasks.json")
         skills = json.load(open(skills_path, encoding="utf-8"))
         tasks = json.load(open(tasks_path, encoding="utf-8"))
+        identities_path = os.path.join(tax, "taxonomy-identities.json")
+        identities_before = json.load(open(identities_path, encoding="utf-8"))
         skills["skills"][0]["name"] = "Edited <script>alert(1)</script> skill"
         tasks["tasks"][0]["name"] = "Edited task wording"
+        tasks["tasks"][0]["subtasks"][0]["name"] = "Edited subtask wording"
         tasks["tasks"][0]["subtasks"][0]["description"] = "Edited subtask wording"
         with open(skills_path, "w", encoding="utf-8") as fh:
             json.dump(skills, fh, ensure_ascii=False, indent=2)
@@ -119,12 +122,22 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
             (task["id"], [sub["id"] for sub in task["subtasks"]])
             for task in tasks["tasks"]
         ]
+        tools = os.path.join(tmp, "tools")
+        os.makedirs(tools)
+        contract_builder = os.path.join(tools, "build_taxonomy_contract.py")
+        shutil.copy2(os.path.join(TOOLS, "build_taxonomy_contract.py"), contract_builder)
+        subprocess.run([sys.executable, contract_builder], check=True, cwd=tmp,
+                       capture_output=True, text=True)
+        identities_after = json.load(open(identities_path, encoding="utf-8"))
+        assert identities_after == identities_before
+
         subprocess.run([sys.executable, os.path.join(tax, "_build_taxonomy.py")],
                        check=True, cwd=tmp, capture_output=True, text=True)
         regenerated_skills = json.load(open(skills_path, encoding="utf-8"))
         regenerated_tasks = json.load(open(tasks_path, encoding="utf-8"))
         assert regenerated_skills["skills"][0]["name"] == "Edited <script>alert(1)</script> skill"
         assert regenerated_tasks["tasks"][0]["name"] == "Edited task wording"
+        assert regenerated_tasks["tasks"][0]["subtasks"][0]["name"] == "Edited subtask wording"
         assert regenerated_tasks["tasks"][0]["subtasks"][0]["description"] == "Edited subtask wording"
         assert [
             (task["id"], [sub["id"] for sub in task["subtasks"]])

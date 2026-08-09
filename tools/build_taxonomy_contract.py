@@ -13,6 +13,13 @@ def read(name):
         return json.load(fh)
 
 
+def read_optional(name):
+    try:
+        return read(name)
+    except FileNotFoundError:
+        return None
+
+
 def write(name, value):
     with open(os.path.join(TAX, name), "w", encoding="utf-8") as fh:
         json.dump(value, fh, ensure_ascii=False, indent=2)
@@ -22,22 +29,36 @@ def write(name, value):
 skills = read("skills.json")
 tasks = read("tasks.json")
 crosswalk = read("folio-crosswalk.json")
+existing_identities = read_optional("taxonomy-identities.json") or {"tasks": []}
+existing_tasks_by_id = {task["id"]: task for task in existing_identities["tasks"]}
+
+
+def task_identity(task):
+    existing = existing_tasks_by_id.get(task["id"])
+    if existing and existing["skill_id"] != task["skill_id"]:
+        raise RuntimeError(f"task {task['id']} changed locked skill_id")
+    existing_subtasks = {
+        subtask["id"]: subtask for subtask in (existing or {}).get("subtasks", [])
+    }
+    return {
+        "id": task["id"],
+        "skill_id": task["skill_id"],
+        "seed_name": existing["seed_name"] if existing else task["name"],
+        "subtasks": [
+            {
+                "id": subtask["id"],
+                "seed_name": existing_subtasks.get(subtask["id"], {}).get(
+                    "seed_name", subtask["name"]
+                ),
+            }
+            for subtask in task["subtasks"]
+        ],
+    }
 
 identities = {
     "schema_version": "1.0.0",
     "note": "Literal preservation keys migrated from the 2026-08-09 positional taxonomy.",
-    "tasks": [
-        {
-            "id": task["id"],
-            "skill_id": task["skill_id"],
-            "seed_name": task["name"],
-            "subtasks": [
-                {"id": subtask["id"], "seed_name": subtask["name"]}
-                for subtask in task["subtasks"]
-            ],
-        }
-        for task in tasks["tasks"]
-    ],
+    "tasks": [task_identity(task) for task in tasks["tasks"]],
 }
 
 editable = []
