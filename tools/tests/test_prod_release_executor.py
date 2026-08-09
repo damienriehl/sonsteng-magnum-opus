@@ -186,6 +186,15 @@ def test_restoration_uses_recorded_base_and_failure_remains_fenced():
         restorer=ResumedRestorer()).restore_recorded_base(resumed)
     assert [event[1] for event in resumed_ledger.events] == ["restored"]
 
+    retry = release(state="failed_fenced", completed_phases=("restoring", "failed_fenced"))
+    retry_ledger = Ledger(retry)
+    pages, worker = Target("pages"), Target("worker")
+    class RetryRestorer:
+        def restore(self, sha, order): pages.observed = sha; worker.observed = sha
+    ProductionExecutor(retry_ledger,pages,worker,
+        restorer=RetryRestorer()).restore_recorded_base(retry)
+    assert [event[1] for event in retry_ledger.events] == ["restoring", "restored"]
+
 
 def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     seen = {}

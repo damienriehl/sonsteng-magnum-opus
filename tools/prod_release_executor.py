@@ -206,6 +206,15 @@ class ProductionCandidateBuilder:
             temporary = pathlib.Path(target.name)
         temporary.replace(self.manifest_path)
 
+    def _frozen_tree(self, candidate_sha):
+        if hasattr(self.git, "isolated_checkout"):
+            with self.git.isolated_checkout(candidate_sha) as root:
+                frozen = GitRefAdapter(root)
+                frozen.require_clean_candidate(candidate_sha)
+                return frozen.tree(candidate_sha)
+        self.git.require_clean_candidate(candidate_sha)
+        return self.git.tree(candidate_sha)
+
     def prepare_latest(self):
         context = self.ledger.preparation_context()
         active = context.get("active_release")
@@ -237,13 +246,12 @@ class ProductionCandidateBuilder:
         if not base_sha:
             raise ReleaseError("first release requires a recorded production base SHA")
         candidate_sha = batches[-1]["commit_sha"]
-        self.git.require_clean_candidate(candidate_sha)
         if not self.git.is_ancestor(base_sha, candidate_sha):
             raise ReleaseError("candidate is not descended from production base")
         batch_ids = [batch["batch_id"] for batch in batches]
         batch_commits = [batch["commit_sha"] for batch in batches]
         suggestion_ids = sorted(item for batch in batches for item in batch["suggestion_ids"])
-        manifest = self._manifest(base_sha, candidate_sha, self.git.tree(candidate_sha),
+        manifest = self._manifest(base_sha, candidate_sha, self._frozen_tree(candidate_sha),
             generator_id, batch_ids, batch_commits, suggestion_ids)
         manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
         evidence_hash = hashlib.sha256(_canonical({"batch_ids":batch_ids,
@@ -427,7 +435,7 @@ class ProductionExecutor:
         """Operator recovery toward the recorded known-good pair, never HEAD."""
         if self.restorer is None:
             raise ReleaseError("recorded-pair restore adapter is required; release remains fenced")
-        if release.state != "restoring" and "restoring" not in release.completed_phases:
+        if release.state != "restoring":
             self._event(release, "restoring", candidate_sha=release.base_sha)
         try:
             self.restorer.restore(release.base_sha,
