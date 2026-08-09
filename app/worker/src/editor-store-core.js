@@ -755,6 +755,28 @@ export class EditorStoreCore {
     return { ...row, batches, suggestion_ids, events };
   }
 
+  // Read-only projection for the human Publisher surface. A selectable target
+  // is always a complete apply batch after the last verified production
+  // frontier; each target implicitly encloses every earlier returned batch.
+  publisherContext() {
+    const activeRow = this._one(
+      "SELECT id FROM production_releases WHERE state IN ('prepared','authorized','executing','delayed','failed_fenced','failed-fenced','restoring','verified') ORDER BY updated_at DESC LIMIT 1");
+    const release = activeRow ? this.getProductionRelease(activeRow.id) : null;
+    const frontier = this._one(
+      "SELECT target_batch_id FROM production_releases WHERE state IN ('verified','complete') ORDER BY updated_at DESC,id DESC LIMIT 1");
+    const done = this._all(
+      "SELECT batch_id,commit_sha,generator_id,created_at,updated_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    let start = 0;
+    if (frontier) {
+      const at = done.findIndex((b) => b.batch_id === frontier.target_batch_id);
+      start = at < 0 ? done.length : at + 1;
+    }
+    const batches = done.slice(start).map((batch) => ({ ...batch, changes: this._all(
+      "SELECT id,editor,origin,kind,page,source_ref,original_text,new_text,comment,group_id,status,apply_batch_id,created_at,updated_at FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+      batch.batch_id, STATUS.APPLIED) }));
+    return { release, batches };
+  }
+
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is
   // not yet done, resolve limbo. pre-`merged` phases roll their in_flight items
   // BACK to accepted (re-queue); post-`merged` phases complete them to applied.

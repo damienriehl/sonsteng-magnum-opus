@@ -80,7 +80,7 @@ export function renderHistoryIndex() {
     "<title>Change history — Sonsteng</title>" +
     "<link rel=\"stylesheet\" href=\"/edit/assets/history.css\">" +
     "</head><body><main id=\"history-root\">" +
-    "<h1>Change history</h1>" +
+    "<h1>Change history</h1><p><a href=\"/edit/publish\">Open Production Publisher</a></p>" +
     "<p>Redlined, attributed history for every canonical document. " +
     `Generated ${generated}.</p>` +
     (items ? "<ul class=\"hx-index\">" + items + "</ul>"

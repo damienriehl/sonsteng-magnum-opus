@@ -15,6 +15,7 @@ import { handleEditPage, serveSiteAsset } from "./editor-inject.js";
 import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
 import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-history.js";
+import { renderPublisherPage } from "./editor-publisher.js";
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
@@ -269,7 +270,19 @@ export async function editorFetch(request, env, ctx) {
     const stub = editorStub(env);
     const items = await stub.listAll();
     const reverts = await stub.listRevertRequests(null);
-    return wrap(renderReviewPage(items, reverts));
+    const publisher = typeof stub.publisherContext === "function" ? await stub.publisherContext() : { batches: [] };
+    const eligible = (publisher.batches || []).reduce((n, b) => n + (b.changes || []).length, 0);
+    return wrap(renderReviewPage(items, reverts, eligible));
+  }
+
+  // Distinct human publication gate. Admin authority is intentionally not a
+  // substitute for Publisher authority; insufficient scope stays uniform 404.
+  if (path === "/edit/publish") {
+    if (request.method !== "GET" || env.EDIT_ENVIRONMENT !== "production" ||
+        !auth.scopes.publisher.granted || auth.credential_channel !== "access" || auth.service)
+      return wrap(uniform404());
+    const context = await editorStub(env).publisherContext();
+    return wrap(renderPublisherPage(context, attributionLabel(auth.editor)));
   }
 
   // ---- instructor view ------------------------------------------------------
