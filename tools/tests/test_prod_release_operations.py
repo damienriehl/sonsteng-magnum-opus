@@ -30,6 +30,7 @@ def test_production_direct_apply_is_off_while_dev_remains_on():
 
     assert config.count('"DIRECT_APPLY": "true"') == 2  # default DEV + named DEV
     assert config.count('"DIRECT_APPLY": "false"') == 1  # production only
+    assert config.count('\\"release\\":{\\"release_service\\":1}') == 2
 
 
 def test_prod_daemon_is_a_config_off_noop(monkeypatch):

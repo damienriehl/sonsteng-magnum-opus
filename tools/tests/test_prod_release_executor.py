@@ -15,6 +15,7 @@ from prod_release_executor import (  # noqa: E402
     ProductionExecutor,
     ReleaseError,
     LedgerHTTP,
+    GitRefAdapter,
     RecordedPairRestorer,
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
@@ -215,10 +216,36 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     assert all(call[1]["cwd"] == root.resolve() for call in calls)
     assert staged_headers == ["/*\n  X-Release-SHA: " + item.candidate_sha + "\n"]
     assert not (site / "_headers").exists()
+    assert ["--env", "production"] == calls[1][0][6:8]
     assert calls[1][0][-2:] == ["--var", "RELEASE_SHA:" + item.candidate_sha]
+    assert ["--env", "production"] == calls[2][0][-3:-1]
     with pytest.raises(ReleaseError, match="outside"):
         WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
                              root, run=run).deploy(item)
+
+
+def test_git_adapter_materializes_frozen_sha_away_from_advancing_checkout(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    tracked = repo / "tracked.txt"
+    tracked.write_text("frozen", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "frozen"], cwd=repo, check=True, capture_output=True)
+    frozen = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                            capture_output=True, text=True).stdout.strip()
+    tracked.write_text("advanced", encoding="utf-8")
+    subprocess.run(["git", "commit", "-am", "advanced"], cwd=repo, check=True, capture_output=True)
+
+    adapter = GitRefAdapter(repo)
+    with adapter.isolated_checkout(frozen) as candidate:
+        assert candidate != repo
+        assert (candidate / "tracked.txt").read_text(encoding="utf-8") == "frozen"
+        GitRefAdapter(candidate).require_clean_candidate(frozen)
+    assert not candidate.exists()
 
 
 def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):

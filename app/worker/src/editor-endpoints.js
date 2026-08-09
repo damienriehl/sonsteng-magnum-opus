@@ -854,7 +854,7 @@ export async function publisherAuthorizeEndpoint(request, env, auth) {
 
 export async function publisherReleaseEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.admin?.granted)
+  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.release_service?.granted)
     return editError("forbidden", "Publisher or release-service scope required.", 403);
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return editError("validation_error", "id required.", 400);
@@ -863,7 +863,7 @@ export async function publisherReleaseEndpoint(request, env, auth) {
 }
 
 function releaseService(auth) {
-  return auth?.credential_channel === "bearer" && auth?.scopes?.admin?.granted;
+  return auth?.credential_channel === "bearer" && auth?.scopes?.release_service?.granted;
 }
 
 export async function productionPrepareEndpoint(request, env, auth) {

@@ -1,5 +1,11 @@
 # Publisher-authorized production releases
 
+The executor uses a dedicated `EDIT_TOKEN_RELEASE` bearer granted only the
+`release_service` scope. Never reuse the DEV apply daemon's admin bearer. Each
+authorized candidate is materialized in a detached temporary worktree, so DEV
+may continue advancing without changing the frozen release. Worker upload and
+activation always target Wrangler's explicit `production` environment.
+
 **Approval is not publication.** A wording edit may be saved, accepted, applied to canonical
 content, and visible on DEV without changing public production. Production changes only when a
 human Publisher authorizes an immutable prepared batch and the separate release executor verifies

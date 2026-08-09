@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import urllib.request
 from collections.abc import Callable
+from contextlib import contextmanager
 
 
 class ReleaseError(RuntimeError):
@@ -131,6 +132,22 @@ class GitRefAdapter:
                            cwd=self.repo, check=True, capture_output=True, text=True).stdout
         if head != sha or status.strip():
             raise ReleaseError("candidate checkout is not the clean frozen commit")
+
+    @contextmanager
+    def isolated_checkout(self, sha):
+        """Materialize an immutable candidate without pinning the DEV checkout."""
+        root = pathlib.Path(tempfile.mkdtemp(prefix="sonsteng-prod-candidate-"))
+        added = False
+        try:
+            self._run(["git", "worktree", "add", "--detach", str(root), sha],
+                      cwd=self.repo, check=True, capture_output=True, text=True)
+            added = True
+            yield root
+        finally:
+            if added:
+                self._run(["git", "worktree", "remove", "--force", str(root)],
+                          cwd=self.repo, check=True, capture_output=True, text=True)
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class CandidateValidator:
@@ -289,6 +306,7 @@ class WranglerWorkerAdapter:
         if not config.is_relative_to(self.candidate_root):
             raise ReleaseError("Worker config is outside the frozen candidate checkout")
         uploaded = self._run(["npx", "wrangler", "versions", "upload", "--config", self.config,
+            "--env", "production",
             "--message", "release:" + manifest.candidate_sha,
             "--var", "RELEASE_SHA:" + manifest.candidate_sha], check=True,
             cwd=self.candidate_root, capture_output=True, text=True, timeout=self.timeout)
@@ -296,7 +314,7 @@ class WranglerWorkerAdapter:
         if not version or len(version) > 256:
             raise ReleaseError("Worker upload did not return a bounded version identifier")
         self._run(["npx", "wrangler", "versions", "deploy", version, "--config", self.config,
-                   "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
+                   "--env", "production", "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
                   text=True, timeout=self.timeout)
         return {"provider_id": hashlib.sha256(version.encode()).hexdigest()[:24]}
 
@@ -323,8 +341,8 @@ class ProductionExecutor:
         if not result or result.get("ok") is not True:
             raise ReleaseError("ledger rejected transition: " + str((result or {}).get("reason", "unknown")))
 
-    def run_once(self):
-        release = self.ledger.claim_authorized()
+    def run_once(self, release=None):
+        release = release or self.ledger.claim_authorized()
         if release is None or release.state == "complete":
             return None
         if release.state not in {"authorized", "executing", "pages_deployed", "worker_deployed"}:

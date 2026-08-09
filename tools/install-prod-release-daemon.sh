@@ -34,6 +34,8 @@ if [[ ! -f "$ENV_FILE" ]]; then
 SONSTENG_PROD_RELEASE_ENABLED=false
 SONSTENG_PROD_LEDGER_URL=https://sonsteng-chat.damienriehl.workers.dev
 SONSTENG_PROD_RELEASE_BEARER=
+# This must be the distinct EDIT_TOKEN_RELEASE secret whose only grant is
+# release_service; never place the DEV apply/admin bearer here.
 SONSTENG_PROD_PAGES_PROJECT=sonsteng
 SONSTENG_PROD_PAGES_ARTIFACT=$DAEMON_ROOT/site
 SONSTENG_PROD_PAGES_PROVENANCE_URL=https://sonsteng.damienriehl.com/platform/

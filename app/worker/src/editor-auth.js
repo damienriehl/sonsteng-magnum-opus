@@ -51,6 +51,7 @@ const EMPTY_SCOPES = Object.freeze({
   instructor: { granted: false, ver: 0 },
   admin: { granted: false, ver: 0 },
   publisher: { granted: false, ver: 0 },
+  release_service: { granted: false, ver: 0 },
 });
 
 // Parse EDIT_TOKEN_SCOPES (JSON) into a Map slot -> { edit?:ver, instructor?:ver, admin?:ver }.
@@ -90,6 +91,7 @@ function scopeStamp(slot, grants) {
   // append the new scope only when it exists, while still binding its version.
   const names = ["edit", "instructor", "admin"];
   if (grants.publisher != null) names.push("publisher");
+  if (grants.release_service != null) names.push("release_service");
   const parts = names.map((s) => `${s}:${grants[s] ?? "-"}`);
   return `${slot}|${parts.join(",")}`;
 }

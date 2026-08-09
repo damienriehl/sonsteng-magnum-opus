@@ -391,7 +391,9 @@ immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
 
 These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
 CSRF guarded. `GET /frontier` and `POST /prepare`, `/claim`, and `/transition` require the trusted
-release service channel: a bearer credential with admin/service scope. The
+release service channel: a bearer credential with the dedicated `release_service`
+scope and a separate `EDIT_TOKEN_RELEASE` secret. An admin or DEV apply-daemon
+bearer is insufficient. The
 service may freeze evidence and execute an already-authorized release, but it
 cannot authorize one.
 

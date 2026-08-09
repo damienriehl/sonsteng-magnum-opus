@@ -197,8 +197,9 @@ function post(body) {
       Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" },
     body:JSON.stringify(body) });
 }
-const scopes = (publisher = false, admin = false) => ({ edit:{granted:false},
-  instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher} });
+const scopes = (publisher = false, admin = false, releaseService = false) => ({ edit:{granted:false},
+  instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher},
+  release_service:{granted:releaseService} });
 
 test("only a human Access Publisher can authorize; bearer and admin-only cannot", async () => {
   let calls = 0;
@@ -226,7 +227,7 @@ test("authorized membership and audit are machine-readable without edited conten
     getProductionRelease:async () => release }) } };
   const request = new Request("https://edit.example/edit/v1/prod/releases/status?id=release-1");
   const response = await publisherReleaseEndpoint(request, env,
-    { scopes:scopes(false, true), credential_channel:"bearer" });
+    { scopes:scopes(false, false, true), credential_channel:"bearer" });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).release, release);
 });
@@ -241,7 +242,7 @@ test("trusted release service alone can prepare, claim, and transition", async (
   };
   const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => stub } };
-  const auth = { editor:"service:release", credential_channel:"bearer", scopes:scopes(false,true) };
+  const auth = { editor:"service:release", credential_channel:"bearer", scopes:scopes(false,false,true) };
   const req = (path, body) => new Request("https://edit.example" + path, { method:"POST",
     headers:{ "Content-Type":"application/json", "X-Edit-Request":"1",
       Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" }, body:JSON.stringify(body) });
@@ -256,5 +257,7 @@ test("trusted release service alone can prepare, claim, and transition", async (
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
+  const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
+  assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]), ["prepare","frontier","claim","transition"]);
 });

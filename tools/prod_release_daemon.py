@@ -46,10 +46,6 @@ def main(argv=None):
     with open(args.lock, "a", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         ledger = LedgerHTTP(args.ledger_url, token)
-        pages = WranglerPagesAdapter(args.pages_project,args.pages_artifact,args.pages_provenance_url,
-                                     candidate_root=args.repo)
-        worker = WranglerWorkerAdapter(args.worker_config,args.worker_provenance_url,
-                                       candidate_root=args.repo)
         gate = CompatibilityGate(args.old_worker_accepts_new_pages,
                                  args.new_worker_accepts_old_pages)
         git = GitRefAdapter(args.repo)
@@ -59,8 +55,21 @@ def main(argv=None):
             return 0
         with open(args.manifest, encoding="utf-8") as source:
             manifest = json.load(source)
-        validator = CandidateValidator(git, manifest)
-        ProductionExecutor(ledger,pages,worker,gate,validator).run_once()
+        release = ledger.claim_authorized()
+        if release is None:
+            return 0
+        with git.isolated_checkout(release.candidate_sha) as candidate_root:
+            isolated_git = GitRefAdapter(candidate_root)
+            pages_artifact = candidate_root / pathlib.Path(args.pages_artifact).resolve().relative_to(
+                pathlib.Path(args.repo).resolve())
+            worker_config = candidate_root / pathlib.Path(args.worker_config).resolve().relative_to(
+                pathlib.Path(args.repo).resolve())
+            pages = WranglerPagesAdapter(args.pages_project,pages_artifact,args.pages_provenance_url,
+                                         candidate_root=candidate_root)
+            worker = WranglerWorkerAdapter(worker_config,args.worker_provenance_url,
+                                           candidate_root=candidate_root)
+            validator = CandidateValidator(isolated_git, manifest)
+            ProductionExecutor(ledger,pages,worker,gate,validator).run_once(release)
     return 0
 
 
