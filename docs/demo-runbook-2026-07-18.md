@@ -21,7 +21,7 @@ This landed *after* the runbook was written and it **replaces** the old "nothing
 Damien accepts" framing. Present the new story, not the old one (details:
 [`docs/direct-apply-daemon.md`](direct-apply-daemon.md), [`docs/history-browser.md`](history-browser.md)):
 
-- **Edits publish themselves in ~2 minutes.** `DIRECT_APPLY=true`: a saved edit auto-accepts, the
+- **Edits reach the editing/DEV site in ~2 minutes.** `DIRECT_APPLY=true` in DEV: a saved edit auto-accepts, the
   home-box apply daemon (`sonsteng-apply.timer`, every 2 min) patches canonical git, re-runs the
   validator + parity gates, rebuilds and redeploys **DEV**. There is no Damien approval step.
 - **Safety net moved from *approval* to *history + revert*.** A **History** link in the editing

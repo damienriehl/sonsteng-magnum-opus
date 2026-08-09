@@ -3,7 +3,13 @@
 Date: August 7, 2026  
 Scope: John’s copy-editing experience after production UAT
 
-The UAT found and fixed mechanical failures; those do not need a decision. Two product boundaries remain genuinely open.
+> **Resolved 2026-08-08.** Damien chose to make all human-readable taxonomy text
+> editable and to require a Publisher to explicitly release an approved immutable
+> batch. Approval is not publication. This sheet remains historical framing; the
+> current implementation contract is
+> `docs/plans/2026-08-09-001-feat-taxonomy-publisher-batches-plan.md`.
+
+The UAT found and fixed mechanical failures; those did not need a decision. The two product boundaries below are now resolved as recorded above.
 
 ## D1 — Should the 26 skill taxonomy names be directly editable?
 

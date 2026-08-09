@@ -268,7 +268,9 @@
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
         "EDIT_MAX_DAILY_PER_EDITOR": "500",
         "EDIT_MAX_BYTES": "16384",
-        "DIRECT_APPLY": "true"
+        // Production editing never auto-accepts. Approval/DEV application and
+        // human Publisher authorization are deliberately separate lifecycles.
+        "DIRECT_APPLY": "false"
       }
     }
   }

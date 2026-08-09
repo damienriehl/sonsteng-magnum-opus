@@ -380,6 +380,36 @@ drift` · `accepted → in_flight` (claim) · `in_flight → applied⛔ | accept
 `drift → pending` (re-anchor) · `needs_human → applied⛔ / accepted / declined⛔`.
 Terminal (⛔): `superseded`, `declined`, `applied`.
 
+`applied` is terminal only for the DEV apply lifecycle. It means canonical + DEV
+application, surfaced as **Available on DEV — waiting for Publisher** until it is
+included in a verified production release. Production state is a separate
+immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
+
+## Production release API (`/edit/v1/prod/releases/*`)
+
+These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
+CSRF guarded. `POST /prepare`, `/claim`, and `/transition` require the trusted
+release service channel: a bearer credential with admin/service scope. The
+service may freeze evidence and execute an already-authorized release, but it
+cannot authorize one.
+
+`POST /prepare` binds the next complete contiguous DEV apply frontier through a
+target batch to base/candidate SHA, generator ID, evidence/manifest hashes,
+exact batch/group/suggestion membership, target, and service actor. It is
+idempotent only for the identical binding. The browser has no service credential
+and its preparation control remains disabled; see
+`docs/prod-release-operations.md`.
+
+`POST /authorize` requires a current human Access identity with independent
+`publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
+fail closed. It authorizes only the already-prepared immutable binding.
+
+`POST /claim` returns only authorized releases plus a fencing token.
+`POST /transition` journals bounded identifiers/hashes and rejects stale fences
+or illegal/incomplete phases. `GET /status?id=…` exposes machine-readable state
+to Publisher or service scope. Completion occurs only after Pages and the
+Worker/editor-map provenance match the frozen candidate.
+
 ## EditorStore config (wrangler.jsonc)
 
 `vars`: `EDIT_UPSTREAM` (the static origin the proxy fetches, with trailing

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Single-shot PROD release executor entry point (separate from DEV apply)."""
+"""Single-shot PROD release executor entry point (separate from DEV apply).
+
+The installed service is deliberately safe to schedule while config-off.  It
+does no argument validation, credential lookup, ledger call, git operation, or
+provider operation until SONSTENG_PROD_RELEASE_ENABLED is exactly ``true``.
+"""
 from __future__ import annotations
 
 import argparse
@@ -8,23 +13,29 @@ import json
 import os
 import pathlib
 
-from prod_release_executor import (CandidateValidator, CompatibilityGate, GitRefAdapter,
-    LedgerHTTP, ProductionExecutor, WranglerPagesAdapter, WranglerWorkerAdapter)
-
-
 def main(argv=None):
+    if os.environ.get("SONSTENG_PROD_RELEASE_ENABLED") != "true":
+        print("[prod-release] disabled (SONSTENG_PROD_RELEASE_ENABLED is not true)")
+        return 0
+    from prod_release_executor import (CandidateValidator, CompatibilityGate, GitRefAdapter,
+        LedgerHTTP, ProductionExecutor, WranglerPagesAdapter, WranglerWorkerAdapter)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ledger-url", required=True)
-    parser.add_argument("--pages-project", required=True)
-    parser.add_argument("--pages-artifact", required=True)
-    parser.add_argument("--pages-provenance-url", required=True)
-    parser.add_argument("--worker-config", required=True)
-    parser.add_argument("--worker-provenance-url", required=True)
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--lock", default="/tmp/sonsteng-prod-release.lock")
-    parser.add_argument("--new-worker-accepts-old-pages", action="store_true")
-    parser.add_argument("--old-worker-accepts-new-pages", action="store_true")
+    env = os.environ.get
+    argument = lambda name, key: parser.add_argument(  # noqa: E731
+        name, default=env(key), required=not env(key))
+    argument("--ledger-url", "SONSTENG_PROD_LEDGER_URL")
+    argument("--pages-project", "SONSTENG_PROD_PAGES_PROJECT")
+    argument("--pages-artifact", "SONSTENG_PROD_PAGES_ARTIFACT")
+    argument("--pages-provenance-url", "SONSTENG_PROD_PAGES_PROVENANCE_URL")
+    argument("--worker-config", "SONSTENG_PROD_WORKER_CONFIG")
+    argument("--worker-provenance-url", "SONSTENG_PROD_WORKER_PROVENANCE_URL")
+    argument("--repo", "SONSTENG_PROD_REPO")
+    argument("--manifest", "SONSTENG_PROD_MANIFEST")
+    parser.add_argument("--lock", default=env("SONSTENG_PROD_LOCK", "/tmp/sonsteng-prod-release.lock"))
+    parser.add_argument("--new-worker-accepts-old-pages", action="store_true",
+        default=env("SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES") == "true")
+    parser.add_argument("--old-worker-accepts-new-pages", action="store_true",
+        default=env("SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES") == "true")
     args = parser.parse_args(argv)
     token = os.environ.get("SONSTENG_PROD_RELEASE_BEARER")
     if not token:

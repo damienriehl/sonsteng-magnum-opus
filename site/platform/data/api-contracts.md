@@ -4,6 +4,13 @@ Authoritative request/response contract for the Sonsteng client-interview
 Worker (`app/worker/`). The chat/critique UI is built against this exact
 contract. **Do not deviate without versioning.** Base path: `/v1`.
 
+The authenticated Editor has a separate `/edit/v1` contract. Editor approval
+and DEV application never imply production publication. Production uses
+immutable `/edit/v1/prod/releases/*` records: trusted service preparation,
+human Access Publisher authorization, service-only execution, and matching
+Pages/Worker provenance. See `app/worker/API-CONTRACTS.md` and
+`docs/prod-release-operations.md`.
+
 - System prompt and `max_tokens` are **always server-built**; the client can
   never supply `system`, `max_tokens`, or `tools`. Client input is restricted to
   the whitelisted fields below. The one client-controlled upstream input is the

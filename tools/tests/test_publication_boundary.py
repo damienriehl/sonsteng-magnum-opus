@@ -31,8 +31,9 @@ def test_dev_daemon_and_prod_deployer_are_separate_writers():
 
     assert "DEV ONLY, never PROD" in daemon_source
     assert "sonsteng-dev.damienriehl.com" in dev_deploy
-    assert "wrangler@latest pages deploy" in prod_deploy
-    assert "--branch main" in prod_deploy
+    assert "DISABLED: direct PROD deploy bypasses the Publisher release ledger" in prod_deploy
+    assert "prod_release_daemon.py" in prod_deploy
+    assert "wrangler" not in prod_deploy
     assert "deploy-prod.sh" not in daemon_source
 
 
@@ -42,4 +43,5 @@ def test_editor_liveness_copy_names_the_editing_site_not_public_prod():
 
     assert "Your edits appear on the editing site automatically (~2 min)." in editor
     assert "Your edits appear on the editing site automatically (~2 min)." in guide
-    assert "Damien publishes the public production release" in guide
+    assert "Available on DEV — waiting for Publisher" in guide
+    assert "approval alone does not publish it" in guide

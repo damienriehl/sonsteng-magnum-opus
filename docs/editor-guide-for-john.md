@@ -11,7 +11,8 @@ go to Damien first, so those waiting a little longer is normal.*
 On the editing site, you no longer have to wait for Damien to record a wording change. Click
 **Edit**, type directly in the paragraph, and pause for a moment: the editor saves as you type.
 Click **Done** when you have finished that paragraph. Your wording appears on the editing site
-**automatically within ~2 minutes**. Damien remains the publisher of the public production site.
+**automatically within ~2 minutes**. That means the editing/DEV site only. Damien separately
+reviews an immutable batch as Publisher before the public production site changes.
 You still can't break anything — every version is kept, and any change can be undone with one
 click (below).
 
@@ -104,9 +105,10 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 
 ## What happens next
 
-- **Your edit publishes itself to the editing site.** The system double-checks it, rebuilds that
-  site, and keeps the source and history. Damien publishes the public production release under
-  the separate publisher role. He sees every change, and Roger sees it too.
+- **Your edit becomes available on the editing site.** The system double-checks it, rebuilds that
+  DEV site, and keeps the source and history. Its production status is **Available on DEV — waiting for Publisher**.
+  Damien reviews the exact immutable batch and explicitly authorizes the public
+  production release under the separate Publisher role; approval alone does not publish it.
 - **Your wording is right there when you come back.** Open your link again and the page shows
   what you wrote, exactly as you left it. Click the paragraph to keep refining it.
 - **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not
@@ -116,7 +118,8 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 ## A few reassurances
 
 - **You cannot break the website.** Every version is kept, every change is one click from being
-  undone, and the system re-checks the whole site before anything publishes.
+  undone, and the system re-checks DEV before showing the change there. Production has a separate
+  Publisher gate and verifies both the public site and editor map before saying Published.
 - **Take your time.** If you start editing a paragraph and walk away, your work is saved on your
   computer — come back and it's still there.
 - **If your link ever stops working,** you'll see a plain message telling you to text Damien for

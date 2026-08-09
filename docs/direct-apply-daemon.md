@@ -12,6 +12,11 @@ Two systemd **user** timers (never PROD):
 | `sonsteng-apply.timer` | every 2 min (`OnUnitActiveSec=2min`, `Persistent`) | `tools/direct_apply_daemon.py` |
 | `sonsteng-editorial.timer` | daily 21:30 America/Chicago (`Persistent`) | `tools/editorial_pass.py --daily` |
 
+An `applied` row means **Available on DEV — waiting for Publisher**. It is not a
+production publication claim. The separate, config-off production executor is
+documented in `docs/prod-release-operations.md`; this DEV daemon cannot invoke
+it, prepare or authorize a release, or call `deploy/deploy-prod.sh`.
+
 Install / refresh / remove (mirrors `install-digest-timer.sh`):
 
 ```
