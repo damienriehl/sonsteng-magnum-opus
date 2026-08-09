@@ -177,6 +177,15 @@ def test_restoration_uses_recorded_base_and_failure_remains_fenced():
     with pytest.raises(ReleaseError, match="remains fenced"):
         ProductionExecutor(Ledger(item),Target("pages"),Target("worker")).restore_recorded_base(item)
 
+    resumed = release(state="restoring", completed_phases=("restoring",))
+    resumed_ledger = Ledger(resumed)
+    pages, worker = Target("pages"), Target("worker")
+    class ResumedRestorer:
+        def restore(self, sha, order): pages.observed = sha; worker.observed = sha
+    ProductionExecutor(resumed_ledger,pages,worker,
+        restorer=ResumedRestorer()).restore_recorded_base(resumed)
+    assert [event[1] for event in resumed_ledger.events] == ["restored"]
+
 
 def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     seen = {}

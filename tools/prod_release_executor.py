@@ -423,7 +423,8 @@ class ProductionExecutor:
         """Operator recovery toward the recorded known-good pair, never HEAD."""
         if self.restorer is None:
             raise ReleaseError("recorded-pair restore adapter is required; release remains fenced")
-        self._event(release, "restoring", candidate_sha=release.base_sha)
+        if release.state != "restoring" and "restoring" not in release.completed_phases:
+            self._event(release, "restoring", candidate_sha=release.base_sha)
         try:
             self.restorer.restore(release.base_sha,
                                   tuple(reversed(self.compatibility.deployment_order())))

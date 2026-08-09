@@ -751,11 +751,13 @@ export class EditorStoreCore {
       if (input[key] != null && input[key] !== release[key]) return { ok:false, reason:"stale_draft" };
     }
     const now = this.now();
+    this.transactionSync(() => {
     this.sql.exec("UPDATE production_releases SET state='authorized',actor=?,credential_channel=?,authorization_key=?,authorization_digest=?,updated_at=? WHERE id=? AND state='prepared'",
       input.actor,input.credential_channel,input.idempotency_key,input.request_digest,now,input.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
       input.id,"authorized",input.actor,JSON.stringify({ membership_hash:release.membership_hash,
         evidence_hash:release.evidence_hash,manifest_hash:release.manifest_hash,target_environment:"production" }),now);
+    });
     return { ok:true, release:this.getProductionRelease(input.id) };
   }
 
