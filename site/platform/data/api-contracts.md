@@ -4,13 +4,6 @@ Authoritative request/response contract for the Sonsteng client-interview
 Worker (`app/worker/`). The chat/critique UI is built against this exact
 contract. **Do not deviate without versioning.** Base path: `/v1`.
 
-The authenticated Editor has a separate `/edit/v1` contract. Editor approval
-and DEV application never imply production publication. Production uses
-immutable `/edit/v1/prod/releases/*` records: trusted service preparation,
-human Access Publisher authorization, service-only execution, and matching
-Pages/Worker provenance. See `app/worker/API-CONTRACTS.md` and
-`docs/prod-release-operations.md`.
-
 - System prompt and `max_tokens` are **always server-built**; the client can
   never supply `system`, `max_tokens`, or `tools`. Client input is restricted to
   the whitelisted fields below. The one client-controlled upstream input is the
@@ -386,6 +379,36 @@ drift` · `accepted → in_flight` (claim) · `in_flight → applied⛔ | accept
 | drift | needs_human | accepted` · `accepted_blocked → accepted / declined⛔` ·
 `drift → pending` (re-anchor) · `needs_human → applied⛔ / accepted / declined⛔`.
 Terminal (⛔): `superseded`, `declined`, `applied`.
+
+`applied` is terminal only for the DEV apply lifecycle. It means canonical + DEV
+application, surfaced as **Available on DEV — waiting for Publisher** until it is
+included in a verified production release. Production state is a separate
+immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
+
+## Production release API (`/edit/v1/prod/releases/*`)
+
+These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
+CSRF guarded. `POST /prepare`, `/claim`, and `/transition` require the trusted
+release service channel: a bearer credential with admin/service scope. The
+service may freeze evidence and execute an already-authorized release, but it
+cannot authorize one.
+
+`POST /prepare` binds the next complete contiguous DEV apply frontier through a
+target batch to base/candidate SHA, generator ID, evidence/manifest hashes,
+exact batch/group/suggestion membership, target, and service actor. It is
+idempotent only for the identical binding. The browser has no service credential
+and its preparation control remains disabled; see
+`docs/prod-release-operations.md`.
+
+`POST /authorize` requires a current human Access identity with independent
+`publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
+fail closed. It authorizes only the already-prepared immutable binding.
+
+`POST /claim` returns only authorized releases plus a fencing token.
+`POST /transition` journals bounded identifiers/hashes and rejects stale fences
+or illegal/incomplete phases. `GET /status?id=…` exposes machine-readable state
+to Publisher or service scope. Completion occurs only after Pages and the
+Worker/editor-map provenance match the frozen candidate.
 
 ## EditorStore config (wrangler.jsonc)
 

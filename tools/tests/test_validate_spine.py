@@ -38,6 +38,12 @@ SCHEMAS_DIR = REPO / "data" / "schemas"
 EXAMPLES_DIR = SCHEMAS_DIR / "examples"
 
 
+def test_taxonomy_contract_manifests_are_not_misclassified_as_entities():
+    world = vs.discover(REPO / "data", None)
+    assert len(world.skills) == 31
+    assert len(world.tasks) == 108
+
+
 # ===========================================================================
 # Part 1 — schema-example structural self-test
 # ===========================================================================
