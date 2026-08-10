@@ -8,13 +8,14 @@
 # in response was itself left unwired, which is the same mistake one level up.
 # A check nobody runs is a check that does not exist.
 #
-# Two of these gates need a real browser (Chromium via Xwayland), so they cannot
-# live inside build_site.py --check. They live here instead, and this script is
-# what a session runs before shipping or handing off.
+# Browser gates run headless by default so routine verification never takes the
+# operator's desktop focus. Set HEADFUL=1 only for an explicitly supervised
+# visual run; that opt-in path uses the real Xwayland display.
 #
 # Usage:
 #   bash tools/preflight.sh              # everything (browser gates included)
 #   bash tools/preflight.sh --no-browser # skip the browser gates (CI, no display)
+#   HEADFUL=1 bash tools/preflight.sh     # explicitly visible/supervised browser
 #   TARGET_URL=… bash tools/preflight.sh # also check rail placement on a live page
 #
 # Exit 0 only if every gate that ran passed.
@@ -24,6 +25,11 @@ cd "$(dirname "$0")/.."
 
 WANT_BROWSER=1
 [ "${1:-}" = "--no-browser" ] && WANT_BROWSER=0
+if [ "${HEADFUL:-0}" = "1" ]; then
+  export HEADLESS=0 EDITOR_HEADLESS=0
+else
+  export HEADLESS=1 EDITOR_HEADLESS=1
+fi
 
 pass=0; fail=0; skipped=0
 results=()
@@ -49,9 +55,8 @@ run "worker unit tests"                     bash -c 'cd app/worker && node --tes
 run "offline red-team probe"                bash -c 'node tools/offline_redteam_probe.mjs | grep -q "0/8" || node tools/offline_redteam_probe.mjs | tail -3'
 
 # ---- browser gates ---------------------------------------------------------
-# Chromium here needs Xwayland, which is auth-gated by a mutter cookie whose
-# filename regenerates on every login — DISPLAY alone is not enough, and that is
-# why screenshot verification was quietly broken for weeks.
+# Headless is the normal, non-disruptive path. The Xwayland cookie is needed only
+# for an explicitly requested HEADFUL=1 visual inspection.
 if [ "$WANT_BROWSER" = "1" ]; then
   export DISPLAY="${DISPLAY:-:0}"
   if [ -z "${XAUTHORITY:-}" ] || [ ! -r "${XAUTHORITY:-}" ]; then
@@ -62,11 +67,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # verify-editor exits nonzero on any failed assertion and prints an
     # "N/N PASS" summary — trust the exit code, never a hardcoded count (the
     # literal "43/43" grep silently turned every added assertion into a FAIL).
-    if [ "${HEADLESS:-0}" = "1" ]; then
-      skip "editor client" "headful-only gate"
-    else
-      run "editor client (headful)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
-    fi
+    run "editor client (background)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     run "platform layout matrix"                 node tools/verify_platform_layout.js
     run "catalog client behavior"                node tools/verify_catalog_client.js
@@ -82,9 +83,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # property it proves is geometric (the rail's box never intersects its
     # block's box at ten widths), which the harness reproduces faithfully.
     # Setting TARGET_URL still upgrades it to a real editor page.
-    if [ "${HEADLESS:-0}" = "1" ]; then
-      skip "rail placement" "headful-only gate"
-    elif [ -n "${TARGET_URL:-}" ]; then
+    if [ -n "${TARGET_URL:-}" ]; then
       run "rail placement (live page)"           node app/editor/verify-rail-placement.js
     else
       run "rail placement (harness)"             node app/editor/verify-rail-placement.js

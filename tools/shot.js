@@ -7,7 +7,7 @@ for (const candidate of [process.env.PUP_DIR, 'puppeteer', '/home/damienriehl/.n
 if (!pup) throw new Error('Puppeteer unavailable (set PUP_DIR or install puppeteer)');
 (async () => {
   const [,, url, out, mode='view', width='1440', scale='1.5', target='0'] = process.argv;
-  const b = await pup.launch({ executablePath:process.env.CHROME_BIN||process.env.CHROMIUM_PATH||'/snap/bin/chromium', headless:process.env.HEADLESS==='1', userDataDir:'/tmp/sonsteng-shot-'+process.pid,
+  const b = await pup.launch({ executablePath:process.env.CHROME_BIN||process.env.CHROMIUM_PATH||'/snap/bin/chromium', headless:process.env.HEADFUL!=='1'&&process.env.HEADLESS!=='0', userDataDir:'/tmp/sonsteng-shot-'+process.pid,
     args:['--no-sandbox','--disable-dev-shm-usage','--disable-crash-reporter','--disable-breakpad','--hide-scrollbars','--window-size='+width+',1300'] });
   const p = await b.newPage();
   await p.setViewport({ width:+width, height:1150, deviceScaleFactor:+scale });

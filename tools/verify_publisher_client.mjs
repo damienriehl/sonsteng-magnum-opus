@@ -26,7 +26,7 @@ async function run() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const browser = await loadPuppeteer().launch({
     executablePath:process.env.CHROME_BIN || process.env.CHROMIUM_PATH || "/snap/bin/chromium",
-    headless:process.env.HEADLESS === "1",args:["--no-sandbox","--disable-dev-shm-usage"],
+    headless:process.env.HEADFUL !== "1" && process.env.HEADLESS !== "0",args:["--no-sandbox","--disable-dev-shm-usage"],
   });
   try {
     const page = await browser.newPage();

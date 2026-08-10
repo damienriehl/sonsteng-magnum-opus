@@ -35,7 +35,8 @@ const WIDTHS = [1600, 1400, 1236, 1180, 1100, 1024, 900, 768, 480, 390];
 
 (async () => {
   const browser = await puppeteer.launch({
-    headless: false, args: ['--no-sandbox'], executablePath: '/snap/bin/chromium',
+    headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0',
+    args: ['--no-sandbox'], executablePath: '/snap/bin/chromium',
   });
   const page = await browser.newPage();
   let bad = 0;
