@@ -367,7 +367,8 @@ The `tools/apply_suggestions.py` loop drives these (admin token = service scope)
 - `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
   drift?, commit_sha?, generator_id? }` → journals the phase and resolves the
   batch's `in_flight` rows. The terminal `done` call records the exact canonical
-  commit and content identity of the generators used for the deployable bundles.
+  commit and content identity of the authoritative generator entrypoints plus
+  their complete transitive local-Python dependency closure.
 - `reconcile` → startup crash recovery: expired-lease batches pre-`merged` roll
   `in_flight → accepted` (re-queue) + phase `rolled_back`; post-`merged` complete
   `in_flight → applied`. Orphan `in_flight` (expired lease, no live batch) → back
@@ -390,12 +391,20 @@ immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
 ## Production release API (`/edit/v1/prod/releases/*`)
 
 These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
-CSRF guarded. `GET /frontier` and `POST /prepare`, `/claim`, and `/transition` require the trusted
+CSRF guarded. `GET /frontier` and `POST /prepare`, `/claim`, `/renew`, and `/transition` require the trusted
 release service channel: a bearer credential with the dedicated `release_service`
 scope and a separate `EDIT_TOKEN_RELEASE` secret. An admin or DEV apply-daemon
 bearer is insufficient. The
 service may freeze evidence and execute an already-authorized release, but it
 cannot authorize one.
+
+`POST /renew` extends an unexpired execution lease only for its current fencing
+token. The executor heartbeats around every bounded provider operation; a lost
+renewal, expired lease, or stale token blocks later provider work and ledger
+transitions so a failover cannot overlap the original executor.
+Before a provider call, that lease covers the adapter's complete worst-case
+command sequence plus margin. Production leases are capped at 15 minutes, so
+heartbeat loss cannot create overlapping mutation while failover remains bounded.
 
 `GET /frontier` returns the text-free complete contiguous DEV apply frontier for the isolated
 candidate builder. `POST /prepare` binds that frontier through a
