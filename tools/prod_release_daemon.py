@@ -13,6 +13,40 @@ import json
 import os
 import pathlib
 
+
+def _path_in_checkout(checkout_root, configured_repo, configured_path):
+    repo = pathlib.Path(configured_repo).resolve()
+    configured = pathlib.Path(configured_path).resolve()
+    try:
+        relative = configured.relative_to(repo)
+    except ValueError as exc:
+        raise RuntimeError("configured release path is outside the trusted repository") from exc
+    resolved = pathlib.Path(checkout_root).resolve() / relative
+    if not resolved.exists() or not resolved.resolve().is_relative_to(pathlib.Path(checkout_root).resolve()):
+        raise RuntimeError("recorded release path is missing or untrusted")
+    return resolved
+
+
+def _restore_recorded_release(args, ledger, gate, git, *, registry_factory,
+                              pages_factory, worker_factory, restorer_factory,
+                              executor_factory, git_factory):
+    release = ledger.get_release(args.restore_release_id)
+    if not release or not release.base_sha:
+        raise RuntimeError("restore release lacks a recorded base SHA")
+    registry = registry_factory(args.recovery_registry)
+    with git.isolated_checkout(release.base_sha) as base_root:
+        git_factory(base_root).require_clean_candidate(release.base_sha)
+        pages_artifact = _path_in_checkout(base_root,args.repo,args.pages_artifact)
+        worker_config = _path_in_checkout(base_root,args.repo,args.worker_config)
+        pages = pages_factory(args.pages_project,pages_artifact,
+            args.pages_provenance_url,candidate_root=base_root,
+            production_branch=args.pages_branch)
+        worker = worker_factory(worker_config,args.worker_provenance_url,
+                                candidate_root=base_root)
+        restorer = restorer_factory(registry.pairs(),pages.restore,worker.restore)
+        executor_factory(ledger,pages,worker,gate,restorer=restorer,
+                         recovery_registry=registry).restore_recorded_base(release)
+
 def main(argv=None):
     if os.environ.get("SONSTENG_PROD_RELEASE_ENABLED") != "true":
         print("[prod-release] disabled (SONSTENG_PROD_RELEASE_ENABLED is not true)")
@@ -53,16 +87,10 @@ def main(argv=None):
                                  args.new_worker_accepts_old_pages)
         git = GitRefAdapter(args.repo)
         if args.restore_release_id:
-            release = ledger.get_release(args.restore_release_id)
-            registry = RecoveryRegistry(args.recovery_registry)
-            pages = WranglerPagesAdapter(args.pages_project,args.pages_artifact,
-                args.pages_provenance_url,candidate_root=args.repo,
-                production_branch=args.pages_branch)
-            worker = WranglerWorkerAdapter(args.worker_config,args.worker_provenance_url,
-                                           candidate_root=args.repo)
-            restorer = RecordedPairRestorer(registry.pairs(), pages.restore, worker.restore)
-            ProductionExecutor(ledger,pages,worker,gate,restorer=restorer,
-                               recovery_registry=registry).restore_recorded_base(release)
+            _restore_recorded_release(args,ledger,gate,git,
+                registry_factory=RecoveryRegistry,pages_factory=WranglerPagesAdapter,
+                worker_factory=WranglerWorkerAdapter,restorer_factory=RecordedPairRestorer,
+                executor_factory=ProductionExecutor,git_factory=GitRefAdapter)
             return 0
         ProductionCandidateBuilder(ledger, git, args.manifest,
                                    args.bootstrap_base).prepare_latest()
@@ -75,10 +103,8 @@ def main(argv=None):
             return 0
         with git.isolated_checkout(release.candidate_sha) as candidate_root:
             isolated_git = GitRefAdapter(candidate_root)
-            pages_artifact = candidate_root / pathlib.Path(args.pages_artifact).resolve().relative_to(
-                pathlib.Path(args.repo).resolve())
-            worker_config = candidate_root / pathlib.Path(args.worker_config).resolve().relative_to(
-                pathlib.Path(args.repo).resolve())
+            pages_artifact = _path_in_checkout(candidate_root,args.repo,args.pages_artifact)
+            worker_config = _path_in_checkout(candidate_root,args.repo,args.worker_config)
             pages = WranglerPagesAdapter(args.pages_project,pages_artifact,args.pages_provenance_url,
                                          candidate_root=candidate_root,
                                          production_branch=args.pages_branch)
