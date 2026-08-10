@@ -3,6 +3,7 @@ import sys
 import hashlib
 import json
 import time
+import dataclasses
 
 import pytest
 
@@ -233,7 +234,7 @@ def test_accepted_only_materializer_fails_before_output_on_ambiguous_or_overlap(
         AcceptedOnlyMaterializer().materialize([overlap])
 
 
-def test_accepted_only_materializer_never_splits_structural_group():
+def test_accepted_only_materializer_defers_structural_group_from_prod():
     source = projection_source(original_text="A\n\nB")
     source["operations"] = [
         {"id":"move-from", "decision_id":"move-1", "group_id":"group-1",
@@ -245,17 +246,53 @@ def test_accepted_only_materializer_never_splits_structural_group():
     ]
     source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
     accepted = AcceptedOnlyMaterializer().materialize([source])
-    assert len(accepted.structural_operations) == 2
+    assert accepted.accepted_operation_ids == ()
+    assert accepted.structural_operations == ()
+    assert {item.reason for item in accepted.exclusions} == {"structural_prod_deferred"}
 
     source["decisions"] = [{"operation_id":"move-1", "decision":"rejected"}]
     held = AcceptedOnlyMaterializer().materialize([source])
     assert held.structural_operations == ()
-    assert {item.reason for item in held.exclusions} == {"rejected"}
+    assert {item.reason for item in held.exclusions} == {"structural_prod_deferred"}
 
     source["operations"][1]["decision_id"] = "move-2"
     source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
-    with pytest.raises(ReleaseError, match="partial structural group"):
-        AcceptedOnlyMaterializer().materialize([source])
+    partial = AcceptedOnlyMaterializer().materialize([source])
+    assert {item.reason for item in partial.exclusions} == {"structural_prod_deferred"}
+
+
+@pytest.mark.parametrize("op", ["insert_after", "delete", "split", "merge", "move"])
+def test_accepted_only_materializer_defers_every_structural_operation(op):
+    source = projection_source()
+    source["operations"] = [{"id":op, "decision_id":op, "kind":op, "op":op,
+        "source_ref":source["source_ref"]}]
+    source["decisions"] = [{"operation_id":op, "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.accepted_operation_ids == ()
+    assert [(item.operation_id,item.reason) for item in result.exclusions] == [
+        (op,"structural_prod_deferred")]
+
+
+def test_accepted_only_materializer_holds_prose_dependent_on_structural_target():
+    structural = projection_source(source_ref="data/copy/home.json#a")
+    structural["operations"] = [{"id":"merge", "decision_id":"merge", "kind":"merge",
+        "op":"merge", "op_arg":"data/copy/home.json#b",
+        "source_ref":"data/copy/home.json#a"}]
+    structural["decisions"] = [{"operation_id":"merge", "decision":"accepted"}]
+    prose = projection_source(source_ref="data/copy/home.json#b")
+    prose["operations"] = [prose["operations"][0] | {
+        "source_ref":"data/copy/home.json#b"}]
+    prose["decisions"] = [{"operation_id":"op-word", "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([structural, prose])
+
+    assert result.accepted_operation_ids == ()
+    assert {(item.operation_id, item.reason) for item in result.exclusions} == {
+        ("merge", "structural_prod_deferred"),
+        ("op-word", "depends_on_structural_prod_deferred"),
+    }
 
 
 def test_projection_builder_is_deterministic_and_never_moves_or_dirties_ambient_head(tmp_path):
@@ -647,6 +684,33 @@ def test_candidate_validator_binds_git_tree_ancestry_frontier_and_membership():
     CandidateValidator(Git(), manifest)(item)
     with pytest.raises(ReleaseError, match="binding"):
         CandidateValidator(Git(), {**manifest,"suggestion_ids":["s1"]})(item)
+
+
+def test_candidate_validator_requires_prose_only_scope_and_disjoint_holds():
+    class Git:
+        def is_ancestor(self, base, candidate): return True
+        def tree(self, candidate): return "tree-1"
+        def require_clean_candidate(self, candidate): return None
+
+    item = release(schema_version=2, operation_ids=("prose-1",), suggestion_ids=(),
+                   batch_commits=(), review_receipt_hash="receipt",
+                   projection_identity="projection")
+    manifest = {"base_sha":item.base_sha,"candidate_sha":item.candidate_sha,
+        "candidate_tree":"tree-1","accepted_operation_ids":["prose-1"],
+        "review_receipt_hash":"receipt","production_scope":"structural_v1",
+        "held_exclusions":[]}
+    item = dataclasses.replace(item, manifest_hash=hashlib.sha256(
+        json.dumps(manifest,sort_keys=True,separators=(",", ":")).encode()).hexdigest())
+    with pytest.raises(ReleaseError, match="manifest binding mismatch"):
+        CandidateValidator(Git(), manifest)(item)
+
+    manifest["production_scope"] = "prose_only_v1"
+    manifest["held_exclusions"] = [{"operation_id":"prose-1",
+                                      "reason":"structural_prod_deferred"}]
+    item = dataclasses.replace(item, manifest_hash=hashlib.sha256(
+        json.dumps(manifest,sort_keys=True,separators=(",", ":")).encode()).hexdigest())
+    with pytest.raises(ReleaseError, match="manifest binding mismatch"):
+        CandidateValidator(Git(), manifest)(item)
 
 
 def test_restoration_uses_recorded_base_and_failure_remains_fenced():

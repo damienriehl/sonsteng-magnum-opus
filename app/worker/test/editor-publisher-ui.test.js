@@ -273,6 +273,24 @@ test("move endpoints share one card and one radio group with textual semantics",
   assert.equal((html.match(/name="decision-move-1"/g)||[]).length,3);
 });
 
+test("structural cards are held, filterable, and have no decision controls", async () => {
+  const structural = { ...granularReview,revisions:[{ ...granularReview.revisions[0],revision:{
+    ...granularReview.revisions[0].revision,operations:[
+      { id:"merge-1",decision_id:"merge-1",kind:"merge",op:"merge",
+        source_ref:"data/copy/home.json#a",op_arg:"data/copy/home.json#b",
+        production_scope:"held",production_hold_reason:"structural_prod_deferred" },
+    ] },draft:null,counts:{total:1,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,
+      held:1}
+  }],counts:{total:1,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,held:1} };
+  const html = await renderPublisherPage({ review:structural },"DR").text();
+  assert.match(html,/data-filter="held"[^>]*>Held \/ Not publishable <span>1<\/span>/);
+  assert.match(html,/data-review-status="held"/);
+  assert.match(html,/Not currently publishable/);
+  assert.match(html,/Structural publication is deferred/);
+  assert.doesNotMatch(html,/name="decision-merge-1"/);
+  assert.doesNotMatch(html,/<fieldset class="pub-decision"/);
+});
+
 test("review assets autosave truthfully, block unsafe submit, retain drafts, and support navigation", () => {
   for (const phrase of ["Saving…","Saved","Couldn’t save","beforeunload","pub-next-unreviewed",
     "pub-next-problem","error-summary","aria-invalid","review\/draft","review\/submit"])

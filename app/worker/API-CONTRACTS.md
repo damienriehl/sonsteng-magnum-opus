@@ -458,6 +458,17 @@ grouped operations are held. The candidate is projected from source-patch
 evidence and regenerated; filtering legacy suggestion rows or contiguous DEV
 commits is not selective publication and must fail closed.
 
+The first production-capable granular lane is prose-only. An operation whose
+`op` is `insert_after`, `delete`, `split`, `merge`, or `move` remains visible on
+DEV but is classified `held` with reason `structural_prod_deferred`; prose in
+the same structural group or an affected source is held as
+`depends_on_structural_prod_deferred`. These cards are counted and filterable as
+**Held / Not publishable**, not unanswered or rejected, and expose no decision
+or authorization control. Markdown prose, human-readable `json_scalar` text,
+punctuation, and prose move pairs without a structural `op` remain eligible.
+The Worker projection/preparation and Python materializer/manifest validator
+enforce this boundary independently.
+
 Applied rows that predate operation evidence remain unreviewable until an explicit
 backfill. `POST /edit/v1/publisher/review/backfill` is restricted to the trusted
 bearer/admin migration channel; human Access sessions cannot call it. One named

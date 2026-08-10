@@ -130,12 +130,36 @@ class AcceptedOnlyMaterializer:
                 (any(state["stale"] for state in states) or
                  any(state["decision"] != "accepted" for state in states))}
 
+    @staticmethod
+    def _production_holds(sources):
+        structural_groups, structural_refs = set(), set()
+        for source in sources:
+            for operation in source.get("operations") or []:
+                if operation.get("op") not in STRUCTURAL_OPERATIONS:
+                    continue
+                if operation.get("group_id"):
+                    structural_groups.add(operation["group_id"])
+                structural_refs.update(ref for ref in (
+                    source.get("source_ref"), operation.get("source_ref"),
+                    operation.get("op_arg")) if isinstance(ref, str) and ref)
+        holds = {}
+        for source in sources:
+            for operation in source.get("operations") or []:
+                if operation.get("op") in STRUCTURAL_OPERATIONS:
+                    holds[operation.get("id")] = "structural_prod_deferred"
+                elif ((operation.get("group_id") and
+                       operation.get("group_id") in structural_groups) or
+                      (operation.get("source_ref") or source.get("source_ref")) in structural_refs):
+                    holds[operation.get("id")] = "depends_on_structural_prod_deferred"
+        return holds
+
     def materialize(self, sources):
         patches, structural, exclusions, accepted_ids = [], [], [], []
         seen_operation_ids = set()
         ordered_sources = sorted(sources, key=lambda item: (item.get("source_ref", ""),
                                                              item.get("review_revision_id", "")))
         held_groups = self._held_group_ids(ordered_sources)
+        production_holds = self._production_holds(ordered_sources)
 
         for source in ordered_sources:
             source_ref = source.get("source_ref")
@@ -160,7 +184,10 @@ class AcceptedOnlyMaterializer:
 
             for group_id, members in groups.items():
                 group_decisions = {decisions.get(member) for member in members}
-                if not source.get("stale") and "accepted" in group_decisions and \
+                if not any(production_holds.get(operation.get("id"))
+                           for operation in operations
+                           if (operation.get("group_id") or operation.get("move_pair_id")) == group_id) and \
+                   not source.get("stale") and "accepted" in group_decisions and \
                    group_decisions != {"accepted"}:
                     raise ReleaseError(f"partial structural group {group_id}")
 
@@ -172,20 +199,15 @@ class AcceptedOnlyMaterializer:
                 operation_id = self._operation_id(operation)
                 decision = decisions.get(operation_id)
                 group_id = operation.get("group_id") or operation.get("move_pair_id")
-                reason = "stale" if source.get("stale") else (
+                reason = production_holds.get(operation.get("id")) or ("stale" if source.get("stale") else (
                     "group_held" if group_id in held_groups else
                     decision if decision in {"rejected", "questioned"} else
-                    "unanswered" if decision is None else None)
+                    "unanswered" if decision is None else None))
                 if reason:
                     exclusions.append(ProjectionExclusion(operation["id"], source_ref, reason))
                     continue
                 if decision != "accepted":
                     raise ReleaseError(f"unknown submitted decision for {operation_id}")
-                op_name = operation.get("op")
-                if op_name in STRUCTURAL_OPERATIONS:
-                    structural.append(dict(operation))
-                    accepted_ids.append(operation["id"])
-                    continue
                 base_range = operation.get("base_range")
                 if not (isinstance(base_range, list) and len(base_range) == 2 and
                         all(isinstance(value, int) for value in base_range)):
@@ -499,9 +521,14 @@ class CandidateValidator:
         common_mismatch = self.manifest.get("base_sha") != release.base_sha or \
            self.manifest.get("candidate_sha") != release.candidate_sha
         if release.schema_version >= 2:
+            held = self.manifest.get("held_exclusions") or []
+            held_ids = {item.get("operation_id") for item in held if isinstance(item, dict)}
             binding_mismatch = (tuple(self.manifest.get("accepted_operation_ids") or ()) !=
                                 release.operation_ids or
-                                self.manifest.get("review_receipt_hash") != release.review_receipt_hash)
+                                self.manifest.get("review_receipt_hash") != release.review_receipt_hash or
+                                self.manifest.get("production_scope") != "prose_only_v1" or
+                                len(held_ids) != len(held) or
+                                bool(set(self.manifest.get("accepted_operation_ids") or ()) & held_ids))
         else:
             binding_mismatch = (tuple(self.manifest.get("suggestion_ids") or ()) != release.suggestion_ids or
                                 tuple(self.manifest.get("batch_commits") or ()) != release.batch_commits)
@@ -558,6 +585,8 @@ class AcceptedProjectionCandidateBuilder:
                     raise ReleaseError("projection writer cannot verify rebased sources")
                 verifier(root,rebased)
             materialized = self.materializer.materialize(sources)
+            if materialized.structural_operations:
+                raise ReleaseError("structural operations are deferred from production")
             if not materialized.accepted_operation_ids:
                 return None
             evidence = self.writer.write(root, materialized)
@@ -565,6 +594,7 @@ class AcceptedProjectionCandidateBuilder:
             candidate_sha, candidate_tree = candidate_git.commit_projected_tree(base_sha,timestamp)
             exclusions = [dataclasses.asdict(item) for item in materialized.exclusions]
             manifest = {"schema_version":2,"target_environment":"production",
+                "production_scope":"prose_only_v1",
                 "base_sha":base_sha,"candidate_sha":candidate_sha,
                 "candidate_tree":candidate_tree,"generator_id":evidence["generator_id"],
                 "review_receipt_hash":receipt_binding,"review_receipts":list(receipt_hashes),

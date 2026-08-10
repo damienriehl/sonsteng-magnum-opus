@@ -287,8 +287,8 @@ export const PUBLISHER_JS = `(() => {
       a.textContent="Change "+(index+1)+" needs a question";li.appendChild(a);list.appendChild(li)});
     summary.hidden=!errors.length;if(errors.length)summary.focus();return !errors.length;}
   function refreshCounts(){const cards=Array.from(reviewForm.querySelectorAll(".pub-operation"));
-    const values={all:cards.length,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0};
-    for(const card of cards){const decision=decisionFor(card);const state=card.dataset.reviewStatus==="stale"?"stale":decision?.decision||"unreviewed";card.dataset.reviewStatus=state;
+    const values={all:cards.length,held:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0};
+    for(const card of cards){const decision=decisionFor(card);const state=card.dataset.reviewStatus==="held"?"held":card.dataset.reviewStatus==="stale"?"stale":decision?.decision||"unreviewed";card.dataset.reviewStatus=state;
       card.querySelector(".pub-change-status").textContent=state.replace(/^./,c=>c.toUpperCase());if(state in values)values[state]+=1;if(decision)values.reviewed+=1;}
     for(const button of document.querySelectorAll("[data-filter]")){const count=button.querySelector("span");if(count)count.textContent=String(values[button.dataset.filter]||0)}}
   async function flush(){const sources=Array.from(reviewForm.querySelectorAll(".pub-source"))

@@ -125,6 +125,17 @@ function renderDecisionCard(item, operations, position, total, decision) {
   const submitted = item.submitted_review ? " disabled" : "";
   const stale = item.stale ? " disabled" : "";
   const excerpts = operations.map((op) => renderMarkedOperation(op)).join("");
+  const holdReason = operations.find((op) => op.production_hold_reason)?.production_hold_reason;
+  if (holdReason) {
+    const explanation = holdReason === "structural_prod_deferred" ?
+      "Structural publication is deferred until its topology-specific review contract ships." :
+      "This prose depends on a structurally held block and cannot publish separately.";
+    return "<article class=\"pub-operation pub-operation-held\" id=\"change-" + safeId +
+      "\" data-operation-id=\"" + safeId + "\" data-review-status=\"held\"><header><h4>Change " +
+      position + " of " + total + "</h4><span class=\"pub-change-status\">Not currently publishable</span></header>" +
+      excerpts + "<p class=\"pub-hold-reason\"><strong>Not currently publishable.</strong> " +
+      escapeHtml(explanation) + "</p></article>";
+  }
   const status = item.stale ? "Stale" : decision ? String(decision.decision || "Unreviewed").replace(/^./, (c) => c.toUpperCase()) : "Unreviewed";
   return "<article class=\"pub-operation\" id=\"change-" + safeId + "\" data-operation-id=\"" + safeId +
     "\" data-review-status=\"" + escapeHtml(status.toLowerCase()) + "\"><header><h4>Change " + position +
@@ -149,7 +160,7 @@ function renderGranularReview(review) {
   const revisions = Array.isArray(review?.revisions) ? review.revisions : [];
   if (!revisions.length) return "<section class=\"pub-review\" aria-labelledby=\"pub-review-title\"><h2 id=\"pub-review-title\">Review changes</h2><p class=\"pub-empty\">No atomic review evidence is available yet.</p></section>";
   const counts = review.counts || {};
-  const filters = [["all", counts.total], ["reviewed", counts.reviewed], ["unreviewed", counts.unreviewed], ["accepted", counts.accepted],
+  const filters = [["all", counts.total], ["held", counts.held], ["reviewed", counts.reviewed], ["unreviewed", counts.unreviewed], ["accepted", counts.accepted],
     ["rejected", counts.rejected], ["questioned", counts.questioned]];
   let ordinal = 0;
   const sources = revisions.map((item) => {
@@ -180,7 +191,8 @@ function renderGranularReview(review) {
     "<p>Decide each atomic change. Draft choices remain private until you submit the review.</p>" +
     "<div class=\"pub-counts\" aria-label=\"Filter changes by review status\">" + filters.map(([name, count]) =>
       "<button type=\"button\" data-filter=\"" + name + "\" aria-pressed=\"" + (name === "all" ? "true" : "false") +
-      "\">" + name.replace(/^./, (c) => c.toUpperCase()) + " <span>" + Number(count || 0) + "</span></button>").join("") + "</div>" +
+      "\">" + (name === "held" ? "Held / Not publishable" : name.replace(/^./, (c) => c.toUpperCase())) +
+      " <span>" + Number(count || 0) + "</span></button>").join("") + "</div>" +
     "<div class=\"pub-jump\"><button type=\"button\" id=\"pub-next-unreviewed\">Next unreviewed</button>" +
     "<button type=\"button\" id=\"pub-next-problem\">Next problem</button></div>" +
     "<div id=\"error-summary\" class=\"pub-error-summary\" role=\"alert\" tabindex=\"-1\" hidden><h3>Review needs attention</h3><ul></ul></div>" +

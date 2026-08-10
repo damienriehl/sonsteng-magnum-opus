@@ -25,6 +25,26 @@ import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-s
 export const STRUCTURAL_KINDS = new Set([
   "insert_after", "delete", "split", "merge", "move",
 ]);
+
+function classifyProductionScope(sources = []) {
+  const structuralGroups = new Set(), structuralRefs = new Set();
+  for (const source of sources) for (const operation of source.operations || []) {
+    if (!STRUCTURAL_KINDS.has(operation.op)) continue;
+    if (operation.group_id) structuralGroups.add(operation.group_id);
+    for (const ref of [source.source_ref,operation.source_ref,operation.op_arg])
+      if (typeof ref === "string" && ref) structuralRefs.add(ref);
+  }
+  return sources.map((source) => ({ ...source,operations:(source.operations || []).map((operation) => {
+    const structural = STRUCTURAL_KINDS.has(operation.op);
+    const dependent = !structural &&
+      ((operation.group_id && structuralGroups.has(operation.group_id)) ||
+       structuralRefs.has(operation.source_ref || source.source_ref));
+    const production_hold_reason = structural ? "structural_prod_deferred" :
+      dependent ? "depends_on_structural_prod_deferred" : null;
+    return { ...operation,production_scope:production_hold_reason ? "held" : "prose",
+      production_hold_reason };
+  }) }));
+}
 // The ONLY kinds DIRECT_APPLY may auto-accept at suggest time.
 export const AUTO_APPLY_KINDS = new Set([
   "prose", "json_scalar", "page_override", "page_override_revert",
@@ -1030,7 +1050,8 @@ export class EditorStoreCore {
       for (const operation of source.operations || []) {
         const decision = decisions.get(operation.decision_id || operation.id);
         const groupId = operation.group_id || operation.move_pair_id;
-        if (!source.stale && !heldGroups.has(groupId) && decision?.decision === "accepted") {
+        if (operation.production_scope !== "held" && !source.stale &&
+            !heldGroups.has(groupId) && decision?.decision === "accepted") {
           const affectedSourceRefs = [...new Set([source.source_ref,operation.op_arg]
             .filter((value) => typeof value === "string" && value))].sort();
           members.push({ operation_id:operation.id,review_revision_id:source.review_revision_id,
@@ -1038,8 +1059,8 @@ export class EditorStoreCore {
             affected_source_refs:affectedSourceRefs,
             group_id:decision.group_id || operation.group_id || null });
         } else {
-          const reason = source.stale ? "stale" : heldGroups.has(groupId) ? "group_held" :
-            decision?.decision || "unanswered";
+          const reason = operation.production_hold_reason || (source.stale ? "stale" :
+            heldGroups.has(groupId) ? "group_held" : decision?.decision || "unanswered");
           held.push({ operation_id:operation.id,decision:decision?.decision || "unanswered",reason });
         }
       }
@@ -1489,7 +1510,7 @@ export class EditorStoreCore {
         (PARTITION BY source_ref ORDER BY created_at DESC,id DESC) AS row_num
       FROM production_review_revisions) WHERE row_num=1 ORDER BY source_ref`);
     if (!revisionRows.length) return { blocked_reason:"missing_revision_evidence",revisions:[],revision:null,draft:null,
-      submitted_review:null,counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0 } };
+      submitted_review:null,counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,held:0 } };
     const revisions = revisionRows.map((revisionRow) => {
       const revision = this._reviewRevision(revisionRow.id);
       const stale_reason = this._reviewStaleReason(revision);
@@ -1517,10 +1538,25 @@ export class EditorStoreCore {
         counts:{ total,reviewed:current.length,unreviewed:Math.max(0,total-current.length),
           accepted:count("accepted"),rejected:count("rejected"),questioned:count("questioned") } };
     });
+    const classified = classifyProductionScope(revisions.map((item) => ({
+      source_ref:item.revision.source_ref,operations:item.revision.operations,
+    })));
+    revisions.forEach((item,index) => {
+      item.revision.operations = classified[index].operations;
+      const heldIds = new Set(item.revision.operations.filter((operation) =>
+        operation.production_scope === "held").map((operation) => operation.decision_id || operation.id));
+      const visibleDecisions = item.submitted_review?.decisions || item.draft?.decisions || [];
+      item.counts.held = heldIds.size;
+      item.counts.reviewed = visibleDecisions.filter((decision) => !heldIds.has(decision.operation_id)).length;
+      for (const decision of ["accepted","rejected","questioned"])
+        item.counts[decision] = visibleDecisions.filter((item) =>
+          !heldIds.has(item.operation_id) && item.decision === decision).length;
+      item.counts.unreviewed = Math.max(0,item.counts.total-item.counts.held-item.counts.reviewed);
+    });
     const counts = revisions.reduce((sum,item) => {
       for (const key of Object.keys(sum)) sum[key] += item.counts[key];
       return sum;
-    }, { total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0 });
+    }, { total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,held:0 });
     return { revisions, ...revisions[0], counts };
   }
 
@@ -1754,7 +1790,7 @@ export class EditorStoreCore {
   }
 
   _operationFrontierProjection({ summaryOnly=false } = {}) {
-    const evidenceColumns = summaryOnly ? "" : `,r.original_hash,r.proposed_hash,
+    const evidenceColumns = summaryOnly ? ",r.operations_json" : `,r.original_hash,r.proposed_hash,
         r.original_text,r.source_original_text,r.operations_json`;
     const submittedRows = this._all(`SELECT * FROM (WITH active_groups AS (
         SELECT DISTINCT group_id FROM production_review_operations
@@ -1825,9 +1861,12 @@ export class EditorStoreCore {
         (sourcePublished ? sourcePublished !== row.prod_base :
           !!legacyProd && legacyProd.candidate_sha !== row.prod_base);
       const operationState = operationsByRevision.get(row.review_revision_id) || new Map();
-      const operations = (summaryOnly ? [...operationState.values()].map((operation) => ({
-        id:operation.operation_id,decision_id:operation.decision_id,group_id:operation.group_id })) :
-        JSON.parse(row.operations_json)).filter((operation) =>
+      const recordedOperations = JSON.parse(row.operations_json);
+      const operations = (summaryOnly ? recordedOperations.map((operation) => ({
+        id:operation.id,decision_id:operation.decision_id || operation.id,
+        group_id:operation.group_id || null,move_pair_id:operation.move_pair_id || null,
+        source_ref:operation.source_ref || row.source_ref,op:operation.op || null,
+        op_arg:operation.op_arg || null })) : recordedOperations).filter((operation) =>
           operationState.get(operation.id)?.lifecycle_state !== "published" &&
           !publishedOperations.has(operation.id));
       if (!operations.length) continue;
@@ -1841,20 +1880,23 @@ export class EditorStoreCore {
         operations,stale,decisions:[...(decisionsByRevision.get(row.review_revision_id)?.values() || [])] });
     }
 
-    const heldGroups = this._heldReviewGroups(projectionSources);
-    let eligibleOperationCount = 0;
-    for (const source of projectionSources) {
+    const classifiedSources = classifyProductionScope(projectionSources);
+    const heldGroups = this._heldReviewGroups(classifiedSources);
+    let eligibleOperationCount = 0, heldOperationCount = 0;
+    for (const source of classifiedSources) {
       const decisions = new Map(source.decisions.map((decision) => [decision.operation_id,decision.decision]));
       for (const operation of source.operations) {
         const groupId = operation.group_id || operation.move_pair_id;
-        if (!source.stale && lifecycleByOperation.get(operation.id) === "unpublished" && !frozen.has(operation.id) &&
+        if (operation.production_scope === "held") heldOperationCount += 1;
+        if (operation.production_scope !== "held" && !source.stale &&
+            lifecycleByOperation.get(operation.id) === "unpublished" && !frozen.has(operation.id) &&
             decisions.get(operation.decision_id || operation.id) === "accepted" &&
             !heldGroups.has(groupId)) eligibleOperationCount += 1;
       }
     }
     return { review_receipts:[...receiptById.values()].sort((a,b) =>
-      a.created_at-b.created_at || a.id.localeCompare(b.id)),sources:projectionSources,
-      eligible_operation_count:eligibleOperationCount };
+      a.created_at-b.created_at || a.id.localeCompare(b.id)),sources:classifiedSources,
+      eligible_operation_count:eligibleOperationCount,held_operation_count:heldOperationCount };
   }
 
   publisherSummary() {

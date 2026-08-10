@@ -110,11 +110,11 @@ test("v2 preparation expands one accepted move decision to both immutable endpoi
   assert.deepEqual(prepared.release.operation_ids,["move-from","move-to"]);
 });
 
-test("structural publication advances every affected source", () => {
+test("structural operations and dependent prose stay held outside production membership", () => {
   const core = makeCore(() => 2750);
   const sourceA = "data/copy/home.json#a";
   const sourceB = "data/copy/home.json#b";
-  const operations = [{ id:"merge-operation",decision_id:"merge-operation",kind:"merge",
+  const operations = [{ id:"merge-operation",decision_id:"merge-operation",kind:"merge",op:"merge",
     source_ref:sourceA,op_arg:sourceB,source_revision:"dev-merge",prod_base:"prod-base" }];
   assert.equal(core.recordReviewRevision({ id:"revision-merge",source_ref:sourceA,
     source_revision:"dev-merge",prod_base:"prod-base",commit_sha:"dev-merge",
@@ -124,7 +124,8 @@ test("structural publication advances every affected source", () => {
     source_revision:"dev-b",prod_base:"prod-base",commit_sha:"dev-b",
     original_hash:"b-old",proposed_hash:"b-new",original_text:"B",proposed_text:"B edited",
     suggestion_ids:["suggestion-b"],operations:[{ id:"operation-b",kind:"replace",
-      source_ref:sourceB,source_revision:"dev-b",prod_base:"prod-base" }] }).ok,true);
+      source_ref:sourceB,source_revision:"dev-b",prod_base:"prod-base",base_range:[0,1],
+      old_text:"B",new_text:"B edited" }] }).ok,true);
   const decisions = [{ operation_id:"merge-operation",decision:"accepted" }];
   assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
     review_revision_id:"revision-merge",source_revision:"dev-merge",prod_base:"prod-base",
@@ -133,22 +134,34 @@ test("structural publication advances every affected source", () => {
     request_digest:"review-merge",actor:"slot:damien",sources:[{
       review_revision_id:"revision-merge",source_revision:"dev-merge",prod_base:"prod-base",
       decisions }] }).ok,true);
-  const receipt = core.productionPreparationContext().projection.review_receipts[0].receipt_hash;
+  const proseDecisions = [{ operation_id:"operation-b",decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-b",source_revision:"dev-b",prod_base:"prod-base",
+    decisions:proseDecisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-b",idempotency_key:"review-b",
+    request_digest:"review-b",actor:"slot:damien",sources:[{
+      review_revision_id:"revision-b",source_revision:"dev-b",prod_base:"prod-base",
+      decisions:proseDecisions }] }).ok,true);
+  const projection = core.productionPreparationContext().projection;
+  assert.equal(projection.eligible_operation_count,0);
+  const reviewContext = core.getPublisherReview("slot:damien");
+  assert.equal(reviewContext.counts.held,2);
+  assert.equal(reviewContext.counts.unreviewed,0);
+  assert.equal(reviewContext.counts.reviewed,0);
+  assert.equal(reviewContext.counts.accepted,0);
+  assert.deepEqual(projection.sources.flatMap((source) => source.operations)
+    .map(({ id,production_hold_reason }) => [id,production_hold_reason]).sort(),[
+      ["merge-operation","structural_prod_deferred"],
+      ["operation-b","depends_on_structural_prod_deferred"],
+    ]);
+  const receipt = projection.review_receipts[0].receipt_hash;
   const prepared = core.prepareProductionRelease(release({ id:"release-merge",
     idempotency_key:"release-merge",request_digest:"release-merge",schema_version:2,
     target_batch_id:"operation-frontier",candidate_sha:"candidate-merge",
     review_receipt_hash:receipt,projection_identity:"projection-merge",
-    accepted_operation_ids:["merge-operation"],held_exclusions:[] })).release;
-  assert.deepEqual(prepared.operation_members[0].affected_source_refs,[sourceA,sourceB]);
-  const authorized = core.authorizeProductionRelease(authorize(prepared,{ id:prepared.id,
-    review_receipt_hash:receipt,projection_identity:"projection-merge" })).release;
-  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
-    credential_channel:"bearer",id:authorized.id }).release;
-  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
-    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
-      credential_channel:"bearer",fencing_token:claimed.fencing_token,
-      detail:{ candidate_sha:"candidate-merge" } }).ok,true);
-  assert.equal(core._reviewStaleReason(core._reviewRevision("revision-b")),"stale_prod_base");
+    review_receipts:projection.review_receipts.map((item) => item.receipt_hash),
+    accepted_operation_ids:["merge-operation"],held_exclusions:[] }));
+  assert.equal(prepared.reason,"operation_membership_mismatch");
 });
 
 test("v2 partial completion publishes operations without stamping their parent suggestion", () => {
