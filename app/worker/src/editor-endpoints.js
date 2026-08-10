@@ -871,11 +871,15 @@ export async function publisherReviewSubmitEndpoint(request, env, auth) {
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
   const text = (key) => typeof body[key] === "string" ? body[key] : "";
-  const binding = { id:text("id"),idempotency_key:text("idempotency_key"),
-    review_revision_id:text("review_revision_id"),source_revision:text("source_revision"),
+  const legacy = { review_revision_id:text("review_revision_id"),source_revision:text("source_revision"),
     prod_base:text("prod_base"),decisions:body.decisions };
-  if ([binding.id,binding.idempotency_key,binding.review_revision_id,binding.source_revision,
-    binding.prod_base].some((value) => !value || value.length > 256))
+  const sources = Array.isArray(body.sources) ? body.sources.map((source) => ({
+    review_revision_id:typeof source?.review_revision_id === "string" ? source.review_revision_id : "",
+    source_revision:typeof source?.source_revision === "string" ? source.source_revision : "",
+    prod_base:typeof source?.prod_base === "string" ? source.prod_base : "",decisions:source?.decisions })) : [legacy];
+  const binding = { id:text("id"),idempotency_key:text("idempotency_key"),sources };
+  if (!sources.length || [binding.id,binding.idempotency_key,...sources.flatMap((source) =>
+    [source.review_revision_id,source.source_revision,source.prod_base])].some((value) => !value || value.length > 256))
     return editError("validation_error", "Incomplete review binding.", 400);
   const request_digest = await sha256Hex(JSON.stringify(binding));
   const result = await editorStub(env).submitPublisherReview({ ...binding,request_digest,actor:auth.editor });

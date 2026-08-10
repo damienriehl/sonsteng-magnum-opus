@@ -151,6 +151,22 @@ export const SCHEMA_SQL = `
     note TEXT NOT NULL, operation_digest TEXT NOT NULL, group_id TEXT,
     PRIMARY KEY(review_id, operation_id)
   );
+  CREATE TABLE IF NOT EXISTS production_review_submissions (
+    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+    request_digest TEXT NOT NULL, actor TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL, receipt_json TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS production_review_submission_sources (
+    review_id TEXT NOT NULL, review_revision_id TEXT NOT NULL UNIQUE,
+    source_revision TEXT NOT NULL, prod_base TEXT NOT NULL, evidence_digest TEXT NOT NULL,
+    PRIMARY KEY(review_id, review_revision_id)
+  );
+  CREATE TABLE IF NOT EXISTS production_review_submission_decisions (
+    review_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL, decision TEXT NOT NULL, note TEXT NOT NULL,
+    operation_digest TEXT NOT NULL, group_id TEXT,
+    PRIMARY KEY(review_id, review_revision_id, operation_id)
+  );
 
   -- Single-row apply-daemon liveness beacon (SL6 heartbeat). id is pinned to 1
   -- so recordHeartbeat is an upsert of the ONE latest run. received_at is the
@@ -1132,7 +1148,8 @@ export class EditorStoreCore {
       return { ok:false,reason:"revision_mismatch" };
     const stale = this._reviewStaleReason(revision);
     if (stale) return { ok:false,reason:stale };
-    if (this._one("SELECT id FROM production_reviews WHERE review_revision_id=?", revision.id))
+    if (this._one("SELECT id FROM production_reviews WHERE review_revision_id=?", revision.id) ||
+      this._one("SELECT review_id FROM production_review_submission_sources WHERE review_revision_id=?", revision.id))
       return { ok:false,reason:"review_submitted" };
     const existing = this._one("SELECT actor FROM production_review_drafts WHERE review_revision_id=?", revision.id);
     if (existing && existing.actor !== input.actor) return { ok:false,reason:"draft_owned" };
@@ -1161,9 +1178,11 @@ export class EditorStoreCore {
       const stale_reason = this._reviewStaleReason(revision);
       const draftRow = this._one("SELECT * FROM production_review_drafts WHERE review_revision_id=? AND actor=?",
         revision.id,actor || "");
-      const reviewRow = this._one("SELECT * FROM production_reviews WHERE review_revision_id=?", revision.id);
-      const submitted = reviewRow ? this._all("SELECT operation_id,decision,note,group_id FROM production_review_decisions WHERE review_id=? ORDER BY operation_id",
-        reviewRow.id) : [];
+      const reviewRow = this._one("SELECT s.id,s.actor,s.created_at,s.receipt_hash FROM production_review_submissions s JOIN production_review_submission_sources r ON r.review_id=s.id WHERE r.review_revision_id=?", revision.id) ||
+        this._one("SELECT id,actor,created_at,receipt_hash FROM production_reviews WHERE review_revision_id=?", revision.id);
+      let submitted = reviewRow ? this._all("SELECT operation_id,decision,note,group_id FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id",
+        reviewRow.id,revision.id) : [];
+      if (reviewRow && !submitted.length) submitted = this._all("SELECT operation_id,decision,note,group_id FROM production_review_decisions WHERE review_id=? ORDER BY operation_id",reviewRow.id);
       const draft = draftRow ? { review_revision_id:revision.id, actor:draftRow.actor,
         source_revision:draftRow.source_revision,prod_base:draftRow.prod_base,
         decisions:JSON.parse(draftRow.decisions_json),updated_at:draftRow.updated_at } : null;
@@ -1189,6 +1208,13 @@ export class EditorStoreCore {
   }
 
   _submittedReview(id) {
+    const submission = this._one("SELECT * FROM production_review_submissions WHERE id=?", id || "");
+    if (submission) {
+      const sources = this._all("SELECT review_revision_id,source_revision,prod_base,evidence_digest FROM production_review_submission_sources WHERE review_id=? ORDER BY review_revision_id",submission.id)
+        .map((source) => ({ ...source,decisions:this._all("SELECT operation_id,decision,note,group_id FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id",submission.id,source.review_revision_id) }));
+      return { id:submission.id,actor:submission.actor,created_at:submission.created_at,
+        receipt_hash:submission.receipt_hash,sources,decisions:sources.flatMap((source) => source.decisions) };
+    }
     const row = this._one("SELECT * FROM production_reviews WHERE id=?", id || "");
     if (!row) return null;
     return { id:row.id,actor:row.actor,created_at:row.created_at,receipt_hash:row.receipt_hash,
@@ -1196,55 +1222,72 @@ export class EditorStoreCore {
   }
 
   submitPublisherReview(input = {}) {
-    const required = ["id","idempotency_key","request_digest","actor","review_revision_id",
-      "source_revision","prod_base"];
+    const required = ["id","idempotency_key","request_digest","actor"];
     if (required.some((key) => typeof input[key] !== "string" || !input[key]))
       return { ok:false,reason:"validation_error" };
-    const prior = this._one("SELECT id,request_digest,actor FROM production_reviews WHERE idempotency_key=?",
-      input.idempotency_key);
+    const sources = Array.isArray(input.sources) ? input.sources : [{ review_revision_id:input.review_revision_id,
+      source_revision:input.source_revision,prod_base:input.prod_base,decisions:input.decisions }];
+    if (!sources.length || sources.some((source) => !source ||
+      ["review_revision_id","source_revision","prod_base"].some((key) => typeof source[key] !== "string" || !source[key])) ||
+      new Set(sources.map((source) => source.review_revision_id)).size !== sources.length)
+      return { ok:false,reason:"validation_error" };
+    const prior = this._one("SELECT id,request_digest,actor FROM production_review_submissions WHERE idempotency_key=?",
+      input.idempotency_key) || this._one("SELECT id,request_digest,actor FROM production_reviews WHERE idempotency_key=?",input.idempotency_key);
     if (prior) return prior.id === input.id && prior.request_digest === input.request_digest &&
       prior.actor === input.actor ? { ok:true,replay:true,review:this._submittedReview(prior.id) } :
       { ok:false,reason:"idempotency_conflict" };
-    if (this._one("SELECT id FROM production_reviews WHERE id=?", input.id))
+    if (this._one("SELECT id FROM production_review_submissions WHERE id=?", input.id) ||
+      this._one("SELECT id FROM production_reviews WHERE id=?", input.id))
       return { ok:false,reason:"review_exists" };
-    const revision = this._reviewRevision(input.review_revision_id);
-    if (!revision) return { ok:false,reason:"missing_revision_evidence" };
-    if (input.source_revision !== revision.source_revision || input.prod_base !== revision.prod_base)
-      return { ok:false,reason:"revision_mismatch" };
-    const stale = this._reviewStaleReason(revision);
-    if (stale) return { ok:false,reason:stale };
-    const draft = this._one("SELECT * FROM production_review_drafts WHERE review_revision_id=?", revision.id);
-    if (!draft) return { ok:false,reason:"draft_missing" };
-    if (draft.actor !== input.actor) return { ok:false,reason:"draft_owned" };
-    const normalized = this._normalizeReviewDecisions(revision,input.decisions);
-    if (normalized.reason) return { ok:false,reason:normalized.reason };
-    const digest = this._digest({ revision:revision.evidence_digest, decisions:normalized.decisions });
-    if (digest !== draft.payload_digest) return { ok:false,reason:"draft_mismatch" };
-    const groupMembers = new Map();
-    for (const operation of revision.operations) if (operation.group_id) {
-      if (!groupMembers.has(operation.group_id)) groupMembers.set(operation.group_id,new Set());
-      groupMembers.get(operation.group_id).add(operation.decision_id || operation.id);
-    }
-    for (const [groupId,members] of groupMembers) {
-      const answered = normalized.decisions.filter((unit) => unit.group_id === groupId);
-      if (answered.length && (answered.length !== members.size || new Set(answered.map((item) => item.decision)).size !== 1))
-        return { ok:false,reason:"partial_group" };
+    const prepared = [];
+    for (const source of sources) {
+      const revision = this._reviewRevision(source.review_revision_id);
+      if (!revision) return { ok:false,reason:"missing_revision_evidence" };
+      if (source.source_revision !== revision.source_revision || source.prod_base !== revision.prod_base)
+        return { ok:false,reason:"revision_mismatch" };
+      const stale = this._reviewStaleReason(revision);
+      if (stale) return { ok:false,reason:stale };
+      if (this._one("SELECT review_id FROM production_review_submission_sources WHERE review_revision_id=?",revision.id) ||
+        this._one("SELECT id FROM production_reviews WHERE review_revision_id=?",revision.id))
+        return { ok:false,reason:"review_submitted" };
+      const draft = this._one("SELECT * FROM production_review_drafts WHERE review_revision_id=?",revision.id);
+      if (!draft) return { ok:false,reason:"draft_missing" };
+      if (draft.actor !== input.actor) return { ok:false,reason:"draft_owned" };
+      const normalized = this._normalizeReviewDecisions(revision,source.decisions);
+      if (normalized.reason) return { ok:false,reason:normalized.reason };
+      if (this._digest({ revision:revision.evidence_digest,decisions:normalized.decisions }) !== draft.payload_digest)
+        return { ok:false,reason:"draft_mismatch" };
+      const groupMembers = new Map();
+      for (const operation of revision.operations) if (operation.group_id) {
+        if (!groupMembers.has(operation.group_id)) groupMembers.set(operation.group_id,new Set());
+        groupMembers.get(operation.group_id).add(operation.decision_id || operation.id);
+      }
+      for (const [groupId,members] of groupMembers) {
+        const answered = normalized.decisions.filter((unit) => unit.group_id === groupId);
+        if (answered.length && (answered.length !== members.size || new Set(answered.map((item) => item.decision)).size !== 1))
+          return { ok:false,reason:"partial_group" };
+      }
+      prepared.push({ revision,decisions:normalized.decisions });
     }
     const now = this.now();
     const receipt = { review_id:input.id,actor:input.actor,created_at:now,
-      review_revision_id:revision.id,source_revision:revision.source_revision,prod_base:revision.prod_base,
-      evidence_digest:revision.evidence_digest,decisions:normalized.decisions };
+      sources:prepared.map(({ revision,decisions }) => ({ review_revision_id:revision.id,
+        source_revision:revision.source_revision,prod_base:revision.prod_base,
+        evidence_digest:revision.evidence_digest,decisions })) };
     const receiptHash = this._digest(receipt);
     this.transactionSync(() => {
-      this.sql.exec("INSERT INTO production_reviews (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        input.id,input.idempotency_key,input.request_digest,input.actor,revision.id,
-        revision.source_revision,revision.prod_base,receiptHash,this._canonical(receipt),now);
-      for (const decision of normalized.decisions) this.sql.exec(
-        "INSERT INTO production_review_decisions (review_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?)",
-        input.id,decision.operation_id,decision.decision,decision.note,decision.operation_digest,decision.group_id);
-      this.sql.exec("DELETE FROM production_review_drafts WHERE review_revision_id=? AND actor=?", revision.id,input.actor);
+      this.sql.exec("INSERT INTO production_review_submissions (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?)",
+        input.id,input.idempotency_key,input.request_digest,input.actor,receiptHash,this._canonical(receipt),now);
+      for (const { revision,decisions } of prepared) {
+        this.sql.exec("INSERT INTO production_review_submission_sources (review_id,review_revision_id,source_revision,prod_base,evidence_digest) VALUES (?,?,?,?,?)",
+          input.id,revision.id,revision.source_revision,revision.prod_base,revision.evidence_digest);
+        for (const decision of decisions) this.sql.exec(
+          "INSERT INTO production_review_submission_decisions (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?,?)",
+          input.id,revision.id,decision.operation_id,decision.decision,decision.note,decision.operation_digest,decision.group_id);
+        this.sql.exec("DELETE FROM production_review_drafts WHERE review_revision_id=? AND actor=?",revision.id,input.actor);
+      }
     });
-    return { ok:true,review:this.getPublisherReview(input.actor).submitted_review };
+    return { ok:true,review:this._submittedReview(input.id) };
   }
 
   // Read-only projection for the human Publisher surface. A selectable target

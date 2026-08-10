@@ -87,6 +87,61 @@ test("submission freezes exact evidence, validates questions, and replays only i
     source_revision:"dev-1", prod_base:"prod-1", decisions:[] }).reason, "review_submitted");
 });
 
+test("one multi-source submission is atomic when any exact source binding is stale", () => {
+  const core = makeCore(() => 2500);
+  const skillsRef = "data/copy/skills.json#lead";
+  const skillsRevision = revision({ id:"revision-skills",source_ref:skillsRef,
+    operations:operations.map((op) => ({ ...op,id:`skills-${op.id}`,decision_id:`skills-${op.id}`,
+      source_ref:skillsRef })) });
+  core.recordReviewRevision(revision());
+  core.recordReviewRevision(skillsRevision);
+  const home = { review_revision_id:"revision-1",source_revision:"dev-1",prod_base:"prod-1",
+    decisions:[{ operation_id:"op-word",decision:"accepted" }] };
+  const skills = { review_revision_id:"revision-skills",source_revision:"dev-1",prod_base:"prod-1",
+    decisions:[{ operation_id:"skills-op-word",decision:"rejected",note:"Keep the original." }] };
+  core.savePublisherReviewDraft({ actor:"slot:damien",...home });
+  core.savePublisherReviewDraft({ actor:"slot:damien",...skills });
+  core.recordReviewRevision(revision({ id:"revision-skills-2",source_ref:skillsRef,
+    source_revision:"dev-2",commit_sha:"dev-2",original_hash:"new-hash",proposed_hash:"newer-hash",
+    operations:operations.map((op) => ({ ...op,id:`skills-next-${op.id}`,
+      decision_id:`skills-next-${op.id}`,source_ref:skillsRef,source_revision:"dev-2" })) }));
+
+  const result = core.submitPublisherReview({ id:"review-multi",idempotency_key:"submit-multi",
+    request_digest:"digest-multi",actor:"slot:damien",sources:[home,skills] });
+  assert.equal(result.reason,"stale_revision");
+  const view = core.getPublisherReview("slot:damien");
+  assert.equal(view.revisions.find((item) => item.revision.id === "revision-1").submitted_review,null);
+  assert.equal(view.revisions.find((item) => item.revision.id === "revision-skills-2").submitted_review,null);
+  assert.ok(view.revisions.find((item) => item.revision.id === "revision-1").draft);
+});
+
+test("one multi-source receipt preserves every binding and replays only the exact request", () => {
+  const core = makeCore(() => 2750);
+  const skillsRef = "data/copy/skills.json#lead";
+  core.recordReviewRevision(revision());
+  core.recordReviewRevision(revision({ id:"revision-skills",source_ref:skillsRef,
+    operations:operations.map((op) => ({ ...op,id:`skills-${op.id}`,decision_id:`skills-${op.id}`,
+      source_ref:skillsRef })) }));
+  const sources = [
+    { review_revision_id:"revision-1",source_revision:"dev-1",prod_base:"prod-1",
+      decisions:[{ operation_id:"op-word",decision:"accepted" }] },
+    { review_revision_id:"revision-skills",source_revision:"dev-1",prod_base:"prod-1",
+      decisions:[{ operation_id:"skills-op-word",decision:"questioned",note:"Confirm this term?" }] },
+  ];
+  for (const source of sources) assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",...source }).ok,true);
+  const binding = { id:"review-multi",idempotency_key:"submit-multi",request_digest:"digest-multi",
+    actor:"slot:damien",sources };
+  const submitted = core.submitPublisherReview(binding);
+  assert.equal(submitted.ok,true);
+  assert.deepEqual(submitted.review.sources.map((source) => source.review_revision_id),
+    ["revision-1","revision-skills"]);
+  assert.equal(new Set(core.getPublisherReview("slot:damien").revisions.map((item) =>
+    item.submitted_review?.id)).size,1);
+  assert.equal(core.submitPublisherReview(binding).replay,true);
+  assert.equal(core.submitPublisherReview({ ...binding,request_digest:"changed" }).reason,
+    "idempotency_conflict");
+});
+
 test("stale, missing, tampered, and split-group evidence fail closed", () => {
   const core = makeCore(() => 3000);
   assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien", review_revision_id:"missing",
@@ -191,4 +246,30 @@ test("Publisher review endpoints require a current human Access Publisher and CS
     { ...publisher(), editor:"slot:approver", scopes:{ publisher:{granted:false}, admin:{granted:true} } },
   ]) assert.equal((await publisherReviewSubmitEndpoint(request("/edit/v1/publisher/review/submit", "POST",
     { ...draft, id:"review-1", idempotency_key:"key-1" }), env, denied)).status, 403);
+});
+
+test("HTTP submit preflights every source before creating the shared receipt", async () => {
+  const core = makeCore(() => 4250);
+  const skillsRef = "data/copy/skills.json#lead";
+  core.recordReviewRevision(revision());
+  core.recordReviewRevision(revision({ id:"revision-skills",source_ref:skillsRef,
+    operations:operations.map((op) => ({ ...op,id:`skills-${op.id}`,decision_id:`skills-${op.id}`,
+      source_ref:skillsRef })) }));
+  const home = { review_revision_id:"revision-1",source_revision:"dev-1",prod_base:"prod-1",
+    decisions:[{ operation_id:"op-word",decision:"accepted" }] };
+  const skills = { review_revision_id:"revision-skills",source_revision:"dev-1",prod_base:"prod-1",
+    decisions:[{ operation_id:"skills-op-word",decision:"rejected" }] };
+  core.savePublisherReviewDraft({ actor:"slot:damien",...home });
+  core.savePublisherReviewDraft({ actor:"slot:damien",...skills });
+  core.recordReviewRevision(revision({ id:"revision-skills-next",source_ref:skillsRef,
+    source_revision:"dev-2",commit_sha:"dev-2",original_hash:"new-hash",proposed_hash:"newer-hash",
+    operations:operations.map((op) => ({ ...op,id:`next-${op.id}`,decision_id:`next-${op.id}`,
+      source_ref:skillsRef,source_revision:"dev-2" })) }));
+  const response = await publisherReviewSubmitEndpoint(request("/edit/v1/publisher/review/submit","POST",{
+    id:"review-http-multi",idempotency_key:"review-http-multi-key",sources:[home,skills],
+  }),envFor(core),publisher());
+  assert.equal(response.status,409);
+  const view = core.getPublisherReview("slot:damien");
+  assert.equal(view.revisions.find((item) => item.revision.id === "revision-1").submitted_review,null);
+  assert.ok(view.revisions.find((item) => item.revision.id === "revision-1").draft);
 });

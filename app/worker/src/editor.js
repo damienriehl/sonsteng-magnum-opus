@@ -324,8 +324,12 @@ export async function editorFetch(request, env, ctx) {
     if (request.method !== "GET" || env.PROD_RELEASE_LEDGER !== "true" ||
         !auth.scopes.publisher.granted || auth.credential_channel !== "access" || auth.service)
       return wrap(uniform404());
-    const context = await editorStub(env).publisherContext();
-    return wrap(renderPublisherPage(context, attributionLabel(auth.editor)));
+    const stub = editorStub(env);
+    const [context, review] = await Promise.all([
+      stub.publisherContext(),
+      typeof stub.getPublisherReview === "function" ? stub.getPublisherReview(auth.editor) : Promise.resolve(null),
+    ]);
+    return wrap(renderPublisherPage({ ...context, review }, attributionLabel(auth.editor)));
   }
 
   // ---- instructor view ------------------------------------------------------

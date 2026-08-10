@@ -221,15 +221,102 @@ export const PUBLISHER_CSS = `.pub{max-width:66rem;margin:0 auto;padding:1.5rem 
 .pub-redline{display:grid;grid-template-columns:1fr 1fr}.pub-redline section{padding:.8rem;min-width:0}.pub-redline section+section{border-left:1px solid var(--pp-rule)}
 .pub-redline h4{margin:0 0 .4rem}.pub-redline p{white-space:pre-wrap;overflow-wrap:anywhere}.pub-redline del{text-decoration:line-through}.pub-redline ins{text-decoration:none;border-bottom:3px double currentColor}
 .pub-confirm{display:block;margin:1rem 0;font-weight:700}.pub-authority button{font:inherit;padding:.65rem 1rem;min-height:44px}.pub-authority button:disabled{cursor:not-allowed;opacity:.6}
+.pub-review{margin:1.5rem 0}.pub-counts,.pub-jump{display:flex;gap:.5rem;flex-wrap:wrap;margin:.8rem 0}
+.pub-counts button,.pub-jump button,.pub-retry,.pub-submit button{font:inherit;min-height:44px;padding:.45rem .75rem;border:1px solid var(--pp-rule);border-radius:6px;background:#fff;color:var(--pp-ink)}
+.pub-counts button[aria-pressed="true"]{background:var(--pp-ink);color:#fff}.pub-source{border:1px solid var(--pp-rule);border-radius:8px;margin:1rem 0;background:#fff;overflow:hidden}
+.pub-source>header{padding:.75rem 1rem;margin:0;background:#f3ecdd}.pub-source h3,.pub-page{margin:.1rem 0;overflow-wrap:anywhere}.pub-page{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em}
+.pub-operation{padding:1rem;border-top:1px solid var(--pp-rule)}.pub-operation>header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin:0 0 .5rem;border:0}.pub-operation h4{margin:0}
+.pub-change-status{font-weight:700}.pub-excerpt{white-space:pre-wrap;overflow-wrap:anywhere;background:#faf7f0;border-left:4px solid var(--pp-rule);padding:.7rem;line-height:1.7}
+.pub-sr-label{font-size:.75rem;font-weight:700;margin:0 .2rem}.pub-excerpt del{color:#8b1e2d;background:#fbd9df;text-decoration-thickness:2px}.pub-excerpt ins{color:#064d8c;background:#dbeeff;text-decoration:underline;text-decoration-thickness:2px}
+.pub-operation:has([aria-label="Moved from"]),.pub-operation:has([aria-label="Moved to"]){border-left:4px solid #247346}.pub-operation [aria-label^="Moved"]{color:#175b35;background:#d9f1e3}
+.pub-decision{border:0;padding:0;margin:.75rem 0}.pub-decision legend{font-weight:700;margin-bottom:.35rem}.pub-decision>label{display:inline-flex;align-items:center;gap:.25rem;margin:0 1rem .5rem 0;min-height:44px}
+.pub-note{margin:.5rem 0}.pub-note label{display:block;font-weight:700}.pub-note textarea{font:inherit;width:100%;max-width:45rem;border:1px solid #675c4d;border-radius:5px;padding:.5rem}.pub-note[hidden]{display:none}
+.pub-inline-error,.pub-error-summary{color:#721c24}.pub-error-summary{border:3px solid #b42331;background:#fff1f2;padding:.75rem;margin:1rem 0}.pub-error-summary a{color:inherit;font-weight:700}
+.pub-save-state,.pub-retry,.pub-context{margin:.75rem 1rem}.pub-save-state[data-state="failed"]{color:#8b1e2d;font-weight:700}.pub-context p{white-space:pre-wrap;overflow-wrap:anywhere}.pub-submit{border:2px solid var(--pp-ink);padding:1rem;margin-top:1.5rem}.pub-submit h3{margin-top:0}
 .pub :focus-visible{outline:3px solid var(--pp-focus);outline-offset:3px}.pub-live:focus{outline:none}
 @media (max-width:640px){.pub-binding,.pub-redline{grid-template-columns:1fr}.pub-redline section+section{border-left:0;border-top:1px solid var(--pp-rule)}.pub-change header{display:block}}
+@media (max-width:480px){.pub{padding:1rem .65rem 3rem}.pub-counts button,.pub-jump button{flex:1 1 9rem}.pub-operation{padding:.75rem}.pub-decision>label{display:flex;margin-right:0}.pub-operation>header{align-items:flex-start}.pub-submit button{width:100%}}
+@media (forced-colors:active){.pub-excerpt del,.pub-excerpt ins,.pub-operation [aria-label^="Moved"]{forced-color-adjust:auto;color:CanvasText;background:Canvas;text-decoration-thickness:3px}.pub-operation:has([aria-label^="Moved"]){border-left:4px solid CanvasText}.pub-counts button[aria-pressed="true"]{outline:3px solid Highlight}}
 `;
 
 export const PUBLISHER_JS = `(() => {
   "use strict";
+  const live=document.getElementById("pub-live");
+  const reviewForm=document.getElementById("publisher-review-form");
+  const pendingSaves=new Map(), saveTimers=new Map(), failedSaves=new Set(), dirtyRevisions=new Set();
+  function sourceFor(node){return node&&node.closest(".pub-source")}
+  function decisionFor(card){
+    const checked=card.querySelector("input[type=radio]:checked");if(!checked)return null;
+    const note=card.querySelector("[data-note-for="+checked.value+"]");
+    return {operation_id:card.dataset.operationId,decision:checked.value,note:note?note.value.trim():""};
+  }
+  function payloadFor(source){return {review_revision_id:source.dataset.reviewRevision,
+    source_revision:source.dataset.sourceRevision,prod_base:source.dataset.prodBase,
+    decisions:Array.from(source.querySelectorAll(".pub-operation")).map(decisionFor).filter(Boolean)};}
+  function setSaveState(source,state){const status=source.querySelector(".pub-save-state"),retry=source.querySelector(".pub-retry");
+    status.dataset.state=state;status.textContent=state==="saving"?"Saving…":state==="saved"?"Saved":"Couldn’t save";
+    retry.hidden=state!=="failed";}
+  async function save(source){
+    const id=source.dataset.reviewRevision;clearTimeout(saveTimers.get(id));saveTimers.delete(id);
+    setSaveState(source,"saving");dirtyRevisions.add(id);
+    const promise=fetch("/edit/v1/publisher/review/draft",{method:"POST",credentials:"same-origin",
+      headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(payloadFor(source))});
+    pendingSaves.set(id,promise);
+    try{const response=await promise;if(!response.ok)throw new Error(String(response.status));
+      if(pendingSaves.get(id)===promise){failedSaves.delete(id);dirtyRevisions.delete(id);setSaveState(source,"saved");}return true;
+    }catch{if(pendingSaves.get(id)===promise){failedSaves.add(id);setSaveState(source,"failed");}return false}
+    finally{if(pendingSaves.get(id)===promise)pendingSaves.delete(id)}
+  }
+  function schedule(source){const id=source.dataset.reviewRevision;dirtyRevisions.add(id);setSaveState(source,"saving");
+    clearTimeout(saveTimers.get(id));saveTimers.set(id,setTimeout(()=>save(source),450));}
+  function syncNotes(card){const value=card.querySelector("input[type=radio]:checked")?.value;
+    for(const note of card.querySelectorAll(".pub-note"))note.hidden=note.querySelector("textarea").dataset.noteFor!==value;
+    const question=card.querySelector('[data-note-for="questioned"]');if(question)question.required=value==="questioned";}
+  function problem(card,message){const p=card.querySelector(".pub-inline-error"),question=card.querySelector('[data-note-for="questioned"]');
+    p.hidden=!message;p.textContent=message||"";if(question)question.setAttribute("aria-invalid",message?"true":"false");return !message;}
+  function validate(){const errors=[];for(const card of reviewForm.querySelectorAll(".pub-operation")){
+    const decision=decisionFor(card);const bad=decision?.decision==="questioned"&&!decision.note;
+    problem(card,bad?"Enter a question before submitting this change.":"");if(bad)errors.push(card);}
+    const summary=document.getElementById("error-summary"),list=summary.querySelector("ul");list.textContent="";
+    errors.forEach((card,index)=>{const li=document.createElement("li"),a=document.createElement("a");a.href="#"+card.id;
+      a.textContent="Change "+(index+1)+" needs a question";li.appendChild(a);list.appendChild(li)});
+    summary.hidden=!errors.length;if(errors.length)summary.focus();return !errors.length;}
+  function refreshCounts(){const cards=Array.from(reviewForm.querySelectorAll(".pub-operation"));
+    const values={all:cards.length,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0};
+    for(const card of cards){const decision=decisionFor(card);const state=card.dataset.reviewStatus==="stale"?"stale":decision?.decision||"unreviewed";card.dataset.reviewStatus=state;
+      card.querySelector(".pub-change-status").textContent=state.replace(/^./,c=>c.toUpperCase());if(state in values)values[state]+=1;if(decision)values.reviewed+=1;}
+    for(const button of document.querySelectorAll("[data-filter]")){const count=button.querySelector("span");if(count)count.textContent=String(values[button.dataset.filter]||0)}}
+  async function flush(){for(const source of reviewForm.querySelectorAll(".pub-source")){
+    if(!source.querySelector(".pub-submitted"))await save(source);}
+    await Promise.all(Array.from(pendingSaves.values()));return failedSaves.size===0;}
+  async function digest(value){const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));
+    return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")}
+  if(reviewForm){
+    for(const card of reviewForm.querySelectorAll(".pub-operation")){syncNotes(card);
+      card.addEventListener("change",()=>{syncNotes(card);problem(card,"");refreshCounts();schedule(sourceFor(card))});
+      card.addEventListener("input",()=>schedule(sourceFor(card)));}
+    for(const retry of reviewForm.querySelectorAll(".pub-retry"))retry.addEventListener("click",()=>save(sourceFor(retry)));
+    window.addEventListener("beforeunload",event=>{if(dirtyRevisions.size||pendingSaves.size||failedSaves.size){event.preventDefault();event.returnValue=""}});
+    reviewForm.addEventListener("submit",async event=>{event.preventDefault();const submit=document.getElementById("pub-submit-review");
+      if(!validate())return;submit.disabled=true;submit.ariaBusy="true";live.textContent="Saving draft decisions before submission…";
+      if(!await flush()){live.textContent="Couldn’t save every draft. Retry save before submitting.";submit.disabled=false;submit.ariaBusy="false";live.focus();return}
+      try{const sources=Array.from(reviewForm.querySelectorAll(".pub-source")).filter(source=>!source.querySelector(".pub-submitted")).map(payloadFor);
+        const body={sources},hash=await digest(JSON.stringify({sources}));body.id="review-"+hash;body.idempotency_key="review-submit-"+hash;
+        const response=await fetch("/edit/v1/publisher/review/submit",{method:"POST",credentials:"same-origin",
+          headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});if(!response.ok)throw new Error(String(response.status));
+        live.textContent="Review submitted. Accepted changes are eligible for a separate production preview; production is not authorized.";location.reload();
+      }catch{live.textContent="Review submission failed. Your saved drafts remain available; correct any marked problem and try again.";submit.disabled=false;live.focus()}
+      finally{submit.ariaBusy="false"}});
+    function next(selector){const nodes=Array.from(reviewForm.querySelectorAll(selector)).filter(x=>!x.hidden);if(!nodes.length)return;
+      const after=nodes.find(x=>x.getBoundingClientRect().top>8)||nodes[0];after.scrollIntoView({block:"center"});after.querySelector("input,textarea,button")?.focus()}
+    document.getElementById("pub-next-unreviewed")?.addEventListener("click",()=>next('[data-review-status="unreviewed"]'));
+    document.getElementById("pub-next-problem")?.addEventListener("click",()=>next('[data-review-status="questioned"],[data-review-status="stale"],.pub-operation:has([aria-invalid="true"])'));
+    for(const filter of document.querySelectorAll("[data-filter]"))filter.addEventListener("click",()=>{for(const b of document.querySelectorAll("[data-filter]"))b.setAttribute("aria-pressed",String(b===filter));
+      for(const card of reviewForm.querySelectorAll(".pub-operation"))card.hidden=filter.dataset.filter!=="all"&&card.dataset.reviewStatus!==filter.dataset.filter;});
+  }
   const button=document.getElementById("pub-authorize"), confirm=document.getElementById("pub-confirm");
   if(!button||!confirm)return;
-  const live=document.getElementById("pub-live"); let binding={}, pending=false;
+  let binding={}, pending=false;
   try{binding=JSON.parse(document.getElementById("publisher-binding").textContent)}catch{}
   const required=["id","target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash"];
   const complete=required.every(k=>typeof binding[k]==="string"&&binding[k]);

@@ -189,6 +189,79 @@ test("publisher assets bind the immutable payload, announce results, restore foc
   assert.match(PUBLISHER_CSS, /grid-template-columns:1fr/);
 });
 
+const granularReview = {
+  counts:{ total:3,reviewed:1,unreviewed:2,accepted:1,rejected:0,questioned:0 },
+  revisions:[{
+    revision:{ id:"revision-home",source_ref:"site/platform/index.html#lead",
+      source_revision:"dev-1",prod_base:"prod-1",original_text:"Weigh strong points, and weak points.",
+      proposed_text:"Weigh strongest points and weak points!",operations:[
+        { id:"op-word",decision_id:"op-word",kind:"replace",old_text:"strong",new_text:"strongest",
+          context_before:["Weigh "],context_after:[" points",","," ","and"," ","weak"," ","points"],
+          source_ref:"site/platform/index.html#lead" },
+        { id:"op-comma",decision_id:"op-comma",kind:"delete",old_text:",",new_text:"",
+          context_before:["Weigh ","strong"," points"],context_after:[" ","and"," ","weak"," ","points"],
+          source_ref:"site/platform/index.html#lead" },
+        { id:"op-bang",decision_id:"op-bang",kind:"replace",old_text:".",new_text:"!",
+          context_before:["and"," ","weak"," ","points"],context_after:[],
+          source_ref:"site/platform/index.html#lead" },
+      ] },
+    draft:{ decisions:[{ operation_id:"op-word",decision:"accepted",note:"" }] },
+    submitted_review:null,stale:false,
+    counts:{ total:3,reviewed:1,unreviewed:2,accepted:1,rejected:0,questioned:0 },
+  }],
+};
+
+test("granular Publisher renders bounded atomic redlines and one accessible decision per change", async () => {
+  const html = await renderPublisherPage({ release:null,batches:[],review:granularReview }, "DR").text();
+  assert.match(html,/Review changes/);
+  assert.match(html,/site\/platform\/index\.html/);
+  assert.match(html,/Deleted text<\/span><del[^>]*>strong<\/del>/);
+  assert.match(html,/Added text<\/span><ins[^>]*>strongest<\/ins>/);
+  assert.match(html,/Deleted text<\/span><del[^>]*>,<\/del>/);
+  assert.doesNotMatch(html,/<del[^>]*>Weigh strong points, and weak points\.<\/del>/);
+  assert.equal((html.match(/<fieldset class="pub-decision"/g)||[]).length,3);
+  for (const choice of ["Accept","Reject","Ask question"]) assert.match(html,new RegExp(`> ${choice}<`));
+  assert.match(html,/name="decision-op-word"/);
+  assert.match(html,/Question \(required when asking\)/);
+  assert.match(html,/Rejection note \(optional\)/);
+  assert.match(html,/Submit review/);
+  assert.match(html,/Submitting this review does not authorize production/);
+});
+
+test("move endpoints share one card and one radio group with textual semantics", async () => {
+  const move = { ...granularReview,revisions:[{ ...granularReview.revisions[0],revision:{
+    ...granularReview.revisions[0].revision,operations:[
+      { id:"move-from",decision_id:"move-1",move_pair_id:"move-1",move_role:"from",kind:"delete",
+        old_text:"distinctive amber phrase travels",new_text:"",context_before:["First. "],context_after:[] },
+      { id:"move-to",decision_id:"move-1",move_pair_id:"move-1",move_role:"to",kind:"insert",
+        old_text:"",new_text:"distinctive amber phrase travels",context_before:[],context_after:[" First."] },
+    ] },draft:null,counts:{total:1,reviewed:0,unreviewed:1,accepted:0,rejected:0,questioned:0}
+  }],counts:{total:1,reviewed:0,unreviewed:1,accepted:0,rejected:0,questioned:0} };
+  const html = await renderPublisherPage({ review:move },"DR").text();
+  assert.equal((html.match(/<fieldset class="pub-decision"/g)||[]).length,1);
+  assert.match(html,/Moved from/);
+  assert.match(html,/Moved to/);
+  assert.equal((html.match(/name="decision-move-1"/g)||[]).length,3);
+});
+
+test("review assets autosave truthfully, block unsafe submit, retain drafts, and support navigation", () => {
+  for (const phrase of ["Saving…","Saved","Couldn’t save","beforeunload","pub-next-unreviewed",
+    "pub-next-problem","error-summary","aria-invalid","review\/draft","review\/submit"])
+    assert.match(PUBLISHER_JS,new RegExp(phrase));
+  assert.match(PUBLISHER_JS,/pendingSaves/);
+  assert.match(PUBLISHER_JS,/questioned/);
+  assert.match(PUBLISHER_JS,/required/);
+  assert.match(PUBLISHER_CSS,/@media \(max-width:480px\)/);
+  assert.match(PUBLISHER_CSS,/@media \(forced-colors:active\)/);
+  assert.match(PUBLISHER_CSS,/overflow-wrap:anywhere/);
+});
+
+test("one Submit review action sends one multi-source request", () => {
+  assert.match(PUBLISHER_JS,/const body=\{sources\}/);
+  assert.equal((PUBLISHER_JS.match(/fetch\("\/edit\/v1\/publisher\/review\/submit"/g)||[]).length,1);
+  assert.doesNotMatch(PUBLISHER_JS,/for\(const source[^}]+review\/submit/s);
+});
+
 test("publisher route is distinct, human Publisher-only, and review links to it", async () => {
   const response = await editorFetch(new Request("https://edit.example/edit/publish"), {
     PROD_RELEASE_LEDGER: "true", EDIT_ORIGIN: "https://edit.example",
