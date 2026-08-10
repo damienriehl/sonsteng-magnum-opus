@@ -455,7 +455,10 @@ Applied rows that predate operation evidence remain unreviewable until an explic
 backfill. `POST /edit/v1/publisher/review/backfill` is restricted to the trusted
 bearer/admin migration channel; human Access sessions cannot call it. One named
 transaction binds a verified PROD base and per-source cumulative revision
-snapshots to applied suggestion IDs and their completed apply commits. Exact
+snapshots to applied suggestion IDs, per-suggestion batch/commit evidence, and
+the complete ordered apply-batch base-to-commit chain ending at the revision.
+The store matches every chain entry to a completed batch and requires the
+snapshot to include every applied suggestion for that source in those batches. Exact
 replay is idempotent and audited; changed replay, pending rows, and mismatched
 source/commit/base evidence fail atomically. Backfill creates operations only—no
 drafts, decisions, reviews, release membership, or implicit acceptance.

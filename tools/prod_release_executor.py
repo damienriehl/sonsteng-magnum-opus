@@ -124,8 +124,7 @@ class AcceptedOnlyMaterializer:
                 raise ReleaseError("projection source lacks durable source evidence")
             decisions = {item.get("operation_id"): item.get("decision")
                          for item in source.get("decisions") or []}
-            operations = sorted(source.get("operations") or [], key=lambda item: (
-                item.get("created_at", 0), item.get("id", "")))
+            operations = list(source.get("operations") or [])
             groups = {}
             for operation in operations:
                 operation_id = self._operation_id(operation)
@@ -148,6 +147,7 @@ class AcceptedOnlyMaterializer:
             projected = original
             accepted_ranges = []
             source_accepted = []
+            resolved_edits = []
             for operation in operations:
                 operation_id = self._operation_id(operation)
                 decision = decisions.get(operation_id)
@@ -159,7 +159,7 @@ class AcceptedOnlyMaterializer:
                     continue
                 if decision != "accepted":
                     raise ReleaseError(f"unknown submitted decision for {operation_id}")
-                op_name = operation.get("op") or operation.get("kind")
+                op_name = operation.get("op")
                 if op_name in STRUCTURAL_OPERATIONS:
                     structural.append(dict(operation))
                     accepted_ids.append(operation["id"])
@@ -176,11 +176,14 @@ class AcceptedOnlyMaterializer:
                        if end > start and prior_end > prior_start):
                     raise ReleaseError(f"overlapping accepted operations at {operation_id}")
                 evidence = self._source_evidence(operation)
-                anchor_start, anchor_end = self._unique_span(projected, evidence, operation_id)
-                projected = projected[:anchor_start] + evidence["new_text"] + projected[anchor_end:]
+                anchor_start, anchor_end = self._unique_span(original, evidence, operation_id)
                 accepted_ranges.append((start, end))
+                resolved_edits.append((anchor_start,anchor_end,evidence["new_text"],operation_id))
                 source_accepted.append(operation["id"])
                 accepted_ids.append(operation["id"])
+            for anchor_start,anchor_end,new_text,operation_id in sorted(
+                    resolved_edits,key=lambda item:(item[0],item[1],item[3]),reverse=True):
+                projected = projected[:anchor_start] + new_text + projected[anchor_end:]
             if source_accepted:
                 patches.append(ProjectionPatch(source_ref, original, projected,
                     tuple(source_accepted), source.get("review_revision_id", "")))
@@ -197,13 +200,21 @@ class ProjectionTreeWriter:
             pipeline = SubprocessPipeline()
         self.pipeline = pipeline
 
+    def verify_rebased_sources(self, root, sources):
+        """Prove old-base reviews still name the identical current PROD leaf."""
+        source_index = self.pipeline.regenerate_map(str(root))
+        for source in sources:
+            block = source_index.get(source.get("source_ref"))
+            expected = source.get("source_original_text", source.get("original_text"))
+            if not block or not isinstance(expected, str) or block.get("original_text") != expected:
+                raise ReleaseError("reviewed source changed after its production base")
+
     @staticmethod
     def _patch_for(block, operation_id, source_ref, old_text, new_text, operation=None):
         from apply_suggestions import Patch, classify
         operation = operation or {}
         relpath = source_ref.split("#", 1)[0]
-        op_name = operation.get("op") or (operation.get("kind")
-            if operation.get("kind") in STRUCTURAL_OPERATIONS else None)
+        op_name = operation.get("op")
         kind, json_path = classify(source_ref, block, op_name)
         return Patch(suggestion_id=operation_id,
             group_id=operation.get("group_id") or operation.get("move_pair_id"),
@@ -479,15 +490,30 @@ class AcceptedProjectionCandidateBuilder:
         if not sources or not receipts:
             return None
         base_sha = context.get("base_sha") or sources[0].get("prod_base")
-        if not base_sha or any(source.get("prod_base") != base_sha for source in sources):
+        if not base_sha or any(not source.get("prod_base") for source in sources):
             raise ReleaseError("submitted review does not match the verified production base")
-        materialized = self.materializer.materialize(sources)
-        if not materialized.accepted_operation_ids:
-            return None
+        # An unrelated release may advance the global PROD frontier after this
+        # source was reviewed. Permit that ancestry-only rebase here; the
+        # ProjectionTreeWriter still applies the immutable original value in an
+        # isolated checkout of `base_sha`, so any same-source drift fails closed
+        # before a candidate commit is created.
+        if any(source["prod_base"] != base_sha and
+               not self.git.is_ancestor(source["prod_base"], base_sha)
+               for source in sources):
+            raise ReleaseError("submitted review does not descend from the verified production base")
         receipt_hashes = tuple(sorted(item["receipt_hash"] for item in receipts))
         receipt_binding = hashlib.sha256(_canonical(receipt_hashes)).hexdigest()
         timestamp = max(int(item.get("created_at", 0)) for item in receipts) // 1000
         with self.git.isolated_checkout(base_sha) as root:
+            rebased = [source for source in sources if source["prod_base"] != base_sha]
+            if rebased:
+                verifier = getattr(self.writer,"verify_rebased_sources",None)
+                if verifier is None:
+                    raise ReleaseError("projection writer cannot verify rebased sources")
+                verifier(root,rebased)
+            materialized = self.materializer.materialize(sources)
+            if not materialized.accepted_operation_ids:
+                return None
             evidence = self.writer.write(root, materialized)
             candidate_git = GitRefAdapter(root)
             candidate_sha, candidate_tree = candidate_git.commit_projected_tree(base_sha,timestamp)

@@ -201,10 +201,15 @@ test("legacy backfill is atomic, idempotent, audited, and never assigns a decisi
     core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
       `batch-${id}`,"prod-1",`dev-${id}`,"generator-v1","done",3500,3500);
   }
+  const withApplyEvidence = (item, suggestionId) => ({ ...item,
+    batch_chain:[{ batch_id:`batch-${suggestionId}`,base_sha:"prod-1",commit_sha:`dev-${suggestionId}` }],
+    suggestion_evidence:[{ suggestion_id:suggestionId,batch_id:`batch-${suggestionId}`,
+      commit_sha:`dev-${suggestionId}` }] });
   const revisions = [revision(), revision({ id:"revision-skills",source_ref:"data/copy/skills.json#lead",
     commit_sha:"dev-suggestion-2",suggestion_ids:["suggestion-2"],operations:operations.map((op) => ({
       ...op,id:`skills-${op.id}`,decision_id:`skills-${op.id}`,source_ref:"data/copy/skills.json#lead" })) })];
-  revisions[0] = revision({ commit_sha:"dev-suggestion-1" });
+  revisions[0] = withApplyEvidence(revision({ commit_sha:"dev-suggestion-1" }),"suggestion-1");
+  revisions[1] = withApplyEvidence(revisions[1],"suggestion-2");
   const payload = { migration_id:"legacy-20260810",prod_base:"prod-1",revisions };
   assert.deepEqual(core.backfillReviewRevisions(payload),
     { ok:true,migration_id:"legacy-20260810",inserted:2,replayed:0 });
@@ -227,11 +232,55 @@ test("legacy backfill rejects non-applied or mismatched evidence without partial
   core.suggest({ id:"pending-1",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
     source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old-hash",
     new_text:"New",map_version:"v1" }, {}, { directApply:false });
+  core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    "batch-pending","prod-1","dev-1","generator-v1","done",3600,3600);
   const result = core.backfillReviewRevisions({ migration_id:"bad-migration",prod_base:"prod-1",
-    revisions:[revision({ suggestion_ids:["pending-1"] })] });
+    revisions:[revision({ suggestion_ids:["pending-1"],batch_chain:[{
+      batch_id:"batch-pending",base_sha:"prod-1",commit_sha:"dev-1" }],
+      suggestion_evidence:[{ suggestion_id:"pending-1",batch_id:"batch-pending",commit_sha:"dev-1" }] })] });
   assert.equal(result.reason,"legacy_suggestion_not_applied");
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_revisions").n,0);
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,0);
+});
+
+test("legacy backfill binds cumulative same-source edits through the exact batch chain", () => {
+  const core = makeCore(() => 3800);
+  const sourceRef = "data/copy/home.json#lead";
+  for (const [id,batchId,base,commit] of [
+    ["suggestion-1","batch-1","prod-1","dev-1"],
+    ["suggestion-2","batch-2","dev-1","dev-2"],
+  ]) {
+    core.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",source_ref:sourceRef,
+      original_text:"Old",original_hash:"old-hash",new_text:"New",map_version:"v1" },{}, { directApply:true });
+    core.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id=? WHERE id=?",batchId,id);
+    core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+      batchId,base,commit,"generator-v1","done",3700,3700);
+  }
+  const migrated = revision({ commit_sha:"dev-2",suggestion_ids:["suggestion-1","suggestion-2"],
+    batch_chain:[
+      { batch_id:"batch-1",base_sha:"prod-1",commit_sha:"dev-1" },
+      { batch_id:"batch-2",base_sha:"dev-1",commit_sha:"dev-2" },
+    ],suggestion_evidence:[
+      { suggestion_id:"suggestion-1",batch_id:"batch-1",commit_sha:"dev-1" },
+      { suggestion_id:"suggestion-2",batch_id:"batch-2",commit_sha:"dev-2" },
+    ] });
+
+  assert.equal(core.backfillReviewRevisions({ migration_id:"cumulative",prod_base:"prod-1",
+    revisions:[migrated] }).ok,true);
+  const second = makeCore(() => 3800);
+  for (const [id,batchId,base,commit] of [
+    ["suggestion-1","batch-1","prod-1","dev-1"],
+    ["suggestion-2","batch-2","dev-1","dev-2"],
+  ]) {
+    second.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",source_ref:sourceRef,
+      original_text:"Old",original_hash:"old-hash",new_text:"New",map_version:"v1" },{}, { directApply:true });
+    second.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id=? WHERE id=?",batchId,id);
+    second.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+      batchId,base,commit,"generator-v1","done",3700,3700);
+  }
+  assert.equal(second.backfillReviewRevisions({ migration_id:"omitted",prod_base:"prod-1",
+    revisions:[{ ...migrated,suggestion_ids:["suggestion-2"],suggestion_evidence:[migrated.suggestion_evidence[1]] }] }).reason,
+    "missing_revision_evidence");
 });
 
 test("legacy backfill endpoint is bearer-only and never grants browser migration authority", async () => {
@@ -290,6 +339,8 @@ test("Publisher review endpoints require a current human Access Publisher and CS
     submission),env,publisher())).status,201);
   assert.equal((await publisherReviewSubmitEndpoint(request("/edit/v1/publisher/review/submit", "POST",
     submission),env,publisher())).status,200);
+  assert.equal((await publisherReviewSubmitEndpoint(request("/edit/v1/publisher/review/submit", "POST",
+    { ...submission,id:"review-http-2",idempotency_key:"review-http-key-2" }),env,publisher())).status,409);
   assert.equal((await publisherReviewDraftEndpoint(new Request("https://edit.example.com/edit/v1/publisher/review/draft",
     { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(draft) }),
     env, publisher())).status, 403);

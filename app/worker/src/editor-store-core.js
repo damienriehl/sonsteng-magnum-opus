@@ -950,7 +950,7 @@ export class EditorStoreCore {
       if (source.stale) return { ok:false,reason:"stale_review" };
       const decisions = new Map((source.decisions || []).map((item) => [item.operation_id,item]));
       for (const operation of source.operations || []) {
-        const decision = decisions.get(operation.id);
+        const decision = decisions.get(operation.decision_id || operation.id);
         if (decision?.decision === "accepted") {
           if (!this._one("SELECT operation_id FROM production_published_operations WHERE operation_id=?",operation.id))
             members.push({ operation_id:operation.id,review_revision_id:source.review_revision_id,
@@ -1254,14 +1254,52 @@ export class EditorStoreCore {
         if (revision?.prod_base !== input.prod_base) throw { backfillFailure:"prod_base_mismatch" };
         if (!Array.isArray(revision.suggestion_ids) || revision.suggestion_ids.length === 0)
           throw { backfillFailure:"missing_revision_evidence" };
+        if (!Array.isArray(revision.batch_chain) || revision.batch_chain.length === 0 ||
+            !Array.isArray(revision.suggestion_evidence) ||
+            revision.suggestion_evidence.length !== revision.suggestion_ids.length)
+          throw { backfillFailure:"missing_apply_evidence" };
+        let expectedBase = input.prod_base;
+        const batches = new Map();
+        for (const item of revision.batch_chain) {
+          if (!item || typeof item.batch_id !== "string" || !item.batch_id ||
+              item.base_sha !== expectedBase || typeof item.commit_sha !== "string" || !item.commit_sha ||
+              batches.has(item.batch_id)) throw { backfillFailure:"legacy_batch_chain_mismatch" };
+          const batch = this._one("SELECT base_sha,commit_sha,phase FROM apply_batches WHERE batch_id=?",item.batch_id);
+          if (!batch || batch.phase !== "done" || batch.base_sha !== item.base_sha ||
+              batch.commit_sha !== item.commit_sha) throw { backfillFailure:"legacy_batch_chain_mismatch" };
+          batches.set(item.batch_id,item.commit_sha);
+          expectedBase = item.commit_sha;
+        }
+        if (expectedBase !== revision.commit_sha) throw { backfillFailure:"legacy_commit_mismatch" };
+        const evidenceById = new Map();
+        for (const item of revision.suggestion_evidence) {
+          if (!item || typeof item.suggestion_id !== "string" || !item.suggestion_id ||
+              typeof item.batch_id !== "string" || !item.batch_id ||
+              typeof item.commit_sha !== "string" || !item.commit_sha || evidenceById.has(item.suggestion_id))
+            throw { backfillFailure:"missing_apply_evidence" };
+          evidenceById.set(item.suggestion_id,item);
+        }
+        if (evidenceById.size !== new Set(revision.suggestion_ids).size)
+          throw { backfillFailure:"missing_apply_evidence" };
         for (const suggestionId of revision.suggestion_ids) {
+          const item = evidenceById.get(suggestionId);
+          if (!item || batches.get(item.batch_id) !== item.commit_sha)
+            throw { backfillFailure:"legacy_commit_mismatch" };
           const row = this._one("SELECT source_ref,status,apply_batch_id FROM suggestions WHERE id=?",suggestionId);
           if (!row || row.status !== STATUS.APPLIED) throw { backfillFailure:"legacy_suggestion_not_applied" };
           if (row.source_ref !== revision.source_ref) throw { backfillFailure:"legacy_source_mismatch" };
-          const batch = this._one("SELECT commit_sha,phase FROM apply_batches WHERE batch_id=?",row.apply_batch_id);
-          if (!batch || batch.phase !== "done" || batch.commit_sha !== revision.commit_sha)
+          if (row.apply_batch_id !== item.batch_id)
             throw { backfillFailure:"legacy_commit_mismatch" };
         }
+        const authoritativeIds = [];
+        for (const batchId of batches.keys()) {
+          authoritativeIds.push(...this._all(
+            "SELECT id FROM suggestions WHERE source_ref=? AND apply_batch_id=? AND status=? ORDER BY id",
+            revision.source_ref,batchId,STATUS.APPLIED).map((row) => row.id));
+        }
+        if (this._canonical([...new Set(authoritativeIds)].sort()) !==
+            this._canonical([...new Set(revision.suggestion_ids)].sort()))
+          throw { backfillFailure:"missing_revision_evidence" };
         const recorded = this.recordReviewRevision(revision);
         if (!recorded.ok) throw { backfillFailure:recorded.reason };
       }
@@ -1353,12 +1391,10 @@ export class EditorStoreCore {
   }
 
   getPublisherReview(actor) {
-    const allRows = this._all("SELECT id,source_ref FROM production_review_revisions ORDER BY created_at DESC,id DESC");
-    const seenSources = new Set();
-    const revisionRows = allRows.filter((row) => {
-      if (seenSources.has(row.source_ref)) return false;
-      seenSources.add(row.source_ref); return true;
-    });
+    const revisionRows = this._all(`SELECT id,source_ref FROM (
+      SELECT id,source_ref,ROW_NUMBER() OVER
+        (PARTITION BY source_ref ORDER BY created_at DESC,id DESC) AS row_num
+      FROM production_review_revisions) WHERE row_num=1 ORDER BY source_ref`);
     if (!revisionRows.length) return { blocked_reason:"missing_revision_evidence",revisions:[],revision:null,draft:null,
       submitted_review:null,counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0 } };
     const revisions = revisionRows.map((revisionRow) => {
@@ -1403,20 +1439,64 @@ export class EditorStoreCore {
     if (!Array.isArray(sourceRefs)) return [];
     const refs = [...new Set(sourceRefs.filter((ref) => typeof ref === "string" && ref))].slice(0, 1000);
     const out = [];
-    for (const sourceRef of refs) {
-      const current = this._one("SELECT id,proposed_hash FROM production_review_revisions WHERE source_ref=? ORDER BY created_at DESC,id DESC LIMIT 1", sourceRef);
-      if (!current) continue;
-      const reviewed = this._one("SELECT r.id,r.source_revision,r.proposed_hash,r.operations_json,s.id AS review_id,s.actor,s.created_at FROM production_review_revisions r JOIN production_review_submission_sources x ON x.review_revision_id=r.id JOIN production_review_submissions s ON s.id=x.review_id WHERE r.source_ref=? ORDER BY s.created_at DESC,s.id DESC LIMIT 1", sourceRef) ||
-        this._one("SELECT r.id,r.source_revision,r.proposed_hash,r.operations_json,s.id AS review_id,s.actor,s.created_at FROM production_review_revisions r JOIN production_reviews s ON s.review_revision_id=r.id WHERE r.source_ref=? ORDER BY s.created_at DESC,s.id DESC LIMIT 1", sourceRef);
-      if (!reviewed) continue;
-      const staleReason = this._reviewStaleReason(this._reviewRevision(reviewed.id));
-      let decisions = this._all("SELECT operation_id,decision,note FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id", reviewed.review_id, reviewed.id);
-      if (!decisions.length) decisions = this._all("SELECT operation_id,decision,note FROM production_review_decisions WHERE review_id=? ORDER BY operation_id", reviewed.review_id);
-      out.push({ source_ref:sourceRef,review_revision_id:reviewed.id,
-        source_revision:reviewed.source_revision,proposed_hash:reviewed.proposed_hash,
-        current_proposed_hash:current.proposed_hash,reviewer:reviewed.actor,
-        submitted_at:reviewed.created_at,stale:!!staleReason,stale_reason:staleReason,
-        operations:JSON.parse(reviewed.operations_json),decisions });
+    const legacyProd = this._one("SELECT candidate_sha FROM production_releases WHERE state IN ('verified','complete') AND COALESCE(schema_version,1)=1 ORDER BY updated_at DESC,id DESC LIMIT 1");
+    for (let offset = 0; offset < refs.length; offset += 400) {
+      const chunk = refs.slice(offset,offset + 400), marks = chunk.map(() => "?").join(",");
+      const currentBySource = new Map(this._all(`SELECT id,source_ref,proposed_hash FROM (
+        SELECT id,source_ref,proposed_hash,ROW_NUMBER() OVER (PARTITION BY source_ref ORDER BY created_at DESC,id DESC) AS row_num
+        FROM production_review_revisions WHERE source_ref IN (${marks}))
+        WHERE row_num=1`,...chunk).map((row) => [row.source_ref,row]));
+      const submitted = this._all(`SELECT * FROM (
+        SELECT r.id,r.source_ref,r.source_revision,r.prod_base,r.proposed_hash,r.operations_json,
+          s.id AS review_id,s.actor,s.created_at,
+          ROW_NUMBER() OVER (PARTITION BY r.source_ref ORDER BY s.created_at DESC,s.id DESC) AS row_num
+        FROM production_review_revisions r
+        JOIN production_review_submission_sources x ON x.review_revision_id=r.id
+        JOIN production_review_submissions s ON s.id=x.review_id
+        WHERE r.source_ref IN (${marks})) WHERE row_num=1`,...chunk);
+      const legacy = this._all(`SELECT * FROM (
+        SELECT r.id,r.source_ref,r.source_revision,r.prod_base,r.proposed_hash,r.operations_json,
+          s.id AS review_id,s.actor,s.created_at,
+          ROW_NUMBER() OVER (PARTITION BY r.source_ref ORDER BY s.created_at DESC,s.id DESC) AS row_num
+        FROM production_review_revisions r JOIN production_reviews s ON s.review_revision_id=r.id
+        WHERE r.source_ref IN (${marks})) WHERE row_num=1`,...chunk);
+      const reviewedBySource = new Map();
+      for (const reviewed of [...submitted,...legacy]) {
+        const prior = reviewedBySource.get(reviewed.source_ref);
+        if (!prior || reviewed.created_at > prior.created_at ||
+            (reviewed.created_at === prior.created_at && reviewed.review_id > prior.review_id))
+          reviewedBySource.set(reviewed.source_ref,reviewed);
+      }
+      const reviewIds = [...new Set([...reviewedBySource.values()].map((row) => row.review_id))];
+      const decisionMarks = reviewIds.map(() => "?").join(",");
+      const submittedDecisions = reviewIds.length ? this._all(
+        `SELECT review_id,review_revision_id,operation_id,decision,note FROM production_review_submission_decisions WHERE review_id IN (${decisionMarks}) ORDER BY operation_id`,...reviewIds) : [];
+      const legacyDecisions = reviewIds.length ? this._all(
+        `SELECT review_id,operation_id,decision,note FROM production_review_decisions WHERE review_id IN (${decisionMarks}) ORDER BY operation_id`,...reviewIds) : [];
+      const decisionsByReview = new Map();
+      for (const item of [...submittedDecisions,...legacyDecisions]) {
+        const key = `${item.review_id}\0${item.review_revision_id || ""}`;
+        if (!decisionsByReview.has(key)) decisionsByReview.set(key,[]);
+        decisionsByReview.get(key).push({ operation_id:item.operation_id,decision:item.decision,note:item.note });
+      }
+      const publishedBySource = new Map(this._all(`SELECT source_ref,candidate_sha FROM (
+        SELECT source_ref,candidate_sha,ROW_NUMBER() OVER (PARTITION BY source_ref ORDER BY published_at DESC,operation_id DESC) AS row_num
+        FROM production_published_operations WHERE source_ref IN (${marks}))
+        WHERE row_num=1`,...chunk).map((row) => [row.source_ref,row]));
+      for (const sourceRef of chunk) {
+        const current = currentBySource.get(sourceRef),reviewed = reviewedBySource.get(sourceRef);
+        if (!current || !reviewed) continue;
+        const sourceProd = publishedBySource.get(sourceRef);
+        const staleReason = current.id !== reviewed.id ? "stale_revision" :
+          sourceProd && sourceProd.candidate_sha !== reviewed.prod_base ? "stale_prod_base" :
+          !sourceProd && legacyProd && legacyProd.candidate_sha !== reviewed.prod_base ? "stale_prod_base" : null;
+        const decisions = decisionsByReview.get(`${reviewed.review_id}\0${submitted.includes(reviewed) ? reviewed.id : ""}`) || [];
+        out.push({ source_ref:sourceRef,review_revision_id:reviewed.id,
+          source_revision:reviewed.source_revision,proposed_hash:reviewed.proposed_hash,
+          current_proposed_hash:current.proposed_hash,reviewer:reviewed.actor,
+          submitted_at:reviewed.created_at,stale:!!staleReason,stale_reason:staleReason,
+          operations:JSON.parse(reviewed.operations_json),decisions });
+      }
     }
     return out;
   }
@@ -1575,33 +1655,52 @@ export class EditorStoreCore {
         batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
         "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
         .map((row) => row.id)] }));
-    const submittedRows = this._all(
-      "SELECT s.id,s.actor,s.created_at,s.receipt_hash,x.review_revision_id FROM production_review_submissions s JOIN production_review_submission_sources x ON x.review_id=s.id ORDER BY s.created_at DESC,s.id DESC,x.review_revision_id");
-    const seenSources = new Set();
+    const submittedRows = this._all(`SELECT * FROM (
+      SELECT s.id,s.actor,s.created_at,s.receipt_hash,r.id AS review_revision_id,
+        r.source_ref,r.source_revision,r.prod_base,r.original_hash,r.proposed_hash,
+        r.original_text,r.source_original_text,r.operations_json,
+        ROW_NUMBER() OVER (PARTITION BY r.source_ref ORDER BY s.created_at DESC,s.id DESC) AS row_num
+      FROM production_review_submissions s
+      JOIN production_review_submission_sources x ON x.review_id=s.id
+      JOIN production_review_revisions r ON r.id=x.review_revision_id)
+      WHERE row_num=1 ORDER BY source_ref`);
+    const decisionRows = submittedRows.length ? this._all(
+      `SELECT review_id,review_revision_id,operation_id,decision,note,group_id
+       FROM production_review_submission_decisions
+       WHERE review_id IN (${submittedRows.map(() => "?").join(",")}) ORDER BY operation_id`,
+      ...submittedRows.map((row) => row.id)) : [];
+    const decisionsBySource = new Map();
+    for (const decision of decisionRows) {
+      const key = `${decision.review_id}\0${decision.review_revision_id}`;
+      if (!decisionsBySource.has(key)) decisionsBySource.set(key,[]);
+      decisionsBySource.get(key).push({ operation_id:decision.operation_id,decision:decision.decision,
+        note:decision.note,group_id:decision.group_id });
+    }
     const projectionSources = [];
-    const receiptIds = new Set();
+    const publishedOperations = new Set(this._all(
+      "SELECT operation_id FROM production_published_operations").map((row) => row.operation_id));
+    const receiptById = new Map();
     for (const row of submittedRows) {
       const revision = this._reviewRevision(row.review_revision_id);
-      if (!revision || seenSources.has(revision.source_ref)) continue;
-      seenSources.add(revision.source_ref);
-      receiptIds.add(row.id);
-      projectionSources.push({ review_id:row.id,review_revision_id:revision.id,
-        source_ref:revision.source_ref,source_revision:revision.source_revision,
-        prod_base:revision.prod_base,original_hash:revision.original_hash,
-        proposed_hash:revision.proposed_hash,original_text:revision.original_text,
-        source_original_text:revision.source_original_text || revision.original_text,
-        operations:revision.operations,stale:!!this._reviewStaleReason(revision),
-        decisions:this._all("SELECT operation_id,decision,note,group_id FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id",
-          row.id,revision.id) });
+      const operations = JSON.parse(row.operations_json);
+      const decisions = decisionsBySource.get(`${row.id}\0${row.review_revision_id}`) || [];
+      const decisionById = new Map(decisions.map((item) => [item.operation_id,item.decision]));
+      const hasUnpublishedAccepted = operations.some((operation) =>
+        decisionById.get(operation.decision_id || operation.id) === "accepted" &&
+        !publishedOperations.has(operation.id));
+      if (!hasUnpublishedAccepted) continue;
+      receiptById.set(row.id,{ id:row.id,actor:row.actor,created_at:row.created_at,
+        receipt_hash:row.receipt_hash });
+      projectionSources.push({ review_id:row.id,review_revision_id:row.review_revision_id,
+        source_ref:row.source_ref,source_revision:row.source_revision,
+        prod_base:row.prod_base,original_hash:row.original_hash,
+        proposed_hash:row.proposed_hash,original_text:row.original_text,
+        source_original_text:row.source_original_text || row.original_text,
+        operations,stale:!!this._reviewStaleReason(revision),decisions });
     }
-    projectionSources.sort((a,b) => a.source_ref.localeCompare(b.source_ref));
-    const reviewReceipts = [...receiptIds].map((id) => {
-      const row = this._one("SELECT id,actor,created_at,receipt_hash FROM production_review_submissions WHERE id=?",id);
-      return { id:row.id,actor:row.actor,created_at:row.created_at,receipt_hash:row.receipt_hash };
-    }).sort((a,b) => a.created_at-b.created_at || a.id.localeCompare(b.id));
-    const bases = new Set(projectionSources.map((source) => source.prod_base));
+    const reviewReceipts = [...receiptById.values()]
+      .sort((a,b) => a.created_at-b.created_at || a.id.localeCompare(b.id));
     const projection = { review_receipts:reviewReceipts,sources:projectionSources };
-    if (bases.size > 1) projection.blocked_reason = "mixed_prod_bases";
     return { active_release:null, base_sha:frontier?.candidate_sha || null, batches, projection };
   }
 

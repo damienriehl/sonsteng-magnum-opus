@@ -63,6 +63,68 @@ def test_accepted_only_materializer_projects_atoms_and_records_held_canaries():
     assert "op-comma" not in materialized.accepted_operation_ids
 
 
+@pytest.mark.parametrize(("kind", "original", "old_text", "new_text", "base_range", "expected"), [
+    ("replace", "old word", "old", "new", [0, 3], "new word"),
+    ("insert", "word", "", "new ", [0, 0], "new word"),
+    ("delete", "extra word", "extra ", "", [0, 6], "word"),
+])
+def test_accepted_only_materializer_treats_atomic_prose_kinds_as_text(
+        kind, original, old_text, new_text, base_range, expected):
+    source = projection_source(original_text=original)
+    source["operations"] = [{
+        "id":"atomic", "decision_id":"atomic", "kind":kind,
+        "source_ref":source["source_ref"], "old_text":old_text,
+        "new_text":new_text, "base_range":base_range, "created_at":1,
+        "context_before":[], "context_after":[original] if kind == "insert" else [],
+    }]
+    source["decisions"] = [{"operation_id":"atomic", "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.patches[0].new_text == expected
+    assert result.structural_operations == ()
+
+
+def test_accepted_only_materializer_preserves_review_revision_operation_order():
+    source = projection_source(original_text="alpha beta")
+    source["operations"] = [
+        {"id":"z-first", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"alpha", "new_text":"one", "base_range":[0,5], "created_at":2},
+        {"id":"a-second", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"beta", "new_text":"two", "base_range":[6,10], "created_at":1},
+    ]
+    source["decisions"] = [
+        {"operation_id":"z-first", "decision":"accepted"},
+        {"operation_id":"a-second", "decision":"accepted"},
+    ]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.accepted_operation_ids == ("z-first", "a-second")
+    assert result.patches[0].new_text == "one two"
+
+
+def test_accepted_only_materializer_resolves_overlapping_contexts_before_editing():
+    source = projection_source(original_text="alpha beta gamma")
+    source["operations"] = [
+        {"id":"one", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"alpha", "new_text":"first", "base_range":[0,5], "created_at":1,
+         "context_before":[], "context_after":[" beta"]},
+        {"id":"two", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"beta", "new_text":"second", "base_range":[6,10], "created_at":2,
+         "context_before":["alpha "], "context_after":[" gamma"]},
+    ]
+    source["decisions"] = [
+        {"operation_id":"one", "decision":"accepted"},
+        {"operation_id":"two", "decision":"accepted"},
+    ]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.patches[0].new_text == "first second gamma"
+    assert result.accepted_operation_ids == ("one", "two")
+
+
 @pytest.mark.parametrize("decision,stale,reason", [
     ("rejected", False, "rejected"),
     ("questioned", False, "questioned"),
@@ -181,6 +243,67 @@ def test_projection_builder_is_deterministic_and_never_moves_or_dirties_ambient_
     candidate_copy = subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],
         cwd=repo,check=True,capture_output=True,text=True).stdout
     assert candidate_copy == "The good idea\n"  # rejected comma is a positive leak canary
+
+
+def test_projection_builder_rebases_unchanged_source_after_unrelated_release(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.name","Test"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.email","test@example.invalid"],cwd=repo,check=True)
+    (repo / "data").mkdir()
+    (repo / "data" / "copy.txt").write_text("The bad idea\n",encoding="utf-8")
+    subprocess.run(["git","add","data/copy.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","review base"],cwd=repo,check=True)
+    reviewed_base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    (repo / "unrelated.txt").write_text("released elsewhere\n",encoding="utf-8")
+    subprocess.run(["git","add","unrelated.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","unrelated release"],cwd=repo,check=True)
+    current_base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+
+    class Writer:
+        def verify_rebased_sources(self, root, sources):
+            assert pathlib.Path(root,"data","copy.txt").read_text(encoding="utf-8") == \
+                sources[0]["original_text"] + "\n"
+        def write(self, root, projection):
+            target = pathlib.Path(root,"data","copy.txt")
+            assert target.read_text(encoding="utf-8") == projection.patches[0].original_text + "\n"
+            target.write_text(projection.patches[0].new_text + "\n",encoding="utf-8")
+            return {"generator_id":"generator-v2","parity_verified":True}
+
+    source = projection_source(prod_base=reviewed_base,original_text="The bad idea")
+    context = {"base_sha":current_base,"projection":{"sources":[source],
+        "review_receipts":[{"receipt_hash":"receipt-1","created_at":120000}]}}
+    result = AcceptedProjectionCandidateBuilder(GitRefAdapter(repo),tmp_path / "manifest.json",
+        writer=Writer()).build(context)
+
+    assert result["manifest"]["base_sha"] == current_base
+    assert subprocess.run(["git","show",f"{result['candidate_sha']}:unrelated.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "released elsewhere\n"
+    assert subprocess.run(["git","show",f"{result['candidate_sha']}:data/copy.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "The good idea\n"
+
+
+@pytest.mark.parametrize("kind",["json_scalar","prose","structural_md"])
+def test_projection_writer_rejects_rebased_source_drift_before_writing(tmp_path,kind):
+    root = tmp_path / "candidate"
+    (root / "data").mkdir(parents=True)
+    target = root / "data" / "home.json"
+    target.write_text('{"lead":"newer production wording"}\n',encoding="utf-8")
+
+    class Pipeline:
+        def regenerate_map(self, _worktree):
+            return {"data/home.json#lead":{"kind":kind,"json_path":"lead",
+                "original_text":"newer production wording"}}
+
+    writer = ProjectionTreeWriter(Pipeline())
+    with pytest.raises(ReleaseError,match="reviewed source changed"):
+        writer.verify_rebased_sources(root,[projection_source(
+            source_ref="data/home.json#lead",source_original_text="The bad idea")])
+    assert json.loads(target.read_text(encoding="utf-8"))["lead"] == "newer production wording"
 
 
 def test_projection_tree_writer_uses_existing_atomic_writer_and_runs_parity(tmp_path):

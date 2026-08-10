@@ -909,7 +909,8 @@ export async function publisherReviewSubmitEndpoint(request, env, auth) {
   const result = await editorStub(env).submitPublisherReview({ ...binding,request_digest,actor:auth.editor });
   if (!result.ok) return editError(result.reason || "validation_error",
     "The review was not submitted.", ["stale_revision","stale_prod_base","revision_mismatch",
-      "draft_owned","draft_mismatch","partial_group","idempotency_conflict","review_exists"].includes(result.reason) ? 409 : 400);
+      "draft_owned","draft_mismatch","partial_group","idempotency_conflict","review_exists",
+      "review_submitted"].includes(result.reason) ? 409 : 400);
   return json(result,result.replay ? 200 : 201);
 }
 
@@ -990,8 +991,9 @@ export async function productionPrepareEndpoint(request, env, auth) {
     accepted_operation_ids:Array.isArray(body.accepted_operation_ids) ? body.accepted_operation_ids : undefined,
     held_exclusions:Array.isArray(body.held_exclusions) ? body.held_exclusions : undefined,
   } : {};
+  const requestBinding = { ...binding,...operationBinding };
   const result = await editorStub(env).prepareProductionRelease({ ...binding,
-    request_digest:await sha256Hex(JSON.stringify(binding)), actor:auth.editor || "service:release",
+    request_digest:await sha256Hex(JSON.stringify(requestBinding)), actor:auth.editor || "service:release",
     credential_channel:"bearer",target_environment:"production",ancestry_verified:body.ancestry_verified === true,
     expected_batch_ids:Array.isArray(body.expected_batch_ids) ? body.expected_batch_ids : undefined,
     expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined,

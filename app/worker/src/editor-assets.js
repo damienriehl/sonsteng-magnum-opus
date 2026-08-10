@@ -243,7 +243,9 @@ export const PUBLISHER_JS = `(() => {
   "use strict";
   const live=document.getElementById("pub-live");
   const reviewForm=document.getElementById("publisher-review-form");
-  const pendingSaves=new Map(), saveTimers=new Map(), failedSaves=new Set(), dirtyRevisions=new Set();
+  const pendingSaves=new Map(), saveTimers=new Map(), saveGenerations=new Map(), failedSaves=new Set(), dirtyRevisions=new Set();
+  function boundedFetch(url,options){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+    return fetch(url,{...options,signal:controller.signal}).finally(()=>clearTimeout(timer));}
   function sourceFor(node){return node&&node.closest(".pub-source")}
   function decisionFor(card){
     const checked=card.querySelector("input[type=radio]:checked");if(!checked)return null;
@@ -258,16 +260,19 @@ export const PUBLISHER_JS = `(() => {
     retry.hidden=state!=="failed";}
   async function save(source){
     const id=source.dataset.reviewRevision;clearTimeout(saveTimers.get(id));saveTimers.delete(id);
+    if(!saveGenerations.has(id))saveGenerations.set(id,0);
+    const generation=saveGenerations.get(id),payload=payloadFor(source),previous=pendingSaves.get(id);
     setSaveState(source,"saving");dirtyRevisions.add(id);
-    const promise=fetch("/edit/v1/publisher/review/draft",{method:"POST",credentials:"same-origin",
-      headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(payloadFor(source))});
+    const promise=(previous?previous.catch(()=>null):Promise.resolve()).then(()=>
+      boundedFetch("/edit/v1/publisher/review/draft",{method:"POST",credentials:"same-origin",
+        headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(payload)}));
     pendingSaves.set(id,promise);
     try{const response=await promise;if(!response.ok)throw new Error(String(response.status));
-      if(pendingSaves.get(id)===promise){failedSaves.delete(id);dirtyRevisions.delete(id);setSaveState(source,"saved");}return true;
-    }catch{if(pendingSaves.get(id)===promise){failedSaves.add(id);setSaveState(source,"failed");}return false}
+      if(pendingSaves.get(id)===promise&&saveGenerations.get(id)===generation){failedSaves.delete(id);dirtyRevisions.delete(id);setSaveState(source,"saved");}return true;
+    }catch{if(pendingSaves.get(id)===promise&&saveGenerations.get(id)===generation){failedSaves.add(id);setSaveState(source,"failed");}return false}
     finally{if(pendingSaves.get(id)===promise)pendingSaves.delete(id)}
   }
-  function schedule(source){const id=source.dataset.reviewRevision;dirtyRevisions.add(id);setSaveState(source,"saving");
+  function schedule(source){const id=source.dataset.reviewRevision;saveGenerations.set(id,(saveGenerations.get(id)||0)+1);dirtyRevisions.add(id);setSaveState(source,"saving");
     clearTimeout(saveTimers.get(id));saveTimers.set(id,setTimeout(()=>save(source),450));}
   function syncNotes(card){const value=card.querySelector("input[type=radio]:checked")?.value;
     for(const note of card.querySelectorAll(".pub-note"))note.hidden=note.querySelector("textarea").dataset.noteFor!==value;
@@ -286,8 +291,9 @@ export const PUBLISHER_JS = `(() => {
     for(const card of cards){const decision=decisionFor(card);const state=card.dataset.reviewStatus==="stale"?"stale":decision?.decision||"unreviewed";card.dataset.reviewStatus=state;
       card.querySelector(".pub-change-status").textContent=state.replace(/^./,c=>c.toUpperCase());if(state in values)values[state]+=1;if(decision)values.reviewed+=1;}
     for(const button of document.querySelectorAll("[data-filter]")){const count=button.querySelector("span");if(count)count.textContent=String(values[button.dataset.filter]||0)}}
-  async function flush(){for(const source of reviewForm.querySelectorAll(".pub-source")){
-    if(!source.querySelector(".pub-submitted"))await save(source);}
+  async function flush(){const sources=Array.from(reviewForm.querySelectorAll(".pub-source"))
+    .filter(source=>!source.querySelector(".pub-submitted"));
+    await Promise.all(sources.map(source=>save(source)));
     await Promise.all(Array.from(pendingSaves.values()));return failedSaves.size===0;}
   async function digest(value){const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));
     return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("")}
@@ -302,7 +308,7 @@ export const PUBLISHER_JS = `(() => {
       if(!await flush()){live.textContent="Couldn’t save every draft. Retry save before submitting.";submit.disabled=false;submit.ariaBusy="false";live.focus();return}
       try{const sources=Array.from(reviewForm.querySelectorAll(".pub-source")).filter(source=>!source.querySelector(".pub-submitted")).map(payloadFor);
         const body={sources},hash=await digest(JSON.stringify({sources}));body.id="review-"+hash;body.idempotency_key="review-submit-"+hash;
-        const response=await fetch("/edit/v1/publisher/review/submit",{method:"POST",credentials:"same-origin",
+        const response=await boundedFetch("/edit/v1/publisher/review/submit",{method:"POST",credentials:"same-origin",
           headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});if(!response.ok)throw new Error(String(response.status));
         live.textContent="Review submitted. Accepted changes are eligible for a separate production preview; production is not authorized.";location.reload();
       }catch{live.textContent="Review submission failed. Your saved drafts remain available; correct any marked problem and try again.";submit.disabled=false;live.focus()}
@@ -331,7 +337,7 @@ export const PUBLISHER_JS = `(() => {
     pending=true;button.disabled=true; button.ariaBusy="true"; live.textContent="Authorizing the exact prepared release…";
     try{
       const body={...binding,idempotency_key:await authorizationKey()};
-      const response=await fetch("/edit/v1/prod/releases/authorize",{method:"POST",credentials:"same-origin",
+      const response=await boundedFetch("/edit/v1/prod/releases/authorize",{method:"POST",credentials:"same-origin",
         headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});
       let result={};try{result=await response.json()}catch{}
       if(response.ok){live.textContent=result.replay?"This exact release was already authorized.":"Release authorized. Automation may now publish only this frozen batch.";button.textContent="Authorized";confirm.disabled=true;}

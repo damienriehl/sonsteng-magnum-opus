@@ -115,4 +115,21 @@ test("pathological input fails closed before unbounded work", async () => {
     () => atomicProseDiff("a", "x".repeat(40_000), meta),
     { name: "RangeError", message: /maximum supported length/ },
   );
+  await assert.rejects(
+    () => atomicProseDiff("a", "x ".repeat(1_025), meta),
+    { name: "RangeError", message: /maximum supported token count/ },
+  );
+});
+
+test("oversized LCS matrices fall back to one deterministic bounded replacement", async () => {
+  const oldText = Array.from({ length: 500 }, (_, index) => `old${index}`).join(" ");
+  const newText = Array.from({ length: 500 }, (_, index) => `new${index}`).join(" ");
+
+  const first = await atomicProseDiff(oldText,newText,meta);
+  const second = await atomicProseDiff(oldText,newText,meta);
+
+  assert.equal(first.operations.length,1);
+  assert.deepEqual(first.operations.map((operation) => [operation.kind,operation.old_text,operation.new_text]),
+    [["replace",oldText,newText]]);
+  assert.equal(JSON.stringify(first),JSON.stringify(second));
 });

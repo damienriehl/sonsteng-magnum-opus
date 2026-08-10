@@ -258,7 +258,10 @@ test("review assets autosave truthfully, block unsafe submit, retain drafts, and
 
 test("one Submit review action sends one multi-source request", () => {
   assert.match(PUBLISHER_JS,/const body=\{sources\}/);
-  assert.equal((PUBLISHER_JS.match(/fetch\("\/edit\/v1\/publisher\/review\/submit"/g)||[]).length,1);
+  assert.equal((PUBLISHER_JS.match(/boundedFetch\("\/edit\/v1\/publisher\/review\/submit"/g)||[]).length,1);
+  assert.match(PUBLISHER_JS,/AbortController\(\)/);
+  assert.match(PUBLISHER_JS,/setTimeout\(\(\)=>controller\.abort\(\),20000\)/);
+  assert.equal((PUBLISHER_JS.match(/boundedFetch\("\/edit\/v1\//g)||[]).length,3);
   assert.doesNotMatch(PUBLISHER_JS,/for\(const source[^}]+review\/submit/s);
 });
 

@@ -6,6 +6,9 @@
 // as one replacement. The JS implementation is deliberately bounded and uses
 // structured segments so callers never need to trust diff text as HTML.
 
+import { escapeHtml } from "./editor-map.js";
+import { sha256Hex } from "./text-norm.js";
+
 const MAX_TEXT_LENGTH = 32_768;
 const MAX_TOKENS = 1_024;
 const MAX_MATRIX_CELLS = 250_000;
@@ -93,9 +96,7 @@ function canonicalJson(value) {
 }
 
 async function sha256Id(prefix, value) {
-  const bytes = new TextEncoder().encode(canonicalJson(value));
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `${prefix}_${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  return `${prefix}_${await sha256Hex(canonicalJson(value))}`;
 }
 
 function validateInputs(oldText, newText, metadata) {
@@ -265,12 +266,6 @@ export async function atomicProseDiff(oldText, newText, metadata, options = {}) 
   });
   return { version: 1, source_ref: metadata.source_ref, source_revision: metadata.source_revision,
     prod_base: metadata.prod_base, operations, segments };
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#x27;",
-  })[character]);
 }
 
 // This helper returns only engine-owned semantic markup. Every prose byte is

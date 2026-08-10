@@ -103,8 +103,11 @@ Applied DEV suggestions created before granular review have no release authority
 The trusted apply/migration bearer may submit a named, immutable bulk backfill to
 `POST /edit/v1/publisher/review/backfill`. Each per-source cumulative revision
 must bind the verified PROD base, applied suggestion IDs, their completed apply
-commit, source hashes, and deterministic atomic operations. The store validates
-the entire payload transactionally, writes an audit receipt, and treats an exact
+batch/commit evidence, the complete ordered apply-batch base-to-commit chain,
+source hashes, and deterministic atomic operations. The store validates that
+the chain ends at the revision and includes every applied suggestion for that
+source in its named batches, validates the entire payload transactionally,
+writes an audit receipt, and treats an exact
 retry as an idempotent replay. Any pending row, mismatched source/commit/base, or
 changed retry rolls back or fails closed. Backfill creates no draft, decision,
 review receipt, release member, or implicit acceptance: every operation appears
