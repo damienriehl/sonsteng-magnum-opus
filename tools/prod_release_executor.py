@@ -387,6 +387,9 @@ class LedgerHTTP:
     """Concrete release-service adapter; authorization is intentionally absent."""
 
     def __init__(self, base_url, bearer, opener=urllib.request.urlopen):
+        parsed = urllib.parse.urlsplit(base_url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ReleaseError("release ledger requires HTTPS")
         self.base_url, self._bearer, self._opener = base_url.rstrip("/"), bearer, opener
 
     def _request(self, path, body=None):
@@ -405,8 +408,9 @@ class LedgerHTTP:
     def preparation_context(self):
         return self._request("/edit/v1/prod/releases/frontier")["context"]
 
-    def claim_authorized(self):
-        result = self._request("/edit/v1/prod/releases/claim", {})
+    def claim_authorized(self, release_id=None):
+        result = self._request("/edit/v1/prod/releases/claim",
+                               {"id": release_id} if release_id else {})
         return FrozenRelease.from_ledger(result["release"]) if result.get("release") else None
 
     def claim_restore(self, release_id):
@@ -763,6 +767,9 @@ class WranglerPagesAdapter:
     def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
                  production_branch="main",
                  run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
+        parsed = urllib.parse.urlsplit(provenance_url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ReleaseError("Pages provenance requires HTTPS")
         self.project, self.artifact_dir = project, artifact_dir
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
         self.production_branch = production_branch
@@ -820,6 +827,9 @@ class WranglerWorkerAdapter:
 
     def __init__(self, config, provenance_url, candidate_root=None, run=subprocess.run,
                  opener=urllib.request.urlopen, timeout=240):
+        parsed = urllib.parse.urlsplit(provenance_url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ReleaseError("Worker provenance requires HTTPS")
         self.config, self.provenance_url = config, provenance_url
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(config).parents[2]).resolve()
         self._run, self._opener, self.timeout = run, opener, timeout

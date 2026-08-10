@@ -816,9 +816,17 @@ test("trusted release service alone can prepare, claim, and transition", async (
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
+  assert.equal((await productionPrepareEndpoint(req(
+    "/edit/v1/prod/releases/prepare",binding),env,humanAdmin)).status,403);
+  assert.equal((await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,humanAdmin)).status,403);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
   assert.equal((await productionRestoreClaimEndpoint(req(
     "/edit/v1/prod/releases/restore-claim",{ id:"release-1" }),env,humanAdmin)).status,403);
+  assert.equal((await productionRenewEndpoint(req("/edit/v1/prod/releases/renew",
+    { id:"release-1",fencing_token:"fence" }),env,humanAdmin)).status,403);
+  assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
+    { id:"release-1",state:"verified",fencing_token:"fence" }),env,humanAdmin)).status,403);
   const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),

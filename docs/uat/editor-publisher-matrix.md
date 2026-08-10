@@ -1,5 +1,10 @@
 # Real-browser Editor and Publisher UAT matrix
 
+All browser checks run headless or on an isolated display. They never fall back to a foreground
+browser. Before backfill, record the editing Worker's prior version, prove old-version reads of the
+migrated store, activate/read back the old and new versions, and smoke the Publisher/status API while
+the release executor remains config-off. A failed rollback proof blocks backfill.
+
 Run this matrix on the real box with trusted browser exit codes. Use disposable, non-sensitive
 wording. Record release IDs, hashes, timestamps, and screenshots only; never tokens or edited
 content in operational logs. Repository tests and a mocked browser are preparation, not a pass.

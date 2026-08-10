@@ -99,6 +99,47 @@ Only after those gates may an operator set the flag to true and explicitly enabl
 config flip is operational authority, so it must be attributed in the release evidence. Do not use
 the legacy deploy script as a canary.
 
+### Editing Worker migration and rollback gate
+
+Before deploying the editing Worker migration, record its prior editing Worker version ID, the
+deployed source SHA, and a redacted live provenance response. Prove the new schema is compatible
+with that version before changing code: the old Worker can read the migrated Durable Object state,
+its read-only Publisher/status projections remain valid, and it does not interpret new rows as
+publication authority. Then activate the prior version, read back its exact version and provenance,
+run a config-off status smoke, reactivate the new version, and read that identity back too.
+
+This is a hard rollback gate. If the old Worker cannot read the migrated Durable Object state, stop
+before legacy backfill. Do not treat a successful forward migration as rollback proof, and do not
+backfill review revisions until the exact prior-version activation/readback and config-off smoke are
+recorded. Rolling back the editing Worker never changes the production Pages/Worker pair.
+
+### Routine activation ordering
+
+Routine activation is fail closed and ordered. First stop and disable the timer, prove no release
+service process is running and no live lease is owned, and retain `SONSTENG_PROD_RELEASE_ENABLED=false`.
+While stopped, set the intended non-secret configuration, compute and record its
+first-tick configuration digest, set `SONSTENG_PROD_EXPECTED_CONFIG_DIGEST`, then set the enabled flag and read
+both values back without printing credentials. Record the operator, time, reason, exact code SHA,
+configuration digest, and timer intent. Only then enable the timer and read back its enabled state.
+Compute the value with `python3 tools/print_prod_release_config_digest.py --env-file <protected-env-file>`;
+the parser allowlists non-secret release controls and neither evaluates nor hashes credential fields.
+
+The first tick recomputes the non-secret configuration digest before importing the executor, parsing
+arguments, reading credentials, opening the ledger, inspecting git, or contacting a provider. A
+mismatch stops the tick. If any stop/process/lease, environment readback, timer readback, or first-tick
+check fails, compensate by stopping and disabling the timer, restoring
+`SONSTENG_PROD_RELEASE_ENABLED=false`, reading both states back, and recording the failed intent.
+
+### Supervised one-shot canary
+
+The first publication uses a process-scoped one-shot canary, not routine enablement. The timer remains stopped and disabled,
+and the persisted environment remains config-off. In one supervised process,
+override `SONSTENG_PROD_RELEASE_ENABLED=true`, set `SONSTENG_PROD_RELEASE_MODE=canary`, bind
+`SONSTENG_PROD_CANARY_RELEASE_ID` to exactly one already human-authorized release, and bind the matching
+configuration digest. Canary mode never prepares a frontier and claims only that exact release. Return
+the process environment to config-off before the recovery drill. Routine timer activation is a later,
+separately attributed event after the canary and exact-pair recovery evidence pass.
+
 ## Credentials, rotation, and emergency revocation
 
 Use distinct environment-scoped principals:
@@ -111,10 +152,22 @@ Use distinct environment-scoped principals:
   named production Worker version only. It must have no DNS, Access-policy, account-admin, or DEV
   mutation rights.
 
+Every machine endpoint is TLS-only. The PROD release bearer has independent production scope and is
+not a renamed or shared DEV/admin credential. Human Access sessions require Publisher scope plus the
+existing same-origin/CSRF marker for every review submission and authorization mutation; the service
+bearer cannot submit or authorize. Conversely, Access sessions cannot prepare, claim, renew,
+transition, fence, restore, or bootstrap. Bootstrap is a separate local-operator authority and accepts
+neither the browser session nor the release-service bearer.
+
 Secrets live only in 0600 environment files or the provider's secret store. **Never copy credentials**
 into source, manifests, command arguments, journals, receipts, notifications, screenshots, or UAT
 notes. Evidence records opaque provider IDs and hashes only. Do not inspect or print secret values
 while verifying configuration.
+
+Never pass secrets in CLI arguments. They must not appear in the ledger, configuration digest,
+manifest, journal, receipt, logs, process listing, exception text, or provider-output capture. Canary
+tests use a sentinel secret and fail if it reaches any of those seams. Redact authorization headers and
+discard provider stdout/stderr before recording bounded error categories.
 
 For routine rotation: create the replacement with equal or narrower scope, inject it out of band,
 run a non-publishing authentication/status canary, switch the service environment, verify the old

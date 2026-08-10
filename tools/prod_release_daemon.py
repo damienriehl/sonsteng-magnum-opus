@@ -9,9 +9,34 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 import pathlib
+
+
+# Non-secret inputs whose exact values define one executable release tick.  The
+# bearer and provider credentials are deliberately absent: their values must
+# never be copied into an activation receipt or configuration digest.
+CONFIG_DIGEST_KEYS = (
+    "SONSTENG_PROD_RELEASE_MODE", "SONSTENG_PROD_CANARY_RELEASE_ID",
+    "SONSTENG_PROD_LEDGER_URL", "SONSTENG_PROD_PAGES_PROJECT",
+    "SONSTENG_PROD_PAGES_BRANCH", "SONSTENG_PROD_PAGES_ARTIFACT",
+    "SONSTENG_PROD_PAGES_PROVENANCE_URL", "SONSTENG_PROD_WORKER_CONFIG",
+    "SONSTENG_PROD_WORKER_PROVENANCE_URL", "SONSTENG_PROD_REPO",
+    "SONSTENG_PROD_MANIFEST", "SONSTENG_PROD_RECOVERY_REGISTRY",
+    "SONSTENG_PROD_LOCK", "SONSTENG_PROD_BOOTSTRAP_BASE_SHA",
+    "SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES",
+    "SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES",
+)
+
+
+def runtime_config_digest(environ=None):
+    """Return a stable, redaction-safe identity for the release configuration."""
+    source = os.environ if environ is None else environ
+    payload = {key: source.get(key, "") for key in CONFIG_DIGEST_KEYS}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True,
+        separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _path_in_checkout(checkout_root, configured_repo, configured_path):
@@ -51,6 +76,17 @@ def main(argv=None):
     if os.environ.get("SONSTENG_PROD_RELEASE_ENABLED") != "true":
         print("[prod-release] disabled (SONSTENG_PROD_RELEASE_ENABLED is not true)")
         return 0
+    expected_digest = os.environ.get("SONSTENG_PROD_EXPECTED_CONFIG_DIGEST", "")
+    if len(expected_digest) != 64 or expected_digest != runtime_config_digest():
+        raise RuntimeError("release configuration digest mismatch; leave the timer off")
+    release_mode = os.environ.get("SONSTENG_PROD_RELEASE_MODE", "routine")
+    if release_mode not in {"routine", "canary"}:
+        raise RuntimeError("release mode must be routine or canary")
+    canary_release_id = os.environ.get("SONSTENG_PROD_CANARY_RELEASE_ID", "")
+    if release_mode == "canary" and (not canary_release_id or len(canary_release_id) > 256):
+        raise RuntimeError("canary mode requires one exact release id")
+    if release_mode == "routine" and canary_release_id:
+        raise RuntimeError("routine mode cannot carry a canary release id")
     from prod_release_executor import (CandidateValidator, CompatibilityGate, GitRefAdapter,
         LedgerHTTP, ProductionCandidateBuilder, ProductionExecutor,
         RecordedPairRestorer, RecoveryRegistry, WranglerPagesAdapter, WranglerWorkerAdapter)
@@ -76,6 +112,8 @@ def main(argv=None):
     parser.add_argument("--old-worker-accepts-new-pages", action="store_true",
         default=env("SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES") == "true")
     args = parser.parse_args(argv)
+    if release_mode == "canary" and args.restore_release_id:
+        raise RuntimeError("canary mode cannot enter the restoration path")
     token = os.environ.get("SONSTENG_PROD_RELEASE_BEARER")
     if not token:
         parser.error("SONSTENG_PROD_RELEASE_BEARER must be injected")
@@ -92,15 +130,20 @@ def main(argv=None):
                 worker_factory=WranglerWorkerAdapter,restorer_factory=RecordedPairRestorer,
                 executor_factory=ProductionExecutor,git_factory=GitRefAdapter)
             return 0
-        ProductionCandidateBuilder(ledger, git, args.manifest,
-                                   args.bootstrap_base).prepare_latest()
-        if not pathlib.Path(args.manifest).is_file():
-            return 0
+        if release_mode == "routine":
+            ProductionCandidateBuilder(ledger, git, args.manifest,
+                                       args.bootstrap_base).prepare_latest()
+            if not pathlib.Path(args.manifest).is_file():
+                return 0
+        elif not pathlib.Path(args.manifest).is_file():
+            raise RuntimeError("canary manifest is missing")
         with open(args.manifest, encoding="utf-8") as source:
             manifest = json.load(source)
-        release = ledger.claim_authorized()
+        release = ledger.claim_authorized(canary_release_id or None)
         if release is None:
             return 0
+        if canary_release_id and release.id != canary_release_id:
+            raise RuntimeError("ledger returned a release outside the canary authority")
         with git.isolated_checkout(release.candidate_sha) as candidate_root:
             isolated_git = GitRefAdapter(candidate_root)
             pages_artifact = _path_in_checkout(candidate_root,args.repo,args.pages_artifact)

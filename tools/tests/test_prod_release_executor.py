@@ -794,6 +794,25 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert seen["User-agent"] == "sonsteng-prod-release/1.0"
 
 
+def test_ledger_http_requires_tls_and_can_claim_one_exact_authorized_release():
+    with pytest.raises(ReleaseError, match="HTTPS"):
+        LedgerHTTP("http://edit.example", "secret")
+    seen = {}
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def read(self, *_): return b'{"ok":true,"release":null}'
+    def opener(request, timeout):
+        seen["body"] = json.loads(request.data)
+        return Response()
+    assert LedgerHTTP("https://edit.example", "secret", opener).claim_authorized("release-7") is None
+    assert seen["body"] == {"id":"release-7"}
+    with pytest.raises(ReleaseError, match="Pages provenance requires HTTPS"):
+        WranglerPagesAdapter("pages", "/candidate/site", "http://pages.example")
+    with pytest.raises(ReleaseError, match="Worker provenance requires HTTPS"):
+        WranglerWorkerAdapter("/candidate/app/worker/wrangler.jsonc", "http://worker.example")
+
+
 def test_ledger_http_restore_claim_is_named_and_returns_fresh_fence():
     seen = {}
     item = release(state="restoring",fencing_token="restore-fence")

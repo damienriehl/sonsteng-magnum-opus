@@ -11,9 +11,58 @@ sys.path.insert(0,str(TOOLS))
 spec = importlib.util.spec_from_file_location("prod_release_daemon",TOOLS / "prod_release_daemon.py")
 daemon = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(daemon)
+digest_spec = importlib.util.spec_from_file_location("print_prod_release_config_digest",
+    TOOLS / "print_prod_release_config_digest.py")
+digest_tool = importlib.util.module_from_spec(digest_spec)
+digest_spec.loader.exec_module(digest_tool)
 
 from prod_release_executor import (GitRefAdapter, RecoveryRegistry, RecordedPairRestorer,
     WranglerPagesAdapter, WranglerWorkerAdapter)  # noqa: E402
+
+
+def test_runtime_config_digest_excludes_credentials_and_binds_release_controls(monkeypatch):
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_BEARER", "super-secret")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "provider-secret")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_MODE", "routine")
+    monkeypatch.setenv("SONSTENG_PROD_LEDGER_URL", "https://ledger.example")
+
+    digest = daemon.runtime_config_digest()
+
+    assert len(digest) == 64
+    assert "secret" not in digest
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_MODE", "canary")
+    assert daemon.runtime_config_digest() != digest
+
+
+def test_digest_tool_reads_only_allowlisted_nonsecret_environment(tmp_path):
+    env_file = tmp_path / "env"
+    env_file.write_text("SONSTENG_PROD_RELEASE_MODE=routine\n"
+        "SONSTENG_PROD_LEDGER_URL=https://ledger.example\n"
+        "SONSTENG_PROD_RELEASE_BEARER=sentinel-secret\n"
+        "CLOUDFLARE_API_TOKEN=provider-secret\n", encoding="utf-8")
+    values = digest_tool.read_nonsecret_config(env_file)
+    assert values == {"SONSTENG_PROD_RELEASE_MODE":"routine",
+        "SONSTENG_PROD_LEDGER_URL":"https://ledger.example"}
+    assert "secret" not in daemon.runtime_config_digest(values)
+
+
+def test_enabled_tick_rejects_config_digest_before_credentials_or_imports(monkeypatch):
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_EXPECTED_CONFIG_DIGEST", "0" * 64)
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_BEARER", "must-not-be-read")
+
+    with pytest.raises(RuntimeError, match="configuration digest mismatch"):
+        daemon.main([])
+
+
+def test_canary_mode_requires_exact_release_and_never_prepares(monkeypatch, tmp_path):
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_MODE", "canary")
+    monkeypatch.delenv("SONSTENG_PROD_CANARY_RELEASE_ID", raising=False)
+    monkeypatch.setenv("SONSTENG_PROD_EXPECTED_CONFIG_DIGEST", daemon.runtime_config_digest())
+
+    with pytest.raises(RuntimeError, match="exact release id"):
+        daemon.main([])
 
 
 def git(repo,*args):
@@ -99,7 +148,7 @@ def test_restore_checkout_cleans_up_on_error_and_paths_fail_closed(tmp_path):
     args = SimpleNamespace(restore_release_id="release-1",recovery_registry=str(registry_path),
         repo=str(repo),pages_artifact=str(repo / "site"),
         worker_config=str(repo / "app/worker/wrangler.jsonc"),pages_project="stable-pages",
-        pages_provenance_url="p",worker_provenance_url="w",pages_branch="main")
+        pages_provenance_url="https://pages.example",worker_provenance_url="https://worker.example",pages_branch="main")
     roots = []
     def fail_pages(*_args,**kwargs):
         roots.append(pathlib.Path(kwargs["candidate_root"]))

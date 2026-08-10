@@ -32,6 +32,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Config-off by design. Keep false until the migration, known-good manifest,
 # credential separation, live canary, and recovery drills are recorded.
 SONSTENG_PROD_RELEASE_ENABLED=false
+# `routine` is timer-driven. A supervised canary instead uses a process-scoped
+# environment override and one exact already-authorized release ID while the
+# timer remains disabled.
+SONSTENG_PROD_RELEASE_MODE=routine
+SONSTENG_PROD_CANARY_RELEASE_ID=
+# SHA-256 printed by runtime_config_digest() for the non-secret settings below.
+# The enabled first tick fails before credentials/imports/network/git unless it
+# matches exactly.
+SONSTENG_PROD_EXPECTED_CONFIG_DIGEST=
 SONSTENG_PROD_LEDGER_URL=https://sonsteng-chat.damienriehl.workers.dev
 SONSTENG_PROD_RELEASE_BEARER=
 # This must be the distinct EDIT_TOKEN_RELEASE secret whose only grant is

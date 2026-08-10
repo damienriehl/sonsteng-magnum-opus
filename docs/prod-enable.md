@@ -10,6 +10,11 @@ human Access Publisher authorization, coordinated Pages + Worker activation, exa
 verification, and recorded-pair recovery. The executor and timer remain config-off until every
 enablement gate in that runbook is recorded.
 
+Engineering deployment does not enable publication. The exact editing-Worker rollback proof,
+process-scoped one-shot canary, first-tick configuration digest, stopped-timer activation ordering,
+and compensating config-off procedure are mandatory in the authoritative runbook before routine
+enablement.
+
 The Access-door operations below remain authoritative for login, identity mapping, routing, and
 revocation. The Access-only `damienadmin` slot carries the independent Publisher scope on this
 canonical DEV/apply ledger. The separate production Worker carries neither Access nor Publisher
