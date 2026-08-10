@@ -925,6 +925,30 @@ def test_recovery_registry_persists_exact_pair_atomically(tmp_path):
         registry.record_target(sha, "worker", "different")
 
 
+def test_recovery_registry_lists_complete_pairs_from_one_snapshot(tmp_path):
+    class CountingRegistry(RecoveryRegistry):
+        reads = 0
+
+        def _read(self):
+            self.reads += 1
+            return super()._read()
+
+    path = tmp_path / "known-good.json"
+    path.write_text(json.dumps({
+        "a" * 40:{"pages_deployment_id":"pages-a","worker_version_id":"worker-a"},
+        "b" * 40:{"pages_deployment_id":"pages-only"},
+    }), encoding="utf-8")
+    registry = CountingRegistry(path)
+
+    pairs = registry.pairs()
+
+    assert registry.reads == 1
+    assert pairs == {"a" * 40:{
+        "pages_deployment_id":"pages-a","worker_version_id":"worker-a"}}
+    pairs["a" * 40]["pages_deployment_id"] = "changed-copy"
+    assert registry.pair("a" * 40)["pages_deployment_id"] == "pages-a"
+
+
 def test_registry_reconciles_crash_before_ledger_receipt_without_redeploy(tmp_path):
     item = release()
     registry = RecoveryRegistry(tmp_path / "known-good.json")

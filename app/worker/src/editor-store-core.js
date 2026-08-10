@@ -1524,9 +1524,7 @@ export class EditorStoreCore {
       const draft = draftRow ? { review_revision_id:revision.id, actor:draftRow.actor,
         source_revision:draftRow.source_revision,prod_base:draftRow.prod_base,
         decisions:JSON.parse(draftRow.decisions_json),updated_at:draftRow.updated_at } : null;
-      const current = submitted.length ? submitted : (draft?.decisions || []);
       const total = new Set(revision.operations.map((op) => op.decision_id || op.id)).size;
-      const count = (decision) => current.filter((item) => item.decision === decision).length;
       return { revision:{ id:revision.id,source_ref:revision.source_ref,
         source_revision:revision.source_revision,prod_base:revision.prod_base,
         original_hash:revision.original_hash,proposed_hash:revision.proposed_hash,
@@ -1535,8 +1533,7 @@ export class EditorStoreCore {
         stale:!!stale_reason,stale_reason,draft,
         submitted_review:reviewRow ? { id:reviewRow.id,actor:reviewRow.actor,
           created_at:reviewRow.created_at,receipt_hash:reviewRow.receipt_hash,decisions:submitted } : null,
-        counts:{ total,reviewed:current.length,unreviewed:Math.max(0,total-current.length),
-          accepted:count("accepted"),rejected:count("rejected"),questioned:count("questioned") } };
+        counts:{ total } };
     });
     const classified = classifyProductionScope(revisions.map((item) => ({
       source_ref:item.revision.source_ref,operations:item.revision.operations,

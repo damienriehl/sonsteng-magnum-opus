@@ -383,13 +383,17 @@ class CompatibilityGate:
         raise ReleaseError("no compatible transient deployment order")
 
 
+def _require_https_url(value, purpose):
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ReleaseError(f"{purpose} requires HTTPS")
+
+
 class LedgerHTTP:
     """Concrete release-service adapter; authorization is intentionally absent."""
 
     def __init__(self, base_url, bearer, opener=urllib.request.urlopen):
-        parsed = urllib.parse.urlsplit(base_url)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-            raise ReleaseError("release ledger requires HTTPS")
+        _require_https_url(base_url, "release ledger")
         self.base_url, self._bearer, self._opener = base_url.rstrip("/"), bearer, opener
 
     def _request(self, path, body=None):
@@ -767,9 +771,7 @@ class WranglerPagesAdapter:
     def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
                  production_branch="main",
                  run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
-        parsed = urllib.parse.urlsplit(provenance_url)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-            raise ReleaseError("Pages provenance requires HTTPS")
+        _require_https_url(provenance_url, "Pages provenance")
         self.project, self.artifact_dir = project, artifact_dir
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
         self.production_branch = production_branch
@@ -827,9 +829,7 @@ class WranglerWorkerAdapter:
 
     def __init__(self, config, provenance_url, candidate_root=None, run=subprocess.run,
                  opener=urllib.request.urlopen, timeout=240):
-        parsed = urllib.parse.urlsplit(provenance_url)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-            raise ReleaseError("Worker provenance requires HTTPS")
+        _require_https_url(provenance_url, "Worker provenance")
         self.config, self.provenance_url = config, provenance_url
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(config).parents[2]).resolve()
         self._run, self._opener, self.timeout = run, opener, timeout
@@ -1107,15 +1107,24 @@ class RecoveryRegistry:
         temporary.replace(self.path)
         return False
 
-    def pair(self, sha):
-        pair = self._read().get(sha)
+    @staticmethod
+    def _complete_pair(pair):
         required = {"pages_deployment_id", "worker_version_id"}
         return dict(pair) if isinstance(pair, dict) and set(pair) == required and \
             all(pair.get(key) for key in required) else None
+
+    def pair_state(self, sha):
+        data = self._read()
+        return sha in data, self._complete_pair(data.get(sha))
+
+    def pair(self, sha):
+        return self.pair_state(sha)[1]
 
     def target(self, sha, target):
         key = "pages_deployment_id" if target == "pages" else "worker_version_id"
         return self._read().get(sha, {}).get(key)
 
     def pairs(self):
-        return {sha: pair for sha in self._read() if (pair := self.pair(sha))}
+        data = self._read()
+        return {sha: complete for sha, pair in data.items()
+                if (complete := self._complete_pair(pair))}

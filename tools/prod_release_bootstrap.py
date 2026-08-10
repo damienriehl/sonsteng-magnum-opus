@@ -80,10 +80,8 @@ def _validate_request(request):
         path = pathlib.Path(configured)
         if path.is_symlink():
             raise ReleaseError("bootstrap release paths may not be symlinks")
-        try:
-            path.resolve().relative_to(repo)
-        except ValueError as exc:
-            raise ReleaseError("bootstrap release path is outside the trusted repository") from exc
+        if not path.resolve().is_relative_to(repo):
+            raise ReleaseError("bootstrap release path is outside the trusted repository")
         if not path.exists():
             raise ReleaseError("bootstrap release path is missing")
     for state_path in (request.recovery_registry, request.receipt_log):
@@ -150,14 +148,14 @@ def _run_bootstrap_locked(request, *, target_factory, git_factory, now):
     operator_id, authority_channel = _operator_authority()
     _validate_request(request)
     registry = RecoveryRegistry(request.recovery_registry)
-    existing = registry.pair(request.source_sha)
+    present, existing = registry.pair_state(request.source_sha)
     requested_pair = {
         "pages_deployment_id": request.pages_deployment_id,
         "worker_version_id": request.worker_version_id,
     }
     if existing and existing != requested_pair:
         raise ReleaseError("complete pair conflict")
-    if request.recovery_registry.exists() and request.source_sha in registry._read() and not existing:
+    if present and not existing:
         raise ReleaseError("partial recovery pair conflicts with audited bootstrap")
 
     git = git_factory(request.repo)
