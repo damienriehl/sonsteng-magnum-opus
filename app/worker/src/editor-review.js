@@ -32,7 +32,7 @@ function renderRevertPanel(reverts) {
     "<ul class=\"rv-revert-list\">" + li + "</ul></section>";
 }
 
-export function renderReviewPage(items, reverts) {
+export function renderReviewPage(items, reverts, publisherEligibleCount = 0) {
   // Stamp the human attribution label ("slot:roger" -> "RSH", "slot:john" ->
   // "JOS") onto every row from its server-resolved `editor` identity. This is the
   // SURFACE Damien actually reviews from — REVIEW_JS reads this embedded island
@@ -49,7 +49,9 @@ export function renderReviewPage(items, reverts) {
     "<link rel=\"stylesheet\" href=\"/edit/assets/review.css\">" +
     "</head><body><main>" +
     "<header class=\"rv-head\"><h1>Suggestion Review</h1>" +
-    "<p class=\"rv-sub\">All outstanding suggestions, grouped by source. Review the whole sweep at once.</p></header>" +
+    "<p class=\"rv-sub\">All outstanding suggestions, grouped by source. Review the whole sweep at once. " +
+    "<a href=\"/edit/publish\">Open Production Publisher (" + Number(publisherEligibleCount || 0) +
+    " eligible)</a></p></header>" +
     "<div id=\"rv-root\" aria-live=\"polite\">Loading…</div>" +
     renderRevertPanel(reverts) +
     "</main>" +

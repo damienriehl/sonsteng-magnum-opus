@@ -20,12 +20,19 @@ class NodeSql {
     st.run(...binds);
     return { toArray: () => [] };
   }
+  transactionSync(callback) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try { const result = callback(); this.db.exec("COMMIT"); return result; }
+    catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
 }
 
 // makeCore({ now }) -> a fresh, schema-initialized EditorStoreCore. `now` is a
 // mutable clock: pass a { value } and mutate it, or a function.
 export function makeCore(nowFn) {
-  const core = new EditorStoreCore(new NodeSql(), nowFn || (() => Date.now()));
+  const sql = new NodeSql();
+  const core = new EditorStoreCore(sql, nowFn || (() => Date.now()),
+    sql.transactionSync.bind(sql));
   core.initSchema();
   return core;
 }

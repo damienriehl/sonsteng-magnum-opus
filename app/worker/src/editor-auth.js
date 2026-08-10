@@ -50,6 +50,8 @@ const EMPTY_SCOPES = Object.freeze({
   edit: { granted: false, ver: 0 },
   instructor: { granted: false, ver: 0 },
   admin: { granted: false, ver: 0 },
+  publisher: { granted: false, ver: 0 },
+  release_service: { granted: false, ver: 0 },
 });
 
 // Parse EDIT_TOKEN_SCOPES (JSON) into a Map slot -> { edit?:ver, instructor?:ver, admin?:ver }.
@@ -64,7 +66,7 @@ function parseScopeConfig(env) {
   for (const [slot, scopes] of Object.entries(cfg)) {
     if (!/^[a-z0-9_]+$/i.test(slot)) continue; // slot names are simple identifiers
     const rec = {};
-    for (const s of ["edit", "instructor", "admin"]) {
+    for (const s of Object.keys(EMPTY_SCOPES)) {
       if (scopes && typeof scopes[s] === "number") rec[s] = scopes[s];
     }
     out.set(slot.toLowerCase(), rec);
@@ -74,12 +76,9 @@ function parseScopeConfig(env) {
 
 // Build the { edit, instructor, admin } record from a slot's granted scopes.
 function scopeRecord(grants) {
-  const rec = {
-    edit: { granted: false, ver: 0 },
-    instructor: { granted: false, ver: 0 },
-    admin: { granted: false, ver: 0 },
-  };
-  for (const s of ["edit", "instructor", "admin"]) {
+  const rec = Object.fromEntries(Object.keys(EMPTY_SCOPES)
+    .map((scope) => [scope, { granted: false, ver: 0 }]));
+  for (const s of Object.keys(EMPTY_SCOPES)) {
     if (grants && typeof grants[s] === "number") rec[s] = { granted: true, ver: grants[s] };
   }
   return rec;
@@ -88,7 +87,12 @@ function scopeRecord(grants) {
 // A short stable stamp binding a slot to its current scope versions. Bumping any
 // version changes the stamp, invalidating cookies minted under the old versions.
 function scopeStamp(slot, grants) {
-  const parts = ["edit", "instructor", "admin"].map((s) => `${s}:${grants[s] ?? "-"}`);
+  // Preserve pre-Publisher cookies for slots whose grant record did not change;
+  // append the new scope only when it exists, while still binding its version.
+  const names = ["edit", "instructor", "admin"];
+  if (grants.publisher != null) names.push("publisher");
+  if (grants.release_service != null) names.push("release_service");
+  const parts = names.map((s) => `${s}:${grants[s] ?? "-"}`);
   return `${slot}|${parts.join(",")}`;
 }
 
@@ -232,7 +236,8 @@ export async function resolveAuth(env, request) {
       const config = parseScopeConfig(env);
       const grants = config.get(parsed.slot);
       if (grants && scopeStamp(parsed.slot, grants) === parsed.stamp) {
-        return { scopes: scopeRecord(grants), slot: parsed.slot, editor: `slot:${parsed.slot}` };
+        return { scopes: scopeRecord(grants), slot: parsed.slot, editor: `slot:${parsed.slot}`,
+          credential_channel: "cookie" };
       }
     }
   }
@@ -240,7 +245,8 @@ export async function resolveAuth(env, request) {
   const m = /^Bearer\s+(.+)$/i.exec(authz);
   if (m) {
     const svc = await resolveOpaqueToken(env, m[1].trim());
-    if (svc) return { scopes: svc.record, slot: svc.slot, editor: `slot:${svc.slot}` };
+    if (svc) return { scopes: svc.record, slot: svc.slot, editor: `slot:${svc.slot}`,
+      credential_channel: "bearer" };
   }
   // 3) Cloudflare Access: a verified identity on the Access-gated hostname. This
   //    is a THIRD way to arrive at a slot, not a replacement — everything above
@@ -280,13 +286,15 @@ export async function resolveAuth(env, request) {
           // same all-false result as any unauthorized request, so a stale map
           // entry can never become a silent partial grant.
           if (grants) {
-            return { scopes: scopeRecord(grants), slot, editor: `slot:${slot}` };
+            return { scopes: scopeRecord(grants), slot, editor: `slot:${slot}`,
+              credential_channel: "access" };
           }
         }
       }
     }
   }
-  return { scopes: { ...EMPTY_SCOPES }, slot: null, editor: null };
+  return { scopes: { ...EMPTY_SCOPES }, slot: null, editor: null,
+    credential_channel: "none" };
 }
 
 // ---- Access email -> slot ---------------------------------------------------

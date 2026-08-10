@@ -15,7 +15,8 @@ import { EditorStoreCore } from "./editor-store-core.js";
 export class EditorStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.core = new EditorStoreCore(ctx.storage.sql);
+    this.core = new EditorStoreCore(ctx.storage.sql, undefined,
+      ctx.storage.transactionSync.bind(ctx.storage));
     ctx.blockConcurrencyWhile(async () => {
       this.core.initSchema();
       // Crash reconciliation runs before the DO serves any claim: no limbo.
@@ -35,6 +36,8 @@ export class EditorStore extends DurableObject {
   reanchor(id, patch) { return this.core.reanchor(id, patch); }
   claimBatch(batchId, opts) { return this.core.claimBatch(batchId, opts); }
   finalize(batchId, outcome) { return this.core.finalize(batchId, outcome); }
+  recordCanonicalMutation(input) { return this.core.recordCanonicalMutation(input); }
+  completeCanonicalMutation(input) { return this.core.completeCanonicalMutation(input); }
   reconcile() { return this.core.reconcile(); }
   digest() { return this.core.digest(); }
   purge(days) { return this.core.purge(days); }
@@ -46,4 +49,14 @@ export class EditorStore extends DurableObject {
   claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
   resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
+  prepareProductionRelease(input) { return this.core.prepareProductionRelease(input); }
+  authorizeProductionRelease(input) { return this.core.authorizeProductionRelease(input); }
+  getProductionRelease(id) { return this.core.getProductionRelease(id); }
+  claimAuthorizedProductionRelease(input) { return this.core.claimAuthorizedProductionRelease(input); }
+  claimProductionRestore(input) { return this.core.claimProductionRestore(input); }
+  renewProductionReleaseLease(input) { return this.core.renewProductionReleaseLease(input); }
+  transitionProductionRelease(input) { return this.core.transitionProductionRelease(input); }
+  publisherContext() { return this.core.publisherContext(); }
+  publisherSummary() { return this.core.publisherSummary(); }
+  productionPreparationContext() { return this.core.productionPreparationContext(); }
 }

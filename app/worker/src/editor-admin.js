@@ -437,6 +437,9 @@ export function renderAdminPage({ items, reverts, flags, viewerLabel, studentVie
     "revision by revision.</p>" +
     "<p class=\"ad-go\"><a href=\"/edit/history/\">Browse the change history</a></p>" +
     "</section>" +
+    "<section class=\"ad-card\"><h2>Production Publisher</h2>" +
+    "<p class=\"ad-lede\">Approved copy remains on DEV until a human Publisher authorizes an immutable production batch.</p>" +
+    "<p class=\"ad-go\"><a href=\"/edit/publish\">Open Production Publisher</a></p></section>" +
     "<p class=\"ad-foot\">This page carries no secret in its address. " +
     "Bookmark it — signing in again is a code sent to your email.</p>" +
     "</main></body></html>";

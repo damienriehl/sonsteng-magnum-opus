@@ -37,7 +37,7 @@ export const EDITOR_JS = `(() => {
   const edits = island("edits-data") || { items: [] };
 
   // Walker contract (mirror of tools/build_site.py): candidate elements within
-  // <main>, in document order — p,li,h1-h6,blockquote (outermost). Assign index.
+  // <main>, in document order — block tags plus explicit .eb-candidate leaves.
   const TAGS = new Set(["P","LI","H1","H2","H3","H4","H5","H6","BLOCKQUOTE"]);
   const editable = new Map((map.blocks||[]).map(b => [b.index, b]));
   const main = document.querySelector("main");
@@ -45,7 +45,7 @@ export const EDITOR_JS = `(() => {
     const candidates = [];
     (function walk(node){
       for (const child of node.children){
-        if (TAGS.has(child.tagName)) { candidates.push(child); }
+        if (TAGS.has(child.tagName) || child.classList.contains("eb-candidate")) { candidates.push(child); }
         else walk(child);
       }
     })(main);
@@ -206,6 +206,54 @@ export const REVIEW_JS = `(() => {
 })();
 `;
 
+// Publisher assets are deliberately separate from review.js: review decisions
+// cannot accidentally acquire production authority, and a no-JS Publisher page
+// remains a read-only immutable preview.
+export const PUBLISHER_CSS = `.pub{max-width:66rem;margin:0 auto;padding:1.5rem 1.25rem 4rem}
+.pub nav{margin-bottom:1.5rem}.pub header{border-bottom:2px solid var(--pp-accent);margin-bottom:1rem}
+.pub-eyebrow{text-transform:uppercase;letter-spacing:.1em;font-size:.78rem;font-weight:700}
+.pub-state,.pub-authority,.pub-targets{border:1px solid var(--pp-rule);border-radius:8px;padding:1rem;margin:1rem 0;background:#fff}
+.pub-status{font-weight:700}.pub-targets{display:grid;gap:.7rem}.pub-targets label{display:block}
+.pub-help,.pub-nojs,.pub-empty{color:#5c5346}.pub-binding{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem}
+.pub-binding div{border-top:1px solid var(--pp-rule);padding-top:.35rem;min-width:0}.pub-binding dt{font-size:.75rem;text-transform:uppercase}
+.pub-binding dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+.pub-change{border:1px solid var(--pp-rule);border-radius:8px;margin:1rem 0;overflow:hidden}.pub-change header{padding:.7rem;margin:0;background:#f3ecdd;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.pub-redline{display:grid;grid-template-columns:1fr 1fr}.pub-redline section{padding:.8rem;min-width:0}.pub-redline section+section{border-left:1px solid var(--pp-rule)}
+.pub-redline h4{margin:0 0 .4rem}.pub-redline p{white-space:pre-wrap;overflow-wrap:anywhere}.pub-redline del{text-decoration:line-through}.pub-redline ins{text-decoration:none;border-bottom:3px double currentColor}
+.pub-confirm{display:block;margin:1rem 0;font-weight:700}.pub-authority button{font:inherit;padding:.65rem 1rem;min-height:44px}.pub-authority button:disabled{cursor:not-allowed;opacity:.6}
+.pub :focus-visible{outline:3px solid var(--pp-focus);outline-offset:3px}.pub-live:focus{outline:none}
+@media (max-width:640px){.pub-binding,.pub-redline{grid-template-columns:1fr}.pub-redline section+section{border-left:0;border-top:1px solid var(--pp-rule)}.pub-change header{display:block}}
+`;
+
+export const PUBLISHER_JS = `(() => {
+  "use strict";
+  const button=document.getElementById("pub-authorize"), confirm=document.getElementById("pub-confirm");
+  if(!button||!confirm)return;
+  const live=document.getElementById("pub-live"); let binding={}, pending=false;
+  try{binding=JSON.parse(document.getElementById("publisher-binding").textContent)}catch{}
+  const required=["id","target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash"];
+  const complete=required.every(k=>typeof binding[k]==="string"&&binding[k]);
+  async function authorizationKey(){
+    const bound=[binding.id,binding.target_batch_id,binding.base_sha,binding.candidate_sha,binding.membership_hash].join("\\0");
+    const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(bound));
+    return "publisher-"+Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  confirm.addEventListener("change",()=>{button.disabled=pending||!confirm.checked||!complete});
+  button.addEventListener("click",async()=>{
+    if(pending||button.disabled||!confirm.checked||!complete)return;
+    pending=true;button.disabled=true; button.ariaBusy="true"; live.textContent="Authorizing the exact prepared release…";
+    try{
+      const body={...binding,idempotency_key:await authorizationKey()};
+      const response=await fetch("/edit/v1/prod/releases/authorize",{method:"POST",credentials:"same-origin",
+        headers:{"content-type":"application/json","X-Edit-Request":"1"},body:JSON.stringify(body)});
+      let result={};try{result=await response.json()}catch{}
+      if(response.ok){live.textContent=result.replay?"This exact release was already authorized.":"Release authorized. Automation may now publish only this frozen batch.";button.textContent="Authorized";confirm.disabled=true;}
+      else{live.textContent=response.status===409?"The prepared preview changed or conflicts with an active release. Reload and review again.":response.status===403?"Authorization denied. A current human Publisher sign-in is required.":"Authorization failed. Production was not released.";}
+    }catch{live.textContent="Authorization could not be sent. Production was not released.";}
+    finally{pending=false;button.ariaBusy="false";if(button.textContent!=="Authorized")button.disabled=!confirm.checked||!complete;live.focus();}
+  });
+})();`;
+
 // Minimal History-browser stubs — used only when the app/history/ client bundle
 // is absent at build (unit tests). The real client (app/history/history.{js,css},
 // 253/77 lines) overrides these via CLIENT.HISTORY_JS/HISTORY_CSS. The stub still
@@ -230,6 +278,8 @@ export function serveAsset(name) {
     "editor.js": [CLIENT.EDITOR_JS || EDITOR_JS, "text/javascript; charset=utf-8"],
     "review.css": [REVIEW_CSS, "text/css; charset=utf-8"],
     "review.js": [REVIEW_JS, "text/javascript; charset=utf-8"],
+    "publisher.css": [PUBLISHER_CSS, "text/css; charset=utf-8"],
+    "publisher.js": [PUBLISHER_JS, "text/javascript; charset=utf-8"],
     "history.css": [CLIENT.HISTORY_CSS || HISTORY_CSS, "text/css; charset=utf-8"],
     "history.js": [CLIENT.HISTORY_JS || HISTORY_JS, "text/javascript; charset=utf-8"],
   };

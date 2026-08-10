@@ -48,6 +48,7 @@ import contextlib
 import dataclasses
 import datetime
 import fcntl
+import hashlib
 import json
 import os
 import subprocess
@@ -57,6 +58,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_push  # noqa: E402  (reuse resolve_topic/publish_ntfy — never modified)
+from apply_suggestions import generator_identity  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS_DIR = os.path.join(REPO_ROOT, "tools")
@@ -71,6 +73,7 @@ ENV_STATE_FILE = "SONSTENG_APPLY_STATE"   # override the daemon state path
 ENV_IDLE_MIN = "APPLY_EDITORIAL_IDLE_MIN"  # session-end idle threshold (min); default 30
 
 DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
+SERVICE_USER_AGENT = "sonsteng-apply-daemon/1.0"
 DEFAULT_IDLE_MINUTES = 30
 
 # The status the daemon flushes. Auto-accept (worker lane) lands rows here; the
@@ -181,7 +184,7 @@ def fetch_review(api_base, token, timeout=30):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json")
     req.add_header("X-Edit-Request", "1")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")  # CF edge bans default UA
+    req.add_header("User-Agent", SERVICE_USER_AGENT)  # CF edge bans default UA
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -325,7 +328,7 @@ def fetch_revert_requests(api_base, token, timeout=30):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json")
     req.add_header("X-Edit-Request", "1")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -349,7 +352,7 @@ def resolve_revert_request(api_base, token, request_id, status, note=None, timeo
     req.add_header("Content-Type", "application/json")
     req.add_header("X-Edit-Request", "1")
     req.add_header("Accept", "application/json")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -359,6 +362,24 @@ def resolve_revert_request(api_base, token, request_id, status, note=None, timeo
         return {"sent": False, "reason": "http_%d" % exc.code}
     except urllib.error.URLError as exc:
         return {"sent": False, "reason": "unreachable:%s" % (exc.reason,)}
+
+
+def record_revert_mutation(api_base, token, evidence, action="record", timeout=30):
+    if not api_base:
+        return {"sent": False, "reason": "no_api_base"}
+    url = api_base.rstrip("/") + "/revert-record"
+    req = urllib.request.Request(url, data=json.dumps({**evidence,"action":action}).encode("utf-8"), method="POST")
+    for key, value in (("Content-Type", "application/json"), ("X-Edit-Request", "1"),
+                       ("User-Agent", SERVICE_USER_AGENT),
+                       ("Authorization", "Bearer " + token if token else "")):
+        if value:
+            req.add_header(key, value)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+            return {"sent": payload.get("ok") is True, **payload}
+    except (urllib.error.HTTPError, urllib.error.URLError, ValueError) as exc:
+        return {"sent": False, "reason": type(exc).__name__}
 
 
 def restore_regenerable_site(repo_root=REPO_ROOT):
@@ -383,13 +404,15 @@ def restore_regenerable_site(repo_root=REPO_ROOT):
     return rc == 0
 
 
-def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None):
+def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None,
+                   generator=None):
     """Execute ONE approved revert request on the canonical branch (clean-tree,
     conflict-aware). Returns (ok, detail). Holds the apply flock for the whole
     inverse-commit so it never races an in-flight apply. On a git conflict it
     aborts cleanly (never a partial revert) and returns (False, reason)."""
     do_rebuild = do_rebuild or (lambda: rebuild(repo_root))
     do_history = do_history or (lambda: regen_history(repo_root))
+    generator = generator or generator_identity
     doc = (req or {}).get("doc") or ""
     first = (req or {}).get("run_first") or ""
     last = (req or {}).get("run_last") or ""
@@ -411,6 +434,29 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
             return False, "git_status_failed"
         if out.strip():
             return False, "tree_not_clean"
+        request_id = (req or {}).get("id") or ""
+        rc, prior_commit = _git(["log", "-1", "--format=%H",
+            "--grep=^Revert-Request: %s$" % request_id], repo_root)
+        if rc == 0 and prior_commit.strip():
+            prior_commit = prior_commit.strip()
+            _, head = _git(["rev-parse", "HEAD"], repo_root)
+            if prior_commit != head.strip():
+                return False, "revert_retry_ambiguous"
+            before_rc, before_text = _git(["show", prior_commit + "^:" + doc], repo_root)
+            after_rc, after_text = _git(["show", prior_commit + ":" + doc], repo_root)
+            if before_rc != 0 or after_rc != 0:
+                return False, "revert_evidence_unavailable"
+            return True, {"id":request_id,"batch_id":"revert-" + request_id,
+                "actor":req.get("editor") or "slot:unknown","source_ref":doc,
+                "original_text":before_text,"new_text":after_text,
+                "original_hash":hashlib.sha256(before_text.encode()).hexdigest(),
+                "new_hash":hashlib.sha256(after_text.encode()).hexdigest(),
+                "base_sha":_git(["rev-parse", prior_commit + "^"], repo_root)[1].strip(),
+                "commit_sha":prior_commit,"generator_id":generator(repo_root)}
+        rc, base_sha = _git(["rev-parse", "HEAD"], repo_root)
+        before_rc, before_text = _git(["show", "HEAD:" + doc], repo_root)
+        if rc != 0 or before_rc != 0:
+            return False, "revert_evidence_unavailable"
 
         # Stage the inverse of the whole run range (first..last inclusive).
         rc, rout = _git(["revert", "--no-commit", "%s^..%s" % (first, last)], repo_root)
@@ -432,8 +478,16 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
         short = "%s..%s" % (first[:8], last[:8])
         msg = ("revert(history): %s run %s\n\n"
                "Admin-executed revert requested via the History browser.\n"
-               "Editor: DVR\n" % (doc or "(doc)", short))
+               "Editor: %s\n"
+               "Revert-Request: %s\n" % (doc or "(doc)", short,
+                                            req.get("editor") or "unknown", request_id))
         _git(["add", "-A"], repo_root)
+        after_rc, after_text = _git(["show", ":" + doc], repo_root)
+        if (after_rc != 0 or before_text == after_text or
+                len(before_text.encode("utf-8")) > 131072 or
+                len(after_text.encode("utf-8")) > 131072):
+            _git(["reset", "--hard", "HEAD"], repo_root)
+            return False, "revert_evidence_unavailable"
         rc, cout = _git(["commit", "-m", msg], repo_root)
         if rc != 0:
             _git(["reset", "--hard", "HEAD"], repo_root)
@@ -443,7 +497,13 @@ def execute_revert(req, *, repo_root=REPO_ROOT, do_rebuild=None, do_history=None
         # dirties the tree). Non-gating.
         do_history()
         rc, sha = _git(["rev-parse", "HEAD"], repo_root)
-        return True, sha.strip()
+        commit_sha = sha.strip()
+        return True, {"id":req.get("id"),"batch_id":"revert-" + req.get("id", ""),
+            "actor":req.get("editor") or "slot:unknown","source_ref":doc,
+            "original_text":before_text,"new_text":after_text,"base_sha":base_sha.strip(),
+            "original_hash":hashlib.sha256(before_text.encode()).hexdigest(),
+            "new_hash":hashlib.sha256(after_text.encode()).hexdigest(),
+            "commit_sha":commit_sha,"generator_id":generator(repo_root)}
 
 
 # --------------------------------------------------------------------------- #
@@ -462,7 +522,7 @@ def post_heartbeat(api_base, token, *, ok, applied, ts, timeout=15):
     req.add_header("Content-Type", "application/json")
     req.add_header("X-Edit-Request", "1")
     req.add_header("Accept", "application/json")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -542,6 +602,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         fetch=None, apply_engine=None, do_rebuild=None, do_deploy=None,
         heartbeat=None, notify=None, editorial=None, out=None,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
+        revert_record=None,
         clean_site=None, do_deploy_worker=None, do_scoped=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
@@ -579,9 +640,24 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
             reqs = []
         for req in reqs or []:
             rid = req.get("id")
-            ok, detail = revert_exec(req)
+            if req.get("mutation_phase") == "merged":
+                detail = {"id":rid,"batch_id":req["batch_id"],
+                    "actor":req["mutation_actor"],"source_ref":req["source_ref"],
+                    "original_text":req["original_text"],"new_text":req["new_text"],
+                    "original_hash":req["original_hash"],"new_hash":req["new_hash"],
+                    "base_sha":req["base_sha"],"commit_sha":req["commit_sha"],
+                    "generator_id":req["generator_id"]}
+                ok = True
+                steps.append(("revert_resume", {"id":rid,"commit_sha":detail["commit_sha"]}))
+            else:
+                ok, detail = revert_exec(req)
             steps.append(("revert", {"id": rid, "ok": ok, "detail": detail}))
             if ok:
+                recorded = revert_record(detail, "record") if revert_record else {"sent":False}
+                if recorded.get("sent") is not True:
+                    heartbeat(False, 0)
+                    notify([rid])
+                    return DaemonResult(0, "", "revert_record_failed", {}, False, steps)
                 # REBUILD FIRST: the revert commit restores the TRACKED trees
                 # (data/, site/) but build/ artifacts — the editor map above
                 # all — are generated and still describe the pre-revert corpus.
@@ -594,11 +670,16 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
                 # together are the publish; any failing marks the revert failed.
                 wok, _ = do_deploy_worker()
                 dok = rok and dok and wok
-                if revert_resolve:
-                    revert_resolve(rid, "done" if dok else "failed")
+                completed = revert_record(detail, "complete") if dok and revert_record else {"sent":False}
+                dok = dok and completed.get("sent") is True
                 heartbeat(dok, 0)
                 if not dok:
                     notify([rid])
+                    # Keep the request approved and the batch at `merged`: the
+                    # next tick resumes deployment from its exact journaled
+                    # evidence and must never inverse the same git range twice.
+                    return DaemonResult(0, detail.get("batch_id", ""),
+                        "revert_deploy_failed", {}, False, steps)
             else:
                 if revert_resolve:
                     revert_resolve(rid, "failed")
@@ -757,6 +838,8 @@ def main(argv=None):
                          revert_exec=lambda req: execute_revert(req),
                          revert_resolve=lambda rid, st: resolve_revert_request(
                              api_base, token, rid, st),
+                         revert_record=lambda evidence, action: record_revert_mutation(
+                             api_base, token, evidence, action),
                          do_scoped=lambda: dispatch_scoped_drafts())
     except DaemonError as exc:
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)

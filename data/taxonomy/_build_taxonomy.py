@@ -888,6 +888,41 @@ def folio_obj(dec):
     iri, second = dec
     return {"iri": iri, "mapping_confidence": second}
 
+def load_existing(name):
+    path = os.path.join(HERE, name)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return None
+
+
+identity_doc = load_existing("taxonomy-identities.json")
+if not identity_doc:
+    raise RuntimeError("taxonomy-identities.json is required; identities may not be positional")
+identity_by_seed = {}
+for record in identity_doc["tasks"]:
+    key = (record["skill_id"], record["seed_name"])
+    if key in identity_by_seed:
+        raise RuntimeError("duplicate task identity seed: %r" % (key,))
+    identity_by_seed[key] = record
+
+old_skills_doc = load_existing("skills.json") or {}
+old_tasks_doc = load_existing("tasks.json") or {}
+old_cross_doc = load_existing("folio-crosswalk.json") or {}
+old_skills = {item["id"]: item for item in old_skills_doc.get("skills", [])}
+old_tasks = {item["id"]: item for item in old_tasks_doc.get("tasks", [])}
+old_cross_skills = {item["id"]: item for item in old_cross_doc.get("skills", [])}
+old_cross_tasks = {item["id"]: item for item in old_cross_doc.get("tasks", [])}
+
+
+def preserve(obj, old, fields):
+    """Overlay authored wording only for slots the generator still declares."""
+    for field in fields:
+        if field in obj and isinstance(old.get(field), str):
+            obj[field] = old[field]
+
+
 skills_out, cross_skills = [], []
 skill_ids = set()
 for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:
@@ -898,6 +933,7 @@ for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:
     if folio: obj["folio"]=folio_obj(folio)
     else: obj["no_folio_equivalent"]=True
     if survey: obj["survey"]=survey
+    preserve(obj, old_skills.get(sid, {}), ("name", "alt_name"))
     skills_out.append(obj)
     # crosswalk skill entry
     if folio:
@@ -906,17 +942,27 @@ for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:
                              "branch":br,"mapping_confidence":folio[1]})
     else:
         cross_skills.append({"id":sid,"no_folio_equivalent":True,"note":note})
+    if cross_skills[-1].get("no_folio_equivalent"):
+        preserve(cross_skills[-1], old_cross_skills.get(sid, {}), ("note",))
 
 tasks_out, cross_tasks = [], []
-tn = 0
 for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:  # preserve skill order
     for t in TASKS[sid]:
-        tn += 1
-        tid = f"TSK-{tn:03d}"
         tname,tdesc,bloom,module,subs,tfolio,refs = t
+        identity = identity_by_seed.get((sid, tname))
+        if not identity:
+            raise RuntimeError("task lacks reviewed literal identity: %s / %s" % (sid, tname))
+        tid = identity["id"]
+        if len(identity["subtasks"]) != len(subs):
+            raise RuntimeError("subtask identity count changed for %s" % tid)
         subtasks=[]
-        for i,(sn,sd) in enumerate(subs,1):
-            subtasks.append({"id":f"{tid}.{i:02d}","name":sn,"description":sd})
+        old_subtasks = {item["id"]: item for item in old_tasks.get(tid, {}).get("subtasks", [])}
+        for identity_sub, (sn,sd) in zip(identity["subtasks"], subs):
+            if identity_sub["seed_name"] != sn:
+                raise RuntimeError("subtask identity reassigned for %s: %s" % (tid, sn))
+            subtask = {"id":identity_sub["id"],"name":sn,"description":sd}
+            preserve(subtask, old_subtasks.get(subtask["id"], {}), ("name", "description"))
+            subtasks.append(subtask)
         obj={"id":tid,"schema_version":SV,"@id":f"{BASE}/task/{tid}","skill_id":sid,
              "name":tname,"description":tdesc,"bloom_level":bloom,"module":module,
              "subtasks":subtasks}
@@ -929,7 +975,10 @@ for (sid,name,alt,cat,ext,folio,survey,note) in SKILLS:  # preserve skill order
             obj["no_folio_equivalent"]=True
             cross_tasks.append({"id":tid,"no_folio_equivalent":True,"note":tfolio[1]})
         if refs: obj["exercise_refs"]=refs
+        preserve(obj, old_tasks.get(tid, {}), ("name", "description"))
         tasks_out.append(obj)
+        if cross_tasks[-1].get("no_folio_equivalent"):
+            preserve(cross_tasks[-1], old_cross_tasks.get(tid, {}), ("note",))
 
 skills_doc={"schema_version":SV,"@id":f"{BASE}/taxonomy/skills","spine_version":SV,
     "description":"Sonsteng's 17 Legal Practice + 9 Law Practice Management skills (exact survey names, both phrasings preserved) plus a clearly-marked AI-era extension set. Survey importance/preparedness from reliable tables in docs/research/skills-survey.md (Table 4 management-importance percentages deliberately omitted as unreliable).",
@@ -942,6 +991,15 @@ cross_doc={"schema_version":SV,"@id":f"{BASE}/taxonomy/folio-crosswalk",
     "verified_at":"2026-07-17","source":"folio MCP live retrieval",
     "description":"FOLIO crosswalk for every skill and every primary task. Each entry either records a verified FOLIO concept {folio_iri, folio_label (as retrieved), branch, mapping_confidence in exact|near|parent} or declares no_folio_equivalent with a note. This snapshot is the offline source of truth; the ship gate validates against it, not live MCP.",
     "skills":cross_skills,"tasks":cross_tasks}
+
+preserve(skills_doc, old_skills_doc, ("description",))
+preserve(tasks_doc, old_tasks_doc, ("description",))
+preserve(cross_doc, old_cross_doc, ("description",))
+
+used_identity_ids = {task["id"] for task in tasks_out}
+declared_identity_ids = {task["id"] for task in identity_doc["tasks"]}
+if used_identity_ids != declared_identity_ids:
+    raise RuntimeError("identity manifest contains missing/reassigned task IDs")
 
 for fn,doc in [("skills.json",skills_doc),("tasks.json",tasks_doc),("folio-crosswalk.json",cross_doc)]:
     with open(os.path.join(HERE,fn),"w") as f:

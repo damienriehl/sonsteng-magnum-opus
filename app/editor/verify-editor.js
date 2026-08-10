@@ -1083,9 +1083,9 @@ async function run() {
       await page.waitForFunction((re) => new RegExp(re, 'i').test(window.SonstengEditor.bannerText()), { timeout: 4000 }, match).catch(() => {});
       return page.evaluate(() => ({ t: window.SonstengEditor.bannerText(), w: window.SonstengEditor.bannerWarn() }));
     }
-    const hbFresh = await pollBanner(60, 'go live automatically');   // fresh (<5 min)
-    assert('HB1 fresh heartbeat → subtle "edits go live automatically" (no warning)',
-      /go live automatically/i.test(hbFresh.t) && hbFresh.w === false, 'banner="' + hbFresh.t + '" warn=' + hbFresh.w);
+    const hbFresh = await pollBanner(60, 'editing site automatically');   // fresh (<5 min)
+    assert('HB1 fresh heartbeat → editing-site auto-apply copy (no warning)',
+      /editing site automatically/i.test(hbFresh.t) && hbFresh.w === false, 'banner="' + hbFresh.t + '" warn=' + hbFresh.w);
 
     const hbStale = await pollBanner(900, 'paused');                 // stale (>10 min)
     assert('HB2 stale heartbeat → warning "auto-apply paused … edits are safe and queued"',

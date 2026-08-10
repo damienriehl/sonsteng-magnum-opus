@@ -79,10 +79,10 @@ def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     ):
         assert heading in generator
 
-    # Links remain unchanged. Shared/computed-text execution deliberately
-    # advances the editor-block and reading-order contracts, so pin their new
-    # reviewed digests alongside the visual heading repair.
+    # Links remain unchanged. Taxonomy leaf-purity/editability deliberately
+    # advances the editor-block and reading-order contracts, so pin the reviewed
+    # full-corpus digests alongside the visual heading repair.
     baseline = json.loads((TOOLS / "tests/fixtures/platform-semantic-baseline.json").read_text())
     assert baseline["fields"]["links"] == "96a682b9834d1b99f3a54b48945bbfebd994c3bc644a86c7402bd5f171f70f7b"
-    assert baseline["fields"]["editor_blocks"] == "5da3b4773678fa1f96c3b9dc85c5e421fcdbdef0a06dc655a07bb960d11ebbf6"
-    assert baseline["fields"]["reading_order"] == "e36710803ae78b321bc3e3c906994bfb19c3432ad08c61a33e7b3db8f7a2d6f5"
+    assert baseline["fields"]["editor_blocks"] == "d279c7c020eb187eaa4ecfe706711f3b5944ad21484cf0e58395cf63a7368304"
+    assert baseline["fields"]["reading_order"] == "1f2205a4c933aba2c0050568394c4d2bec3166f726332803c83220b4b6ae88cc"

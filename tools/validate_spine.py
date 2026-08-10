@@ -445,7 +445,8 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             fpath = rootp / fname
             if fpath in (sm_path, reg_path, mer_path):
                 continue
-            if fname == "folio-crosswalk.json" or fname.startswith("_"):
+            if fname in {"folio-crosswalk.json", "editable-fields.json",
+                         "taxonomy-identities.json"} or fname.startswith("_"):
                 continue  # --online snapshot / generator scripts, not entity data
             obj, err = read_json(fpath)
             if err:

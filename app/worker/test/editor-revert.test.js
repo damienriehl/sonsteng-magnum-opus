@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { REVERT_STATUS } from "../src/editor-store-core.js";
 import {
-  revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
+  revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint, revertRecordEndpoint,
 } from "../src/editor-endpoints.js";
 import { resolveAuth } from "../src/editor-auth.js";
 
@@ -27,6 +27,8 @@ function envWithCore(over = {}) {
     async fileRevertRequest(input) { return core.fileRevertRequest(input); },
     async listRevertRequests(status) { return core.listRevertRequests(status); },
     async resolveRevertRequest(id, status, note) { return core.resolveRevertRequest(id, status, note); },
+    async recordCanonicalMutation(input) { return core.recordCanonicalMutation(input); },
+    async completeCanonicalMutation(input) { return core.completeCanonicalMutation(input); },
     async digest() { return core.digest(); },
   };
   return { env: { ...ENV_BASE, ...over, EDITOR: { getByName() { return stub; } } }, core };
@@ -156,4 +158,27 @@ test("endpoint: /revert-resolve marks done (daemon path), admin-only", async () 
   // editor scope cannot resolve
   const editorAuth = await authBearer(env, "john-opaque-token-value-123");
   assert.equal((await revertResolveEndpoint(revReq({ id: "r1", status: "failed" }), env, editorAuth)).status, 403);
+});
+
+test("endpoint: revert journal record and completion bind exact evidence", async () => {
+  const { env, core } = envWithCore();
+  core.fileRevertRequest({ id:"r1",editor:"slot:admin",doc:"data/public.json",
+    run_first:"aa",run_last:"bb",approved:true });
+  const adminAuth = await authBearer(env,"admin-opaque-token-value-999");
+  const evidence = { id:"r1",batch_id:"revert-r1",actor:"slot:admin",
+    source_ref:"data/public.json",original_text:"after",new_text:"before",
+    base_sha:"base",commit_sha:"commit",generator_id:"generator-v1" };
+  const record = await revertRecordEndpoint(revReq({ ...evidence,action:"record" },"POST",
+    "https://worker.example.com/edit/v1/revert-record"),env,adminAuth);
+  assert.equal(record.status,201);
+  const mutation = core.sql.exec("SELECT original_hash,new_hash FROM canonical_mutations WHERE id='r1'").toArray()[0];
+  assert.equal(mutation.original_hash.length,64);
+  assert.equal(mutation.new_hash.length,64);
+  const mismatch = await revertRecordEndpoint(revReq({ ...evidence,action:"complete",
+    new_text:"tampered" },"POST","https://worker.example.com/edit/v1/revert-record"),env,adminAuth);
+  assert.equal(mismatch.status,409);
+  const complete = await revertRecordEndpoint(revReq({ ...evidence,action:"complete" },"POST",
+    "https://worker.example.com/edit/v1/revert-record"),env,adminAuth);
+  assert.equal(complete.status,201);
+  assert.equal(core.listRevertRequests(REVERT_STATUS.DONE).length,1);
 });

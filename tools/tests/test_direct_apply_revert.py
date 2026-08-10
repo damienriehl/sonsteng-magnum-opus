@@ -35,11 +35,14 @@ def _empty_review():
 class RevertRecorder:
     """Injected revert side-effects for run() orchestration assertions."""
 
-    def __init__(self, reqs, *, exec_ok=True, deploy_ok=True, detail="sha123"):
+    def __init__(self, reqs, *, exec_ok=True, deploy_ok=True, detail=None):
         self.reqs = reqs
         self.exec_ok = exec_ok
         self.deploy_ok = deploy_ok
-        self.detail = detail
+        self.detail = detail or {"id":"rq1","batch_id":"revert-rq1","actor":"slot:john",
+            "source_ref":"d","original_text":"after","new_text":"before",
+            "original_hash":"after-hash","new_hash":"before-hash",
+            "base_sha":"base","commit_sha":"sha123","generator_id":"generator-v1"}
         self.calls = []
         self.resolved = []
         self.heartbeats = []
@@ -69,6 +72,10 @@ class RevertRecorder:
         self.calls.append(("resolve", rid, status))
         self.resolved.append((rid, status))
 
+    def revert_record(self, evidence, action):
+        self.calls.append((action, evidence["id"], evidence["commit_sha"]))
+        return {"sent": True, "ok": True}
+
     def heartbeat(self, ok, applied):
         self.calls.append(("heartbeat", ok))
         self.heartbeats.append({"ok": ok, "applied": applied})
@@ -90,6 +97,7 @@ def _run_reverts(rec, **kw):
             heartbeat=rec.heartbeat, notify=rec.notify,
             fetch_reverts=rec.fetch_reverts, revert_exec=rec.revert_exec,
             revert_resolve=rec.revert_resolve, do_deploy_worker=rec.deploy_worker,
+            revert_record=rec.revert_record,
         )
         defaults.update(kw)
         return dad.run(**defaults)
@@ -107,9 +115,22 @@ class TestRevertOrchestration(unittest.TestCase):
         # (a restored block re-enters the allowlist), and a stale worker bundle
         # rejects edits against it — caught live on 2026-07-28 (U4 cycle).
         self.assertIn("deploy_worker", rec.calls)
-        self.assertIn(("rq1", "done"), rec.resolved)
+        self.assertIn(("record", "rq1", "sha123"), rec.calls)
+        self.assertIn(("complete", "rq1", "sha123"), rec.calls)
         self.assertEqual(rec.heartbeats[0], {"ok": True, "applied": 0})
         self.assertEqual(rec.notified, [])
+
+    def test_recorded_merged_revert_resumes_deploy_without_second_git_revert(self):
+        evidence = {"id":"rq1","batch_id":"revert-rq1","mutation_actor":"slot:john",
+            "source_ref":"data/public.json","original_text":"after","new_text":"before",
+            "original_hash":"after-hash","new_hash":"before-hash",
+            "base_sha":"base","commit_sha":"sha123","generator_id":"generator-v1",
+            "mutation_phase":"merged"}
+        rec = RevertRecorder([evidence])
+        _run_reverts(rec)
+        self.assertNotIn(("revert_exec", "rq1"), rec.calls)
+        self.assertIn(("record", "rq1", "sha123"), rec.calls)
+        self.assertIn(("complete", "rq1", "sha123"), rec.calls)
 
     def test_revert_exec_failure_resolves_failed_and_alerts_ids_only(self):
         rec = RevertRecorder([{"id": "rq2", "doc": "d", "run_first": "aa", "run_last": "bb"}],
@@ -122,12 +143,12 @@ class TestRevertOrchestration(unittest.TestCase):
         self.assertNotIn(("deploy", "feat/canonical-docs"), rec.calls)
         self.assertNotIn("deploy_worker", rec.calls)
 
-    def test_deploy_failure_after_revert_marks_failed_and_alerts(self):
+    def test_deploy_failure_keeps_journaled_revert_retryable_and_alerts(self):
         rec = RevertRecorder([{"id": "rq3", "doc": "d", "run_first": "aa", "run_last": "bb"}],
                              deploy_ok=False)
         _run_reverts(rec)
         self.assertIn(("deploy", "feat/canonical-docs"), rec.calls)
-        self.assertIn(("rq3", "failed"), rec.resolved)
+        self.assertNotIn(("rq3", "failed"), rec.resolved)
         self.assertEqual(rec.heartbeats[0], {"ok": False, "applied": 0})
         self.assertEqual(rec.notified, [["rq3"]])
 
@@ -173,8 +194,19 @@ class TestExecuteRevertGit(unittest.TestCase):
             last = _write_commit(td, "data/foo.txt", "v2\n", "apply: batch b2")
             req = {"id": "rq", "doc": "data/foo.txt", "run_first": first, "run_last": last}
             ok, detail = dad.execute_revert(
-                req, repo_root=td, do_rebuild=lambda: (True, ""), do_history=lambda: (True, ""))
+                req, repo_root=td, do_rebuild=lambda: (True, ""), do_history=lambda: (True, ""),
+                generator=lambda _root: "generator-test")
             self.assertTrue(ok, detail)
+            self.assertEqual(detail["original_text"], "v2\n")
+            self.assertEqual(detail["new_text"], "v0\n")
+            self.assertEqual(detail["commit_sha"], _git(td, "rev-parse", "HEAD").stdout.strip())
+            self.assertTrue(detail["generator_id"])
+            retry_ok, retry_detail = dad.execute_revert(
+                req, repo_root=td, do_rebuild=lambda: (True, ""), do_history=lambda: (True, ""),
+                generator=lambda _root: "generator-test")
+            self.assertTrue(retry_ok)
+            self.assertEqual(retry_detail, detail)
+            self.assertEqual(_git(td, "rev-list", "--count", "HEAD").stdout.strip(), "4")
             with open(os.path.join(td, "data/foo.txt")) as f:
                 self.assertEqual(f.read(), "v0\n")
             # A real revert commit landed (build_history classifies it as kind=revert).
@@ -199,6 +231,22 @@ class TestExecuteRevertGit(unittest.TestCase):
             self.assertEqual(_git(td, "status", "--porcelain").stdout.strip(), "")
             with open(os.path.join(td, "data/foo.txt")) as f:
                 self.assertEqual(f.read(), "line-B\n")
+
+    def test_multibyte_evidence_over_byte_limit_aborts_before_commit(self):
+        with tempfile.TemporaryDirectory() as td:
+            _init_repo(td)
+            _write_commit(td, "data/foo.txt", "é" * 70000, "base")
+            first = _write_commit(td, "data/foo.txt", "short\n", "apply: batch b1")
+            head_before = _git(td, "rev-parse", "HEAD").stdout.strip()
+            req = {"id":"rq-multibyte","doc":"data/foo.txt",
+                   "run_first":first,"run_last":first}
+            ok, detail = dad.execute_revert(
+                req,repo_root=td,do_rebuild=lambda: (True,""),
+                do_history=lambda: (True,""),generator=lambda _root:"generator-test")
+            self.assertFalse(ok)
+            self.assertEqual(detail,"revert_evidence_unavailable")
+            self.assertEqual(_git(td,"rev-parse","HEAD").stdout.strip(),head_before)
+            self.assertEqual(_git(td,"status","--porcelain").stdout.strip(),"")
 
     def test_dirty_tree_refuses(self):
         with tempfile.TemporaryDirectory() as td:

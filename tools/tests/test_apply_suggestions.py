@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,40 @@ import apply_suggestions as ap  # noqa: E402
 import stamp_block_ids as sb  # noqa: E402
 
 BID_RE = sb.BID_RE
+
+
+class GeneratorIdentityTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="generator-identity-")
+        shutil.copytree(TOOLS, os.path.join(self.root, "tools"))
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _append(self, relpath, text):
+        with open(os.path.join(self.root, relpath), "a", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_dependency_closure_includes_transitive_generator_helpers(self):
+        paths = ap.generator_dependency_paths(self.root)
+        self.assertIn("tools/student_archives.py", paths)
+        self.assertIn("tools/text_norm.py", paths)
+        self.assertIn("tools/render_diff_lib.py", paths)
+
+    def test_identity_changes_when_transitive_helpers_change(self):
+        original = ap.generator_identity(self.root)
+        self._append("tools/student_archives.py", "\n# identity catch-power\n")
+        student_changed = ap.generator_identity(self.root)
+        self.assertNotEqual(student_changed, original)
+        self._append("tools/text_norm.py", "\n# second helper catch-power\n")
+        self.assertNotEqual(ap.generator_identity(self.root), student_changed)
+
+    def test_identity_ignores_unrelated_ambient_files(self):
+        original = ap.generator_identity(self.root)
+        self._append("tools/prod_release_executor.py", "\n# unrelated\n")
+        with open(os.path.join(self.root, "ambient.txt"), "w", encoding="utf-8") as fh:
+            fh.write("unrelated")
+        self.assertEqual(ap.generator_identity(self.root), original)
 
 
 def _bid_of(span):
@@ -219,12 +254,17 @@ class InMemoryEditorStore:
         return {"ok": True, "id": rid, "status": "pending"}
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
-                 needs_human=None, drift=None, base_sha=None):
+                 needs_human=None, drift=None, base_sha=None, commit_sha=None,
+                 generator_id=None):
         b = self.batches.get(batch_id)
         if not b:
             return {"ok": False, "reason": "no_batch"}
         if phase:
             b["phase"] = phase
+        if commit_sha is not None:
+            b["commit_sha"] = commit_sha
+        if generator_id is not None:
+            b["generator_id"] = generator_id
         for ids, st in ((applied, "applied"), (accepted_blocked, "accepted_blocked"),
                         (needs_human, "needs_human"), (drift, "drift")):
             for i in (ids or []):
@@ -266,6 +306,9 @@ class FakePipeline:
 
     def parity(self, worktree):
         return self.parity_ok, {"stdout": "parity"}
+
+    def generator_identity(self, worktree):
+        return "sha256:test-generator"
 
     def deploy(self, worktree, branch, plan_only):
         plan = [["bash", "deploy/deploy-dev.sh", branch], ["npx", "wrangler", "deploy"]]
@@ -456,6 +499,9 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertTrue(res.committed)
         self.assertEqual([p.suggestion_id for p in res.applied], ["s1"])
         self.assertEqual(self.store.rows["s1"]["status"], "applied")
+        self.assertEqual(self.store.batches["b1"]["commit_sha"], ap.head_sha(self.root))
+        self.assertEqual(self.store.batches["b1"]["generator_id"],
+                         "sha256:test-generator")
         canonical = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
         self.assertIn("Revised intake notes", canonical)
         self.assertEqual(self._porcelain(), "")  # clean after merge
@@ -832,6 +878,35 @@ class HttpRpcRoutingTest(unittest.TestCase):
     """The HTTP client's companion proposer MUST hit the admin-scoped
     /system-suggest endpoint (NOT the human /suggest endpoint, which hardcodes
     origin:human and would 403 the admin service token)."""
+
+    def test_finalize_posts_release_evidence(self):
+        import io
+        import urllib.request as urlreq
+        seen = {}
+
+        class _Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            seen["body"] = json.loads(req.data.decode("utf-8"))
+            return _Resp(json.dumps({"ok": True}).encode())
+
+        orig = urlreq.urlopen
+        urlreq.urlopen = fake_urlopen
+        try:
+            client = ap.HttpRpcClient("https://w.example.com/edit/v1", "tok")
+            client.finalize("batch-1", phase=ap.PHASE_DONE, applied=["s1"],
+                            commit_sha="a" * 40,
+                            generator_id="sha256:" + "b" * 64)
+        finally:
+            urlreq.urlopen = orig
+
+        self.assertEqual(seen["body"]["commit_sha"], "a" * 40)
+        self.assertEqual(seen["body"]["generator_id"], "sha256:" + "b" * 64)
 
     def test_propose_companion_posts_to_system_suggest(self):
         import io

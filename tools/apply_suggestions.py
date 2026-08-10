@@ -56,6 +56,7 @@ tools/tests/test_apply_suggestions.py).
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import dataclasses
 import datetime
@@ -86,6 +87,14 @@ LOCK_PATH = os.path.join(LOCK_DIR, "apply.lock")
 ENV_API_BASE = "EDIT_API_BASE"          # e.g. https://<worker>/edit/v1  (no trailing slash)
 ENV_SERVICE_TOKEN = "EDIT_SERVICE_TOKEN"  # admin/service bookmark token (opaque). NEVER commit/log.
 ENV_DEPLOY = "APPLY_DEPLOY"             # "1" => actually deploy; anything else => build+verify only.
+
+GENERATOR_ENTRYPOINTS = (
+    "tools/build_site.py",
+    "tools/build_worker_personas.py",
+    "tools/build_instructor_bundle.py",
+    "tools/check_build_parity.py",
+    "tools/spine_stamp.py",
+)
 
 # apply_batches journal phases (Worker-owned enum).
 PHASE_CLAIMED = "claimed"
@@ -254,6 +263,54 @@ def head_sha(root):
     return git(["rev-parse", "HEAD"], root).stdout.strip()
 
 
+def generator_dependency_paths(root):
+    """Return the deterministic local-Python closure for deployable generators."""
+    root = os.path.abspath(root)
+    pending = list(GENERATOR_ENTRYPOINTS)
+    found = set()
+    while pending:
+        relpath = pending.pop()
+        if relpath in found:
+            continue
+        path = os.path.join(root, relpath)
+        if not os.path.isfile(path):
+            raise ApplyError("generator dependency is missing: " + relpath)
+        found.add(relpath)
+        try:
+            tree = ast.parse(open(path, encoding="utf-8").read(), filename=relpath)
+        except (OSError, SyntaxError) as exc:
+            raise ApplyError("generator dependency cannot be parsed: %s: %s" %
+                             (relpath, exc)) from exc
+        modules = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules.append(node.module)
+        for module in modules:
+            module_path = module.replace(".", "/")
+            candidates = (
+                "tools/%s.py" % module_path,
+                "tools/%s/__init__.py" % module_path,
+            )
+            for candidate in candidates:
+                if os.path.isfile(os.path.join(root, candidate)):
+                    pending.append(candidate)
+                    break
+    return tuple(sorted(found))
+
+
+def generator_identity(root):
+    """Hash the authoritative generator entrypoints and all local dependencies."""
+    digest = hashlib.sha256()
+    for relpath in generator_dependency_paths(root):
+        digest.update(relpath.encode("utf-8") + b"\0")
+        with open(os.path.join(root, relpath), "rb") as fh:
+            digest.update(fh.read())
+        digest.update(b"\0")
+    return "sha256:" + digest.hexdigest()
+
+
 # --------------------------------------------------------------------------- #
 # flock — host-local intra-host guard (the DO in_flight lease is the true mutex).
 # --------------------------------------------------------------------------- #
@@ -288,7 +345,8 @@ class HttpRpcClient:
       * POST /reconcile                       -> { ok, ... }
       * POST /claim   {batch_id, base_sha?}   -> { ok, batch_id, claimed:[id...], lease_expires_at }
       * GET  /review                          -> { ok, items:[<full suggestion rows>] }  (admin)
-      * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?}
+      * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?,
+                        commit_sha?, generator_id?}
       * POST /system-suggest {id, source_ref, origin, ...} -> SYSTEM proposer
             (origin=companion|ai_rewrite, pending). Admin scope only; the human
             /suggest endpoint hardcodes origin:human and is edit/instructor-scoped,
@@ -348,12 +406,17 @@ class HttpRpcClient:
         return self._req("POST", "/system-suggest", companion)
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
-                 needs_human=None, drift=None, base_sha=None):
+                 needs_human=None, drift=None, base_sha=None, commit_sha=None,
+                 generator_id=None):
         body = {"batch_id": batch_id}
         if phase is not None:
             body["phase"] = phase
         if base_sha is not None:
             body["base_sha"] = base_sha
+        if commit_sha is not None:
+            body["commit_sha"] = commit_sha
+        if generator_id is not None:
+            body["generator_id"] = generator_id
         for key, val in (("applied", applied), ("accepted_blocked", accepted_blocked),
                          ("needs_human", needs_human), ("drift", drift)):
             if val:
@@ -420,6 +483,9 @@ class SubprocessPipeline:
         rc, out = self._run(
             [sys.executable, os.path.join(worktree, "tools", "check_build_parity.py")], worktree)
         return rc == 0, {"stdout": out}
+
+    def generator_identity(self, worktree):
+        return generator_identity(worktree)
 
     def deploy(self, worktree, branch, plan_only):
         """Deploy the site (Hetzner DEV) + Worker (wrangler). GATED: only executes
@@ -1583,7 +1649,9 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         client.finalize(batch_id, phase=PHASE_DONE,
                         applied=[p.suggestion_id for p in applied_patches],
                         drift=[_id(r) for r in drift],
-                        needs_human=[_id(r) for r in needs_human])
+                        needs_human=[_id(r) for r in needs_human],
+                        commit_sha=head_sha(canonical_root),
+                        generator_id=pipeline.generator_identity(canonical_root))
         return ApplyResult(batch_id, base_sha, applied_patches, drift, needs_human,
                            [], companions, deploy_info, digest, True)
     finally:

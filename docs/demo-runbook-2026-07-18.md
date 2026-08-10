@@ -2,7 +2,7 @@
 
 *Prepared 2026-07-17→18; rehearsed end-to-end on DEV 2026-07-18 (WP9). Everything below works with ZERO API keys except the steps marked 🔑. Total time: ~20 minutes + discussion.*
 
-*DEV is live: site **https://sonsteng-dev.damienriehl.com/platform/** · Worker (chat / critique / debrief + the `/edit` editor) **https://sonsteng-chat.damienriehl.workers.dev**. PROD is unchanged and stays held — enabling it is a documented one-command step in [`docs/prod-enable.md`](prod-enable.md); **do not run it during the demo.***
+*The editing/DEV site is **https://sonsteng-dev.damienriehl.com/platform/** · Worker (chat / critique / debrief + the `/edit` editor) **https://sonsteng-chat.damienriehl.workers.dev**. Public PROD is **https://sonsteng.damienriehl.com/platform/** and has a separate release lifecycle; DEV auto-apply never publishes it.*
 
 ## What changed since the 2026-07-17 build (weekend fast-follows)
 
@@ -12,7 +12,8 @@ Nothing here alters the keyless demo path, but know it before you present:
 - **Streaming (WP4).** SSE token-streaming for the live interview exists behind a config flag; it ships **OFF** (`STREAMING="false"`). The client's typing indicator is the default experience. No demo impact.
 - **Roger as a second editor (WP2).** Roger has his own edit token; his suggestions carry the **"RSH"** attribution label (John's carry "JOS"). Same review/accept gate.
 - **Digest push (WP3).** When pending editor suggestions accumulate, a batched **ntfy** notification fires (topic `damien-homebox-736591e7`). The `/edit/review` page stays the canonical digest; push is strictly additive.
-- **PROD injector wiring (WP1).** `EDIT_UPSTREAM`/`EDIT_ORIGIN` are now env-scoped; PROD enable is one documented command in `docs/prod-enable.md`. Still **not run**.
+- **PROD injector wiring (WP1).** `EDIT_UPSTREAM`/`EDIT_ORIGIN` are env-scoped. The public site now
+  exists, but the editing daemon still targets DEV only; production release is separate.
 
 ### ⚠ Added 2026-07-19 — canonical **direct-apply** + **redline history** (changes the editor story)
 
@@ -20,17 +21,17 @@ This landed *after* the runbook was written and it **replaces** the old "nothing
 Damien accepts" framing. Present the new story, not the old one (details:
 [`docs/direct-apply-daemon.md`](direct-apply-daemon.md), [`docs/history-browser.md`](history-browser.md)):
 
-- **Edits publish themselves in ~2 minutes.** `DIRECT_APPLY=true`: a saved edit auto-accepts, the
+- **Edits reach the editing/DEV site in ~2 minutes.** `DIRECT_APPLY=true` in DEV: a saved edit auto-accepts, the
   home-box apply daemon (`sonsteng-apply.timer`, every 2 min) patches canonical git, re-runs the
   validator + parity gates, rebuilds and redeploys **DEV**. There is no Damien approval step.
 - **Safety net moved from *approval* to *history + revert*.** A **History** link in the editing
   banner opens `/edit/history/<doc-slug>` — attributed, coalesced revisions with per-revision and
   baseline redlines, plus one-click revert (editors *request*; admin approval executes on the next
   daemon tick).
-- **The banner is honest about the service.** Fresh heartbeat → *"Your edits go live automatically
-  (~2 min)"*; stale → *"Auto-apply paused … your edits are safe and queued."* It never claims live
-  when the home box is down. An edit that can't apply cleanly surfaces as **"Needs attention — not
-  applied"** with the edited text still visible (no silent loss).
+- **The banner is honest about the service.** Fresh heartbeat → *"Your edits appear on the editing
+  site automatically (~2 min)"*; stale → *"Auto-apply paused … your edits are safe and queued."*
+  It never claims DEV-applied when the home box is down. An edit that can't apply cleanly surfaces
+  as **"Needs attention — not applied"** with the edited text still visible (no silent loss).
 - **Editorial pass.** A post-hoc quality review (session-end + daily 21:30 CT) files flags as block
   comments — quality is guarded *after* publish, not before it.
 - **DEV only.** The daemon deploys `main` to the Hetzner DEV box and can never reach PROD. (Since
@@ -65,7 +66,7 @@ Damien accepts" framing. Present the new story, not the old one (details:
 This is a walkthrough *for the two editors*, so close by showing the surface they'll actually use. It is DEV-only and needs no API key.
 
 - **Their edit link.** John (and Roger) each get one bookmarkable link that opens the real practicum site wrapped in an editor: `https://sonsteng-chat.damienriehl.workers.dev/edit/<page-path>/?t=<their-token>` — e.g. `…/edit/matters/m03-tort-meridian/?t=…` (the page-path is the site path **without** the `/platform/` prefix; both `…/` and `…/index.html` resolve). Tokens live only in `~/.secrets/sonsteng-editor-tokens` — resolve the URL, send the finished link, never the token in the clear.
-- **What they see.** A green editing bar across the top and **EDIT** / **COMMENT** affordances on every block (this m03 packet exposes dozens). **Since 2026-07-19 the bar reads *"Your edits go live automatically (~2 min)"* whenever the apply service is healthy** — a saved edit auto-accepts, the validator + parity gates re-run, and the change publishes to DEV on its own. (Plain-language one-pager: [`docs/editor-guide-for-john.md`](editor-guide-for-john.md).) *Demo tip: make one small edit at the start of this section and come back to it — it will be live on the page before you finish talking.*
+- **What they see.** A green editing bar across the top and **EDIT** / **COMMENT** affordances on every block (this m03 packet exposes dozens). **Since 2026-07-19 the bar reports that edits appear on the editing site automatically (~2 min) whenever the apply service is healthy** — a saved edit auto-accepts, the validator + parity gates re-run, and the change publishes to DEV on its own. This does not claim a public-PROD release. (Plain-language one-pager: [`docs/editor-guide-for-john.md`](editor-guide-for-john.md).) *Demo tip: make one small edit at the start of this section and come back to it — it will be live on the editing site before you finish talking.*
 - **The safety net is history, not approval.** The **History** link in the bar opens the attributed redline history for that document, with baseline + per-revision diffs and one-click revert. Show it — it is the answer to "what if I break something?"
 - **Where suggestions and comments land.** Damien's canonical review page: `https://sonsteng-chat.damienriehl.workers.dev/edit/review?t=<admin-token>` — grouped by source, word-level diffs, plus revert requests and editorial-pass flags. John's edits are labeled **JOS**, Roger's **RSH**. Queue is expected **empty** until they start (direct-apply drains it automatically; comments still wait for Damien).
 

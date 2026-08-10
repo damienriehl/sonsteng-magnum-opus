@@ -37,6 +37,7 @@ export const CEILINGS = {
   globalPending: 5000,
   maxBytes: 16 * 1024, // 16KB new_text + comment, pre-insert
   leaseMs: 5 * 60 * 1000, // apply lease window
+  productionLeaseMs: 15 * 60 * 1000, // bounded provider-operation fence
 };
 
 export const SCHEMA_SQL = `
@@ -84,10 +85,41 @@ export const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS apply_batches (
     batch_id TEXT PRIMARY KEY,
     base_sha TEXT,
+    commit_sha TEXT,
+    generator_id TEXT,
     phase TEXT NOT NULL,
     lease_expires_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS canonical_mutations (
+    id TEXT PRIMARY KEY, batch_id TEXT NOT NULL UNIQUE, actor TEXT NOT NULL,
+    kind TEXT NOT NULL, source_ref TEXT NOT NULL, original_text TEXT NOT NULL,
+    new_text TEXT NOT NULL, original_hash TEXT NOT NULL, new_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS production_releases (
+    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+    request_digest TEXT NOT NULL, authorization_key TEXT UNIQUE,
+    authorization_digest TEXT, state TEXT NOT NULL, actor TEXT NOT NULL,
+    credential_channel TEXT NOT NULL, target_environment TEXT NOT NULL,
+    target_batch_id TEXT NOT NULL, base_sha TEXT NOT NULL,
+    candidate_sha TEXT NOT NULL, generator_id TEXT NOT NULL,
+    evidence_hash TEXT NOT NULL, manifest_hash TEXT NOT NULL,
+    membership_hash TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS production_release_batches (
+    release_id TEXT NOT NULL, ordinal INTEGER NOT NULL, batch_id TEXT NOT NULL,
+    commit_sha TEXT NOT NULL, PRIMARY KEY (release_id, ordinal), UNIQUE (release_id, batch_id)
+  );
+  CREATE TABLE IF NOT EXISTS production_release_members (
+    release_id TEXT NOT NULL, suggestion_id TEXT NOT NULL, batch_id TEXT NOT NULL,
+    PRIMARY KEY (release_id, suggestion_id)
+  );
+  CREATE TABLE IF NOT EXISTS production_release_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, release_id TEXT NOT NULL, type TEXT NOT NULL,
+    actor TEXT NOT NULL, detail_json TEXT NOT NULL, created_at INTEGER NOT NULL
   );
 
   -- Single-row apply-daemon liveness beacon (SL6 heartbeat). id is pinned to 1
@@ -166,9 +198,14 @@ const SELECT_COLS =
   "created_at, updated_at";
 
 export class EditorStoreCore {
-  constructor(sql, now = () => Date.now()) {
+  constructor(sql, now = () => Date.now(), transactionSync = null) {
     this.sql = sql;
     this.now = now;
+    this.transactionSync = transactionSync || ((callback) => {
+      this.sql.exec("BEGIN IMMEDIATE");
+      try { const result = callback(); this.sql.exec("COMMIT"); return result; }
+      catch (error) { this.sql.exec("ROLLBACK"); throw error; }
+    });
   }
 
   initSchema() {
@@ -181,6 +218,15 @@ export class EditorStoreCore {
     this._ensureColumn("suggestions", "client_fp", "TEXT");
     // Structural-operation operand (merge's second ref / move's destination).
     this._ensureColumn("suggestions", "op_arg", "TEXT");
+    this._ensureColumn("apply_batches", "commit_sha", "TEXT");
+    this._ensureColumn("apply_batches", "generator_id", "TEXT");
+    this._ensureColumn("production_releases", "authorization_key", "TEXT");
+    this._ensureColumn("production_releases", "authorization_digest", "TEXT");
+    this._ensureColumn("production_releases", "fencing_token", "TEXT");
+    this._ensureColumn("production_releases", "lease_expires_at", "INTEGER");
+    this._ensureColumn("production_releases", "provider_json", "TEXT");
+    this._ensureColumn("suggestions", "production_release_id", "TEXT");
+    this._ensureColumn("suggestions", "production_published_at", "INTEGER");
   }
 
   _ensureColumn(table, col, type) {
@@ -577,7 +623,8 @@ export class EditorStoreCore {
 
   // Journal a phase transition, and (on outcome) resolve the batch's suggestions.
   // outcome for whole batch: undefined = just record phase; or per-status maps.
-  finalize(batchId, { phase, applied, accepted_blocked, needs_human, drift, base_sha } = {}) {
+  finalize(batchId, { phase, applied, accepted_blocked, needs_human, drift, base_sha,
+    commit_sha, generator_id } = {}) {
     const now = this.now();
     const b = this._one("SELECT batch_id FROM apply_batches WHERE batch_id=?", batchId);
     if (!b) return { ok: false, reason: "no_batch" };
@@ -586,6 +633,8 @@ export class EditorStoreCore {
       const sets = ["phase=?", "updated_at=?"];
       const binds = [phase, now];
       if (base_sha != null) { sets.push("base_sha=?"); binds.push(base_sha); }
+      if (commit_sha != null) { sets.push("commit_sha=?"); binds.push(commit_sha); }
+      if (generator_id != null) { sets.push("generator_id=?"); binds.push(generator_id); }
       binds.push(batchId);
       this.sql.exec(`UPDATE apply_batches SET ${sets.join(", ")} WHERE batch_id=?`, ...binds);
     }
@@ -598,6 +647,400 @@ export class EditorStoreCore {
     move(needs_human, STATUS.NEEDS_HUMAN, { lease_expires_at: null });
     move(drift, STATUS.DRIFT, { lease_expires_at: null });
     return { ok: true };
+  }
+
+  recordCanonicalMutation(input = {}) {
+    const required = ["id","batch_id","actor","kind","source_ref","original_text",
+      "new_text","original_hash","new_hash","base_sha","commit_sha","generator_id"];
+    if (required.some((key) => typeof input[key] !== "string") ||
+        required.filter((key) => !["original_text","new_text"].includes(key)).some((key) => !input[key]))
+      return { ok:false, reason:"validation_error" };
+    if (input.kind !== "history_revert" || input.original_text === input.new_text ||
+        new TextEncoder().encode(input.original_text).byteLength > 131072 ||
+        new TextEncoder().encode(input.new_text).byteLength > 131072 ||
+        !/^data\//.test(input.source_ref) || /(^|\/)(?:twin-secrets|\.secrets)(?:\/|$)|\.(?:pem|key)$/i.test(input.source_ref))
+      return { ok:false, reason:"validation_error" };
+    const request = this._one("SELECT editor,status FROM revert_requests WHERE id=?", input.id);
+    if (!request || request.status !== REVERT_STATUS.APPROVED || request.editor !== input.actor)
+      return { ok:false, reason:"revert_not_approved" };
+    const existing = this._one("SELECT * FROM canonical_mutations WHERE id=?", input.id);
+    if (existing) {
+      const batch = this._one("SELECT base_sha,commit_sha,generator_id,phase FROM apply_batches WHERE batch_id=?",
+        existing.batch_id);
+      return existing.batch_id === input.batch_id && existing.actor === input.actor &&
+        existing.source_ref === input.source_ref && existing.original_text === input.original_text &&
+        existing.new_text === input.new_text && existing.original_hash === input.original_hash &&
+        existing.new_hash === input.new_hash && batch?.commit_sha === input.commit_sha &&
+        batch?.generator_id === input.generator_id && batch?.base_sha === input.base_sha ?
+        { ok:true,replay:true,phase:batch.phase } :
+        { ok:false,reason:"idempotency_conflict" };
+    }
+    if (this._one("SELECT batch_id FROM apply_batches WHERE batch_id=?", input.batch_id))
+      return { ok:false,reason:"batch_exists" };
+    const now = this.now();
+    this.transactionSync(() => {
+      this.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,lease_expires_at,created_at,updated_at) VALUES (?,?,?,?, 'merged',NULL,?,?)",
+        input.batch_id,input.base_sha,input.commit_sha,input.generator_id,now,now);
+      this.sql.exec("INSERT INTO canonical_mutations (id,batch_id,actor,kind,source_ref,original_text,new_text,original_hash,new_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        input.id,input.batch_id,input.actor,input.kind,input.source_ref,input.original_text,input.new_text,
+        input.original_hash,input.new_hash,now);
+    });
+    return { ok:true,batch_id:input.batch_id,phase:"merged" };
+  }
+
+  completeCanonicalMutation(input = {}) {
+    const mutation = this._one("SELECT * FROM canonical_mutations WHERE id=?", input.id || "");
+    if (!mutation) return { ok:false,reason:"not_found" };
+    const batch = this._one("SELECT * FROM apply_batches WHERE batch_id=?", mutation.batch_id);
+    for (const key of ["batch_id","actor","source_ref","original_text","new_text","original_hash","new_hash"])
+      if (input[key] !== (key === "batch_id" ? mutation.batch_id : mutation[key]))
+        return { ok:false,reason:"idempotency_conflict" };
+    for (const key of ["base_sha","commit_sha","generator_id"])
+      if (input[key] !== batch[key]) return { ok:false,reason:"idempotency_conflict" };
+    if (batch.phase === "done") return { ok:true,replay:true,phase:"done" };
+    if (batch.phase !== "merged") return { ok:false,reason:"invalid_phase" };
+    const now = this.now();
+    this.transactionSync(() => {
+      this.sql.exec("UPDATE apply_batches SET phase='done',updated_at=? WHERE batch_id=?",
+        now,batch.batch_id);
+      this.sql.exec("UPDATE revert_requests SET status=?,updated_at=? WHERE id=? AND status=?",
+        REVERT_STATUS.DONE,now,input.id,REVERT_STATUS.APPROVED);
+    });
+    return { ok:true,batch_id:batch.batch_id,phase:"done" };
+  }
+
+  prepareProductionRelease(input = {}) {
+    const required = ["id", "idempotency_key", "request_digest", "actor", "base_sha",
+      "candidate_sha", "generator_id", "evidence_hash", "manifest_hash", "target_batch_id"];
+    if (required.some((k) => typeof input[k] !== "string" || !input[k]))
+      return { ok:false, reason:"validation_error" };
+    if (input.target_environment !== "production") return { ok:false, reason:"wrong_target" };
+    if (input.credential_channel !== "bearer") return { ok:false, reason:"service_bearer_required" };
+    if (input.ancestry_verified !== true) return { ok:false, reason:"nonancestor_candidate" };
+    if (this._one("SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' LIMIT 1"))
+      return { ok:false, reason:"missing_batch_evidence" };
+
+    const priorKey = this._one(
+      "SELECT id,request_digest FROM production_releases WHERE idempotency_key=?", input.idempotency_key);
+    if (priorKey) {
+      if (priorKey.id === input.id && priorKey.request_digest === input.request_digest)
+        return { ok:true, replay:true, release:this.getProductionRelease(priorKey.id) };
+      return { ok:false, reason:"idempotency_conflict" };
+    }
+    if (this._one("SELECT id FROM production_releases WHERE id=?", input.id))
+      return { ok:false, reason:"release_exists" };
+
+    if (this._one("SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') LIMIT 1"))
+      return { ok:false, reason:"active_release" };
+
+    const frontier = this._one(
+      "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
+    const allDone = this._all(
+      "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    const done = allDone.filter((batch) => this._one(
+      "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
+      batch.batch_id, STATUS.APPLIED) || this._one(
+      "SELECT id FROM canonical_mutations WHERE batch_id=? LIMIT 1", batch.batch_id));
+    let start = 0;
+    if (frontier) {
+      if (frontier.candidate_sha !== input.base_sha) return { ok:false, reason:"stale_base" };
+      const at = done.findIndex((b) => b.batch_id === frontier.target_batch_id);
+      if (at < 0) return { ok:false, reason:"stale_frontier" };
+      start = at + 1;
+    }
+    const end = done.findIndex((b, i) => i >= start && b.batch_id === input.target_batch_id);
+    if (end < start) return { ok:false, reason:"stale_target" };
+    const batches = done.slice(start, end + 1);
+    if (!batches.length) return { ok:false, reason:"empty_membership" };
+    if (batches.some((b) => !b.commit_sha || b.generator_id !== input.generator_id))
+      return { ok:false, reason:"stale_batch_evidence" };
+    if (batches[batches.length - 1].commit_sha !== input.candidate_sha)
+      return { ok:false, reason:"stale_candidate" };
+
+    const members = [];
+    const groups = new Map();
+    for (const batch of batches) {
+      const rows = this._all(
+        "SELECT id,group_id,status FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+        batch.batch_id, STATUS.APPLIED);
+      const mutations = this._all(
+        "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id);
+      if (!rows.length && !mutations.length) return { ok:false, reason:"stale_member" };
+      for (const row of rows) {
+        if (row.group_id) {
+          if (!groups.has(row.group_id)) groups.set(row.group_id, this._all(
+            "SELECT apply_batch_id,status FROM suggestions WHERE group_id=?", row.group_id));
+          const group = groups.get(row.group_id);
+          if (group.some((g) => g.apply_batch_id !== batch.batch_id || g.status !== STATUS.APPLIED))
+            return { ok:false, reason:"partial_group" };
+        }
+        members.push({ suggestion_id:row.id, batch_id:batch.batch_id });
+      }
+      for (const mutation of mutations)
+        members.push({ suggestion_id:mutation.id, batch_id:batch.batch_id });
+    }
+    const batchIds = batches.map((b) => b.batch_id);
+    const memberIds = members.map((m) => m.suggestion_id);
+    if (input.expected_batch_ids && JSON.stringify(input.expected_batch_ids) !== JSON.stringify(batchIds))
+      return { ok:false, reason:"membership_mismatch" };
+    if (input.expected_suggestion_ids &&
+        JSON.stringify([...input.expected_suggestion_ids].sort()) !== JSON.stringify([...memberIds].sort()))
+      return { ok:false, reason:"membership_mismatch" };
+    const membershipHash = this._fingerprint(JSON.stringify(batchIds), JSON.stringify(memberIds),
+      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash].join("\0"));
+    const now = this.now();
+    this.transactionSync(() => {
+    this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      input.id,input.idempotency_key,input.request_digest,"prepared",input.actor,input.credential_channel,
+      "production",input.target_batch_id,input.base_sha,input.candidate_sha,input.generator_id,
+      input.evidence_hash,input.manifest_hash,membershipHash,now,now);
+    batches.forEach((b, ordinal) => this.sql.exec(
+      "INSERT INTO production_release_batches (release_id,ordinal,batch_id,commit_sha) VALUES (?,?,?,?)",
+      input.id,ordinal,b.batch_id,b.commit_sha));
+    members.forEach((m) => this.sql.exec(
+      "INSERT INTO production_release_members (release_id,suggestion_id,batch_id) VALUES (?,?,?)",
+      input.id,m.suggestion_id,m.batch_id));
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      input.id,"prepared",input.actor,JSON.stringify({ membership_hash:membershipHash,
+        evidence_hash:input.evidence_hash, manifest_hash:input.manifest_hash,
+        target_environment:"production" }),now);
+    });
+    return { ok:true, release:this.getProductionRelease(input.id) };
+  }
+
+  authorizeProductionRelease(input = {}) {
+    if (!input.id || !input.idempotency_key || !input.request_digest || !input.actor)
+      return { ok:false, reason:"validation_error" };
+    if (input.credential_channel !== "access") return { ok:false, reason:"human_access_required" };
+    const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id);
+    if (!release) return { ok:false, reason:"not_found" };
+    if (release.authorization_key) {
+      if (release.authorization_key === input.idempotency_key &&
+          release.authorization_digest === input.request_digest)
+        return { ok:true, replay:true, release:this.getProductionRelease(input.id) };
+      return { ok:false, reason:"idempotency_conflict" };
+    }
+    if (release.state !== "prepared") return { ok:false, reason:"stale_draft" };
+    for (const key of ["target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash"]) {
+      if (input[key] != null && input[key] !== release[key]) return { ok:false, reason:"stale_draft" };
+    }
+    const now = this.now();
+    this.transactionSync(() => {
+    this.sql.exec("UPDATE production_releases SET state='authorized',actor=?,credential_channel=?,authorization_key=?,authorization_digest=?,updated_at=? WHERE id=? AND state='prepared'",
+      input.actor,input.credential_channel,input.idempotency_key,input.request_digest,now,input.id);
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      input.id,"authorized",input.actor,JSON.stringify({ membership_hash:release.membership_hash,
+        evidence_hash:release.evidence_hash,manifest_hash:release.manifest_hash,target_environment:"production" }),now);
+    });
+    return { ok:true, release:this.getProductionRelease(input.id) };
+  }
+
+  getProductionRelease(id) {
+    const row = this._one("SELECT * FROM production_releases WHERE id=?", id);
+    if (!row) return null;
+    const batches = this._all(
+      "SELECT ordinal,batch_id,commit_sha FROM production_release_batches WHERE release_id=? ORDER BY ordinal", id);
+    const suggestion_ids = this._all(
+      "SELECT suggestion_id FROM production_release_members WHERE release_id=? ORDER BY suggestion_id", id)
+      .map((r) => r.suggestion_id);
+    const events = this._all(
+      "SELECT type,actor,detail_json,created_at FROM production_release_events WHERE release_id=? ORDER BY id", id)
+      .map((event) => ({ type:event.type, actor:event.actor,
+        detail:JSON.parse(event.detail_json), created_at:event.created_at }));
+    return { ...row, batches, suggestion_ids, events };
+  }
+
+  // Production execution is a separate lifecycle. This claim can consume only
+  // a release carrying a prior human authorization; it never scans accepted or
+  // applied suggestions and therefore cannot enlarge frozen membership.
+  claimAuthorizedProductionRelease(input = {}) {
+    if (!input.actor || input.credential_channel !== "bearer")
+      return { ok:false, reason:"service_bearer_required" };
+    const now = this.now();
+    let release = input.id ? this._one("SELECT * FROM production_releases WHERE id=?", input.id) :
+      this._one("SELECT * FROM production_releases WHERE state='authorized' OR (state IN ('executing','pages_deployed','worker_deployed','verified') AND lease_expires_at<=?) ORDER BY updated_at,id LIMIT 1", now);
+    if (!release) return { ok:true, release:null };
+    if (['executing','pages_deployed','worker_deployed','verified'].includes(release.state) &&
+        release.lease_expires_at > now)
+      return { ok:false, reason:"lease_active" };
+    if (!['authorized','executing','pages_deployed','worker_deployed','verified'].includes(release.state))
+      return { ok:false, reason:"not_authorized" };
+    const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
+    const lease = now + Math.max(1000, Math.min(
+      input.lease_ms || CEILINGS.leaseMs, CEILINGS.productionLeaseMs));
+    this.sql.exec("UPDATE production_releases SET state=?,fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
+      release.state === "authorized" ? "executing" : release.state,token,lease,now,release.id);
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      release.id,"executing",input.actor,JSON.stringify({ fencing_token:token,
+        manifest_hash:release.manifest_hash }),now);
+    return { ok:true, release:this.getProductionRelease(release.id) };
+  }
+
+  claimProductionRestore(input = {}) {
+    if (!input.id || !input.actor || input.credential_channel !== "bearer")
+      return { ok:false,reason:"service_bearer_required" };
+    const release = this._one("SELECT * FROM production_releases WHERE id=?",input.id);
+    if (!release) return { ok:false,reason:"not_found" };
+    const now = this.now();
+    if (release.state === "restoring" && release.lease_expires_at > now)
+      return { ok:false,reason:"lease_active" };
+    if (!['failed_fenced','restoring'].includes(release.state))
+      return { ok:false,reason:"not_fenced" };
+    const token = this._fingerprint(release.id,release.fencing_token || "",
+      `${now}:${input.actor}:restore`);
+    const lease = now + Math.max(1000,Math.min(
+      input.lease_ms || CEILINGS.productionLeaseMs,CEILINGS.productionLeaseMs));
+    this.transactionSync(() => {
+      this.sql.exec("UPDATE production_releases SET state='restoring',fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
+        token,lease,now,release.id);
+      this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+        release.id,"restoring",input.actor,JSON.stringify({ restore_claim:true }),now);
+    });
+    return { ok:true,release:this.getProductionRelease(release.id) };
+  }
+
+  renewProductionReleaseLease(input = {}) {
+    const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id || "");
+    if (!release) return { ok:false, reason:"not_found" };
+    if (input.credential_channel !== "bearer" || !input.actor)
+      return { ok:false, reason:"service_bearer_required" };
+    if (!input.fencing_token || input.fencing_token !== release.fencing_token)
+      return { ok:false, reason:"stale_fence" };
+    if (!['executing','pages_deployed','worker_deployed','verified','restoring'].includes(release.state))
+      return { ok:false, reason:"not_executing" };
+    const now = this.now();
+    if (!release.lease_expires_at || release.lease_expires_at <= now)
+      return { ok:false, reason:"lease_expired" };
+    const lease = now + Math.max(1000,
+      Math.min(input.lease_ms || CEILINGS.productionLeaseMs, CEILINGS.productionLeaseMs));
+    this.sql.exec("UPDATE production_releases SET lease_expires_at=?,updated_at=? WHERE id=? AND fencing_token=?",
+      lease,now,release.id,release.fencing_token);
+    return { ok:true, lease_expires_at:lease };
+  }
+
+  transitionProductionRelease(input = {}) {
+    const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id || "");
+    if (!release) return { ok:false, reason:"not_found" };
+    if (input.credential_channel !== "bearer" || !input.actor)
+      return { ok:false, reason:"service_bearer_required" };
+    if (!input.fencing_token || input.fencing_token !== release.fencing_token)
+      return { ok:false, reason:"stale_fence" };
+    if (['executing','pages_deployed','worker_deployed','verified','restoring'].includes(release.state) &&
+        (!release.lease_expires_at || release.lease_expires_at <= this.now()))
+      return { ok:false, reason:"lease_expired" };
+    const replayable = new Set(["executing","pages_deployed","worker_deployed","verified","complete"]);
+    const prior = replayable.has(input.state) && this._one(
+      "SELECT detail_json FROM production_release_events WHERE release_id=? AND type=? LIMIT 1", release.id,input.state);
+    if (prior) {
+      const requested = JSON.stringify(input.detail && typeof input.detail === "object" ? input.detail : {});
+      if (prior.detail_json !== requested) return { ok:false, reason:"idempotency_conflict" };
+      return { ok:true, replay:true, release:this.getProductionRelease(release.id) };
+    }
+    if (input.state === "verified") {
+      const pages = this._one("SELECT id FROM production_release_events WHERE release_id=? AND type='pages_deployed'", release.id);
+      const worker = this._one("SELECT id FROM production_release_events WHERE release_id=? AND type='worker_deployed'", release.id);
+      if (!pages || !worker) return { ok:false, reason:"targets_incomplete" };
+    }
+    const allowed = {
+      executing:new Set(["pages_deployed","worker_deployed","failed_fenced"]),
+      pages_deployed:new Set(["worker_deployed","verified","failed_fenced"]),
+      worker_deployed:new Set(["pages_deployed","verified","failed_fenced"]),
+      verified:new Set(["complete","failed_fenced"]),
+      failed_fenced:new Set(), restoring:new Set(["restored","failed_fenced"]),
+    };
+    if (!allowed[release.state]?.has(input.state)) return { ok:false, reason:"invalid_transition" };
+    const detail = input.detail && typeof input.detail === "object" ? input.detail : {};
+    const forbidden = JSON.stringify(detail).match(/new_text|original_text|authorization|credential|token/i);
+    if (forbidden) return { ok:false, reason:"unsafe_evidence" };
+    const now = this.now();
+    this.transactionSync(() => {
+    this.sql.exec("UPDATE production_releases SET state=?,provider_json=?,lease_expires_at=?,updated_at=? WHERE id=?",
+      input.state,JSON.stringify(detail),input.state === "complete" ? null :
+        now + CEILINGS.leaseMs,now,release.id);
+    this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+      release.id,input.state,input.actor,JSON.stringify(detail),now);
+    if (input.state === "complete") {
+      const members = this._all("SELECT suggestion_id FROM production_release_members WHERE release_id=?", release.id);
+      for (const member of members) this.sql.exec(
+        "UPDATE suggestions SET production_release_id=?,production_published_at=? WHERE id=? AND status=? AND (production_release_id IS NULL OR production_release_id=?)",
+        release.id,now,member.suggestion_id,STATUS.APPLIED,release.id);
+    }
+    });
+    return { ok:true, release:this.getProductionRelease(release.id) };
+  }
+
+  // Read-only projection for the human Publisher surface. A selectable target
+  // is always a complete apply batch after the last verified production
+  // frontier; each target implicitly encloses every earlier returned batch.
+  publisherContext() {
+    const activeRow = this._one(
+      "SELECT id FROM production_releases WHERE state IN ('prepared','authorized','executing','pages_deployed','worker_deployed','delayed','failed_fenced','restoring','verified') ORDER BY updated_at DESC LIMIT 1");
+    const release = activeRow ? this.getProductionRelease(activeRow.id) : null;
+    const frontier = this._one(
+      "SELECT target_batch_id FROM production_releases WHERE state IN ('verified','complete') ORDER BY updated_at DESC,id DESC LIMIT 1");
+    const done = this._all(
+      "SELECT batch_id,commit_sha,generator_id,created_at,updated_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    let start = 0;
+    if (frontier) {
+      const at = done.findIndex((b) => b.batch_id === frontier.target_batch_id);
+      start = at < 0 ? done.length : at + 1;
+    }
+    const visible = release ? release.batches.map((frozen) =>
+      done.find((batch) => batch.batch_id === frozen.batch_id)).filter(Boolean) : done.slice(start);
+    const batches = visible.map((batch) => ({ ...batch, changes: [...this._all(
+      "SELECT id,editor,origin,kind,page,source_ref,original_text,new_text,comment,group_id,status,apply_batch_id,created_at,updated_at FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+      batch.batch_id, STATUS.APPLIED), ...this._all(
+      "SELECT id,actor AS editor,'human' AS origin,kind,NULL AS page,source_ref,original_text,new_text,NULL AS comment,NULL AS group_id,'applied' AS status,batch_id AS apply_batch_id,created_at,created_at AS updated_at FROM canonical_mutations WHERE batch_id=? ORDER BY id",
+      batch.batch_id)] }));
+    return { release, batches };
+  }
+
+  publisherSummary() {
+    const frontier = this._one(
+      "SELECT b.created_at,b.batch_id FROM production_releases r JOIN apply_batches b ON b.batch_id=r.target_batch_id WHERE r.state IN ('verified','complete') ORDER BY r.updated_at DESC,r.id DESC LIMIT 1");
+    const row = frontier ? this._one(
+      "SELECT COUNT(*) AS count FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done' AND (b.created_at>? OR (b.created_at=? AND b.batch_id>?))",
+      STATUS.APPLIED,frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
+      "SELECT COUNT(*) AS count FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done'",
+      STATUS.APPLIED);
+    const mutationRow = frontier ? this._one(
+      "SELECT COUNT(*) AS count FROM canonical_mutations m JOIN apply_batches b ON b.batch_id=m.batch_id WHERE b.phase='done' AND (b.created_at>? OR (b.created_at=? AND b.batch_id>?))",
+      frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
+      "SELECT COUNT(*) AS count FROM canonical_mutations m JOIN apply_batches b ON b.batch_id=m.batch_id WHERE b.phase='done'");
+    return { eligible:Number(row?.count || 0) + Number(mutationRow?.count || 0) };
+  }
+
+  // Minimal, text-free projection for the trusted candidate builder.  The
+  // service receives immutable IDs and commit evidence; edited copy remains
+  // confined to the human Publisher preview.
+  productionPreparationContext() {
+    const activeRow = this._one(
+      "SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 1");
+    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
+    const missing = this._one(
+      "SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' ORDER BY created_at,batch_id LIMIT 1");
+    if (missing) return { active_release:null, batches:[], blocked_reason:"missing_batch_evidence",
+      blocked_batch_id:missing.batch_id };
+    const frontier = this._one(
+      "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
+    const allDone = this._all(
+      "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
+    const done = allDone.filter((batch) => this._one(
+      "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
+      batch.batch_id, STATUS.APPLIED) || this._one(
+      "SELECT id FROM canonical_mutations WHERE batch_id=? LIMIT 1", batch.batch_id));
+    let start = 0;
+    if (frontier) {
+      const at = done.findIndex((batch) => batch.batch_id === frontier.target_batch_id);
+      start = at < 0 ? done.length : at + 1;
+    }
+    const batches = done.slice(start).map((batch) => ({ ...batch,
+      suggestion_ids:[...this._all(
+        "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
+        batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
+        "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
+        .map((row) => row.id)] }));
+    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches };
   }
 
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is
@@ -639,9 +1082,12 @@ export class EditorStoreCore {
             swept.completed.push(it.id);
           }
         }
+        const evidence = this._one(
+          "SELECT commit_sha,generator_id FROM apply_batches WHERE batch_id=?", b.batch_id);
+        const terminalPhase = evidence?.commit_sha && evidence?.generator_id ? "done" : "evidence_missing";
         this.sql.exec(
-          "UPDATE apply_batches SET phase='done', updated_at=? WHERE batch_id=?",
-          now, b.batch_id
+          "UPDATE apply_batches SET phase=?, updated_at=? WHERE batch_id=?",
+          terminalPhase, now, b.batch_id
         );
       }
     }
@@ -692,7 +1138,7 @@ export class EditorStoreCore {
   listRevertRequests(status = null) {
     if (status) {
       return this._all(
-        "SELECT * FROM revert_requests WHERE status=? ORDER BY created_at ASC", status);
+        "SELECT r.*,m.batch_id,m.actor AS mutation_actor,m.source_ref,m.original_text,m.new_text,m.original_hash,m.new_hash,b.base_sha,b.commit_sha,b.generator_id,b.phase AS mutation_phase FROM revert_requests r LEFT JOIN canonical_mutations m ON m.id=r.id LEFT JOIN apply_batches b ON b.batch_id=m.batch_id WHERE r.status=? ORDER BY r.created_at ASC", status);
     }
     return this._all("SELECT * FROM revert_requests ORDER BY created_at DESC");
   }

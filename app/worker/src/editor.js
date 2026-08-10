@@ -15,6 +15,7 @@ import { handleEditPage, serveSiteAsset } from "./editor-inject.js";
 import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
 import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-history.js";
+import { renderPublisherPage } from "./editor-publisher.js";
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
@@ -22,6 +23,11 @@ import {
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
+  revertRecordEndpoint,
+  publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
+  productionPreparationContextEndpoint,
+  productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
+  productionRestoreClaimEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -111,6 +117,23 @@ export async function editorFetch(request, env, ctx) {
   const reqOrigin = request.headers.get("Origin");
   const wrap = (resp) => withEditHeaders(resp, env, reqOrigin);
 
+  // Public, read-only deployment attestation used by the production executor.
+  // RELEASE_SHA is injected by the candidate-bound Wrangler upload; an absent
+  // or malformed value fails closed instead of claiming ambient provenance.
+  if (path === "/edit/release-provenance" && request.method === "GET") {
+    const sha = typeof env.RELEASE_SHA === "string" ? env.RELEASE_SHA : "";
+    if (!/^[0-9a-f]{40}$/.test(sha)) {
+      return wrap(new Response("Release provenance unavailable.\n", {
+        status: 503,
+        headers: { "content-type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+      }));
+    }
+    return wrap(new Response(null, {
+      status: 204,
+      headers: { "X-Release-SHA": sha, "Cache-Control": "no-store" },
+    }));
+  }
+
   // ---- CORS preflight for /edit/v1 XHRs (edit origin only) ------------------
   if (request.method === "OPTIONS") {
     return wrap(new Response(null, { status: 204 }));
@@ -182,12 +205,30 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await reconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/heartbeat" && request.method === "POST")
     return wrap(await heartbeatEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/releases/authorize" && request.method === "POST")
+    return wrap(await publisherAuthorizeEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/prepare" && request.method === "POST")
+    return wrap(await productionPrepareEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/frontier" && request.method === "GET")
+    return wrap(await productionPreparationContextEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/claim" && request.method === "POST")
+    return wrap(await productionClaimEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/restore-claim" && request.method === "POST")
+    return wrap(await productionRestoreClaimEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/renew" && request.method === "POST")
+    return wrap(await productionRenewEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/transition" && request.method === "POST")
+    return wrap(await productionTransitionEndpoint(request, env, auth));
+  if (path === "/edit/v1/prod/releases/status" && request.method === "GET")
+    return wrap(await publisherReleaseEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-request" && request.method === "POST")
     return wrap(await revertRequestEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-requests" && request.method === "GET")
     return wrap(await revertRequestsEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-resolve" && request.method === "POST")
     return wrap(await revertResolveEndpoint(request, env, auth));
+  if (path === "/edit/v1/revert-record" && request.method === "POST")
+    return wrap(await revertRecordEndpoint(request, env, auth));
 
   // ---- editor-gated redline History browser (edit/instructor scope) ---------
   // Same gate as /edit/v1/pending. Index + per-doc slice from the inlined bundle.
@@ -262,9 +303,22 @@ export async function editorFetch(request, env, ctx) {
   if (path === "/edit/review") {
     if (request.method !== "GET" || !auth.scopes.admin.granted) return wrap(uniform404());
     const stub = editorStub(env);
-    const items = await stub.listAll();
-    const reverts = await stub.listRevertRequests(null);
-    return wrap(renderReviewPage(items, reverts));
+    const [items, reverts, publisher] = await Promise.all([
+      stub.listAll(), stub.listRevertRequests(null),
+      typeof stub.publisherSummary === "function" ? stub.publisherSummary() : Promise.resolve({ eligible: 0 }),
+    ]);
+    const eligible = Number(publisher.eligible || 0);
+    return wrap(renderReviewPage(items, reverts, eligible));
+  }
+
+  // Distinct human publication gate. Admin authority is intentionally not a
+  // substitute for Publisher authority; insufficient scope stays uniform 404.
+  if (path === "/edit/publish") {
+    if (request.method !== "GET" || env.PROD_RELEASE_LEDGER !== "true" ||
+        !auth.scopes.publisher.granted || auth.credential_channel !== "access" || auth.service)
+      return wrap(uniform404());
+    const context = await editorStub(env).publisherContext();
+    return wrap(renderPublisherPage(context, attributionLabel(auth.editor)));
   }
 
   // ---- instructor view ------------------------------------------------------

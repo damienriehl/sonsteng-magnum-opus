@@ -365,7 +365,10 @@ The `tools/apply_suggestions.py` loop drives these (admin token = service scope)
   groups only** (never partially), stamps a **lease** + `apply_batch_id`, opens
   the `apply_batches` journal at phase `claimed`.
 - `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
-  drift? }` → journals the phase and resolves the batch's `in_flight` rows.
+  drift?, commit_sha?, generator_id? }` → journals the phase and resolves the
+  batch's `in_flight` rows. The terminal `done` call records the exact canonical
+  commit and content identity of the authoritative generator entrypoints plus
+  their complete transitive local-Python dependency closure.
 - `reconcile` → startup crash recovery: expired-lease batches pre-`merged` roll
   `in_flight → accepted` (re-queue) + phase `rolled_back`; post-`merged` complete
   `in_flight → applied`. Orphan `in_flight` (expired lease, no live batch) → back
@@ -379,6 +382,47 @@ drift` · `accepted → in_flight` (claim) · `in_flight → applied⛔ | accept
 | drift | needs_human | accepted` · `accepted_blocked → accepted / declined⛔` ·
 `drift → pending` (re-anchor) · `needs_human → applied⛔ / accepted / declined⛔`.
 Terminal (⛔): `superseded`, `declined`, `applied`.
+
+`applied` is terminal only for the DEV apply lifecycle. It means canonical + DEV
+application, surfaced as **Available on DEV — waiting for Publisher** until it is
+included in a verified production release. Production state is a separate
+immutable ledger; approval and `DIRECT_APPLY` never authorize PROD.
+
+## Production release API (`/edit/v1/prod/releases/*`)
+
+These routes exist only with `EDIT_ENVIRONMENT=production` and are same-origin
+CSRF guarded. `GET /frontier` and `POST /prepare`, `/claim`, `/renew`, and `/transition` require the trusted
+release service channel: a bearer credential with the dedicated `release_service`
+scope and a separate `EDIT_TOKEN_RELEASE` secret. An admin or DEV apply-daemon
+bearer is insufficient. The
+service may freeze evidence and execute an already-authorized release, but it
+cannot authorize one.
+
+`POST /renew` extends an unexpired execution lease only for its current fencing
+token. The executor heartbeats around every bounded provider operation; a lost
+renewal, expired lease, or stale token blocks later provider work and ledger
+transitions so a failover cannot overlap the original executor.
+Before a provider call, that lease covers the adapter's complete worst-case
+command sequence plus margin. Production leases are capped at 15 minutes, so
+heartbeat loss cannot create overlapping mutation while failover remains bounded.
+
+`GET /frontier` returns the text-free complete contiguous DEV apply frontier for the isolated
+candidate builder. `POST /prepare` binds that frontier through a
+target batch to base/candidate SHA, generator ID, evidence/manifest hashes,
+exact batch/group/suggestion membership, target, and service actor. It is
+idempotent only for the identical binding. The browser has no service credential
+and its preparation control remains disabled; see
+`docs/prod-release-operations.md`.
+
+`POST /authorize` requires a current human Access identity with independent
+`publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
+fail closed. It authorizes only the already-prepared immutable binding.
+
+`POST /claim` returns only authorized releases plus a fencing token.
+`POST /transition` journals bounded identifiers/hashes and rejects stale fences
+or illegal/incomplete phases. `GET /status?id=…` exposes machine-readable state
+to Publisher or service scope. Completion occurs only after Pages and the
+Worker/editor-map provenance match the frozen candidate.
 
 ## EditorStore config (wrangler.jsonc)
 

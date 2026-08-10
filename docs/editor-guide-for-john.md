@@ -11,7 +11,8 @@ go to Damien first, so those waiting a little longer is normal.*
 On the editing site, you no longer have to wait for Damien to record a wording change. Click
 **Edit**, type directly in the paragraph, and pause for a moment: the editor saves as you type.
 Click **Done** when you have finished that paragraph. Your wording appears on the editing site
-**automatically within ~2 minutes**. Damien remains the publisher of the public production site.
+**automatically within ~2 minutes**. That means the editing/DEV site only. Damien separately
+reviews an immutable batch as Publisher before the public production site changes.
 You still can't break anything — every version is kept, and any change can be undone with one
 click (below).
 
@@ -19,9 +20,10 @@ click (below).
   **"Going live…"**; once it's published it clears. If something couldn't be applied cleanly,
   the paragraph shows your text with a warning outline and a **"Needs attention — not applied"**
   pill, so nothing is ever silently lost.
-- **The green bar is honest about the service.** When auto-publishing is healthy it reads
-  *"Your edits go live automatically (~2 min)."* If the home service is momentarily paused it
-  says so — *"Auto-apply paused … your edits are safe and queued"* — and your work waits safely.
+- **The green bar is honest about the editing service.** When DEV auto-apply is healthy it reads
+  *"Your edits appear on the editing site automatically (~2 min)."* If the home service is
+  momentarily paused it says so — *"Auto-apply paused … your edits are safe and queued"* — and
+  your work waits safely.
 - **History + one-click undo.** A **"History"** link in the top bar opens the change history for
   every document: who changed what, a redline of each revision, and a **Request revert** button
   to roll a change back. (Damien's link executes reverts immediately; yours files the request.)
@@ -39,7 +41,7 @@ choose, no account to create. Use the same address Damien put on the list; if a 
 is typed in, the code never arrives.
 
 Once you're in, it opens the real practicum website, but now you can change it. A green bar
-across the top reads **"You're editing — your edits go live automatically (~2 min)."** If you
+across the top reads **"Your edits appear on the editing site automatically (~2 min)."** If you
 ever don't see that bar, you're on the normal site; go to the address again.
 
 *Your old personal link still works too, for now — nothing you have bookmarked has stopped
@@ -103,9 +105,10 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 
 ## What happens next
 
-- **Your edit publishes itself to the editing site.** The system double-checks it, rebuilds that
-  site, and keeps the source and history. Damien publishes the public production release under
-  the separate publisher role. He sees every change, and Roger sees it too.
+- **Your edit becomes available on the editing site.** The system double-checks it, rebuilds that
+  DEV site, and keeps the source and history. Its production status is **Available on DEV — waiting for Publisher**.
+  Damien reviews the exact immutable batch and explicitly authorizes the public
+  production release under the separate Publisher role; approval alone does not publish it.
 - **Your wording is right there when you come back.** Open your link again and the page shows
   what you wrote, exactly as you left it. Click the paragraph to keep refining it.
 - **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not
@@ -115,7 +118,8 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 ## A few reassurances
 
 - **You cannot break the website.** Every version is kept, every change is one click from being
-  undone, and the system re-checks the whole site before anything publishes.
+  undone, and the system re-checks DEV before showing the change there. Production has a separate
+  Publisher gate and verifies both the public site and editor map before saying Published.
 - **Take your time.** If you start editing a paragraph and walk away, your work is saved on your
   computer — come back and it's still there.
 - **If your link ever stops working,** you'll see a plain message telling you to text Damien for
