@@ -28,6 +28,7 @@ class ReleaseError(RuntimeError):
 
 
 MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
+SERVICE_USER_AGENT = "sonsteng-prod-release/1.0"
 
 
 def _canonical(value) -> bytes:
@@ -100,7 +101,7 @@ class LedgerHTTP:
             method="GET" if body is None else "POST",
             headers={"Authorization": "Bearer " + self._bearer,
                      "Content-Type": "application/json", "X-Edit-Request": "1",
-                     "User-Agent": "sonsteng-prod-release/1.0"})
+                     "User-Agent": SERVICE_USER_AGENT})
         with self._opener(request, timeout=30) as response:
             return json.load(response)
 
@@ -336,7 +337,9 @@ class WranglerPagesAdapter:
                 "deployable_id": deployment}
 
     def provenance(self):
-        with self._opener(self.provenance_url, timeout=30) as response:
+        request = urllib.request.Request(self.provenance_url,
+            headers={"Accept": "*/*", "User-Agent": SERVICE_USER_AGENT})
+        with self._opener(request, timeout=30) as response:
             return response.headers.get("X-Release-SHA", "")
 
     def restore(self, deployment_id):
@@ -383,7 +386,9 @@ class WranglerWorkerAdapter:
                 "deployable_id": version}
 
     def provenance(self):
-        with self._opener(self.provenance_url, timeout=30) as response:
+        request = urllib.request.Request(self.provenance_url,
+            headers={"Accept": "*/*", "User-Agent": SERVICE_USER_AGENT})
+        with self._opener(request, timeout=30) as response:
             return response.headers.get("X-Release-SHA", "")
 
     def restore(self, version_id):
@@ -475,8 +480,21 @@ class ProductionExecutor:
                 recorded = self.recovery_registry.target(release.candidate_sha, name) \
                     if self.recovery_registry else None
                 if recorded:
-                    if targets[name].provenance() != release.candidate_sha:
-                        raise ReleaseError("recorded target does not match live provenance")
+                    live = targets[name].provenance()
+                    if live == release.base_sha:
+                        # The artifact belongs to the candidate, while activation
+                        # belongs to this release attempt. After a recorded-pair
+                        # restore, a fresh human-authorized attempt may reactivate
+                        # that exact artifact; it must never upload ambient state.
+                        self._provider_operation(release, targets[name],
+                            lambda target=targets[name], artifact=recorded:
+                                target.restore(artifact))
+                        if targets[name].provenance() != release.candidate_sha:
+                            raise ReleaseError("recorded target reactivation provenance mismatch")
+                        receipts[name] = {"provider_id":hashlib.sha256(recorded.encode()).hexdigest()[:24],
+                                          "reactivated":True}
+                    elif live != release.candidate_sha:
+                        raise ReleaseError("recorded target does not match live provenance or base")
                     self._event(release, name + "_deployed",
                         **{name + "_id": hashlib.sha256(recorded.encode()).hexdigest()[:24]})
                     continue

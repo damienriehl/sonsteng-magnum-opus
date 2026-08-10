@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import datetime
 import io
+import json
 import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import direct_apply_daemon as dad  # noqa: E402
@@ -93,6 +95,36 @@ class TestAcceptedFilter(unittest.TestCase):
 
     def test_skips_rows_without_id(self):
         self.assertEqual(dad.accepted_ids([{"status": "accepted"}]), [])
+
+
+class TestRevertJournalTransport(unittest.TestCase):
+    def test_record_and_complete_send_cloudflare_safe_service_user_agent(self):
+        requests = []
+
+        class Response(io.BytesIO):
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+
+        def opener(request, timeout=None):
+            requests.append(request)
+            return Response(b'{"ok":true}')
+
+        evidence = {"id":"revert-1","batch_id":"revert-revert-1"}
+        with mock.patch.object(dad.urllib.request, "urlopen", opener):
+            self.assertTrue(dad.record_revert_mutation(
+                "https://edit.example/edit/v1", "secret", evidence, "record")["sent"])
+            self.assertTrue(dad.record_revert_mutation(
+                "https://edit.example/edit/v1", "secret", evidence, "complete")["sent"])
+
+        self.assertEqual([json.loads(req.data)["action"] for req in requests],
+                         ["record", "complete"])
+        for request in requests:
+            self.assertEqual(request.full_url,
+                             "https://edit.example/edit/v1/revert-record")
+            self.assertEqual(request.get_header("User-agent"),
+                             "sonsteng-apply-daemon/1.0")
+            self.assertFalse(request.get_header("User-agent").startswith("Python-urllib/"))
 
 
 class TestNoOpPath(unittest.TestCase):

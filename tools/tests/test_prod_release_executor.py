@@ -53,7 +53,7 @@ class Target:
         if self.fail:
             raise RuntimeError("provider failure")
         self.deployed.append(manifest.candidate_sha)
-        return {"provider_id": f"{self.name}-1"}
+        return {"provider_id": f"{self.name}-1", "deployable_id":f"{self.name}-artifact-1"}
 
     def provenance(self):
         return self.observed
@@ -62,6 +62,19 @@ class Target:
         if self.fail:
             raise RuntimeError("restore failure")
         self.observed = sha
+
+
+class ArtifactTarget(Target):
+    def __init__(self, name, candidate, artifacts, **kwargs):
+        super().__init__(name, **kwargs)
+        self.candidate, self.artifacts = candidate, dict(artifacts)
+        self.reactivated = []
+
+    def restore(self, artifact_id):
+        if self.fail:
+            raise RuntimeError("restore failure")
+        self.reactivated.append(artifact_id)
+        self.observed = self.artifacts.get(artifact_id, "foreign")
 
 
 def release(**overrides):
@@ -288,6 +301,31 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert seen["User-agent"] == "sonsteng-prod-release/1.0"
 
 
+def test_both_provenance_probes_send_cloudflare_safe_service_user_agent(tmp_path):
+    requests = []
+
+    class Response:
+        headers = {"X-Release-SHA": "b" * 40}
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+
+    def opener(request, timeout):
+        requests.append(request)
+        return Response()
+
+    pages = WranglerPagesAdapter("sonsteng", tmp_path, "https://pages.example/provenance",
+        candidate_root=tmp_path, opener=opener)
+    worker = WranglerWorkerAdapter(tmp_path / "wrangler.jsonc",
+        "https://worker.example/provenance", candidate_root=tmp_path, opener=opener)
+    assert pages.provenance() == "b" * 40
+    assert worker.provenance() == "b" * 40
+    assert [request.full_url for request in requests] == [
+        "https://pages.example/provenance", "https://worker.example/provenance"]
+    for request in requests:
+        assert request.get_header("User-agent") == "sonsteng-prod-release/1.0"
+        assert not request.get_header("User-agent").startswith("Python-urllib/")
+
+
 def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     root = tmp_path / "candidate"
     site = root / "site"
@@ -352,13 +390,81 @@ def test_registry_reconciles_crash_before_ledger_receipt_without_redeploy(tmp_pa
     registry.record_target(item.candidate_sha, "worker",
                            "12345678-1234-4234-8234-123456789abc")
     ledger = Ledger(item)
-    pages = Target("pages", observed=item.candidate_sha)
-    worker = Target("worker", observed=item.candidate_sha)
+    pages = ArtifactTarget("pages",item.candidate_sha,
+        {"pagesdeploy123":item.candidate_sha},observed=item.candidate_sha)
+    worker = ArtifactTarget("worker",item.candidate_sha,
+        {"12345678-1234-4234-8234-123456789abc":item.candidate_sha},
+        observed=item.candidate_sha)
     result = ProductionExecutor(ledger, pages, worker,
         recovery_registry=registry).run_once()
     assert result["state"] == "complete"
     assert pages.deployed == []
     assert worker.deployed == []
+    assert pages.reactivated == []
+    assert worker.reactivated == []
+
+
+def test_fresh_attempt_reactivates_exact_recorded_pair_after_base_restore(tmp_path):
+    item = release(id="rel-retry")
+    registry = RecoveryRegistry(tmp_path / "known-good.json")
+    registry.record_target(item.candidate_sha,"pages","pages-candidate")
+    registry.record_target(item.candidate_sha,"worker","worker-candidate")
+    order = []
+    class OrderedTarget(ArtifactTarget):
+        def restore(self, artifact_id):
+            order.append(self.name)
+            return super().restore(artifact_id)
+    pages = OrderedTarget("pages",item.candidate_sha,
+        {"pages-candidate":item.candidate_sha},observed=item.base_sha)
+    worker = OrderedTarget("worker",item.candidate_sha,
+        {"worker-candidate":item.candidate_sha},observed=item.base_sha)
+    result = ProductionExecutor(Ledger(item),pages,worker,
+        compatibility=CompatibilityGate(False,True),
+        recovery_registry=registry).run_once()
+    assert result["state"] == "complete"
+    assert order == ["worker","pages"]
+    assert pages.reactivated == ["pages-candidate"]
+    assert worker.reactivated == ["worker-candidate"]
+    assert not pages.deployed and not worker.deployed
+    assert result["receipts"]["pages"]["reactivated"] is True
+
+
+def test_reactivation_handles_one_target_partial_prior_attempt(tmp_path):
+    item = release(id="rel-partial-retry")
+    registry = RecoveryRegistry(tmp_path / "known-good.json")
+    registry.record_target(item.candidate_sha,"pages","pages-candidate")
+    pages = ArtifactTarget("pages",item.candidate_sha,
+        {"pages-candidate":item.candidate_sha},observed=item.base_sha)
+    worker = Target("worker",observed=item.candidate_sha)
+    result = ProductionExecutor(Ledger(item),pages,worker,
+        recovery_registry=registry).run_once()
+    assert result["state"] == "complete"
+    assert pages.reactivated == ["pages-candidate"]
+    assert worker.deployed == [item.candidate_sha]
+    assert registry.target(item.candidate_sha,"worker") == "worker-artifact-1"
+
+
+def test_recorded_artifact_reactivation_fences_foreign_live_or_receipt(tmp_path):
+    item = release(id="rel-foreign")
+    registry = RecoveryRegistry(tmp_path / "known-good.json")
+    registry.record_target(item.candidate_sha,"pages","pages-candidate")
+    registry.record_target(item.candidate_sha,"worker","worker-candidate")
+    pages = ArtifactTarget("pages",item.candidate_sha,
+        {"pages-candidate":item.candidate_sha},observed="foreign-live")
+    worker = ArtifactTarget("worker",item.candidate_sha,
+        {"worker-candidate":item.candidate_sha},observed=item.base_sha)
+    with pytest.raises(ReleaseError,match="live provenance or base"):
+        ProductionExecutor(Ledger(item),pages,worker,recovery_registry=registry).run_once()
+    assert not pages.reactivated and not worker.reactivated
+
+    pages = ArtifactTarget("pages",item.candidate_sha,
+        {"pages-candidate":"foreign-artifact"},observed=item.base_sha)
+    with pytest.raises(ReleaseError,match="reactivation provenance mismatch"):
+        ProductionExecutor(Ledger(item),pages,
+            ArtifactTarget("worker",item.candidate_sha,
+                {"worker-candidate":item.candidate_sha},observed=item.base_sha),
+            recovery_registry=registry).run_once()
+    assert pages.reactivated == ["pages-candidate"]
 
 
 def test_git_adapter_materializes_frozen_sha_away_from_advancing_checkout(tmp_path):

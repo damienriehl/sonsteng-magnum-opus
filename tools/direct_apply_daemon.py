@@ -73,6 +73,7 @@ ENV_STATE_FILE = "SONSTENG_APPLY_STATE"   # override the daemon state path
 ENV_IDLE_MIN = "APPLY_EDITORIAL_IDLE_MIN"  # session-end idle threshold (min); default 30
 
 DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
+SERVICE_USER_AGENT = "sonsteng-apply-daemon/1.0"
 DEFAULT_IDLE_MINUTES = 30
 
 # The status the daemon flushes. Auto-accept (worker lane) lands rows here; the
@@ -183,7 +184,7 @@ def fetch_review(api_base, token, timeout=30):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json")
     req.add_header("X-Edit-Request", "1")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")  # CF edge bans default UA
+    req.add_header("User-Agent", SERVICE_USER_AGENT)  # CF edge bans default UA
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -327,7 +328,7 @@ def fetch_revert_requests(api_base, token, timeout=30):
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/json")
     req.add_header("X-Edit-Request", "1")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -351,7 +352,7 @@ def resolve_revert_request(api_base, token, request_id, status, note=None, timeo
     req.add_header("Content-Type", "application/json")
     req.add_header("X-Edit-Request", "1")
     req.add_header("Accept", "application/json")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
@@ -369,6 +370,7 @@ def record_revert_mutation(api_base, token, evidence, action="record", timeout=3
     url = api_base.rstrip("/") + "/revert-record"
     req = urllib.request.Request(url, data=json.dumps({**evidence,"action":action}).encode("utf-8"), method="POST")
     for key, value in (("Content-Type", "application/json"), ("X-Edit-Request", "1"),
+                       ("User-Agent", SERVICE_USER_AGENT),
                        ("Authorization", "Bearer " + token if token else "")):
         if value:
             req.add_header(key, value)
@@ -520,7 +522,7 @@ def post_heartbeat(api_base, token, *, ok, applied, ts, timeout=15):
     req.add_header("Content-Type", "application/json")
     req.add_header("X-Edit-Request", "1")
     req.add_header("Accept", "application/json")
-    req.add_header("User-Agent", "sonsteng-apply-daemon/1.0")
+    req.add_header("User-Agent", SERVICE_USER_AGENT)
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:
