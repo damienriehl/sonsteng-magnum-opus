@@ -84,6 +84,7 @@ def test_restore_materializes_recorded_base_config_and_exact_provider_ids(tmp_pa
     assert commands[0][0][4] == "worker-base-id"
     assert pathlib.Path(commands[0][0][6]).name == "wrangler.jsonc"
     assert commands[1][0][5] == "pages-base-id"
+    assert all(argv[:2] == ["npx","wrangler@4"] for argv,_kwargs in commands)
     assert all(pathlib.Path(kwargs["cwd"]) in roots for _argv,kwargs in commands)
     assert roots and all(root != repo and not root.exists() for root in roots)
 

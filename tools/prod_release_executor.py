@@ -29,6 +29,11 @@ class ReleaseError(RuntimeError):
 
 MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
 SERVICE_USER_AGENT = "sonsteng-prod-release/1.0"
+WRANGLER_COMMAND = ("npx", "wrangler@4")
+
+
+def _wrangler(*args):
+    return [*WRANGLER_COMMAND,*args]
 
 
 def _canonical(value) -> bytes:
@@ -327,9 +332,9 @@ class WranglerPagesAdapter:
                 existing += "\n"
             headers.write_text(existing + "/*\n  X-Release-SHA: " +
                                manifest.candidate_sha + "\n", encoding="utf-8")
-            result = self._run(["npx", "wrangler", "pages", "deploy", str(staged),
+            result = self._run(_wrangler("pages", "deploy", str(staged),
                 "--project-name", self.project, "--branch", self.production_branch,
-                "--commit-hash", manifest.candidate_sha],
+                "--commit-hash", manifest.candidate_sha),
                 cwd=self.candidate_root, check=True, capture_output=True, text=True,
                 timeout=self.timeout)
         match = re.search(r"https://([a-z0-9-]{8,})\.[a-z0-9-]+\.pages\.dev(?:/|\s|$)",
@@ -347,8 +352,8 @@ class WranglerPagesAdapter:
             return response.headers.get("X-Release-SHA", "")
 
     def restore(self, deployment_id):
-        self._run(["npx", "wrangler", "pages", "deployment", "rollback", deployment_id,
-                   "--project-name", self.project, "--yes"], cwd=self.candidate_root,
+        self._run(_wrangler("pages", "deployment", "rollback", deployment_id,
+                   "--project-name", self.project, "--yes"), cwd=self.candidate_root,
                   check=True, capture_output=True, text=True, timeout=self.timeout)
 
 
@@ -372,10 +377,10 @@ class WranglerWorkerAdapter:
         config = pathlib.Path(self.config).resolve()
         if not config.is_relative_to(self.candidate_root):
             raise ReleaseError("Worker config is outside the frozen candidate checkout")
-        uploaded = self._run(["npx", "wrangler", "versions", "upload", "--config", self.config,
+        uploaded = self._run(_wrangler("versions", "upload", "--config", self.config,
             "--env", "production",
             "--message", "release:" + manifest.candidate_sha,
-            "--var", "RELEASE_SHA:" + manifest.candidate_sha], check=True,
+            "--var", "RELEASE_SHA:" + manifest.candidate_sha), check=True,
             cwd=self.candidate_root, capture_output=True, text=True, timeout=self.timeout)
         match = re.search(
             r"(?:^|\n)\s*Worker Version ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\s*(?:\n|$)",
@@ -383,8 +388,8 @@ class WranglerWorkerAdapter:
         version = match.group(1) if match else ""
         if not version:
             raise ReleaseError("Worker upload did not return a bounded version identifier")
-        self._run(["npx", "wrangler", "versions", "deploy", version, "--config", self.config,
-                   "--env", "production", "--yes"], cwd=self.candidate_root, check=True, capture_output=True,
+        self._run(_wrangler("versions", "deploy", version, "--config", self.config,
+                   "--env", "production", "--yes"), cwd=self.candidate_root, check=True, capture_output=True,
                   text=True, timeout=self.timeout)
         return {"provider_id": hashlib.sha256(version.encode()).hexdigest()[:24],
                 "deployable_id": version}
@@ -396,8 +401,8 @@ class WranglerWorkerAdapter:
             return response.headers.get("X-Release-SHA", "")
 
     def restore(self, version_id):
-        self._run(["npx", "wrangler", "versions", "deploy", version_id, "--config", self.config,
-                   "--env", "production", "--yes"], cwd=self.candidate_root, check=True,
+        self._run(_wrangler("versions", "deploy", version_id, "--config", self.config,
+                   "--env", "production", "--yes"), cwd=self.candidate_root, check=True,
                   capture_output=True, text=True, timeout=self.timeout)
 
 

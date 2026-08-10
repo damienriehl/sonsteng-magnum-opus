@@ -86,3 +86,10 @@ def test_operations_docs_cover_bypasses_credentials_and_real_uat():
         "authenticated editor map",
     ]:
         assert phrase in uat
+
+
+def test_production_release_lane_pins_wrangler_major_everywhere():
+    executor = (ROOT / "tools/prod_release_executor.py").read_text(encoding="utf-8")
+    assert 'WRANGLER_COMMAND = ("npx", "wrangler@4")' in executor
+    assert '["npx", "wrangler"' not in executor
+    assert '"npx wrangler' not in executor

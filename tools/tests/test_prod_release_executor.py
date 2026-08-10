@@ -399,7 +399,13 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
                          run=run, timeout=17).deploy(item)
     WranglerWorkerAdapter(config, "https://worker.example", root,
                           run=run, timeout=19).deploy(item)
-    assert [call[1]["timeout"] for call in calls] == [17, 19, 19]
+    WranglerPagesAdapter("sonsteng",site,"https://pages.example",root,
+                         run=run,timeout=17).restore("pagesdeploy123")
+    WranglerWorkerAdapter(config,"https://worker.example",root,
+                          run=run,timeout=19).restore(
+                              "12345678-1234-4234-8234-123456789abc")
+    assert [call[1]["timeout"] for call in calls] == [17, 19, 19, 17, 19]
+    assert all(call[0][:2] == ["npx","wrangler@4"] for call in calls)
     assert all(call[1]["cwd"] == root.resolve() for call in calls)
     assert staged_headers == ["/*\n  X-Release-SHA: " + item.candidate_sha + "\n"]
     assert not (site / "_headers").exists()
@@ -408,6 +414,9 @@ def test_wrangler_adapters_pin_candidate_root_and_timeout(tmp_path):
     assert calls[1][0][-2:] == ["--var", "RELEASE_SHA:" + item.candidate_sha]
     assert ["--env", "production"] == calls[2][0][-3:-1]
     assert calls[2][0][4] == "12345678-1234-4234-8234-123456789abc"
+    assert calls[3][0][2:6] == ["pages","deployment","rollback","pagesdeploy123"]
+    assert calls[4][0][2:5] == ["versions","deploy",
+      "12345678-1234-4234-8234-123456789abc"]
     with pytest.raises(ReleaseError, match="outside"):
         WranglerPagesAdapter("sonsteng", tmp_path / "other", "https://pages.example",
                              root, run=run).deploy(item)
