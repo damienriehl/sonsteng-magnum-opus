@@ -122,6 +122,36 @@ export const SCHEMA_SQL = `
     actor TEXT NOT NULL, detail_json TEXT NOT NULL, created_at INTEGER NOT NULL
   );
 
+  -- Production review is deliberately separate from the terminal DEV suggestion
+  -- lifecycle. Revision and receipt rows are immutable; only one actor-bound
+  -- draft per revision may be replaced before submission.
+  CREATE TABLE IF NOT EXISTS production_review_revisions (
+    id TEXT PRIMARY KEY, source_ref TEXT NOT NULL, source_revision TEXT NOT NULL,
+    prod_base TEXT NOT NULL, commit_sha TEXT NOT NULL, original_hash TEXT NOT NULL,
+    proposed_hash TEXT NOT NULL, original_text TEXT NOT NULL, proposed_text TEXT NOT NULL,
+    suggestion_ids_json TEXT NOT NULL, operations_json TEXT NOT NULL,
+    evidence_digest TEXT NOT NULL, created_at INTEGER NOT NULL,
+    UNIQUE(source_ref, source_revision, prod_base)
+  );
+  CREATE INDEX IF NOT EXISTS idx_review_revision_source
+    ON production_review_revisions(source_ref, created_at, id);
+  CREATE TABLE IF NOT EXISTS production_review_drafts (
+    review_revision_id TEXT PRIMARY KEY, actor TEXT NOT NULL,
+    source_revision TEXT NOT NULL, prod_base TEXT NOT NULL,
+    decisions_json TEXT NOT NULL, payload_digest TEXT NOT NULL, updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS production_reviews (
+    id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
+    request_digest TEXT NOT NULL, actor TEXT NOT NULL, review_revision_id TEXT NOT NULL UNIQUE,
+    source_revision TEXT NOT NULL, prod_base TEXT NOT NULL,
+    receipt_hash TEXT NOT NULL, receipt_json TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS production_review_decisions (
+    review_id TEXT NOT NULL, operation_id TEXT NOT NULL, decision TEXT NOT NULL,
+    note TEXT NOT NULL, operation_digest TEXT NOT NULL, group_id TEXT,
+    PRIMARY KEY(review_id, operation_id)
+  );
+
   -- Single-row apply-daemon liveness beacon (SL6 heartbeat). id is pinned to 1
   -- so recordHeartbeat is an upsert of the ONE latest run. received_at is the
   -- worker's own clock at record time — age is derived from it (never the
@@ -262,6 +292,15 @@ export class EditorStoreCore {
   _all(query, ...binds) {
     return this.sql.exec(query, ...binds).toArray();
   }
+
+  _canonical(value) {
+    if (Array.isArray(value)) return `[${value.map((item) => this._canonical(item)).join(",")}]`;
+    if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${this._canonical(value[key])}`).join(",")}}`;
+    return JSON.stringify(value);
+  }
+
+  _digest(value) { return this._fingerprint("review-v1", this._canonical(value), null); }
 
   _get(id) {
     return this._one(`SELECT ${SELECT_COLS} FROM suggestions WHERE id=?`, id);
@@ -624,7 +663,8 @@ export class EditorStoreCore {
   // Journal a phase transition, and (on outcome) resolve the batch's suggestions.
   // outcome for whole batch: undefined = just record phase; or per-status maps.
   finalize(batchId, { phase, applied, accepted_blocked, needs_human, drift, base_sha,
-    commit_sha, generator_id } = {}) {
+    commit_sha, generator_id, review_revisions } = {}) {
+    try { return this.transactionSync(() => {
     const now = this.now();
     const b = this._one("SELECT batch_id FROM apply_batches WHERE batch_id=?", batchId);
     if (!b) return { ok: false, reason: "no_batch" };
@@ -646,7 +686,21 @@ export class EditorStoreCore {
     move(accepted_blocked, STATUS.ACCEPTED_BLOCKED, { lease_expires_at: null });
     move(needs_human, STATUS.NEEDS_HUMAN, { lease_expires_at: null });
     move(drift, STATUS.DRIFT, { lease_expires_at: null });
+    // New apply clients may attach already-derived U2 operation evidence. Older
+    // clients remain valid, but create no review revision and therefore remain
+    // fail-closed/unreviewable until the explicit migration backfills evidence.
+    if (phase === "done" && Array.isArray(review_revisions)) {
+      for (const revision of review_revisions) {
+        if (revision.commit_sha !== commit_sha) throw { reviewFailure:{ ok:false,reason:"revision_mismatch" } };
+        const recorded = this.recordReviewRevision(revision);
+        if (!recorded.ok) throw { reviewFailure:recorded };
+      }
+    }
     return { ok: true };
+    }); } catch (error) {
+      if (error?.reviewFailure) return error.reviewFailure;
+      throw error;
+    }
   }
 
   recordCanonicalMutation(input = {}) {
@@ -697,15 +751,30 @@ export class EditorStoreCore {
         return { ok:false,reason:"idempotency_conflict" };
     for (const key of ["base_sha","commit_sha","generator_id"])
       if (input[key] !== batch[key]) return { ok:false,reason:"idempotency_conflict" };
-    if (batch.phase === "done") return { ok:true,replay:true,phase:"done" };
+    if (batch.phase === "done") {
+      if (input.review_revision) {
+        const recorded = this.recordReviewRevision(input.review_revision);
+        if (!recorded.ok) return recorded;
+      }
+      return { ok:true,replay:true,phase:"done" };
+    }
     if (batch.phase !== "merged") return { ok:false,reason:"invalid_phase" };
+    if (input.review_revision && input.review_revision.commit_sha !== batch.commit_sha)
+      return { ok:false,reason:"revision_mismatch" };
     const now = this.now();
-    this.transactionSync(() => {
+    try { this.transactionSync(() => {
       this.sql.exec("UPDATE apply_batches SET phase='done',updated_at=? WHERE batch_id=?",
         now,batch.batch_id);
       this.sql.exec("UPDATE revert_requests SET status=?,updated_at=? WHERE id=? AND status=?",
         REVERT_STATUS.DONE,now,input.id,REVERT_STATUS.APPROVED);
-    });
+      if (input.review_revision) {
+        const recorded = this.recordReviewRevision(input.review_revision);
+        if (!recorded.ok) throw { reviewFailure:recorded };
+      }
+    }); } catch (error) {
+      if (error?.reviewFailure) return error.reviewFailure;
+      throw error;
+    }
     return { ok:true,batch_id:batch.batch_id,phase:"done" };
   }
 
@@ -967,6 +1036,215 @@ export class EditorStoreCore {
     }
     });
     return { ok:true, release:this.getProductionRelease(release.id) };
+  }
+
+  // Trusted apply/migration seam. The operation payload is stored once and is
+  // thereafter the authority; browser draft/submit calls can name an operation
+  // but can never redefine its ranges, text, ancestry, or grouping.
+  recordReviewRevision(input = {}) {
+    const required = ["id","source_ref","source_revision","prod_base","commit_sha",
+      "original_hash","proposed_hash","original_text","proposed_text"];
+    if (required.some((key) => typeof input[key] !== "string" || !input[key]) ||
+        !Array.isArray(input.suggestion_ids) || !Array.isArray(input.operations) ||
+        input.operations.length === 0) return { ok:false, reason:"validation_error" };
+    const decisionIds = new Set();
+    for (const operation of input.operations) {
+      const decisionId = operation?.decision_id || operation?.id;
+      if (!operation || typeof operation.id !== "string" || !operation.id ||
+          typeof decisionId !== "string" || !decisionId ||
+          operation.source_ref !== input.source_ref ||
+          operation.source_revision !== input.source_revision || operation.prod_base !== input.prod_base)
+        return { ok:false, reason:"operation_mismatch" };
+      decisionIds.add(decisionId);
+    }
+    if (decisionIds.size === 0) return { ok:false, reason:"missing_revision_evidence" };
+    const evidence = { source_ref:input.source_ref, source_revision:input.source_revision,
+      prod_base:input.prod_base, commit_sha:input.commit_sha, original_hash:input.original_hash,
+      proposed_hash:input.proposed_hash, suggestion_ids:[...input.suggestion_ids].sort(),
+      operations:input.operations };
+    const digest = this._digest(evidence);
+    const existing = this._one("SELECT evidence_digest FROM production_review_revisions WHERE id=?", input.id);
+    if (existing) return existing.evidence_digest === digest ? { ok:true,replay:true,id:input.id } :
+      { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_review_revisions WHERE source_ref=? AND source_revision=? AND prod_base=?",
+      input.source_ref,input.source_revision,input.prod_base)) return { ok:false,reason:"revision_exists" };
+    const now = this.now();
+    this.sql.exec("INSERT INTO production_review_revisions (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,original_text,proposed_text,suggestion_ids_json,operations_json,evidence_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      input.id,input.source_ref,input.source_revision,input.prod_base,input.commit_sha,input.original_hash,
+      input.proposed_hash,input.original_text,input.proposed_text,this._canonical([...input.suggestion_ids].sort()),
+      this._canonical(input.operations),digest,now);
+    return { ok:true,id:input.id };
+  }
+
+  _reviewRevision(id) {
+    const row = this._one("SELECT * FROM production_review_revisions WHERE id=?", id || "");
+    if (!row) return null;
+    return { ...row, suggestion_ids:JSON.parse(row.suggestion_ids_json),
+      operations:JSON.parse(row.operations_json) };
+  }
+
+  _reviewStaleReason(revision) {
+    const latest = this._one("SELECT id FROM production_review_revisions WHERE source_ref=? ORDER BY created_at DESC,id DESC LIMIT 1",
+      revision.source_ref);
+    if (!latest || latest.id !== revision.id) return "stale_revision";
+    const prod = this._one("SELECT candidate_sha FROM production_releases WHERE state IN ('verified','complete') ORDER BY updated_at DESC,id DESC LIMIT 1");
+    if (prod && prod.candidate_sha !== revision.prod_base) return "stale_prod_base";
+    return null;
+  }
+
+  _normalizeReviewDecisions(revision, decisions) {
+    if (!Array.isArray(decisions)) return { reason:"validation_error" };
+    const units = new Map();
+    for (const operation of revision.operations) {
+      const id = operation.decision_id || operation.id;
+      const prior = units.get(id);
+      const digest = this._digest(operation);
+      if (prior && prior.operation_digest !== digest) {
+        // Move endpoints intentionally share a decision id but bind both exact
+        // payloads into one combined digest.
+        prior.operation_digest = this._digest([prior.operation_digest,digest]);
+      } else if (!prior) units.set(id, { operation_id:id, operation_digest:digest,
+        group_id:operation.group_id || operation.move_pair_id || null });
+    }
+    const normalized = [];
+    const seen = new Set();
+    for (const item of decisions) {
+      const id = item?.operation_id;
+      const unit = units.get(id);
+      if (!unit || seen.has(id)) return { reason:"operation_mismatch" };
+      if (!["accepted","rejected","questioned"].includes(item.decision))
+        return { reason:"invalid_decision" };
+      const note = typeof item.note === "string" ? item.note.trim() : "";
+      if (item.decision === "questioned" && !note) return { reason:"question_required" };
+      if (note.length > 4096) return { reason:"note_too_large" };
+      seen.add(id);
+      normalized.push({ ...unit, decision:item.decision, note });
+    }
+    normalized.sort((a,b) => a.operation_id.localeCompare(b.operation_id));
+    return { decisions:normalized, unit_count:units.size };
+  }
+
+  savePublisherReviewDraft(input = {}) {
+    if (typeof input.actor !== "string" || !input.actor) return { ok:false,reason:"validation_error" };
+    const revision = this._reviewRevision(input.review_revision_id);
+    if (!revision) return { ok:false,reason:"missing_revision_evidence" };
+    if (input.source_revision !== revision.source_revision || input.prod_base !== revision.prod_base)
+      return { ok:false,reason:"revision_mismatch" };
+    const stale = this._reviewStaleReason(revision);
+    if (stale) return { ok:false,reason:stale };
+    if (this._one("SELECT id FROM production_reviews WHERE review_revision_id=?", revision.id))
+      return { ok:false,reason:"review_submitted" };
+    const existing = this._one("SELECT actor FROM production_review_drafts WHERE review_revision_id=?", revision.id);
+    if (existing && existing.actor !== input.actor) return { ok:false,reason:"draft_owned" };
+    const normalized = this._normalizeReviewDecisions(revision,input.decisions);
+    if (normalized.reason) return { ok:false,reason:normalized.reason };
+    const payload = normalized.decisions.map(({ operation_digest,group_id,...decision }) => decision);
+    const digest = this._digest({ revision:revision.evidence_digest, decisions:normalized.decisions });
+    const now = this.now();
+    this.sql.exec("INSERT INTO production_review_drafts (review_revision_id,actor,source_revision,prod_base,decisions_json,payload_digest,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(review_revision_id) DO UPDATE SET decisions_json=excluded.decisions_json,payload_digest=excluded.payload_digest,updated_at=excluded.updated_at WHERE actor=excluded.actor",
+      revision.id,input.actor,revision.source_revision,revision.prod_base,this._canonical(payload),digest,now);
+    return { ok:true,draft:{ review_revision_id:revision.id,actor:input.actor,
+      source_revision:revision.source_revision,prod_base:revision.prod_base,decisions:payload,updated_at:now } };
+  }
+
+  getPublisherReview(actor) {
+    const allRows = this._all("SELECT id,source_ref FROM production_review_revisions ORDER BY created_at DESC,id DESC");
+    const seenSources = new Set();
+    const revisionRows = allRows.filter((row) => {
+      if (seenSources.has(row.source_ref)) return false;
+      seenSources.add(row.source_ref); return true;
+    });
+    if (!revisionRows.length) return { blocked_reason:"missing_revision_evidence",revisions:[],revision:null,draft:null,
+      submitted_review:null,counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0 } };
+    const revisions = revisionRows.map((revisionRow) => {
+      const revision = this._reviewRevision(revisionRow.id);
+      const stale_reason = this._reviewStaleReason(revision);
+      const draftRow = this._one("SELECT * FROM production_review_drafts WHERE review_revision_id=? AND actor=?",
+        revision.id,actor || "");
+      const reviewRow = this._one("SELECT * FROM production_reviews WHERE review_revision_id=?", revision.id);
+      const submitted = reviewRow ? this._all("SELECT operation_id,decision,note,group_id FROM production_review_decisions WHERE review_id=? ORDER BY operation_id",
+        reviewRow.id) : [];
+      const draft = draftRow ? { review_revision_id:revision.id, actor:draftRow.actor,
+        source_revision:draftRow.source_revision,prod_base:draftRow.prod_base,
+        decisions:JSON.parse(draftRow.decisions_json),updated_at:draftRow.updated_at } : null;
+      const current = submitted.length ? submitted : (draft?.decisions || []);
+      const total = new Set(revision.operations.map((op) => op.decision_id || op.id)).size;
+      const count = (decision) => current.filter((item) => item.decision === decision).length;
+      return { revision:{ id:revision.id,source_ref:revision.source_ref,
+        source_revision:revision.source_revision,prod_base:revision.prod_base,
+        original_hash:revision.original_hash,proposed_hash:revision.proposed_hash,
+        original_text:revision.original_text,proposed_text:revision.proposed_text,
+        suggestion_ids:revision.suggestion_ids,operations:revision.operations,evidence_digest:revision.evidence_digest },
+        stale:!!stale_reason,stale_reason,draft,
+        submitted_review:reviewRow ? { id:reviewRow.id,actor:reviewRow.actor,
+          created_at:reviewRow.created_at,receipt_hash:reviewRow.receipt_hash,decisions:submitted } : null,
+        counts:{ total,reviewed:current.length,unreviewed:Math.max(0,total-current.length),
+          accepted:count("accepted"),rejected:count("rejected"),questioned:count("questioned") } };
+    });
+    const counts = revisions.reduce((sum,item) => {
+      for (const key of Object.keys(sum)) sum[key] += item.counts[key];
+      return sum;
+    }, { total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0 });
+    return { revisions, ...revisions[0], counts };
+  }
+
+  _submittedReview(id) {
+    const row = this._one("SELECT * FROM production_reviews WHERE id=?", id || "");
+    if (!row) return null;
+    return { id:row.id,actor:row.actor,created_at:row.created_at,receipt_hash:row.receipt_hash,
+      decisions:this._all("SELECT operation_id,decision,note,group_id FROM production_review_decisions WHERE review_id=? ORDER BY operation_id", row.id) };
+  }
+
+  submitPublisherReview(input = {}) {
+    const required = ["id","idempotency_key","request_digest","actor","review_revision_id",
+      "source_revision","prod_base"];
+    if (required.some((key) => typeof input[key] !== "string" || !input[key]))
+      return { ok:false,reason:"validation_error" };
+    const prior = this._one("SELECT id,request_digest,actor FROM production_reviews WHERE idempotency_key=?",
+      input.idempotency_key);
+    if (prior) return prior.id === input.id && prior.request_digest === input.request_digest &&
+      prior.actor === input.actor ? { ok:true,replay:true,review:this._submittedReview(prior.id) } :
+      { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_reviews WHERE id=?", input.id))
+      return { ok:false,reason:"review_exists" };
+    const revision = this._reviewRevision(input.review_revision_id);
+    if (!revision) return { ok:false,reason:"missing_revision_evidence" };
+    if (input.source_revision !== revision.source_revision || input.prod_base !== revision.prod_base)
+      return { ok:false,reason:"revision_mismatch" };
+    const stale = this._reviewStaleReason(revision);
+    if (stale) return { ok:false,reason:stale };
+    const draft = this._one("SELECT * FROM production_review_drafts WHERE review_revision_id=?", revision.id);
+    if (!draft) return { ok:false,reason:"draft_missing" };
+    if (draft.actor !== input.actor) return { ok:false,reason:"draft_owned" };
+    const normalized = this._normalizeReviewDecisions(revision,input.decisions);
+    if (normalized.reason) return { ok:false,reason:normalized.reason };
+    const digest = this._digest({ revision:revision.evidence_digest, decisions:normalized.decisions });
+    if (digest !== draft.payload_digest) return { ok:false,reason:"draft_mismatch" };
+    const groupMembers = new Map();
+    for (const operation of revision.operations) if (operation.group_id) {
+      if (!groupMembers.has(operation.group_id)) groupMembers.set(operation.group_id,new Set());
+      groupMembers.get(operation.group_id).add(operation.decision_id || operation.id);
+    }
+    for (const [groupId,members] of groupMembers) {
+      const answered = normalized.decisions.filter((unit) => unit.group_id === groupId);
+      if (answered.length && (answered.length !== members.size || new Set(answered.map((item) => item.decision)).size !== 1))
+        return { ok:false,reason:"partial_group" };
+    }
+    const now = this.now();
+    const receipt = { review_id:input.id,actor:input.actor,created_at:now,
+      review_revision_id:revision.id,source_revision:revision.source_revision,prod_base:revision.prod_base,
+      evidence_digest:revision.evidence_digest,decisions:normalized.decisions };
+    const receiptHash = this._digest(receipt);
+    this.transactionSync(() => {
+      this.sql.exec("INSERT INTO production_reviews (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        input.id,input.idempotency_key,input.request_digest,input.actor,revision.id,
+        revision.source_revision,revision.prod_base,receiptHash,this._canonical(receipt),now);
+      for (const decision of normalized.decisions) this.sql.exec(
+        "INSERT INTO production_review_decisions (review_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?)",
+        input.id,decision.operation_id,decision.decision,decision.note,decision.operation_digest,decision.group_id);
+      this.sql.exec("DELETE FROM production_review_drafts WHERE review_revision_id=? AND actor=?", revision.id,input.actor);
+    });
+    return { ok:true,review:this.getPublisherReview(input.actor).submitted_review };
   }
 
   // Read-only projection for the human Publisher surface. A selectable target

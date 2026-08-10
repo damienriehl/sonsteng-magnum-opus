@@ -24,6 +24,7 @@ import {
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
   revertRecordEndpoint,
+  publisherReviewEndpoint, publisherReviewDraftEndpoint, publisherReviewSubmitEndpoint,
   publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint,
   productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
@@ -205,6 +206,12 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await reconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/heartbeat" && request.method === "POST")
     return wrap(await heartbeatEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review" && request.method === "GET")
+    return wrap(await publisherReviewEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/draft" && request.method === "POST")
+    return wrap(await publisherReviewDraftEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/submit" && request.method === "POST")
+    return wrap(await publisherReviewSubmitEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/authorize" && request.method === "POST")
     return wrap(await publisherAuthorizeEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/prepare" && request.method === "POST")

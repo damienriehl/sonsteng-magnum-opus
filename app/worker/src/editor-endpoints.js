@@ -89,6 +89,11 @@ function editorStub(env) {
   return env.EDITOR.getByName("global-v1");
 }
 
+function humanPublisher(auth) {
+  return !!auth?.editor && auth?.scopes?.publisher?.granted === true &&
+    auth.credential_channel === "access" && !auth.service;
+}
+
 // Ceilings resolved from deploy vars (fallback to the spec defaults).
 function ceilingsFor(env) {
   const n = (v, d) => (parseInt(v, 10) > 0 ? parseInt(v, 10) : d);
@@ -565,6 +570,8 @@ export async function revertRecordEndpoint(request, env, auth) {
     source_ref:body.source_ref,original_text:body.original_text,new_text:body.new_text,
     base_sha:body.base_sha,commit_sha:body.commit_sha,generator_id:body.generator_id,
     original_hash:await sha256Hex(body.original_text),new_hash:await sha256Hex(body.new_text),
+    review_revision:body.review_revision && typeof body.review_revision === "object" ?
+      body.review_revision : undefined,
   };
   const result = body.action === "record" ?
     await editorStub(env).recordCanonicalMutation(binding) :
@@ -823,6 +830,7 @@ export async function finalizeEndpoint(request, env, auth) {
     applied: body.applied, accepted_blocked: body.accepted_blocked,
     needs_human: body.needs_human, drift: body.drift, base_sha: body.base_sha,
     commit_sha: body.commit_sha, generator_id: body.generator_id,
+    review_revisions:Array.isArray(body.review_revisions) ? body.review_revisions : undefined,
   });
   return json(result, result.ok ? 200 : 409);
 }
@@ -834,13 +842,55 @@ export async function reconcileEndpoint(request, env, auth) {
   return json(result);
 }
 
+// Publisher review authority is human-only. Service credentials may later
+// consume a frozen receipt to build a candidate, but may not create decisions.
+export async function publisherReviewEndpoint(_request, env, auth) {
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  return json(await editorStub(env).getPublisherReview(auth.editor));
+}
+
+export async function publisherReviewDraftEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).savePublisherReviewDraft({ actor:auth.editor,
+    review_revision_id:typeof body.review_revision_id === "string" ? body.review_revision_id : "",
+    source_revision:typeof body.source_revision === "string" ? body.source_revision : "",
+    prod_base:typeof body.prod_base === "string" ? body.prod_base : "",
+    decisions:body.decisions });
+  if (!result.ok) return editError(result.reason || "validation_error",
+    "The review draft could not be saved.", ["stale_revision","stale_prod_base","revision_mismatch",
+      "draft_owned","review_submitted","operation_mismatch"].includes(result.reason) ? 409 : 400);
+  return json(result);
+}
+
+export async function publisherReviewSubmitEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const text = (key) => typeof body[key] === "string" ? body[key] : "";
+  const binding = { id:text("id"),idempotency_key:text("idempotency_key"),
+    review_revision_id:text("review_revision_id"),source_revision:text("source_revision"),
+    prod_base:text("prod_base"),decisions:body.decisions };
+  if ([binding.id,binding.idempotency_key,binding.review_revision_id,binding.source_revision,
+    binding.prod_base].some((value) => !value || value.length > 256))
+    return editError("validation_error", "Incomplete review binding.", 400);
+  const request_digest = await sha256Hex(JSON.stringify(binding));
+  const result = await editorStub(env).submitPublisherReview({ ...binding,request_digest,actor:auth.editor });
+  if (!result.ok) return editError(result.reason || "validation_error",
+    "The review was not submitted.", ["stale_revision","stale_prod_base","revision_mismatch",
+      "draft_owned","draft_mismatch","partial_group","idempotency_conflict","review_exists"].includes(result.reason) ? 409 : 400);
+  return json(result,result.replay ? 200 : 201);
+}
+
 // Human-only publication authority. Bearer credentials remain valid for the
 // later executor API, but cannot mint or enlarge a production authorization.
 export async function publisherAuthorizeEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!auth?.editor || !auth?.scopes?.publisher?.granted ||
-      auth.credential_channel !== "access" || auth.service)
+  if (!humanPublisher(auth))
     return editError("forbidden", "A human Publisher using Access is required.", 403);
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
