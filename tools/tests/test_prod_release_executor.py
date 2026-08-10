@@ -10,6 +10,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 
 from prod_release_executor import (  # noqa: E402
     AcceptedOnlyMaterializer,
+    ProjectionExclusion,
     AcceptedProjectionCandidateBuilder,
     ProjectionTreeWriter,
     CompatibilityGate,
@@ -764,6 +765,37 @@ def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):
     assert ledger.binding["candidate_sha"] == "b" * 40
     assert ledger.binding["expected_suggestion_ids"] == ["s1","s2"]
     assert ledger.binding["id"].endswith("-attempt-1")
+
+
+def test_candidate_builder_prepares_only_service_materialized_operation_binding(tmp_path):
+    exclusion = ProjectionExclusion(
+        "op-held","data/copy/home.json#lead","rejected")
+    built = {"manifest":{"schema_version":2,"base_sha":"a" * 40,
+              "candidate_sha":"b" * 40,"generator_id":"generator-v2"},
+             "manifest_hash":"manifest-v2","candidate_sha":"b" * 40,
+             "review_receipt_hash":"receipt-set","review_receipts":("receipt-1",),
+             "projection_identity":"projection-v2",
+             "accepted_operation_ids":("op-accepted",),"held_exclusions":(exclusion,)}
+    class ProjectionBuilder:
+        def build(self, context):
+            assert context["projection"]["sources"]
+            return built
+    class Ledger:
+        binding = None
+        def preparation_context(self):
+            return {"active_release":None,"projection":{"sources":[{"source_ref":"x"}]}}
+        def prepare(self,binding):
+            self.binding = binding
+            return {"ok":True,"release":binding}
+    ledger = Ledger()
+    made = ProductionCandidateBuilder(ledger,object(),tmp_path / "manifest.json",
+        attempt_id_factory=lambda:"attempt-v2",projection_builder=ProjectionBuilder()).prepare_latest()
+    assert made["release"]["schema_version"] == 2
+    assert ledger.binding["accepted_operation_ids"] == ["op-accepted"]
+    assert ledger.binding["held_exclusions"] == [{"operation_id":"op-held",
+        "decision":"rejected","reason":"rejected","source_ref":"data/copy/home.json#lead"}]
+    assert ledger.binding["review_receipts"] == ["receipt-1"]
+    assert ledger.binding["projection_identity"] == "projection-v2"
 
 
 def test_candidate_builder_creates_fresh_attempt_after_restoration_and_replays_active(tmp_path):

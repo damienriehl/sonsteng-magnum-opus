@@ -117,6 +117,20 @@ export const SCHEMA_SQL = `
     release_id TEXT NOT NULL, suggestion_id TEXT NOT NULL, batch_id TEXT NOT NULL,
     PRIMARY KEY (release_id, suggestion_id)
   );
+  CREATE TABLE IF NOT EXISTS production_release_operation_members (
+    release_id TEXT NOT NULL, operation_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
+    source_ref TEXT NOT NULL, group_id TEXT, ordinal INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (release_id, operation_id)
+  );
+  CREATE TABLE IF NOT EXISTS production_release_held_exclusions (
+    release_id TEXT NOT NULL, operation_id TEXT NOT NULL, decision TEXT NOT NULL,
+    reason TEXT NOT NULL, PRIMARY KEY (release_id, operation_id)
+  );
+  CREATE TABLE IF NOT EXISTS production_published_operations (
+    operation_id TEXT PRIMARY KEY, release_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
+    source_ref TEXT NOT NULL, source_revision TEXT NOT NULL, candidate_sha TEXT NOT NULL,
+    published_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS production_release_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, release_id TEXT NOT NULL, type TEXT NOT NULL,
     actor TEXT NOT NULL, detail_json TEXT NOT NULL, created_at INTEGER NOT NULL
@@ -272,6 +286,10 @@ export class EditorStoreCore {
     this._ensureColumn("production_releases", "fencing_token", "TEXT");
     this._ensureColumn("production_releases", "lease_expires_at", "INTEGER");
     this._ensureColumn("production_releases", "provider_json", "TEXT");
+    this._ensureColumn("production_releases", "schema_version", "INTEGER");
+    this._ensureColumn("production_releases", "review_receipt_hash", "TEXT");
+    this._ensureColumn("production_releases", "projection_identity", "TEXT");
+    this._ensureColumn("production_release_operation_members", "ordinal", "INTEGER NOT NULL DEFAULT 0");
     this._ensureColumn("suggestions", "production_release_id", "TEXT");
     this._ensureColumn("suggestions", "production_published_at", "INTEGER");
     this._ensureColumn("production_review_revisions", "source_original_text", "TEXT");
@@ -805,6 +823,7 @@ export class EditorStoreCore {
     if (input.target_environment !== "production") return { ok:false, reason:"wrong_target" };
     if (input.credential_channel !== "bearer") return { ok:false, reason:"service_bearer_required" };
     if (input.ancestry_verified !== true) return { ok:false, reason:"nonancestor_candidate" };
+    if (input.schema_version === 2) return this._prepareOperationRelease(input);
     if (this._one("SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' LIMIT 1"))
       return { ok:false, reason:"missing_batch_evidence" };
 
@@ -896,6 +915,83 @@ export class EditorStoreCore {
     return { ok:true, release:this.getProductionRelease(input.id) };
   }
 
+  _prepareOperationRelease(input) {
+    for (const key of ["review_receipt_hash","projection_identity"])
+      if (typeof input[key] !== "string" || !input[key]) return { ok:false,reason:"validation_error" };
+    if (!Array.isArray(input.accepted_operation_ids) || !input.accepted_operation_ids.length)
+      return { ok:false,reason:"empty_membership" };
+    const priorKey = this._one(
+      "SELECT id,request_digest FROM production_releases WHERE idempotency_key=?",input.idempotency_key);
+    if (priorKey) return priorKey.id === input.id && priorKey.request_digest === input.request_digest ?
+      { ok:true,replay:true,release:this.getProductionRelease(priorKey.id) } :
+      { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_releases WHERE id=?",input.id))
+      return { ok:false,reason:"release_exists" };
+    if (this._one("SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') LIMIT 1"))
+      return { ok:false,reason:"active_release" };
+
+    const context = this.productionPreparationContext();
+    const projection = context.projection || {};
+    if (projection.blocked_reason) return { ok:false,reason:projection.blocked_reason };
+    const receiptHashes = (projection.review_receipts || []).map((item) => item.receipt_hash).sort();
+    if (Array.isArray(input.review_receipts) &&
+        JSON.stringify([...input.review_receipts].sort()) !== JSON.stringify(receiptHashes))
+      return { ok:false,reason:"review_receipt_mismatch" };
+    if (receiptHashes.length === 1 && input.review_receipt_hash !== receiptHashes[0] &&
+        !Array.isArray(input.review_receipts))
+      return { ok:false,reason:"review_receipt_mismatch" };
+
+    const members = [],held = [];
+    for (const source of projection.sources || []) {
+      if (source.stale) return { ok:false,reason:"stale_review" };
+      const decisions = new Map((source.decisions || []).map((item) => [item.operation_id,item]));
+      for (const operation of source.operations || []) {
+        const decision = decisions.get(operation.id);
+        if (decision?.decision === "accepted") {
+          if (!this._one("SELECT operation_id FROM production_published_operations WHERE operation_id=?",operation.id))
+            members.push({ operation_id:operation.id,review_revision_id:source.review_revision_id,
+              source_ref:source.source_ref,source_revision:source.source_revision,
+              group_id:decision.group_id || operation.group_id || null });
+        } else held.push({ operation_id:operation.id,decision:decision?.decision || "unanswered",
+          reason:decision?.decision || "unanswered" });
+      }
+    }
+    held.sort((a,b) => a.operation_id.localeCompare(b.operation_id));
+    const expected = [...input.accepted_operation_ids];
+    if (JSON.stringify(expected) !== JSON.stringify(members.map((item) => item.operation_id)))
+      return { ok:false,reason:"operation_membership_mismatch" };
+    if (Array.isArray(input.held_exclusions)) {
+      const supplied = input.held_exclusions.map((item) =>
+        ({ operation_id:item.operation_id,decision:item.decision })).sort((a,b) =>
+          a.operation_id.localeCompare(b.operation_id));
+      const authoritative = held.map(({operation_id,decision}) => ({operation_id,decision}));
+      if (JSON.stringify(supplied) !== JSON.stringify(authoritative))
+        return { ok:false,reason:"held_exclusion_mismatch" };
+    }
+    const membershipHash = this._fingerprint(JSON.stringify(members),JSON.stringify(held),
+      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash,
+        input.review_receipt_hash,input.projection_identity].join("\0"));
+    const now = this.now();
+    this.transactionSync(() => {
+      this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at,schema_version,review_receipt_hash,projection_identity) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        input.id,input.idempotency_key,input.request_digest,"prepared",input.actor,input.credential_channel,
+        "production",input.target_batch_id,input.base_sha,input.candidate_sha,input.generator_id,
+        input.evidence_hash,input.manifest_hash,membershipHash,now,now,2,input.review_receipt_hash,
+        input.projection_identity);
+      members.forEach((item,ordinal) => this.sql.exec(
+        "INSERT INTO production_release_operation_members (release_id,operation_id,review_revision_id,source_ref,group_id,ordinal) VALUES (?,?,?,?,?,?)",
+        input.id,item.operation_id,item.review_revision_id,item.source_ref,item.group_id,ordinal));
+      for (const item of held) this.sql.exec(
+        "INSERT INTO production_release_held_exclusions (release_id,operation_id,decision,reason) VALUES (?,?,?,?)",
+        input.id,item.operation_id,item.decision,item.reason);
+      this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+        input.id,"prepared",input.actor,JSON.stringify({ membership_hash:membershipHash,
+          review_receipt_hash:input.review_receipt_hash,projection_identity:input.projection_identity,
+          evidence_hash:input.evidence_hash,manifest_hash:input.manifest_hash,target_environment:"production" }),now);
+    });
+    return { ok:true,release:this.getProductionRelease(input.id) };
+  }
+
   authorizeProductionRelease(input = {}) {
     if (!input.id || !input.idempotency_key || !input.request_digest || !input.actor)
       return { ok:false, reason:"validation_error" };
@@ -909,7 +1005,14 @@ export class EditorStoreCore {
       return { ok:false, reason:"idempotency_conflict" };
     }
     if (release.state !== "prepared") return { ok:false, reason:"stale_draft" };
-    for (const key of ["target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash"]) {
+    if ((release.schema_version || 1) >= 2) {
+      const revisions = this._all("SELECT DISTINCT review_revision_id FROM production_release_operation_members WHERE release_id=?",release.id);
+      if (revisions.some((item) => {
+        const revision = this._reviewRevision(item.review_revision_id);
+        return !revision || this._reviewStaleReason(revision);
+      })) return { ok:false,reason:"stale_review" };
+    }
+    for (const key of ["target_batch_id","base_sha","candidate_sha","generator_id","evidence_hash","manifest_hash","membership_hash","review_receipt_hash","projection_identity"]) {
       if (input[key] != null && input[key] !== release[key]) return { ok:false, reason:"stale_draft" };
     }
     const now = this.now();
@@ -931,11 +1034,20 @@ export class EditorStoreCore {
     const suggestion_ids = this._all(
       "SELECT suggestion_id FROM production_release_members WHERE release_id=? ORDER BY suggestion_id", id)
       .map((r) => r.suggestion_id);
+    const operation_members = this._all(
+      "SELECT operation_id,review_revision_id,source_ref,group_id,ordinal FROM production_release_operation_members WHERE release_id=? ORDER BY ordinal,operation_id",id);
+    const held_exclusions = this._all(
+      "SELECT operation_id,decision,reason FROM production_release_held_exclusions WHERE release_id=? ORDER BY operation_id",id);
+    const published_operation_ids = this._all(
+      "SELECT operation_id FROM production_published_operations WHERE release_id=? ORDER BY operation_id",id)
+      .map((item) => item.operation_id);
     const events = this._all(
       "SELECT type,actor,detail_json,created_at FROM production_release_events WHERE release_id=? ORDER BY id", id)
       .map((event) => ({ type:event.type, actor:event.actor,
         detail:JSON.parse(event.detail_json), created_at:event.created_at }));
-    return { ...row, batches, suggestion_ids, events };
+    return { ...row,schema_version:row.schema_version || 1,batches,suggestion_ids,
+      operation_ids:operation_members.map((item) => item.operation_id),operation_members,
+      held_exclusions,published_operation_ids,events };
   }
 
   // Production execution is a separate lifecycle. This claim can consume only
@@ -953,6 +1065,13 @@ export class EditorStoreCore {
       return { ok:false, reason:"lease_active" };
     if (!['authorized','executing','pages_deployed','worker_deployed','verified'].includes(release.state))
       return { ok:false, reason:"not_authorized" };
+    if ((release.schema_version || 1) >= 2 && release.state === "authorized") {
+      const revisions = this._all("SELECT DISTINCT review_revision_id FROM production_release_operation_members WHERE release_id=?",release.id);
+      if (revisions.some((item) => {
+        const revision = this._reviewRevision(item.review_revision_id);
+        return !revision || this._reviewStaleReason(revision);
+      })) return { ok:false,reason:"stale_review" };
+    }
     const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
     const lease = now + Math.max(1000, Math.min(
       input.lease_ms || CEILINGS.leaseMs, CEILINGS.productionLeaseMs));
@@ -1048,10 +1167,20 @@ export class EditorStoreCore {
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
       release.id,input.state,input.actor,JSON.stringify(detail),now);
     if (input.state === "complete") {
-      const members = this._all("SELECT suggestion_id FROM production_release_members WHERE release_id=?", release.id);
-      for (const member of members) this.sql.exec(
-        "UPDATE suggestions SET production_release_id=?,production_published_at=? WHERE id=? AND status=? AND (production_release_id IS NULL OR production_release_id=?)",
-        release.id,now,member.suggestion_id,STATUS.APPLIED,release.id);
+      if ((release.schema_version || 1) >= 2) {
+        const members = this._all("SELECT operation_id,review_revision_id,source_ref FROM production_release_operation_members WHERE release_id=?",release.id);
+        for (const member of members) {
+          const revision = this._one("SELECT source_revision FROM production_review_revisions WHERE id=?",member.review_revision_id);
+          this.sql.exec("INSERT OR IGNORE INTO production_published_operations (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at) VALUES (?,?,?,?,?,?,?)",
+            member.operation_id,release.id,member.review_revision_id,member.source_ref,
+            revision?.source_revision || "",release.candidate_sha,now);
+        }
+      } else {
+        const members = this._all("SELECT suggestion_id FROM production_release_members WHERE release_id=?", release.id);
+        for (const member of members) this.sql.exec(
+          "UPDATE suggestions SET production_release_id=?,production_published_at=? WHERE id=? AND status=? AND (production_release_id IS NULL OR production_release_id=?)",
+          release.id,now,member.suggestion_id,STATUS.APPLIED,release.id);
+      }
     }
     });
     return { ok:true, release:this.getProductionRelease(release.id) };
@@ -1110,8 +1239,14 @@ export class EditorStoreCore {
     const latest = this._one("SELECT id FROM production_review_revisions WHERE source_ref=? ORDER BY created_at DESC,id DESC LIMIT 1",
       revision.source_ref);
     if (!latest || latest.id !== revision.id) return "stale_revision";
-    const prod = this._one("SELECT candidate_sha FROM production_releases WHERE state IN ('verified','complete') ORDER BY updated_at DESC,id DESC LIMIT 1");
-    if (prod && prod.candidate_sha !== revision.prod_base) return "stale_prod_base";
+    const sourceProd = this._one("SELECT candidate_sha FROM production_published_operations WHERE source_ref=? ORDER BY published_at DESC,operation_id DESC LIMIT 1",revision.source_ref);
+    if (sourceProd && sourceProd.candidate_sha !== revision.prod_base) return "stale_prod_base";
+    // Legacy releases cannot prove source-level independence, so retain their
+    // historical global-frontier fail-closed behavior. Versioned operation
+    // releases advance only the sources whose operations actually shipped.
+    const legacyProd = this._one("SELECT candidate_sha FROM production_releases WHERE state IN ('verified','complete') AND COALESCE(schema_version,1)=1 ORDER BY updated_at DESC,id DESC LIMIT 1");
+    if (!sourceProd && legacyProd && legacyProd.candidate_sha !== revision.prod_base)
+      return "stale_prod_base";
     return null;
   }
 

@@ -957,12 +957,26 @@ export async function productionPrepareEndpoint(request, env, auth) {
     "generator_id","evidence_hash","manifest_hash"];
   if (allowed.some((key) => typeof body[key] !== "string" || !body[key] || body[key].length > 256))
     return editError("validation_error", "Incomplete release binding.", 400);
+  if (body.schema_version === 2 &&
+      ([body.review_receipt_hash,body.projection_identity].some((value) =>
+        typeof value !== "string" || !value || value.length > 256) ||
+       !Array.isArray(body.review_receipts) || !Array.isArray(body.accepted_operation_ids) ||
+       !Array.isArray(body.held_exclusions)))
+    return editError("validation_error", "Incomplete operation release binding.", 400);
   const binding = Object.fromEntries(allowed.map((key) => [key,body[key]]));
+  const operationBinding = body.schema_version === 2 ? {
+    schema_version:2,review_receipt_hash:body.review_receipt_hash,
+    projection_identity:body.projection_identity,
+    review_receipts:Array.isArray(body.review_receipts) ? body.review_receipts : undefined,
+    accepted_operation_ids:Array.isArray(body.accepted_operation_ids) ? body.accepted_operation_ids : undefined,
+    held_exclusions:Array.isArray(body.held_exclusions) ? body.held_exclusions : undefined,
+  } : {};
   const result = await editorStub(env).prepareProductionRelease({ ...binding,
     request_digest:await sha256Hex(JSON.stringify(binding)), actor:auth.editor || "service:release",
     credential_channel:"bearer",target_environment:"production",ancestry_verified:body.ancestry_verified === true,
     expected_batch_ids:Array.isArray(body.expected_batch_ids) ? body.expected_batch_ids : undefined,
-    expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined });
+    expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined,
+    ...operationBinding });
   return result.ok ? json(result, result.replay ? 200 : 201) :
     editError(result.reason || "validation_error", "Release preparation rejected.", 409);
 }

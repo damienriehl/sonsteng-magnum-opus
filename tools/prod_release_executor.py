@@ -274,15 +274,23 @@ class FrozenRelease:
     batch_commits: tuple[str, ...]
     fencing_token: str
     completed_phases: tuple[str, ...] = ()
+    schema_version: int = 1
+    operation_ids: tuple[str, ...] = ()
+    review_receipt_hash: str = ""
+    projection_identity: str = ""
 
     def __post_init__(self):
         if self.state not in {"authorized", "executing", "pages_deployed",
                               "worker_deployed", "verified", "failed_fenced", "restoring",
                               "complete"}:
             raise ValueError("release is not executable")
-        if len(set(self.suggestion_ids)) != len(self.suggestion_ids) or not self.suggestion_ids:
-            raise ValueError("membership must contain unique suggestion IDs")
-        if not self.batch_commits or self.batch_commits[-1] != self.candidate_sha:
+        membership = self.operation_ids if self.schema_version >= 2 else self.suggestion_ids
+        if len(set(membership)) != len(membership) or not membership:
+            raise ValueError("membership must contain unique IDs")
+        if self.schema_version >= 2:
+            if not self.review_receipt_hash or not self.projection_identity:
+                raise ValueError("operation release lacks review/projection identity")
+        elif not self.batch_commits or self.batch_commits[-1] != self.candidate_sha:
             raise ValueError("candidate frontier must equal the last frozen batch commit")
         if not self.fencing_token:
             raise ValueError("fencing token required")
@@ -296,7 +304,11 @@ class FrozenRelease:
                    suggestion_ids=tuple(value.get("suggestion_ids") or ()),
                    batch_commits=tuple(item["commit_sha"] for item in batches),
                    fencing_token=value["fencing_token"],
-                   completed_phases=tuple(event["type"] for event in value.get("events") or ()))
+                   completed_phases=tuple(event["type"] for event in value.get("events") or ()),
+                   schema_version=int(value.get("schema_version") or 1),
+                   operation_ids=tuple(value.get("operation_ids") or ()),
+                   review_receipt_hash=value.get("review_receipt_hash") or "",
+                   projection_identity=value.get("projection_identity") or "")
 
     @property
     def digest(self):
@@ -427,10 +439,16 @@ class CandidateValidator:
         self.git, self.manifest = git, dict(manifest)
 
     def __call__(self, release):
-        if self.manifest.get("base_sha") != release.base_sha or \
-           self.manifest.get("candidate_sha") != release.candidate_sha or \
-           tuple(self.manifest.get("suggestion_ids") or ()) != release.suggestion_ids or \
-           tuple(self.manifest.get("batch_commits") or ()) != release.batch_commits:
+        common_mismatch = self.manifest.get("base_sha") != release.base_sha or \
+           self.manifest.get("candidate_sha") != release.candidate_sha
+        if release.schema_version >= 2:
+            binding_mismatch = (tuple(self.manifest.get("accepted_operation_ids") or ()) !=
+                                release.operation_ids or
+                                self.manifest.get("review_receipt_hash") != release.review_receipt_hash)
+        else:
+            binding_mismatch = (tuple(self.manifest.get("suggestion_ids") or ()) != release.suggestion_ids or
+                                tuple(self.manifest.get("batch_commits") or ()) != release.batch_commits)
+        if common_mismatch or binding_mismatch:
             raise ReleaseError("manifest binding mismatch")
         manifest_hash = hashlib.sha256(_canonical(self.manifest)).hexdigest()
         if manifest_hash != release.manifest_hash:
@@ -490,6 +508,8 @@ class AcceptedProjectionCandidateBuilder:
         return {"manifest":manifest,"manifest_hash":manifest_hash,
             "candidate_sha":candidate_sha,"candidate_tree":candidate_tree,
             "review_receipt_hash":receipt_binding,
+            "review_receipts":receipt_hashes,
+            "projection_identity":manifest_hash,
             "accepted_operation_ids":materialized.accepted_operation_ids,
             "held_exclusions":materialized.exclusions}
 
@@ -498,11 +518,13 @@ class ProductionCandidateBuilder:
     """Freeze the latest contiguous DEV frontier for human Publisher review."""
 
     def __init__(self, ledger, git, manifest_path, bootstrap_base_sha=None,
-                 attempt_id_factory=None):
+                 attempt_id_factory=None, projection_builder=None):
         self.ledger, self.git = ledger, git
         self.manifest_path = pathlib.Path(manifest_path)
         self.bootstrap_base_sha = bootstrap_base_sha
         self.attempt_id_factory = attempt_id_factory or (lambda: secrets.token_hex(12))
+        self.projection_builder = projection_builder or AcceptedProjectionCandidateBuilder(
+            git,manifest_path)
 
     @staticmethod
     def _manifest(base_sha, candidate_sha, candidate_tree, generator_id,
@@ -534,6 +556,13 @@ class ProductionCandidateBuilder:
         context = self.ledger.preparation_context()
         active = context.get("active_release")
         if active:
+            if int(active.get("schema_version") or 1) >= 2:
+                if not self.manifest_path.is_file():
+                    raise ReleaseError("active operation release manifest is unavailable")
+                manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+                if hashlib.sha256(_canonical(manifest)).hexdigest() != active["manifest_hash"]:
+                    raise ReleaseError("active release manifest cannot be reproduced")
+                return {"ok":True,"replay":True,"release":active}
             batches = active.get("batches") or []
             manifest = self._manifest(active["base_sha"], active["candidate_sha"],
                 self.git.tree(active["candidate_sha"]), active["generator_id"],
@@ -543,6 +572,35 @@ class ProductionCandidateBuilder:
                 raise ReleaseError("active release manifest cannot be reproduced")
             self._write(manifest)
             return {"ok": True, "replay": True, "release": active}
+
+        if (context.get("projection") or {}).get("sources"):
+            built = self.projection_builder.build(context)
+            if built is None:
+                return None
+            manifest = built["manifest"]
+            release_id = "release-" + built["manifest_hash"][:16] + "-" + self.attempt_id_factory()
+            held = [{"operation_id":item.operation_id,"decision":item.reason,
+                     "reason":item.reason,"source_ref":item.source_ref}
+                    for item in built["held_exclusions"]]
+            evidence_hash = hashlib.sha256(_canonical({
+                "review_receipts":list(built["review_receipts"]),
+                "accepted_operation_ids":list(built["accepted_operation_ids"]),
+                "held_exclusions":held,
+                "generator_id":manifest["generator_id"]})).hexdigest()
+            binding = {"schema_version":2,"id":release_id,"idempotency_key":release_id,
+                "target_batch_id":"operation-frontier","base_sha":manifest["base_sha"],
+                "candidate_sha":built["candidate_sha"],"generator_id":manifest["generator_id"],
+                "evidence_hash":evidence_hash,"manifest_hash":built["manifest_hash"],
+                "ancestry_verified":True,"review_receipt_hash":built["review_receipt_hash"],
+                "review_receipts":list(built["review_receipts"]),
+                "projection_identity":built["projection_identity"],
+                "accepted_operation_ids":list(built["accepted_operation_ids"]),
+                "held_exclusions":held}
+            result = self.ledger.prepare(binding)
+            if not result or result.get("ok") is not True:
+                raise ReleaseError("ledger rejected preparation: " +
+                                   str((result or {}).get("reason","unknown")))
+            return result
 
         batches = context.get("batches") or []
         if context.get("blocked_reason"):

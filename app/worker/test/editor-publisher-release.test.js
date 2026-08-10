@@ -34,6 +34,71 @@ function authorize(prepared, over = {}) {
     membership_hash:prepared.membership_hash, ...over };
 }
 
+function reviewedProjection(core) {
+  const sourceRef = "data/copy/home.json#lead";
+  const operations = [
+    { id:"op-accepted",decision_id:"op-accepted",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-base",base_range:[4,7],old_text:"bad",new_text:"good" },
+    { id:"op-held",decision_id:"op-held",kind:"insert",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-base",base_range:[12,12],old_text:"",new_text:"," },
+  ];
+  assert.equal(core.recordReviewRevision({ id:"revision-v2",source_ref:sourceRef,
+    source_revision:"dev-1",prod_base:"prod-base",commit_sha:"dev-1",
+    original_hash:"old",proposed_hash:"new",original_text:"The bad idea",
+    proposed_text:"The good idea,",suggestion_ids:["suggestion-parent"],operations }).ok,true);
+  const decisions = [{ operation_id:"op-accepted",decision:"accepted" },
+    { operation_id:"op-held",decision:"rejected",note:"Hold." }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"revision-v2",
+    source_revision:"dev-1",prod_base:"prod-base",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-v2",idempotency_key:"review-v2",
+    request_digest:"review-v2",actor:"slot:damien",review_revision_id:"revision-v2",
+    source_revision:"dev-1",prod_base:"prod-base",decisions }).ok,true);
+  return core.productionPreparationContext().projection;
+}
+
+test("v2 preparation freezes exact reviewed operation membership and held exclusions", () => {
+  const core = makeCore(() => 2000);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const input = release({ schema_version:2,target_batch_id:"operation-frontier",
+    candidate_sha:"candidate-v2",review_receipt_hash:receipt,
+    projection_identity:"projection-v2",accepted_operation_ids:["op-accepted"],
+    held_exclusions:[{ operation_id:"op-held",decision:"rejected",reason:"held" }] });
+  const enlarged = core.prepareProductionRelease({ ...input,id:"release-enlarged",
+    idempotency_key:"release-enlarged",request_digest:"release-enlarged",
+    accepted_operation_ids:["op-accepted","op-held"] });
+  assert.equal(enlarged.reason,"operation_membership_mismatch");
+  const prepared = core.prepareProductionRelease(input);
+  assert.equal(prepared.ok,true);
+  assert.equal(prepared.release.schema_version,2);
+  assert.deepEqual(prepared.release.operation_ids,["op-accepted"]);
+  assert.deepEqual(prepared.release.held_exclusions.map((x) => x.operation_id),["op-held"]);
+  assert.equal(prepared.release.review_receipt_hash,receipt);
+  assert.equal(prepared.release.projection_identity,"projection-v2");
+
+});
+
+test("v2 partial completion publishes operations without stamping their parent suggestion", () => {
+  const core = makeCore(() => 3000);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-v2",
+    review_receipt_hash:receipt,projection_identity:"projection-v2",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[
+      { operation_id:"op-held",decision:"rejected",reason:"held" }] })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    review_receipt_hash:receipt,projection_identity:"projection-v2"})).release;
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer",id:authorized.id }).release;
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
+      credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:"candidate-v2"} }).ok,true);
+  assert.deepEqual(core.getProductionRelease(prepared.id).published_operation_ids,["op-accepted"]);
+  assert.equal(core._one("SELECT production_release_id FROM suggestions WHERE id='suggestion-parent'"),undefined);
+});
+
 test("Publisher freezes every complete apply batch through the chosen frontier", () => {
   const core = makeCore(() => 1000);
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
@@ -515,6 +580,15 @@ test("trusted release service alone can prepare, claim, and transition", async (
     base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
     manifest_hash:"manifest",ancestry_verified:true };
   assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare", binding),env,auth)).status,201);
+  const operationBinding = { ...binding,id:"release-v2",idempotency_key:"prepare-v2",
+    schema_version:2,review_receipt_hash:"receipt-set",review_receipts:["receipt-1"],
+    projection_identity:"projection-v2",accepted_operation_ids:["op-1"],
+    held_exclusions:[{ operation_id:"op-2",decision:"rejected",reason:"rejected" }] };
+  assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare",
+    operationBinding),env,auth)).status,201);
+  assert.deepEqual(calls.at(-1)[1].accepted_operation_ids,["op-1"]);
+  assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare",
+    { ...operationBinding,id:"bad-v2",review_receipts:undefined }),env,auth)).status,400);
   assert.equal((await productionPreparationContextEndpoint(
     new Request("https://edit.example/edit/v1/prod/releases/frontier"),env,auth)).status,200);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
@@ -531,5 +605,5 @@ test("trusted release service alone can prepare, claim, and transition", async (
   const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),
-    ["prepare","frontier","claim","restore-claim","renew","transition"]);
+    ["prepare","prepare","frontier","claim","restore-claim","renew","transition"]);
 });
