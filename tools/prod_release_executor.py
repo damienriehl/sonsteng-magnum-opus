@@ -113,11 +113,31 @@ class AcceptedOnlyMaterializer:
             raise ReleaseError(f"operation {operation_id} lacks a unique anchor")
         return starts[0], starts[0]
 
+    def _held_group_ids(self, sources):
+        group_states = {}
+        for source in sources:
+            decisions = {item.get("operation_id"): item.get("decision")
+                         for item in source.get("decisions") or []}
+            for operation in source.get("operations") or []:
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
+                if group_id:
+                    group_states.setdefault(group_id, []).append({
+                        "stale": bool(source.get("stale")),
+                        "decision": decisions.get(self._operation_id(operation)),
+                    })
+        return {group_id for group_id,states in group_states.items()
+                if any(state["decision"] == "accepted" for state in states) and
+                (any(state["stale"] for state in states) or
+                 any(state["decision"] != "accepted" for state in states))}
+
     def materialize(self, sources):
         patches, structural, exclusions, accepted_ids = [], [], [], []
         seen_operation_ids = set()
-        for source in sorted(sources, key=lambda item: (item.get("source_ref", ""),
-                                                         item.get("review_revision_id", ""))):
+        ordered_sources = sorted(sources, key=lambda item: (item.get("source_ref", ""),
+                                                             item.get("review_revision_id", "")))
+        held_groups = self._held_group_ids(ordered_sources)
+
+        for source in ordered_sources:
             source_ref = source.get("source_ref")
             original = source.get("source_original_text", source.get("original_text"))
             if not source_ref or not isinstance(original, str):
@@ -151,7 +171,9 @@ class AcceptedOnlyMaterializer:
             for operation in operations:
                 operation_id = self._operation_id(operation)
                 decision = decisions.get(operation_id)
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
                 reason = "stale" if source.get("stale") else (
+                    "group_held" if group_id in held_groups else
                     decision if decision in {"rejected", "questioned"} else
                     "unanswered" if decision is None else None)
                 if reason:

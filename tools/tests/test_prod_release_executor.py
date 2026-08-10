@@ -63,6 +63,57 @@ def test_accepted_only_materializer_projects_atoms_and_records_held_canaries():
     assert "op-comma" not in materialized.accepted_operation_ids
 
 
+def test_accepted_only_materializer_holds_whole_group_when_one_source_is_stale():
+    group_id = "group-cross-source"
+    source_a = projection_source(review_revision_id="revision-a", stale=True,
+        source_ref="data/copy/home.json#a")
+    source_a["operations"] = [{"id":"operation-a","decision_id":"group-decision",
+        "group_id":group_id,"kind":"replace","source_ref":source_a["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7],
+        "context_before":["The "],"context_after":[" idea"]}]
+    source_a["decisions"] = [{"operation_id":"group-decision","decision":"accepted",
+        "group_id":group_id}]
+    source_b = projection_source(review_revision_id="revision-b",
+        source_ref="data/copy/home.json#b")
+    source_b["operations"] = [{"id":"operation-b","decision_id":"group-decision",
+        "group_id":group_id,"kind":"replace","source_ref":source_b["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7],
+        "context_before":["The "],"context_after":[" idea"]}]
+    source_b["decisions"] = [{"operation_id":"group-decision","decision":"accepted",
+        "group_id":group_id}]
+
+    result = AcceptedOnlyMaterializer().materialize([source_a,source_b])
+
+    assert result.accepted_operation_ids == ()
+    assert {(item.operation_id,item.reason) for item in result.exclusions} == {
+        ("operation-a","stale"),("operation-b","group_held")}
+
+
+@pytest.mark.parametrize("held_decision", ["rejected", "questioned", None])
+def test_accepted_only_materializer_holds_mixed_decision_groups(held_decision):
+    group_id = "group-mixed"
+    accepted = projection_source(review_revision_id="revision-accepted")
+    accepted["operations"] = [{"id":"operation-accepted","decision_id":"accepted-decision",
+        "group_id":group_id,"kind":"replace","source_ref":accepted["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7]}]
+    accepted["decisions"] = [{"operation_id":"accepted-decision","decision":"accepted"}]
+    held = projection_source(review_revision_id="revision-held",
+        source_ref="data/copy/home.json#held")
+    held["operations"] = [{"id":"operation-held","decision_id":"held-decision",
+        "group_id":group_id,"kind":"replace","source_ref":held["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7]}]
+    held["decisions"] = [] if held_decision is None else [
+        {"operation_id":"held-decision","decision":held_decision}]
+
+    result = AcceptedOnlyMaterializer().materialize([accepted, held])
+
+    assert result.accepted_operation_ids == ()
+    assert {item.operation_id for item in result.exclusions} == {
+        "operation-accepted", "operation-held"}
+    assert next(item for item in result.exclusions
+                if item.operation_id == "operation-accepted").reason == "group_held"
+
+
 @pytest.mark.parametrize(("kind", "original", "old_text", "new_text", "base_range", "expected"), [
     ("replace", "old word", "old", "new", [0, 3], "new word"),
     ("insert", "word", "", "new ", [0, 0], "new word"),

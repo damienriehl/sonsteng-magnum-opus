@@ -243,6 +243,99 @@ test("trusted builder omits fully published reviews without blocking later sourc
   assert.equal(projection.sources[0].stale,false);
 });
 
+test("unpublished semantic groups retain superseded endpoints across sources", () => {
+  const core = makeCore(() => 1275);
+  const groupId = "group-cross-source";
+  const record = ({ revisionId,sourceRef,operationId,sourceRevision,group = groupId }) => {
+    const operations = [{ id:operationId,decision_id:group ? "group-decision" : operationId,
+      group_id:group,kind:"replace",source_ref:sourceRef,source_revision:sourceRevision,
+      prod_base:"prod-base",base_range:[0,3],old_text:"old",new_text:"new" }];
+    assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+      source_revision:sourceRevision,prod_base:"prod-base",commit_sha:sourceRevision,
+      original_hash:`old-${revisionId}`,proposed_hash:`new-${revisionId}`,
+      original_text:"old",proposed_text:"new",suggestion_ids:[`suggestion-${revisionId}`],
+      operations }).ok,true);
+    const decisions = [{ operation_id:group ? "group-decision" : operationId,
+      decision:"accepted" }];
+    assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:revisionId,
+      source_revision:sourceRevision,prod_base:"prod-base",decisions }).ok,true);
+    return { review_revision_id:revisionId,source_revision:sourceRevision,
+      prod_base:"prod-base",decisions };
+  };
+  const sourceA = "data/copy/home.json#a";
+  const sourceB = "data/copy/home.json#b";
+  const firstSources = [
+    record({ revisionId:"revision-a1",sourceRef:sourceA,
+      operationId:"operation-a1",sourceRevision:"dev-1" }),
+    record({ revisionId:"revision-b1",sourceRef:sourceB,
+      operationId:"operation-b1",sourceRevision:"dev-1" }),
+  ];
+  assert.equal(core.submitPublisherReview({ id:"review-group",idempotency_key:"review-group",
+    request_digest:"review-group",actor:"slot:damien",sources:firstSources }).ok,true);
+  const later = record({ revisionId:"revision-a2",sourceRef:sourceA,
+    operationId:"operation-a2",sourceRevision:"dev-2",group:null });
+  assert.equal(core.submitPublisherReview({ id:"review-a2",idempotency_key:"review-a2",
+    request_digest:"review-a2",actor:"slot:damien",sources:[later] }).ok,true);
+
+  const projection = core.productionPreparationContext().projection;
+  assert.deepEqual(projection.sources.map((source) => source.review_revision_id).sort(),
+    ["revision-a1","revision-a2","revision-b1"]);
+  assert.equal(projection.sources.find((source) => source.review_revision_id === "revision-a1").stale,
+    true);
+  const prepared = core.prepareProductionRelease(release({ id:"release-superseded-group",
+    idempotency_key:"release-superseded-group",request_digest:"release-superseded-group",
+    schema_version:2,target_batch_id:"operation-frontier",candidate_sha:"candidate-a2",
+    review_receipt_hash:"multi-receipt",projection_identity:"projection-a2",
+    accepted_operation_ids:["operation-a2"],held_exclusions:[
+      { operation_id:"operation-a1",decision:"accepted",reason:"stale" },
+      { operation_id:"operation-b1",decision:"accepted",reason:"group_held" },
+    ] }));
+  assert.equal(prepared.ok,true);
+  assert.deepEqual(prepared.release.operation_ids,["operation-a2"]);
+});
+
+test("v2 completion removes published operations from the eligibility summary", () => {
+  const core = makeCore(() => 1280);
+  seedApplied(core,"batch-parent",["suggestion-parent"],1200);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-summary-v2",
+    idempotency_key:"release-summary-v2",request_digest:"release-summary-v2",schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-summary-v2",
+    review_receipt_hash:receipt,projection_identity:"projection-summary-v2",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[
+      { operation_id:"op-held",decision:"rejected",reason:"held" }] })).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{ id:prepared.id,
+    review_receipt_hash:receipt,projection_identity:"projection-summary-v2" })).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer",id:authorized.id }).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  for (const state of ["pages_deployed","worker_deployed","verified"]) {
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
+      credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:"candidate-summary-v2"} }).ok,true);
+    assert.equal(core.publisherSummary().eligible,0);
+  }
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"complete",actor:"service:release",
+    credential_channel:"bearer",fencing_token:claimed.fencing_token,
+    detail:{ candidate_sha:"candidate-summary-v2"} }).ok,true);
+  assert.equal(core.publisherSummary().eligible,0);
+});
+
+test("normalized frontier backfills existing submitted reviews and drives the first v2 summary", () => {
+  const core = makeCore(() => 1285);
+  reviewedProjection(core);
+  assert.equal(core.publisherSummary().eligible,1);
+  core.sql.exec("DELETE FROM production_review_operations WHERE operation_id='op-accepted'");
+  core.sql.exec("DELETE FROM editor_schema_migrations WHERE id='production-review-operations-v1'");
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,1);
+  core.initSchema();
+  assert.equal(core.publisherSummary().eligible,1);
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,2);
+});
+
 test("History revert batches are first-class production frontier members", () => {
   const core = makeCore(() => 1300);
   core.fileRevertRequest({ id:"revert-1",editor:"slot:damien",doc:"data/copy/home.json",
