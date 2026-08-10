@@ -151,7 +151,7 @@ async function run() {
   const puppeteer = loadPuppeteer();
   const browser = await puppeteer.launch({
     executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium',
-    headless: process.env.HEADLESS === '1',
+    headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0',
     userDataDir: path.join('/tmp', `sonsteng-chat-${process.pid}`),
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-crash-reporter', '--disable-breakpad']
   });

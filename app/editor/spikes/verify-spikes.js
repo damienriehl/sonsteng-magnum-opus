@@ -19,7 +19,7 @@ function assert(rule, cond, detail){
 async function run(){
   const browser = await puppeteer.launch({
     executablePath: '/snap/bin/chromium',
-    headless: false,
+    headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0',
     args: ['--no-sandbox','--disable-dev-shm-usage','--window-size=1280,1400']
   });
 

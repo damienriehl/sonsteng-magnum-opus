@@ -39,6 +39,30 @@ def test_browser_gates_are_wired_into_preflight_and_never_soft_pass_launch_error
         assert "BROWSER GATE ERROR" in source
 
 
+def test_browser_analysis_is_background_by_default_and_headful_is_explicit_opt_in():
+    preflight = (TOOLS / "preflight.sh").read_text()
+    assert 'if [ "${HEADFUL:-0}" = "1" ]' in preflight
+    assert "export HEADLESS=1 EDITOR_HEADLESS=1" in preflight
+    assert "headful-only gate" not in preflight
+
+    scripts = [
+        ROOT / "app/editor/verify-editor.js",
+        ROOT / "app/editor/verify-rail-placement.js",
+        ROOT / "app/editor/spikes/verify-spikes.js",
+        TOOLS / "a11y_audit.js",
+        TOOLS / "shot.js",
+        TOOLS / "verify_catalog_client.js",
+        TOOLS / "verify_chat_critique.js",
+        TOOLS / "verify_platform_layout.js",
+        TOOLS / "verify_publisher_client.mjs",
+    ]
+    for script in scripts:
+        source = script.read_text()
+        assert "process.env.HEADFUL" in source, script
+        assert "process.env.HEADLESS==='1'" not in source, script
+        assert "process.env.HEADLESS === '1'" not in source, script
+
+
 def test_accessibility_audit_resolves_puppeteer_portably():
     source = (TOOLS / "a11y_audit.js").read_text()
     env_candidate = "process.env.PUP_DIR"

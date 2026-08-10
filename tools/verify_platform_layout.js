@@ -54,7 +54,7 @@ async function run() {
   const printOnly=process.argv.includes('--print');
   const m=JSON.parse(fs.readFileSync(MATRIX_PATH,'utf8')); const initial=matrixErrors(m);
   if(initial.length){initial.forEach((x)=>console.error('FAIL matrix:',x));return 1;}
-  const pup=loadPuppeteer(); const browser=await pup.launch({executablePath:process.env.CHROME_BIN||process.env.CHROMIUM_PATH||'/snap/bin/chromium',headless:process.env.HEADLESS==='1',userDataDir:path.join('/tmp',`sonsteng-layout-${process.pid}`),args:['--no-sandbox','--disable-dev-shm-usage','--disable-crash-reporter','--disable-breakpad']});
+  const pup=loadPuppeteer(); const browser=await pup.launch({executablePath:process.env.CHROME_BIN||process.env.CHROMIUM_PATH||'/snap/bin/chromium',headless:process.env.HEADFUL!=='1'&&process.env.HEADLESS!=='0',userDataDir:path.join('/tmp',`sonsteng-layout-${process.pid}`),args:['--no-sandbox','--disable-dev-shm-usage','--disable-crash-reporter','--disable-breakpad']});
   let fails=0, checks=0; const report=[];
   const pages=printOnly?m.pages.filter((p)=>p.print):m.pages.filter((p)=>!p.interactive);
   const viewports=printOnly?[m.viewports.find((v)=>v.width===1280)]:m.viewports;

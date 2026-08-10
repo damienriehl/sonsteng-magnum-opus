@@ -226,7 +226,7 @@ const AUDIT = function () {
   const targets = explicitTargets ? args
     : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p)).concat([EDITOR_HARNESS]);
   const browser = await puppeteer.launch({
-    headless: process.env.HEADLESS === '1', args: ['--no-sandbox', '--window-size=1280,900'],
+    headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0', args: ['--no-sandbox', '--window-size=1280,900'],
     executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium', defaultViewport: { width: 1280, height: 900 },
     userDataDir: path.join('/tmp', `sonsteng-a11y-${process.pid}`),
   });
