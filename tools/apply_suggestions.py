@@ -1402,7 +1402,9 @@ def _atomic_review_operations(patch, source_revision, prod_base):
                          if group_id else None)
     if patch.op is not None:
         identity = {**metadata, "op": patch.op, "op_arg": patch.op_arg,
-                    "old_text": patch.original_text, "new_text": patch.new_text}
+                    "old_text": patch.original_text, "new_text": patch.new_text,
+                    "suggestion_id": patch.suggestion_id,
+                    "created_at": patch.created_at}
         operation_id = _stable_evidence_id("op", identity)
         return [{"id": operation_id, "decision_id": group_decision_id or operation_id,
                  "group_id": group_id,

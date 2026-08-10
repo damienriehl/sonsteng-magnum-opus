@@ -93,6 +93,21 @@ class AtomicReviewEvidenceTest(unittest.TestCase):
         self.assertEqual({operation["group_id"] for operation in operations}, {"shared-1"})
         self.assertEqual(len({operation["decision_id"] for operation in operations}), 1)
 
+    def test_duplicate_structural_edits_keep_distinct_identity_and_order_evidence(self):
+        common = dict(group_id="shared-structural",source_ref="data/a.md#baaaaaaaa",
+                      relpath="data/a.md",kind="prose_md",json_path="",
+                      original_text="Anchor",new_text="Same addition",op="insert_after")
+        first = ap.Patch(suggestion_id="insert-1",created_at=1000,**common)
+        second = ap.Patch(suggestion_id="insert-2",created_at=2000,**common)
+
+        operations = [ap._atomic_review_operations(patch,"dev-tip","prod-tip")[0]
+                      for patch in (first,second)]
+
+        self.assertEqual([operation["created_at"] for operation in operations],[1000,2000])
+        self.assertEqual([operation["suggestion_id"] for operation in operations],
+                         ["insert-1","insert-2"])
+        self.assertEqual(len({operation["id"] for operation in operations}),2)
+
     def test_distinctive_exact_prose_move_pairs_both_endpoints(self):
         moved = "This distinctive sentence has enough words to qualify."
         stationary = "The substantially longer middle passage remains exactly where it was throughout this careful move test."
