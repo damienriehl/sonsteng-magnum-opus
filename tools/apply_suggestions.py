@@ -1375,6 +1375,15 @@ def word_diff(old, new):
 
 _REVIEW_TOKEN_RE = re.compile(r"\w+(?:['’_-]\w+)*|\s+|[^\w\s]", re.UNICODE)
 
+# Keep the authoritative Python evidence path inside the same deterministic
+# work envelope as the browser's redline renderer. SequenceMatcher with
+# autojunk=False is intentionally exact for ordinary prose, but its worst-case
+# work is quadratic on repetitive inputs. Above either ceiling we retain exact
+# text/range evidence as one whole-span operation instead of risking the apply
+# lease on a finer alignment.
+MAX_REVIEW_TOKENS = 1_024
+MAX_REVIEW_MATRIX_CELLS = 250_000
+
 
 def _review_tokens(text):
     return [(match.group(0), match.start(), match.end())
@@ -1385,6 +1394,21 @@ def _stable_evidence_id(prefix, value):
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True,
                          separators=(",", ":")).encode("utf-8")
     return "%s_%s" % (prefix, hashlib.sha256(encoded).hexdigest())
+
+
+def _whole_span_review_operation(patch, metadata, group_id, group_decision_id):
+    old_text = str(patch.original_text)
+    new_text = str(patch.new_text)
+    if old_text == new_text:
+        return []
+    kind = "replace" if old_text and new_text else ("delete" if old_text else "insert")
+    identity = {**metadata, "base_range": [0, len(old_text)],
+                "proposed_range": [0, len(new_text)],
+                "old_text": old_text, "new_text": new_text}
+    operation_id = _stable_evidence_id("op", identity)
+    return [{"id": operation_id, "decision_id": group_decision_id or operation_id,
+             "group_id": group_id, "kind": kind, **identity,
+             "context_before": [], "context_after": []}]
 
 
 def _atomic_review_operations(patch, source_revision, prod_base):
@@ -1414,6 +1438,11 @@ def _atomic_review_operations(patch, source_revision, prod_base):
 
     old_tokens = _review_tokens(str(patch.original_text))
     new_tokens = _review_tokens(str(patch.new_text))
+    if (len(old_tokens) > MAX_REVIEW_TOKENS or
+            len(new_tokens) > MAX_REVIEW_TOKENS or
+            len(old_tokens) * len(new_tokens) > MAX_REVIEW_MATRIX_CELLS):
+        return _whole_span_review_operation(
+            patch, metadata, group_id, group_decision_id)
     matcher = difflib.SequenceMatcher(
         None, [token[0] for token in old_tokens],
         [token[0] for token in new_tokens], autojunk=False)

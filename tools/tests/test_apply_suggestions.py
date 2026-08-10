@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -130,6 +131,56 @@ class AtomicReviewEvidenceTest(unittest.TestCase):
         for patch in (short, repeated):
             operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
             self.assertFalse(any(operation.get("move_pair_id") for operation in operations))
+
+    def test_repetitive_near_limit_prose_bypasses_matcher_with_deterministic_fallback(self):
+        old = ("repeat " * 2300) + "old."
+        new = ("repeat " * 2300) + "new!"
+        patch = self._patch("s1", "data/a.md#baaaaaaaa", old, new)
+
+        started = time.monotonic()
+        with mock.patch.object(ap.difflib, "SequenceMatcher",
+                               side_effect=AssertionError("matcher must be bypassed")):
+            first = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+            second = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+        self.assertLess(time.monotonic() - started, 2.0)
+
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first, second)
+        self.assertEqual(first[0]["kind"], "replace")
+        self.assertEqual(first[0]["old_text"], old)
+        self.assertEqual(first[0]["new_text"], new)
+        self.assertEqual(first[0]["base_range"], [0, len(old)])
+        self.assertEqual(first[0]["proposed_range"], [0, len(new)])
+        self.assertEqual(first[0]["context_before"], [])
+        self.assertEqual(first[0]["context_after"], [])
+
+    def test_atomic_matcher_preserves_separated_punctuation_and_unicode_edits(self):
+        patch = self._patch(
+            "s1", "data/a.md#baaaaaaaa",
+            "Café strong points, and weak points.",
+            "Café strongest points, and weak points!",
+        )
+
+        operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+
+        self.assertEqual([(op["old_text"], op["new_text"]) for op in operations],
+                         [("strong", "strongest"), (".", "!")])
+        self.assertEqual(operations[0]["context_before"][-2:], ["Café", " "])
+
+    def test_oversized_review_matrix_bypasses_matcher_below_token_ceiling(self):
+        old = " ".join("old%d" % index for index in range(400))
+        new = " ".join("new%d" % index for index in range(400))
+        self.assertLess(len(ap._review_tokens(old)), ap.MAX_REVIEW_TOKENS)
+        self.assertGreater(len(ap._review_tokens(old)) * len(ap._review_tokens(new)),
+                           ap.MAX_REVIEW_MATRIX_CELLS)
+        patch = self._patch("s1", "data/a.md#baaaaaaaa", old, new)
+
+        with mock.patch.object(ap.difflib, "SequenceMatcher",
+                               side_effect=AssertionError("matcher must be bypassed")):
+            operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+
+        self.assertEqual([(op["kind"], op["old_text"], op["new_text"])
+                          for op in operations], [("replace", old, new)])
 
 
 def _bid_of(span):
