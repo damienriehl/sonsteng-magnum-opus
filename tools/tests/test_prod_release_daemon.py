@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import subprocess
 import sys
+import contextlib
 from types import SimpleNamespace
 
 import pytest
@@ -63,6 +64,45 @@ def test_canary_mode_requires_exact_release_and_never_prepares(monkeypatch, tmp_
 
     with pytest.raises(RuntimeError, match="exact release id"):
         daemon.main([])
+
+
+def test_canary_claims_and_executes_only_the_named_release(monkeypatch, tmp_path):
+    release_id = "release-canary-1"
+    manifest = tmp_path / "manifest.json"; manifest.write_text("{}")
+    repo = tmp_path / "repo"; repo.mkdir()
+    pages = repo / "site"; pages.mkdir()
+    worker = repo / "wrangler.jsonc"; worker.write_text("{}")
+    calls = []
+    class Git:
+        def __init__(self, root): self.root = pathlib.Path(root)
+        @contextlib.contextmanager
+        def isolated_checkout(self, _sha): yield self.root
+    class Ledger:
+        def __init__(self, *_args): pass
+        def claim_authorized(self, exact):
+            calls.append(("claim", exact)); return SimpleNamespace(id=release_id,candidate_sha="a"*40)
+    class Executor:
+        def __init__(self, *_args, **_kwargs): pass
+        def run_once(self, release): calls.append(("run", release.id))
+    class NeverPrepare:
+        def __init__(self, *_args, **_kwargs): raise AssertionError("canary prepared a frontier")
+    fake = SimpleNamespace(CandidateValidator=lambda *_:object(),CompatibilityGate=lambda *_:object(),
+        GitRefAdapter=Git,LedgerHTTP=Ledger,ProductionCandidateBuilder=NeverPrepare,
+        ProductionExecutor=Executor,RecordedPairRestorer=object,RecoveryRegistry=lambda *_:object(),
+        WranglerPagesAdapter=lambda *_a,**_k:object(),WranglerWorkerAdapter=lambda *_a,**_k:object())
+    monkeypatch.setitem(sys.modules,"prod_release_executor",fake)
+    values = {
+      "SONSTENG_PROD_RELEASE_ENABLED":"true","SONSTENG_PROD_RELEASE_MODE":"canary",
+      "SONSTENG_PROD_CANARY_RELEASE_ID":release_id,"SONSTENG_PROD_RELEASE_BEARER":"secret",
+      "SONSTENG_PROD_LEDGER_URL":"https://ledger.example","SONSTENG_PROD_PAGES_PROJECT":"pages",
+      "SONSTENG_PROD_PAGES_ARTIFACT":str(pages),"SONSTENG_PROD_PAGES_PROVENANCE_URL":"https://pages.example",
+      "SONSTENG_PROD_WORKER_CONFIG":str(worker),"SONSTENG_PROD_WORKER_PROVENANCE_URL":"https://worker.example",
+      "SONSTENG_PROD_REPO":str(repo),"SONSTENG_PROD_MANIFEST":str(manifest),
+      "SONSTENG_PROD_RECOVERY_REGISTRY":str(tmp_path/"registry.json"),"SONSTENG_PROD_LOCK":str(tmp_path/"lock")}
+    for key,value in values.items(): monkeypatch.setenv(key,value)
+    monkeypatch.setenv("SONSTENG_PROD_EXPECTED_CONFIG_DIGEST",daemon.runtime_config_digest())
+    assert daemon.main([]) == 0
+    assert calls == [("claim",release_id),("run",release_id)]
 
 
 def git(repo,*args):

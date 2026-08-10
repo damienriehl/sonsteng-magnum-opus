@@ -19,6 +19,7 @@ import pathlib
 import re
 
 from prod_release_executor import (
+    CompatibilityGate,
     GitRefAdapter,
     RecoveryRegistry,
     ReleaseError,
@@ -44,6 +45,8 @@ class BootstrapRequest:
     pages_provenance_url: str = ""
     worker_provenance_url: str = ""
     pages_branch: str = "main"
+    old_worker_accepts_new_pages: bool = True
+    new_worker_accepts_old_pages: bool = False
 
 
 def _operator_authority():
@@ -167,17 +170,20 @@ def _run_bootstrap_locked(request, *, target_factory, git_factory, now):
         _checkout_path(root, request.repo, request.worker_config)
         pages, worker = target_factory(root, request)
         _require_provenance(pages, worker, request.source_sha)
-        for target, provider_id in (
-                (pages, request.pages_deployment_id),
-                (worker, request.worker_version_id)):
+        targets = {"pages": (pages, request.pages_deployment_id),
+                   "worker": (worker, request.worker_version_id)}
+        gate = CompatibilityGate(request.old_worker_accepts_new_pages,
+                                 request.new_worker_accepts_old_pages)
+        order = gate.deployment_order()
+        for name in order:
+            target, provider_id = targets[name]
             _safe_provider_call(lambda target=target, provider_id=provider_id:
                                 target.restore(provider_id))
         _require_provenance(pages, worker, request.source_sha)
         # A second pass in reverse compatibility order is the restoration
         # drill; it must remain exact and must not upload a new artifact.
-        for target, provider_id in (
-                (worker, request.worker_version_id),
-                (pages, request.pages_deployment_id)):
+        for name in reversed(order):
+            target, provider_id = targets[name]
             _safe_provider_call(lambda target=target, provider_id=provider_id:
                                 target.restore(provider_id))
         _require_provenance(pages, worker, request.source_sha)
@@ -185,7 +191,7 @@ def _run_bootstrap_locked(request, *, target_factory, git_factory, now):
     replay = existing == requested_pair
     if not replay:
         timestamp = (now or datetime.datetime.now(datetime.timezone.utc)).isoformat()
-        _append_receipt(request.receipt_log, {
+        receipt = {
             "schema_version": 1,
             "event": "legacy_pair_bootstrap_verified",
             "operator_id": operator_id,
@@ -201,9 +207,12 @@ def _run_bootstrap_locked(request, *, target_factory, git_factory, now):
                 (request.source_sha + ":pages+worker").encode()).hexdigest(),
             "reactivation_verified": True,
             "restoration_verified": True,
-        })
+        }
+        _append_receipt(request.receipt_log, {**receipt,
+            "event": "legacy_pair_bootstrap_started"})
         registry.record_pair(
             request.source_sha, request.pages_deployment_id, request.worker_version_id)
+        _append_receipt(request.receipt_log, receipt)
     return {"ok": True, "replay": replay, "source_sha": request.source_sha}
 
 
@@ -248,6 +257,10 @@ def _parser():
     required("--pages-provenance-url", "SONSTENG_PROD_PAGES_PROVENANCE_URL")
     required("--worker-provenance-url", "SONSTENG_PROD_WORKER_PROVENANCE_URL")
     parser.add_argument("--pages-branch", default=env("SONSTENG_PROD_PAGES_BRANCH", "main"))
+    parser.add_argument("--old-worker-accepts-new-pages", action="store_true",
+        default=env("SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES") == "true")
+    parser.add_argument("--new-worker-accepts-old-pages", action="store_true",
+        default=env("SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES") == "true")
     return parser
 
 
@@ -268,6 +281,8 @@ def main(argv=None):
         pages_provenance_url=args.pages_provenance_url,
         worker_provenance_url=args.worker_provenance_url,
         pages_branch=args.pages_branch,
+        old_worker_accepts_new_pages=args.old_worker_accepts_new_pages,
+        new_worker_accepts_old_pages=args.new_worker_accepts_old_pages,
     )
     result = run_bootstrap(request)
     print(json.dumps(result, sort_keys=True))

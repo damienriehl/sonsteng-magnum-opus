@@ -439,32 +439,38 @@ class LedgerHTTP:
 
 
 class GitRefAdapter:
-    def __init__(self, repo, run=subprocess.run):
-        self.repo, self._run = repo, run
+    def __init__(self, repo, run=subprocess.run, timeout=120):
+        self.repo, self._run, self.timeout = repo, run, timeout
+
+    def _git(self, argv, **kwargs):
+        try:
+            return self._run(argv, timeout=self.timeout, **kwargs)
+        except subprocess.TimeoutExpired:
+            raise ReleaseError("git operation exceeded its bounded timeout") from None
 
     def is_ancestor(self, base, candidate):
-        result = self._run(["git", "merge-base", "--is-ancestor", base, candidate],
+        result = self._git(["git", "merge-base", "--is-ancestor", base, candidate],
                            cwd=self.repo, check=False, capture_output=True)
         return result.returncode == 0
 
     def tree(self, sha):
-        result = self._run(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=self.repo,
+        result = self._git(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=self.repo,
                            check=True, capture_output=True, text=True)
         return result.stdout.strip()
 
     def require_clean_candidate(self, sha):
-        head = self._run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+        head = self._git(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
                          capture_output=True, text=True).stdout.strip()
-        status = self._run(["git", "status", "--porcelain", "--untracked-files=all"],
+        status = self._git(["git", "status", "--porcelain", "--untracked-files=all"],
                            cwd=self.repo, check=True, capture_output=True, text=True).stdout
         if head != sha or status.strip():
             raise ReleaseError("candidate checkout is not the clean frozen commit")
 
     def commit_projected_tree(self, base_sha, timestamp):
         """Create a deterministic synthetic commit without moving ambient HEAD."""
-        self._run(["git", "add", "-A"], cwd=self.repo, check=True,
+        self._git(["git", "add", "-A"], cwd=self.repo, check=True,
                   capture_output=True, text=True)
-        tree = self._run(["git", "write-tree"], cwd=self.repo, check=True,
+        tree = self._git(["git", "write-tree"], cwd=self.repo, check=True,
                          capture_output=True, text=True).stdout.strip()
         env = dict(os.environ, GIT_AUTHOR_NAME="Sonsteng Release Service",
                    GIT_AUTHOR_EMAIL="release@localhost",
@@ -472,7 +478,7 @@ class GitRefAdapter:
                    GIT_COMMITTER_EMAIL="release@localhost",
                    GIT_AUTHOR_DATE=f"@{int(timestamp)} +0000",
                    GIT_COMMITTER_DATE=f"@{int(timestamp)} +0000")
-        commit = self._run(["git", "commit-tree", tree, "-p", base_sha,
+        commit = self._git(["git", "commit-tree", tree, "-p", base_sha,
                             "-m", "release: accepted-only projection"],
                            cwd=self.repo, check=True, capture_output=True,
                            text=True, env=env).stdout.strip()
@@ -483,19 +489,19 @@ class GitRefAdapter:
         if not re.fullmatch(r"[0-9a-f]{64}", identity):
             raise ReleaseError("candidate retention identity is invalid")
         ref = f"refs/sonsteng/releases/{identity}"
-        existing = self._run(["git", "rev-parse", "--verify", "--quiet", ref],
+        existing = self._git(["git", "rev-parse", "--verify", "--quiet", ref],
                              cwd=self.repo, check=False, capture_output=True,
                              text=True).stdout.strip()
         if existing and existing != candidate_sha:
             raise ReleaseError("candidate retention ref conflicts with immutable evidence")
         if not existing:
-            result = self._run(["git", "update-ref", ref, candidate_sha,
+            result = self._git(["git", "update-ref", ref, candidate_sha,
                                 "0" * 40], cwd=self.repo, check=False,
                                capture_output=True, text=True)
             if result.returncode != 0:
                 # A concurrent deterministic preparation may have won the
                 # create-only race. Accept only the identical pinned object.
-                existing = self._run(["git", "rev-parse", "--verify", "--quiet", ref],
+                existing = self._git(["git", "rev-parse", "--verify", "--quiet", ref],
                                      cwd=self.repo, check=False, capture_output=True,
                                      text=True).stdout.strip()
                 if existing != candidate_sha:
@@ -508,13 +514,13 @@ class GitRefAdapter:
         root = pathlib.Path(tempfile.mkdtemp(prefix="sonsteng-prod-candidate-"))
         added = False
         try:
-            self._run(["git", "worktree", "add", "--detach", str(root), sha],
+            self._git(["git", "worktree", "add", "--detach", str(root), sha],
                       cwd=self.repo, check=True, capture_output=True, text=True)
             added = True
             yield root
         finally:
             if added:
-                self._run(["git", "worktree", "remove", "--force", str(root)],
+                self._git(["git", "worktree", "remove", "--force", str(root)],
                           cwd=self.repo, check=True, capture_output=True, text=True)
             shutil.rmtree(root, ignore_errors=True)
 

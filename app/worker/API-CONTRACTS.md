@@ -427,6 +427,26 @@ fail closed. It authorizes only the already-prepared immutable binding.
 
 ### Granular Publisher review and legacy backfill
 
+`GET /edit/v1/publisher/review` requires an authenticated human Publisher and
+returns `{ ok:true, review:{ revisions, counts, blocked_reason? } }`. Each
+revision includes immutable source evidence, classified operations, an
+actor-owned draft when present, and any submitted review. `403` means the
+Publisher scope is absent.
+
+`POST /edit/v1/publisher/review/draft` requires the same Access identity plus
+CSRF proof. Its JSON body binds `review_revision_id`, `source_revision`,
+`prod_base`, and the complete draft `decisions`. Success returns
+`{ ok:true, draft }`; invalid or stale evidence returns `400`, an ownership or
+scope failure returns `403`, and an already-submitted revision returns `409`.
+
+`POST /edit/v1/publisher/review/submit` requires the same human Publisher and
+CSRF proof. Its body contains one idempotency key and a `sources` array whose
+entries bind every submitted revision and decision. The first atomic submit
+returns `201` with one shared immutable review receipt; an exact replay returns
+`200`. Changed replay, stale evidence, partial groups, or incomplete source
+bindings return `409`; malformed input returns `400`. A service bearer cannot
+read, draft, or submit Publisher judgments.
+
 The review source is the cumulative value from the **verified PROD base** to the
 current DEV value for one durable `source_ref`. Sequential DEV suggestions are
 immutable attribution evidence; they are not overlapping review decisions.

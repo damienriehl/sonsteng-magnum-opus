@@ -381,6 +381,33 @@ export class EditorStoreCore {
         AND decision.operation_id=COALESCE(json_extract(operation.value,'$.decision_id'),json_extract(operation.value,'$.id'))
       LEFT JOIN production_published_operations published
         ON published.operation_id=json_extract(operation.value,'$.id')`);
+      this.sql.exec(`INSERT OR IGNORE INTO production_review_operations
+      (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state)
+      SELECT json_extract(operation.value,'$.id'),
+        COALESCE(json_extract(operation.value,'$.decision_id'),json_extract(operation.value,'$.id')),
+        review.id,revision.id,revision.source_ref,
+        COALESCE(json_extract(operation.value,'$.group_id'),json_extract(operation.value,'$.move_pair_id')),
+        COALESCE(decision.decision,'unanswered'),COALESCE(decision.note,''),
+        CASE WHEN published.operation_id IS NOT NULL THEN 'published'
+          WHEN EXISTS (SELECT 1 FROM production_review_submission_sources newer_source
+            JOIN production_review_submissions newer ON newer.id=newer_source.review_id
+            JOIN production_review_revisions newer_revision ON newer_revision.id=newer_source.review_revision_id
+            WHERE newer_revision.source_ref=revision.source_ref
+              AND (newer.created_at>review.created_at OR
+                (newer.created_at=review.created_at AND newer.id>review.id)))
+            OR EXISTS (SELECT 1 FROM production_reviews newer
+              JOIN production_review_revisions newer_revision ON newer_revision.id=newer.review_revision_id
+              WHERE newer_revision.source_ref=revision.source_ref
+                AND (newer.created_at>review.created_at OR
+                  (newer.created_at=review.created_at AND newer.id>review.id)))
+          THEN 'superseded' ELSE 'unpublished' END
+      FROM production_reviews review
+      JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      JOIN json_each(revision.operations_json) operation
+      LEFT JOIN production_review_decisions decision ON decision.review_id=review.id
+        AND decision.operation_id=COALESCE(json_extract(operation.value,'$.decision_id'),json_extract(operation.value,'$.id'))
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=json_extract(operation.value,'$.id')`);
       this.sql.exec("INSERT INTO editor_schema_migrations (id,applied_at) VALUES (?,?)",
         migrationId,this.now());
     });
@@ -1508,7 +1535,10 @@ export class EditorStoreCore {
     const revisionRows = this._all(`SELECT id,source_ref FROM (
       SELECT id,source_ref,ROW_NUMBER() OVER
         (PARTITION BY source_ref ORDER BY created_at DESC,id DESC) AS row_num
-      FROM production_review_revisions) WHERE row_num=1 ORDER BY source_ref`);
+      FROM production_review_revisions) WHERE row_num=1 ORDER BY source_ref LIMIT 501`);
+    if (revisionRows.length > 500) return { blocked_reason:"review_frontier_too_large",
+      revisions:[],revision:null,draft:null,submitted_review:null,
+      counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,held:0 } };
     if (!revisionRows.length) return { blocked_reason:"missing_revision_evidence",revisions:[],revision:null,draft:null,
       submitted_review:null,counts:{ total:0,reviewed:0,unreviewed:0,accepted:0,rejected:0,questioned:0,held:0 } };
     const revisions = revisionRows.map((revisionRow) => {

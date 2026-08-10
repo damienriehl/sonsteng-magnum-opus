@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import http from "node:http";
 import { PUBLISHER_JS } from "../app/worker/src/editor-assets.js";
+import { renderPublisherPage } from "../app/worker/src/editor-publisher.js";
 
 const require = createRequire(import.meta.url);
 function loadPuppeteer() {
@@ -20,8 +21,17 @@ async function run() {
   const html = `<label><input id="pub-confirm" type="checkbox">Confirm</label>
     <button id="pub-authorize" disabled>Authorize</button><p id="pub-live" tabindex="-1"></p>
     <script id="publisher-binding" type="application/json">${JSON.stringify(binding)}</script>`;
-  const server = http.createServer((_request, response) => {
-    response.setHeader("content-type", "text/html; charset=utf-8"); response.end(html);
+  const review = { counts:{total:2,reviewed:0,unreviewed:2,accepted:0,rejected:0,questioned:0,held:0},
+    revisions:[{ revision:{id:"revision-a",source_ref:"data/a.json#copy",source_revision:"dev-a",
+      prod_base:"prod-a",original_text:"Strong points.",proposed_text:"Stronger points!",operations:[
+        {id:"op-word",decision_id:"op-word",kind:"replace",old_text:"Strong",new_text:"Stronger"},
+        {id:"op-punct",decision_id:"op-punct",kind:"replace",old_text:".",new_text:"!"}]},
+      draft:null,submitted_review:null,stale:false,
+      counts:{total:2,reviewed:0,unreviewed:2,accepted:0,rejected:0,questioned:0,held:0}}] };
+  const reviewHtml = await renderPublisherPage({release:null,batches:[],review},"DR").text();
+  const server = http.createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(request.url === "/review" ? reviewHtml : html);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const browser = await loadPuppeteer().launch({
@@ -29,6 +39,26 @@ async function run() {
     headless:process.env.HEADFUL !== "1" && process.env.HEADLESS !== "0",args:["--no-sandbox","--disable-dev-shm-usage"],
   });
   try {
+    const reviewPage = await browser.newPage();
+    await reviewPage.goto(`http://127.0.0.1:${server.address().port}/review`, { waitUntil:"domcontentloaded" });
+    await reviewPage.evaluate(() => { window.reviewCalls=[]; window.fetch=(url,options)=>{
+      window.reviewCalls.push({url,body:JSON.parse(options.body)});
+      if(url.endsWith("/submit")) return new Promise(resolve=>{ window.finishReview=()=>resolve({ok:true}); });
+      return Promise.resolve({ok:true});
+    }; });
+    await reviewPage.addScriptTag({content:PUBLISHER_JS});
+    await reviewPage.click('input[name="decision-op-word"][value="accepted"]');
+    await reviewPage.click('input[name="decision-op-punct"][value="questioned"]');
+    await reviewPage.click("#pub-submit-review");
+    await reviewPage.waitForFunction(() => !document.querySelector("#error-summary").hidden);
+    await reviewPage.type('[data-note-for="questioned"]',"Should this be an exclamation point?");
+    await reviewPage.click("#pub-submit-review");
+    await reviewPage.waitForFunction(() => window.reviewCalls.some(call=>call.url.endsWith("/submit")));
+    const submitted = await reviewPage.evaluate(() => window.reviewCalls.find(call=>call.url.endsWith("/submit")).body);
+    if(submitted.sources.length !== 1 || submitted.sources[0].decisions.length !== 2 ||
+       submitted.sources[0].decisions[1].note !== "Should this be an exclamation point?")
+      throw new Error("granular multi-operation review payload was not exact");
+    await reviewPage.close();
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil:"domcontentloaded" });
     await page.evaluate(() => {

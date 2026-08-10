@@ -66,6 +66,28 @@ test("read projection keeps the latest reviewable revision for every source", ()
   assert.equal(view.counts.unreviewed,4);
 });
 
+test("schema upgrade normalizes legacy single-source review receipts", () => {
+  const core = makeCore(() => 1750);
+  core.recordReviewRevision(revision());
+  core.sql.exec(`INSERT INTO production_reviews
+    (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
+     receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    "legacy-review","legacy-key","legacy-request","slot:damien","revision-1","dev-1",
+    "prod-1","legacy-receipt","{}",1700);
+  core.sql.exec(`INSERT INTO production_review_decisions
+    (review_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?)`,
+    "legacy-review","op-word","accepted","","digest-word",null);
+  core.sql.exec("DELETE FROM production_review_operations");
+  core.sql.exec("DELETE FROM editor_schema_migrations WHERE id=?","production-review-operations-v1");
+  core._backfillReviewOperations();
+  const rows = core.sql.exec(`SELECT operation_id,decision,lifecycle_state
+    FROM production_review_operations ORDER BY operation_id`).toArray().map((row) => ({ ...row }));
+  assert.deepEqual(rows,[
+    { operation_id:"op-comma",decision:"unanswered",lifecycle_state:"unpublished" },
+    { operation_id:"op-word",decision:"accepted",lifecycle_state:"unpublished" },
+  ]);
+});
+
 test("submission freezes exact evidence, validates questions, and replays only identically", () => {
   const core = makeCore(() => 2000);
   core.recordReviewRevision(revision());

@@ -99,7 +99,7 @@ def test_bootstrap_records_complete_pair_after_exact_sha_drill(tmp_path, monkeyp
         ("pages", "pages-legacy-1"),
     ]
     assert roots and all(not root.exists() for root in roots)
-    receipt = json.loads(receipt_path.read_text().splitlines()[0])
+    receipt = json.loads(receipt_path.read_text().splitlines()[-1])
     assert receipt["event"] == "legacy_pair_bootstrap_verified"
     assert receipt["operator_id"] == "operator-17"
     assert receipt["authority_channel"] == "local-console"
@@ -127,7 +127,42 @@ def test_bootstrap_exact_replay_is_idempotent_but_change_conflicts(tmp_path, mon
     changed = bootstrap.dataclasses.replace(request, worker_version_id="worker-2")
     with pytest.raises(ReleaseError, match="complete pair conflict"):
         bootstrap.run_bootstrap(changed, target_factory=factory)
-    assert len(request.receipt_log.read_text().splitlines()) == 1
+    assert len(request.receipt_log.read_text().splitlines()) == 2
+
+
+def test_bootstrap_registry_failure_never_leaves_verified_receipt(tmp_path, monkeypatch):
+    authority_env(monkeypatch)
+    repo, sha = make_repo(tmp_path)
+    request = bootstrap.BootstrapRequest(
+        repo=repo, source_sha=sha, candidate_sha=sha,
+        pages_deployment_id="pages-1", worker_version_id="worker-1",
+        expected_pages_provenance=sha, expected_worker_provenance=sha,
+        recovery_registry=tmp_path / "registry.json",
+        receipt_log=tmp_path / "receipts.jsonl",
+        pages_artifact=repo / "site", worker_config=repo / "app/worker/wrangler.jsonc")
+    monkeypatch.setattr(bootstrap.RecoveryRegistry, "record_pair",
+        lambda *_args: (_ for _ in ()).throw(OSError("registry unavailable")))
+    with pytest.raises(OSError, match="registry unavailable"):
+        bootstrap.run_bootstrap(request, target_factory=lambda *_: (
+            Target("pages", sha, []), Target("worker", sha, [])))
+    events = [json.loads(line)["event"] for line in request.receipt_log.read_text().splitlines()]
+    assert events == ["legacy_pair_bootstrap_started"]
+
+
+def test_bootstrap_honors_worker_first_compatibility_order(tmp_path, monkeypatch):
+    authority_env(monkeypatch)
+    repo, sha = make_repo(tmp_path)
+    calls = []
+    request = bootstrap.BootstrapRequest(
+        repo=repo, source_sha=sha, candidate_sha=sha,
+        pages_deployment_id="pages-1", worker_version_id="worker-1",
+        expected_pages_provenance=sha, expected_worker_provenance=sha,
+        recovery_registry=tmp_path / "registry.json", receipt_log=tmp_path / "receipts.jsonl",
+        pages_artifact=repo / "site", worker_config=repo / "app/worker/wrangler.jsonc",
+        old_worker_accepts_new_pages=False, new_worker_accepts_old_pages=True)
+    bootstrap.run_bootstrap(request, target_factory=lambda *_: (
+        Target("pages", sha, calls), Target("worker", sha, calls)))
+    assert [name for name, _ in calls] == ["worker", "pages", "pages", "worker"]
 
 
 def test_registry_never_exposes_partial_pair_and_partial_legacy_state_fails(tmp_path):

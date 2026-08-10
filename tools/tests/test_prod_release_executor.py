@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 import dataclasses
+import subprocess
 
 import pytest
 
@@ -370,6 +371,17 @@ def test_release_candidate_retention_is_create_only_and_conflict_safe(tmp_path):
         adapter.retain_release_candidate(second,identity)
     with pytest.raises(ReleaseError,match="identity is invalid"):
         adapter.retain_release_candidate(first,"../unsafe")
+
+
+def test_git_ref_adapter_bounds_every_subprocess():
+    calls = []
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+    adapter = GitRefAdapter("/tmp/repo", run=run, timeout=7)
+    with pytest.raises(ReleaseError, match="bounded timeout"):
+        adapter.tree("a" * 40)
+    assert calls[0][1]["timeout"] == 7
 
 
 def test_projection_builder_rebases_unchanged_source_after_unrelated_release(tmp_path):
