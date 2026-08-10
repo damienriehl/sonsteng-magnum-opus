@@ -48,6 +48,21 @@ test("Publisher freezes every complete apply batch through the chosen frontier",
   assert.deepEqual(made.release.events.map((e) => e.type), ["prepared", "authorized"]);
 });
 
+test("characterization: filtering ledger rows cannot exclude one applied sibling", () => {
+  const core = makeCore(() => 1000);
+  seedApplied(core, "batch-1", ["accepted-intent", "rejected-intent"], 1100);
+
+  // The legacy frontier is suggestion/batch membership, not accepted atomic operations. Asking
+  // preparation to omit a sibling fails; an unfiltered preparation freezes both DEV members.
+  assert.equal(core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1", expected_suggestion_ids:["accepted-intent"] })).reason,
+    "membership_mismatch");
+  const prepared = core.prepareProductionRelease(release({ id:"release-all-dev",
+    idempotency_key:"idem-all-dev", request_digest:"digest-all-dev",
+    target_batch_id:"batch-1", candidate_sha:"commit-batch-1" })).release;
+  assert.deepEqual(prepared.suggestion_ids, ["accepted-intent", "rejected-intent"]);
+});
+
 test("trusted builder sees a text-free exact DEV frontier", () => {
   const core = makeCore(() => 1000);
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);

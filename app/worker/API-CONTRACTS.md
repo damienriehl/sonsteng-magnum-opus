@@ -418,6 +418,39 @@ and its preparation control remains disabled; see
 `publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
 fail closed. It authorizes only the already-prepared immutable binding.
 
+### Granular Publisher review vocabulary (frozen contract; implementation pending)
+
+The review source is the cumulative value from the **verified PROD base** to the
+current DEV value for one durable `source_ref`. Sequential DEV suggestions are
+immutable attribution evidence; they are not overlapping review decisions.
+Review display text is a normalized, Unicode-aware prose projection used only
+to calculate and render redlines. Immutable source-patch evidence (source value,
+hashes, source revision, source location, topology operation/arguments, and
+surrounding anchors) remains authoritative for applying a reviewed change.
+
+An **operation** is the smallest independently reviewable edit and binds a
+deterministic `operation_id`, durable `source_ref`, contributing suggestion and
+group IDs, original and proposed values/hashes, verified PROD base, DEV source
+revision, base range, replacement text, and context anchors. Adjacent delete and
+insert spans forming one replacement share one operation. A structural group or
+move pair is indivisible and receives one operation ID and one decision.
+
+A Publisher **draft decision** is actor-bound, mutable, revision-bound, and has
+exactly one value: `accepted`, `rejected`, or `questioned`; `questioned` requires
+text. A draft has no release authority. **Submit review** atomically freezes an
+immutable decision for each answered operation; absence is `unanswered`, never
+accepted. Any relevant PROD-base or DEV-source advance makes affected drafts,
+submitted decisions, and unexecuted previews `stale` and ineligible.
+
+A **review receipt** hash-binds its reviewer and timestamp, verified PROD base
+manifest, DEV frontier, immutable operation payloads, group identities, and the
+complete submitted decision/note set. An **accepted-only manifest** starts from
+that verified PROD base and names only submitted-accepted operation IDs plus the
+review receipt. Rejected, questioned, unanswered, stale, ambiguous, or partially
+grouped operations are held. The candidate is projected from source-patch
+evidence and regenerated; filtering legacy suggestion rows or contiguous DEV
+commits is not selective publication and must fail closed.
+
 `POST /claim` returns only authorized releases plus a fencing token.
 `POST /transition` journals bounded identifiers/hashes and rejects stale fences
 or illegal/incomplete phases. `GET /status?id=…` exposes machine-readable state

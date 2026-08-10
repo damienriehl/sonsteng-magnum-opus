@@ -57,6 +57,29 @@ test("publisher context offers complete DEV apply batches and their exact redlin
   assert.equal(projected.batches[0].changes[0].new_text, "After");
 });
 
+test("characterization: sequential same-source edits remain separate attributed DEV rows", () => {
+  const core = makeCore(() => 1000);
+  for (const item of [
+    { id:"sequence-1", original_text:"Strong points.", new_text:"Strong points!" },
+    { id:"sequence-2", original_text:"Strong points!", new_text:"Strong and weak points!" },
+  ]) {
+    core.suggest({ ...item, editor:"slot:john", scope:"edit", origin:"human", kind:"prose",
+      source_ref:"data/x.json#body", original_hash:`hash-${item.id}`, map_version:"v1" }, {},
+    { directApply:true });
+    core.claimBatch(`batch-${item.id}`, { base_sha:"base", ids:[item.id] });
+    core.finalize(`batch-${item.id}`, { phase:"done", applied:[item.id],
+      commit_sha:`commit-${item.id}`, generator_id:"generator-v1" });
+  }
+  const changes = core.publisherContext().batches.flatMap((batch) => batch.changes);
+  assert.deepEqual(changes.map(({ id, source_ref, original_text, new_text }) =>
+    ({ id, source_ref, original_text, new_text })), [
+    { id:"sequence-1", source_ref:"data/x.json#body", original_text:"Strong points.",
+      new_text:"Strong points!" },
+    { id:"sequence-2", source_ref:"data/x.json#body", original_text:"Strong points!",
+      new_text:"Strong and weak points!" },
+  ]);
+});
+
 test("publisher context keeps partially deployed releases visible", () => {
   const core = makeCore(() => 1000);
   for (const state of ["pages_deployed", "worker_deployed"]) {
@@ -104,11 +127,29 @@ test("prepared page discloses exact immutable release before one deliberate cont
   assert.match(html, /batch-2/);
   assert.match(html, /Old title/);
   assert.match(html, /New title/);
+  assert.match(html, /group g1/);
   assert.match(html, /Available on DEV — waiting for Publisher/);
   assert.match(html, /type="button"[^>]*id="pub-authorize"/);
   assert.match(html, /<details/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(html, /Publish automatically|Execute now|Retry deployment/);
+});
+
+test("characterization: Publisher redlines whole values even for separated word and punctuation edits", async () => {
+  const original = "Weigh both sides' strong points, and weak points.";
+  const proposed = "Weigh both sides' strongest points and weak points!";
+  const html = await renderPublisherPage({ release:null, batches:[{
+    batch_id:"batch-whole-value", commit_sha:"commit-whole-value", changes:[{
+      id:"whole-value-1", editor:"slot:john", source_ref:"data/taxonomy/tasks.json#description",
+      original_text:original, new_text:proposed, group_id:null,
+    }],
+  }] }, "DR").text();
+
+  // Legacy baseline: unchanged context is repeated inside two complete-value spans. U2 replaces
+  // this with structured atomic operations; U1 deliberately does not change the renderer.
+  assert.match(html, /<del>Weigh both sides&#x27; strong points, and weak points\.<\/del>/);
+  assert.match(html, /<ins>Weigh both sides&#x27; strongest points and weak points!<\/ins>/);
+  assert.doesNotMatch(html, /data-operation-id|name="review-decision"|Submit review/);
 });
 
 test("Publisher preview labels an attributed History revert redline", async () => {
