@@ -215,6 +215,7 @@
   var MAP = MAP_ISLAND.blocks || [];
   var PAGE_OVERRIDES = MAP_ISLAND.overrides || [];
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
+  var INITIAL_REVIEWS = EDITS_ISLAND.review_annotations || [];
   var PAGE = MAP_ISLAND.page || derivePage();
 
   /* ---------- SL6 liveness (apply-daemon heartbeat + direct-apply mode) -----
@@ -1094,6 +1095,9 @@
 
   function makeEditable(s, focus) {
     if (!s.editable) return;
+    // Redlines are review chrome, never editable prose. Restore the canonical
+    // block before exposing contenteditable so deleted text cannot be saved.
+    if (s._reviewRendered) { restoreOriginal(s); s._reviewRendered = false; }
     try { s.el.setAttribute('contenteditable', 'plaintext-only'); } catch (e) { s.el.setAttribute('contenteditable', 'true'); }
     s.el.setAttribute('role', 'textbox');
     s.el.setAttribute('aria-label', 'Editable paragraph' + (s.kind ? '' : ''));
@@ -1985,6 +1989,69 @@
     });
   }
 
+  var reviewNotes = [];
+  var REVIEW_LABELS = { accepted:'Accepted',rejected:'Rejected',questioned:'Questioned',
+    unanswered:'Unanswered',stale:'Stale — review again' };
+
+  function clearReviewAnnotations() {
+    reviewNotes.forEach(function (node) { if (node.parentNode) node.parentNode.removeChild(node); });
+    reviewNotes = [];
+    Object.keys(sessions).forEach(function (ref) {
+      var s = sessions[ref];
+      if (s._reviewRendered && !s._hydrated && s.state === ST.IDLE && !draftPresent(s)) restoreOriginal(s);
+      s._reviewRendered = false;
+    });
+  }
+
+  // Submitted reviews are rendered entirely with DOM nodes + textContent. Exact
+  // revision/hash/range checks fail closed to a status-only stale annotation.
+  function renderReviewAnnotations(reviews) {
+    clearReviewAnnotations();
+    var grouped = {};
+    (reviews || []).forEach(function (review) {
+      (grouped[review.source_ref] || (grouped[review.source_ref] = [])).push(review);
+    });
+    Object.keys(grouped).forEach(function (ref) {
+      var s = sessions[ref], rows = grouped[ref];
+      if (!s) return;
+      var stale = rows.some(function (row) { return row.stale || row.status === 'stale' ||
+        row.proposed_hash !== row.current_proposed_hash || row.current_proposed_hash !== s.originalHash; });
+      // A newer pending suggestion/draft is the editor's immediate intent and
+      // wins the block. Keep the submitted outcome beside it, but do not replace
+      // the newer wording with an older redline.
+      var valid = !stale && !s._hydrated && s.state === ST.IDLE && !draftPresent(s);
+      var ops = rows.slice().sort(function (a,b) {
+        return (a.proposed_range && a.proposed_range[0] || 0) - (b.proposed_range && b.proposed_range[0] || 0);
+      });
+      var cursor = 0, fragment = document.createDocumentFragment();
+      if (valid) {
+        for (var i=0;i<ops.length;i++) {
+          var op=ops[i], range=op.proposed_range;
+          if (!range || range[0] < cursor || range[1] < range[0] || range[1] > s.originalText.length ||
+              (op.new_text && s.originalText.slice(range[0],range[1]) !== op.new_text)) { valid=false; break; }
+          fragment.appendChild(document.createTextNode(s.originalText.slice(cursor,range[0])));
+          var wrap=el('span','eb-review-redline eb-review-redline--'+op.status);
+          wrap.setAttribute('data-review-operation',op.operation_id);
+          if (op.old_text) { var deleted=el('del',null,op.old_text); deleted.setAttribute('aria-label','Deleted text'); wrap.appendChild(deleted); }
+          if (op.new_text) { var added=el('ins',null,op.new_text); added.setAttribute('aria-label','Added text'); wrap.appendChild(added); }
+          fragment.appendChild(wrap); cursor=range[1];
+        }
+      }
+      if (valid) {
+        fragment.appendChild(document.createTextNode(s.originalText.slice(cursor)));
+        s.el.textContent=''; s.el.appendChild(fragment); s._reviewRendered=true;
+      }
+      rows.forEach(function (review) {
+        var note=el('aside','eb-review-annotation eb-review-annotation--'+(stale?'stale':review.status));
+        note.setAttribute('role','note');
+        note.appendChild(el('strong',null,(stale?REVIEW_LABELS.stale:REVIEW_LABELS[review.status] || review.status) + ' · ' + review.reviewer));
+        if (review.note) note.appendChild(el('p',null,review.note));
+        insertAfter(note,s._note || s.el); reviewNotes.push(note);
+      });
+    });
+    scheduleRailLayout();
+  }
+
   var polling = false;
   function repollPending() {
     if (polling) return;
@@ -1993,6 +2060,7 @@
       polling = false;
       if (out.ok && out.data && Array.isArray(out.data.items)) {
         renderPending(out.data.items);
+        if (Array.isArray(out.data.review_annotations)) renderReviewAnnotations(out.data.review_annotations);
         // Refresh the SL6 liveness signals + banner from the same projection.
         setHeartbeat(out.data.heartbeat_age_s, out.data.direct_apply);
         log('PENDING synced: ' + out.data.items.length + ' item(s)');
@@ -2190,6 +2258,7 @@
 
     // initial inline status from the island, then a live re-poll
     renderPending(INITIAL_PENDING);
+    renderReviewAnnotations(INITIAL_REVIEWS);
     repollPending();
 
     log('EDITOR ready — ' + Object.keys(sessions).length + ' block(s), page=' + PAGE);
@@ -2219,6 +2288,7 @@
     // hydration harness hooks: render an arbitrary #edits-data item set (the
     // SAME entry point boot + repoll use) and read a block's draft key.
     applyPending: function (items) { renderPending(items); },
+    applyReviews: function (items) { renderReviewAnnotations(items); },
     draftKeyFor: function (index) { var s = byIndex[index]; return s ? draftKey(s) : null; },
     blockText: function (index) { var s = byIndex[index]; return s ? s.el.textContent : ''; },
     statusText: function (index) { var s = byIndex[index]; return s && s._status ? s._status.textContent : ''; },

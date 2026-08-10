@@ -354,13 +354,18 @@ export async function editorFetch(request, env, ctx) {
     // the caller's own. The edit-scope gate above already fenced non-editors out —
     // only an edit-scope holder (admin preview included) ever reaches this source.
     const stub = editorStub(env);
-    const pending = await stub.listForPage(resolved.pageKey);
+    const [pending, reviewAnnotations] = await Promise.all([
+      stub.listForPage(resolved.pageKey),
+      typeof stub.getDevReviewAnnotations === "function"
+        ? stub.getDevReviewAnnotations(resolved.blocks.map((block) => block.source_ref))
+        : Promise.resolve([]),
+    ]);
     // SL6 liveness for the injected island (same signals GET /pending carries):
     // the daemon-heartbeat age + whether auto-apply (DIRECT_APPLY) is on, so the
     // banner reads honestly on first paint (before any repoll).
     const heartbeatAgeS = await stub.heartbeatAgeS();
     const directApply = env.DIRECT_APPLY === "true";
-    return wrap(await handleEditPage(env, { ...resolved, pending, heartbeatAgeS, directApply }));
+    return wrap(await handleEditPage(env, { ...resolved, pending, reviewAnnotations, heartbeatAgeS, directApply }));
   }
 
   return wrap(uniform404());

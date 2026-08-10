@@ -7,7 +7,7 @@ import { json } from "./errors.js";
 import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
-  lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, MAP_VERSION,
+  lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, projectReviewAnnotations, MAP_VERSION,
   enumerateScope, EDITOR_MAP_FACTS, EDITOR_MAP,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
@@ -454,9 +454,14 @@ export async function pendingEndpoint(request, env, auth) {
   // plus the SL6 liveness signals the client banner reads: heartbeat_age_s (null
   // if the daemon has never checked in) and direct_apply (auto-apply mode on/off).
   const heartbeat_age_s = await stub.heartbeatAgeS();
+  const sourceRefs = page && EDITOR_MAP.pages?.[page]
+    ? EDITOR_MAP.pages[page].map((block) => block.source_ref) : [];
+  const reviewRows = sourceRefs.length && typeof stub.getDevReviewAnnotations === "function"
+    ? await stub.getDevReviewAnnotations(sourceRefs) : [];
   return json({
     ok: true,
     items: projectPendingItems(rows),
+    review_annotations: projectReviewAnnotations(reviewRows),
     heartbeat_age_s,
     direct_apply: env.DIRECT_APPLY === "true",
   });

@@ -641,6 +641,36 @@ async function run() {
       last && last.source_ref === HYREF && last.original_hash === 'hash-idx4-v1' && /re-edit that starts/.test(last.new_text || ''),
       'sent hash=' + (last && last.original_hash) + ' text="' + ((last && last.new_text) || '').slice(0, 30) + '"');
 
+    /* --- RV: submitted Publisher annotations on authenticated DEV -------- */
+    const rv = await page.evaluate(() => {
+      var b=window.SonstengEditor.block(5), text=b.originalText, start=text.search(/\S+/), end=text.indexOf(' ',start);
+      if(end<0)end=text.length;var word=text.slice(start,end);
+      window.SonstengEditor.applyReviews([{source_ref:b.ref,review_revision_id:'rv-1',
+        source_revision:'dev-1',proposed_hash:b.originalHash,current_proposed_hash:b.originalHash,
+        operation_id:'op-1',decision_id:'op-1',kind:'replace',old_text:'Prior',new_text:word,
+        proposed_range:[start,end],status:'questioned',reviewer:'DR',
+        note:'Why <img src=x onerror=alert(1)> this wording?',stale:false}]);
+      var block=document.querySelector('[data-eb-index="5"]'),note=document.querySelector('.eb-review-annotation');
+      return {del:block.querySelector('del')?.textContent,ins:block.querySelector('ins')?.textContent,
+        note:note?.textContent,img:document.querySelectorAll('img[src="x"]').length};
+    });
+    assert('RV1 submitted atomic redline + question render in authenticated DEV with hostile prose inert',
+      rv.del==='Prior' && !!rv.ins && /Questioned · DR/.test(rv.note||'') && rv.img===0,
+      JSON.stringify(rv));
+    const rvStale = await page.evaluate(() => {
+      var b=window.SonstengEditor.block(5);
+      window.SonstengEditor.applyReviews([{source_ref:b.ref,review_revision_id:'rv-old',
+        source_revision:'dev-old',proposed_hash:'old-hash',current_proposed_hash:b.originalHash,
+        operation_id:'old-op',decision_id:'old-op',kind:'replace',old_text:'old',new_text:'new',
+        proposed_range:[0,3],status:'stale',reviewer:'DR',note:'Old note',stale:true}]);
+      var block=document.querySelector('[data-eb-index="5"]');
+      return {marks:block.querySelectorAll('del,ins').length,
+        note:document.querySelector('.eb-review-annotation')?.textContent};
+    });
+    assert('RV2 later source revision shows stale status and never retargets old offsets',
+      rvStale.marks===0 && /Stale — review again/.test(rvStale.note||''),JSON.stringify(rvStale));
+    await page.evaluate(() => window.SonstengEditor.applyReviews([]));
+
     /* --- ST: structural operations (U4) — add / remove / move ------------- */
     // Affordance placement: prose blocks carry Add/Remove; move appears only
     // where a destination is expressible (after-a-block only); scalars get none.

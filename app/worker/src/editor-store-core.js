@@ -1207,6 +1207,32 @@ export class EditorStoreCore {
     return { revisions, ...revisions[0], counts };
   }
 
+  // Authenticated DEV projection. Unlike getPublisherReview this exposes no
+  // private drafts: only immutable submitted decisions may annotate John's
+  // editing view. When a newer revision exists, retain the reviewed evidence as
+  // stale rather than silently attaching its offsets to the newer prose.
+  getDevReviewAnnotations(sourceRefs = []) {
+    if (!Array.isArray(sourceRefs)) return [];
+    const refs = [...new Set(sourceRefs.filter((ref) => typeof ref === "string" && ref))].slice(0, 1000);
+    const out = [];
+    for (const sourceRef of refs) {
+      const current = this._one("SELECT id,proposed_hash FROM production_review_revisions WHERE source_ref=? ORDER BY created_at DESC,id DESC LIMIT 1", sourceRef);
+      if (!current) continue;
+      const reviewed = this._one("SELECT r.id,r.source_revision,r.proposed_hash,r.operations_json,s.id AS review_id,s.actor,s.created_at FROM production_review_revisions r JOIN production_review_submission_sources x ON x.review_revision_id=r.id JOIN production_review_submissions s ON s.id=x.review_id WHERE r.source_ref=? ORDER BY s.created_at DESC,s.id DESC LIMIT 1", sourceRef) ||
+        this._one("SELECT r.id,r.source_revision,r.proposed_hash,r.operations_json,s.id AS review_id,s.actor,s.created_at FROM production_review_revisions r JOIN production_reviews s ON s.review_revision_id=r.id WHERE r.source_ref=? ORDER BY s.created_at DESC,s.id DESC LIMIT 1", sourceRef);
+      if (!reviewed) continue;
+      const staleReason = this._reviewStaleReason(this._reviewRevision(reviewed.id));
+      let decisions = this._all("SELECT operation_id,decision,note FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id", reviewed.review_id, reviewed.id);
+      if (!decisions.length) decisions = this._all("SELECT operation_id,decision,note FROM production_review_decisions WHERE review_id=? ORDER BY operation_id", reviewed.review_id);
+      out.push({ source_ref:sourceRef,review_revision_id:reviewed.id,
+        source_revision:reviewed.source_revision,proposed_hash:reviewed.proposed_hash,
+        current_proposed_hash:current.proposed_hash,reviewer:reviewed.actor,
+        submitted_at:reviewed.created_at,stale:!!staleReason,stale_reason:staleReason,
+        operations:JSON.parse(reviewed.operations_json),decisions });
+    }
+    return out;
+  }
+
   _submittedReview(id) {
     const submission = this._one("SELECT * FROM production_review_submissions WHERE id=?", id || "");
     if (submission) {
