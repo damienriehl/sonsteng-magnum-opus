@@ -12,6 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AssetLinkRewriter, LinkRewriter, ScriptStripper, SITE_ASSET_UPSTREAM } from "../src/editor-inject.js";
 import { EDIT_CSP } from "../src/editor-http.js";
+import { readFileSync } from "node:fs";
 
 // Minimal stand-in for HTMLRewriter's Element.
 function stubEl(attrs) {
@@ -180,4 +181,23 @@ test("LinkRewriter leaves external, anchor and scheme links alone", () => {
   const noHref = stubEl({});
   r.element(noHref);
   assert.equal(noHref.getAttribute("href"), null);
+});
+
+test("authenticated injector carries review annotations while public pages remain untouched", () => {
+  const injector = readFileSync(new URL("../src/editor-inject.js", import.meta.url), "utf8");
+  const router = readFileSync(new URL("../src/editor.js", import.meta.url), "utf8");
+  assert.match(injector,/review_annotations/);
+  assert.match(router,/getDevReviewAnnotations/);
+  assert.match(router,/auth\.scopes\.edit\.granted/);
+  assert.doesNotMatch(injector,/EDIT_UPSTREAM.*review_annotations/,
+    "review metadata is injected after the clean public upstream fetch");
+});
+
+test("editor client renders review prose through textContent and stale evidence cannot mark ranges", () => {
+  const client = readFileSync(new URL("../../editor/editor.js", import.meta.url), "utf8");
+  assert.match(client,/renderReviewAnnotations/);
+  assert.match(client,/review\.note/);
+  assert.match(client,/textContent/);
+  assert.match(client,/current_proposed_hash/);
+  assert.match(client,/stale/);
 });

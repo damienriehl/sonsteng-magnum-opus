@@ -27,7 +27,8 @@ canonical data spine, and it does so as an all-or-nothing transaction:
       -> check_build_parity                    mismatch = abort + rollback
       -> deploy      (GATED behind APPLY_DEPLOY=1; default = stop, report would-deploy)
       -> merge worktree to canonical
-      -> finalize applied + emit word-level diff digest
+      -> finalize applied + immutable per-source Publisher review evidence
+         + emit word-level diff digest
       -> worktree remove -> release flock
 
 Security invariants (defense in depth — the Worker enforces the same at suggest
@@ -61,6 +62,7 @@ import contextlib
 import dataclasses
 import datetime
 import decimal
+import difflib
 import fcntl
 import hashlib
 import json
@@ -346,7 +348,7 @@ class HttpRpcClient:
       * POST /claim   {batch_id, base_sha?}   -> { ok, batch_id, claimed:[id...], lease_expires_at }
       * GET  /review                          -> { ok, items:[<full suggestion rows>] }  (admin)
       * POST /finalize {batch_id, phase, applied?, accepted_blocked?, needs_human?, drift?,
-                        commit_sha?, generator_id?}
+                        commit_sha?, generator_id?, review_revisions?}
       * POST /system-suggest {id, source_ref, origin, ...} -> SYSTEM proposer
             (origin=companion|ai_rewrite, pending). Admin scope only; the human
             /suggest endpoint hardcodes origin:human and is edit/instructor-scoped,
@@ -407,7 +409,7 @@ class HttpRpcClient:
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
                  needs_human=None, drift=None, base_sha=None, commit_sha=None,
-                 generator_id=None):
+                 generator_id=None, review_revisions=None):
         body = {"batch_id": batch_id}
         if phase is not None:
             body["phase"] = phase
@@ -417,6 +419,8 @@ class HttpRpcClient:
             body["commit_sha"] = commit_sha
         if generator_id is not None:
             body["generator_id"] = generator_id
+        if review_revisions is not None:
+            body["review_revisions"] = list(review_revisions)
         for key, val in (("applied", applied), ("accepted_blocked", accepted_blocked),
                          ("needs_human", needs_human), ("drift", drift)):
             if val:
@@ -1355,7 +1359,6 @@ def _companion_id(old_tok, target_ref):
 # Word-level diff digest (markdown)
 # --------------------------------------------------------------------------- #
 def word_diff(old, new):
-    import difflib
     old_w, new_w = (old or "").split(), (new or "").split()
     out = []
     for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old_w, new_w).get_opcodes():
@@ -1368,6 +1371,177 @@ def word_diff(old, new):
         elif tag == "replace":
             out.append("~~%s~~ **%s**" % (" ".join(old_w[i1:i2]), " ".join(new_w[j1:j2])))
     return " ".join(w for w in out if w)
+
+
+_REVIEW_TOKEN_RE = re.compile(r"\w+(?:['’_-]\w+)*|\s+|[^\w\s]", re.UNICODE)
+
+# Keep the authoritative Python evidence path inside the same deterministic
+# work envelope as the browser's redline renderer. SequenceMatcher with
+# autojunk=False is intentionally exact for ordinary prose, but its worst-case
+# work is quadratic on repetitive inputs. Above either ceiling we retain exact
+# text/range evidence as one whole-span operation instead of risking the apply
+# lease on a finer alignment.
+MAX_REVIEW_TOKENS = 1_024
+MAX_REVIEW_MATRIX_CELLS = 250_000
+
+
+def _review_tokens(text):
+    return [(match.group(0), match.start(), match.end())
+            for match in _REVIEW_TOKEN_RE.finditer(text or "")]
+
+
+def _stable_evidence_id(prefix, value):
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    return "%s_%s" % (prefix, hashlib.sha256(encoded).hexdigest())
+
+
+def _whole_span_review_operation(patch, metadata, group_id, group_decision_id):
+    old_text = str(patch.original_text)
+    new_text = str(patch.new_text)
+    if old_text == new_text:
+        return []
+    kind = "replace" if old_text and new_text else ("delete" if old_text else "insert")
+    identity = {**metadata, "base_range": [0, len(old_text)],
+                "proposed_range": [0, len(new_text)],
+                "old_text": old_text, "new_text": new_text}
+    operation_id = _stable_evidence_id("op", identity)
+    return [{"id": operation_id, "decision_id": group_decision_id or operation_id,
+             "group_id": group_id, "kind": kind, **identity,
+             "context_before": [], "context_after": []}]
+
+
+def _atomic_review_operations(patch, source_revision, prod_base):
+    """Derive deterministic, bounded review operations from one applied patch.
+
+    Structural edits retain their explicit operation instead of masquerading as
+    prose deletes/inserts. Ordinary text uses the repository's established
+    SequenceMatcher semantics with token-level ranges and bounded context.
+    """
+    metadata = {"source_ref": patch.source_ref,
+                "source_revision": source_revision, "prod_base": prod_base}
+    group_id = (patch.group_id if patch.group_id and
+                not patch.group_id.startswith("solo:") else None)
+    group_decision_id = (_stable_evidence_id("group", {"group_id": group_id})
+                         if group_id else None)
+    if patch.op is not None:
+        identity = {**metadata, "op": patch.op, "op_arg": patch.op_arg,
+                    "old_text": patch.original_text, "new_text": patch.new_text,
+                    "suggestion_id": patch.suggestion_id,
+                    "created_at": patch.created_at}
+        operation_id = _stable_evidence_id("op", identity)
+        return [{"id": operation_id, "decision_id": group_decision_id or operation_id,
+                 "group_id": group_id,
+                 "kind": patch.op, **identity, "base_range": [0, len(patch.original_text)],
+                 "proposed_range": [0, len(patch.new_text)],
+                 "context_before": [], "context_after": []}]
+
+    old_tokens = _review_tokens(str(patch.original_text))
+    new_tokens = _review_tokens(str(patch.new_text))
+    if (len(old_tokens) > MAX_REVIEW_TOKENS or
+            len(new_tokens) > MAX_REVIEW_TOKENS or
+            len(old_tokens) * len(new_tokens) > MAX_REVIEW_MATRIX_CELLS):
+        return _whole_span_review_operation(
+            patch, metadata, group_id, group_decision_id)
+    matcher = difflib.SequenceMatcher(
+        None, [token[0] for token in old_tokens],
+        [token[0] for token in new_tokens], autojunk=False)
+    operations = []
+    context_size = 12
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        old_text = "".join(token[0] for token in old_tokens[i1:i2])
+        new_text = "".join(token[0] for token in new_tokens[j1:j2])
+        kind = "replace" if old_text and new_text else ("delete" if old_text else "insert")
+        base_start = old_tokens[i1][1] if i1 < len(old_tokens) else len(str(patch.original_text))
+        base_end = old_tokens[i2 - 1][2] if i2 > i1 else base_start
+        proposed_start = new_tokens[j1][1] if j1 < len(new_tokens) else len(str(patch.new_text))
+        proposed_end = new_tokens[j2 - 1][2] if j2 > j1 else proposed_start
+        identity = {**metadata, "base_range": [base_start, base_end],
+                    "proposed_range": [proposed_start, proposed_end],
+                    "old_text": old_text, "new_text": new_text}
+        operation_id = _stable_evidence_id("op", identity)
+        operations.append({"id": operation_id, "decision_id": group_decision_id or operation_id,
+                           "group_id": group_id,
+                           "kind": kind, **identity,
+                           "context_before": [token[0] for token in
+                                              old_tokens[max(0, i1 - context_size):i1]],
+                           "context_after": [token[0] for token in
+                                             old_tokens[i2:i2 + context_size]]})
+    _pair_review_moves(operations, str(patch.original_text), str(patch.new_text),
+                       metadata, group_decision_id)
+    return operations
+
+
+def _pair_review_moves(operations, original_text, proposed_text, metadata,
+                       group_decision_id=None):
+    """Pair only distinctive, exact prose moves; ambiguity remains unpaired."""
+    deletes = [operation for operation in operations if operation["kind"] == "delete"]
+    inserts = [operation for operation in operations if operation["kind"] == "insert"]
+    for deletion in deletes:
+        exact = deletion["old_text"].strip()
+        words = [token[0] for token in _review_tokens(exact)
+                 if re.match(r"^\w", token[0], re.UNICODE)]
+        if len(words) < 4 or len(exact) < 24:
+            continue
+        probe = " ".join(words[:3])
+        if original_text.count(probe) != 1 or proposed_text.count(probe) != 1:
+            continue
+        candidates = [operation for operation in inserts
+                      if operation["new_text"].strip() == exact and not operation.get("move_pair_id")]
+        if len(candidates) != 1:
+            continue
+        insertion = candidates[0]
+        pair_id = _stable_evidence_id("move", {
+            **metadata, "text": exact,
+            "from": deletion["base_range"], "to": insertion["proposed_range"],
+        })
+        deletion.update({"move_pair_id": pair_id, "move_role": "from",
+                         "decision_id": group_decision_id or pair_id})
+        insertion.update({"move_pair_id": pair_id, "move_role": "to",
+                          "decision_id": group_decision_id or pair_id})
+
+
+def build_review_revisions(applied_patches, source_revision, prod_base):
+    """Build immutable per-source evidence for the Worker's terminal finalize."""
+    by_source = {}
+    for patch in applied_patches:
+        by_source.setdefault(patch.source_ref, []).append(patch)
+    revisions = []
+    for source_ref, patches in sorted(by_source.items()):
+        operations = []
+        prose_patches = [patch for patch in patches if patch.op is None]
+        structural_patches = [patch for patch in patches if patch.op is not None]
+        if prose_patches:
+            # Several accepted suggestions can reach one source in the same
+            # batch. Review the cumulative source value, not intermediate
+            # per-suggestion contexts that cannot all anchor to one revision.
+            cumulative = dataclasses.replace(prose_patches[0],
+                new_text=prose_patches[-1].new_text)
+            operations.extend(_atomic_review_operations(
+                cumulative, source_revision, prod_base))
+        for patch in structural_patches:
+            operations.extend(_atomic_review_operations(patch, source_revision, prod_base))
+        if not operations:
+            continue
+        original_text = str(patches[0].original_text)
+        proposed_text = str(patches[-1].new_text)
+        # Structural deletion/insertion evidence lives in the explicit operation;
+        # keep the source snapshot fields non-empty for the ledger contract.
+        source_original = original_text or proposed_text
+        source_proposed = proposed_text or original_text
+        evidence = {"source_ref": source_ref, "source_revision": source_revision,
+                    "prod_base": prod_base, "commit_sha": source_revision,
+                    "original_hash": text_norm.norm_hash(source_original),
+                    "proposed_hash": text_norm.norm_hash(source_proposed),
+                    "original_text": source_original, "proposed_text": source_proposed,
+                    "source_original_text": source_original,
+                    "source_proposed_text": source_proposed,
+                    "suggestion_ids": sorted(p.suggestion_id for p in patches),
+                    "operations": operations}
+        revisions.append({"id": _stable_evidence_id("revision", evidence), **evidence})
+    return revisions
 
 
 def build_digest(batch_id, base_sha, applied, drift, needs_human, blocked,
@@ -1458,6 +1632,9 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         return ApplyResult(batch_id, base_sha, [], [], [], [], [], {}, "", False,
                            reason=claim.get("reason", "claim_failed"))
     claimed_ids = claim.get("claimed", [])
+    # The Worker owns the production frontier. The ambient DEV base_sha is not
+    # production evidence and must never be substituted for a missing frontier.
+    prod_base = claim.get("prod_base")
     rows = client.fetch_batch_rows(batch_id, claimed_ids)
     logger("claimed %d rows across %d groups" % (
         len(rows), len({r.get("group_id") or r["id"] for r in rows})))
@@ -1646,12 +1823,16 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         committed = True
 
         # 14) Finalize applied + terminal statuses.
+        commit_sha = head_sha(canonical_root)
+        review_revisions = (build_review_revisions(applied_patches, commit_sha, prod_base)
+                            if prod_base else None)
         client.finalize(batch_id, phase=PHASE_DONE,
                         applied=[p.suggestion_id for p in applied_patches],
                         drift=[_id(r) for r in drift],
                         needs_human=[_id(r) for r in needs_human],
-                        commit_sha=head_sha(canonical_root),
-                        generator_id=pipeline.generator_identity(canonical_root))
+                        commit_sha=commit_sha,
+                        generator_id=pipeline.generator_identity(canonical_root),
+                        review_revisions=review_revisions)
         return ApplyResult(batch_id, base_sha, applied_patches, drift, needs_human,
                            [], companions, deploy_info, digest, True)
     finally:

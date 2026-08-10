@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 import pathlib
 import re
 import secrets
@@ -30,6 +31,7 @@ class ReleaseError(RuntimeError):
 MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
 SERVICE_USER_AGENT = "sonsteng-prod-release/1.0"
 WRANGLER_COMMAND = ("npx", "wrangler@4")
+STRUCTURAL_OPERATIONS = frozenset({"insert_after", "delete", "split", "merge", "move"})
 
 
 def _wrangler(*args):
@@ -38,6 +40,281 @@ def _wrangler(*args):
 
 def _canonical(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+@dataclasses.dataclass(frozen=True)
+class ProjectionPatch:
+    """One synthetic whole-value patch for an existing durable source."""
+
+    source_ref: str
+    original_text: str
+    new_text: str
+    operation_ids: tuple[str, ...]
+    review_revision_id: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ProjectionExclusion:
+    operation_id: str
+    source_ref: str
+    reason: str
+
+
+@dataclasses.dataclass(frozen=True)
+class MaterializedProjection:
+    patches: tuple[ProjectionPatch, ...]
+    structural_operations: tuple[dict, ...]
+    exclusions: tuple[ProjectionExclusion, ...]
+    accepted_operation_ids: tuple[str, ...]
+
+
+class AcceptedOnlyMaterializer:
+    """Pure accepted-operation projection; performs no filesystem writes.
+
+    Submitted review evidence is already immutable and server-derived.  This
+    class deliberately resolves every prose operation before a caller may open
+    or modify an isolated checkout, so ambiguity cannot leave a partial tree.
+    """
+
+    @staticmethod
+    def _operation_id(operation):
+        return operation.get("decision_id") or operation.get("id")
+
+    @staticmethod
+    def _source_evidence(operation):
+        evidence = operation.get("source_patch") or {}
+        return {
+            "old_text": evidence.get("old_text", operation.get("old_text", "")),
+            "new_text": evidence.get("new_text", operation.get("new_text", "")),
+            "context_before": evidence.get("context_before", operation.get("context_before", [])),
+            "context_after": evidence.get("context_after", operation.get("context_after", [])),
+        }
+
+    @staticmethod
+    def _unique_span(value, evidence, operation_id):
+        old = evidence["old_text"]
+        before = "".join(evidence["context_before"] or [])
+        after = "".join(evidence["context_after"] or [])
+        if old:
+            starts = [match.start() for match in re.finditer(re.escape(old), value)]
+            starts = [start for start in starts
+                      if (not before or value[:start].endswith(before)) and
+                      (not after or value[start + len(old):].startswith(after))]
+            if len(starts) != 1:
+                raise ReleaseError(f"operation {operation_id} lacks a unique anchor")
+            return starts[0], starts[0] + len(old)
+        # Insertions anchor the boundary between unchanged before/after text.
+        starts = []
+        for position in range(len(value) + 1):
+            if (not before or value[:position].endswith(before)) and \
+               (not after or value[position:].startswith(after)):
+                starts.append(position)
+        if len(starts) != 1:
+            raise ReleaseError(f"operation {operation_id} lacks a unique anchor")
+        return starts[0], starts[0]
+
+    def _held_group_ids(self, sources):
+        group_states = {}
+        for source in sources:
+            decisions = {item.get("operation_id"): item.get("decision")
+                         for item in source.get("decisions") or []}
+            for operation in source.get("operations") or []:
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
+                if group_id:
+                    group_states.setdefault(group_id, []).append({
+                        "stale": bool(source.get("stale")),
+                        "decision": decisions.get(self._operation_id(operation)),
+                    })
+        return {group_id for group_id,states in group_states.items()
+                if any(state["decision"] == "accepted" for state in states) and
+                (any(state["stale"] for state in states) or
+                 any(state["decision"] != "accepted" for state in states))}
+
+    @staticmethod
+    def _production_holds(sources):
+        structural_groups, structural_refs = set(), set()
+        for source in sources:
+            for operation in source.get("operations") or []:
+                if operation.get("op") not in STRUCTURAL_OPERATIONS:
+                    continue
+                if operation.get("group_id"):
+                    structural_groups.add(operation["group_id"])
+                structural_refs.update(ref for ref in (
+                    source.get("source_ref"), operation.get("source_ref"),
+                    operation.get("op_arg")) if isinstance(ref, str) and ref)
+        holds = {}
+        for source in sources:
+            for operation in source.get("operations") or []:
+                if operation.get("op") in STRUCTURAL_OPERATIONS:
+                    holds[operation.get("id")] = "structural_prod_deferred"
+                elif ((operation.get("group_id") and
+                       operation.get("group_id") in structural_groups) or
+                      (operation.get("source_ref") or source.get("source_ref")) in structural_refs):
+                    holds[operation.get("id")] = "depends_on_structural_prod_deferred"
+        return holds
+
+    def materialize(self, sources):
+        patches, structural, exclusions, accepted_ids = [], [], [], []
+        seen_operation_ids = set()
+        ordered_sources = sorted(sources, key=lambda item: (item.get("source_ref", ""),
+                                                             item.get("review_revision_id", "")))
+        held_groups = self._held_group_ids(ordered_sources)
+        production_holds = self._production_holds(ordered_sources)
+
+        for source in ordered_sources:
+            source_ref = source.get("source_ref")
+            original = source.get("source_original_text", source.get("original_text"))
+            if not source_ref or not isinstance(original, str):
+                raise ReleaseError("projection source lacks durable source evidence")
+            decisions = {item.get("operation_id"): item.get("decision")
+                         for item in source.get("decisions") or []}
+            operations = list(source.get("operations") or [])
+            groups = {}
+            for operation in operations:
+                operation_id = self._operation_id(operation)
+                payload_id = operation.get("id")
+                if not payload_id or not operation_id or operation.get("source_ref") != source_ref:
+                    raise ReleaseError("operation does not bind its durable source")
+                if payload_id in seen_operation_ids:
+                    raise ReleaseError("duplicate operation identity")
+                seen_operation_ids.add(payload_id)
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
+                if group_id:
+                    groups.setdefault(group_id, set()).add(operation_id)
+
+            for group_id, members in groups.items():
+                group_decisions = {decisions.get(member) for member in members}
+                if not any(production_holds.get(operation.get("id"))
+                           for operation in operations
+                           if (operation.get("group_id") or operation.get("move_pair_id")) == group_id) and \
+                   not source.get("stale") and "accepted" in group_decisions and \
+                   group_decisions != {"accepted"}:
+                    raise ReleaseError(f"partial structural group {group_id}")
+
+            projected = original
+            accepted_ranges = []
+            source_accepted = []
+            resolved_edits = []
+            for operation in operations:
+                operation_id = self._operation_id(operation)
+                decision = decisions.get(operation_id)
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
+                reason = production_holds.get(operation.get("id")) or ("stale" if source.get("stale") else (
+                    "group_held" if group_id in held_groups else
+                    decision if decision in {"rejected", "questioned"} else
+                    "unanswered" if decision is None else None))
+                if reason:
+                    exclusions.append(ProjectionExclusion(operation["id"], source_ref, reason))
+                    continue
+                if decision != "accepted":
+                    raise ReleaseError(f"unknown submitted decision for {operation_id}")
+                base_range = operation.get("base_range")
+                if not (isinstance(base_range, list) and len(base_range) == 2 and
+                        all(isinstance(value, int) for value in base_range)):
+                    raise ReleaseError(f"operation {operation_id} lacks a base range")
+                start, end = base_range
+                if end < start:
+                    raise ReleaseError(f"operation {operation_id} has an invalid base range")
+                if any(max(start, prior_start) < min(end, prior_end)
+                       for prior_start, prior_end in accepted_ranges
+                       if end > start and prior_end > prior_start):
+                    raise ReleaseError(f"overlapping accepted operations at {operation_id}")
+                evidence = self._source_evidence(operation)
+                anchor_start, anchor_end = self._unique_span(original, evidence, operation_id)
+                accepted_ranges.append((start, end))
+                resolved_edits.append((anchor_start,anchor_end,evidence["new_text"],operation_id))
+                source_accepted.append(operation["id"])
+                accepted_ids.append(operation["id"])
+            for anchor_start,anchor_end,new_text,operation_id in sorted(
+                    resolved_edits,key=lambda item:(item[0],item[1],item[3]),reverse=True):
+                projected = projected[:anchor_start] + new_text + projected[anchor_end:]
+            if source_accepted:
+                patches.append(ProjectionPatch(source_ref, original, projected,
+                    tuple(source_accepted), source.get("review_revision_id", "")))
+        return MaterializedProjection(tuple(patches), tuple(structural), tuple(exclusions),
+                                      tuple(accepted_ids))
+
+
+class ProjectionTreeWriter:
+    """Apply a materialized projection atomically, then rebuild all consumers."""
+
+    def __init__(self, pipeline=None):
+        if pipeline is None:
+            from apply_suggestions import SubprocessPipeline
+            pipeline = SubprocessPipeline()
+        self.pipeline = pipeline
+
+    def verify_rebased_sources(self, root, sources):
+        """Prove old-base reviews still name the identical current PROD leaf."""
+        source_index = self.pipeline.regenerate_map(str(root))
+        for source in sources:
+            block = source_index.get(source.get("source_ref"))
+            expected = source.get("source_original_text", source.get("original_text"))
+            if not block or not isinstance(expected, str) or block.get("original_text") != expected:
+                raise ReleaseError("reviewed source changed after its production base")
+
+    @staticmethod
+    def _patch_for(block, operation_id, source_ref, old_text, new_text, operation=None):
+        from apply_suggestions import Patch, classify
+        operation = operation or {}
+        relpath = source_ref.split("#", 1)[0]
+        op_name = operation.get("op")
+        kind, json_path = classify(source_ref, block, op_name)
+        return Patch(suggestion_id=operation_id,
+            group_id=operation.get("group_id") or operation.get("move_pair_id"),
+            source_ref=source_ref,relpath=relpath,kind=kind,json_path=json_path,
+            original_text=old_text,new_text=new_text,op=op_name,
+            op_arg=operation.get("op_arg"),created_at=operation.get("created_at",0))
+
+    def write(self, root, projection):
+        from apply_suggestions import apply_file_patches
+        root = pathlib.Path(root)
+        source_index = self.pipeline.regenerate_map(str(root))
+        patches = []
+        for item in projection.patches:
+            block = source_index.get(item.source_ref)
+            if not block:
+                raise ReleaseError(f"durable source is absent from production base: {item.source_ref}")
+            patches.append(self._patch_for(block,"projection:" + "+".join(item.operation_ids),
+                item.source_ref,item.original_text,item.new_text))
+        for operation in projection.structural_operations:
+            source_ref = operation["source_ref"]
+            block = source_index.get(source_ref)
+            if not block:
+                raise ReleaseError(f"structural source is absent from production base: {source_ref}")
+            evidence = AcceptedOnlyMaterializer._source_evidence(operation)
+            patches.append(self._patch_for(block,operation.get("id"),source_ref,
+                evidence["old_text"],evidence["new_text"],operation))
+
+        by_file = {}
+        for patch in patches:
+            by_file.setdefault(patch.relpath, []).append(patch)
+        # Resolve every file against a private data copy.  Only after all files
+        # succeed are their bytes installed in the disposable candidate tree.
+        with tempfile.TemporaryDirectory(prefix="sonsteng-projection-stage-") as stage:
+            stage_root = pathlib.Path(stage)
+            shutil.copytree(root / "data", stage_root / "data")
+            for relpath, file_patches in sorted(by_file.items()):
+                results = apply_file_patches(str(stage_root),relpath,file_patches)
+                if not results or not all(value is True for value in results.values()):
+                    failed = sorted(key for key,value in results.items()
+                                    if value is not True)
+                    raise ReleaseError("projection patch is ambiguous or invalid: " + ",".join(failed))
+            for relpath in sorted(by_file):
+                shutil.copy2(stage_root / relpath, root / relpath)
+
+        # The real pipeline owns the complete generator dependency closure.
+        self.pipeline.regenerate_map(str(root))
+        valid, detail = self.pipeline.validate(str(root))
+        if not valid:
+            raise ReleaseError("projected candidate validation failed: " + str(detail.get("step", "validate")))
+        built, detail = self.pipeline.build(str(root))
+        if not built:
+            raise ReleaseError("projected candidate build failed: " + str(detail.get("step", "build")))
+        parity, detail = self.pipeline.parity(str(root))
+        if not parity:
+            raise ReleaseError("projected candidate parity failed: " + str(detail.get("step", "parity")))
+        return {"generator_id":self.pipeline.generator_identity(str(root)),"parity_verified":True}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -52,15 +329,23 @@ class FrozenRelease:
     batch_commits: tuple[str, ...]
     fencing_token: str
     completed_phases: tuple[str, ...] = ()
+    schema_version: int = 1
+    operation_ids: tuple[str, ...] = ()
+    review_receipt_hash: str = ""
+    projection_identity: str = ""
 
     def __post_init__(self):
         if self.state not in {"authorized", "executing", "pages_deployed",
                               "worker_deployed", "verified", "failed_fenced", "restoring",
                               "complete"}:
             raise ValueError("release is not executable")
-        if len(set(self.suggestion_ids)) != len(self.suggestion_ids) or not self.suggestion_ids:
-            raise ValueError("membership must contain unique suggestion IDs")
-        if not self.batch_commits or self.batch_commits[-1] != self.candidate_sha:
+        membership = self.operation_ids if self.schema_version >= 2 else self.suggestion_ids
+        if len(set(membership)) != len(membership) or not membership:
+            raise ValueError("membership must contain unique IDs")
+        if self.schema_version >= 2:
+            if not self.review_receipt_hash or not self.projection_identity:
+                raise ValueError("operation release lacks review/projection identity")
+        elif not self.batch_commits or self.batch_commits[-1] != self.candidate_sha:
             raise ValueError("candidate frontier must equal the last frozen batch commit")
         if not self.fencing_token:
             raise ValueError("fencing token required")
@@ -74,7 +359,11 @@ class FrozenRelease:
                    suggestion_ids=tuple(value.get("suggestion_ids") or ()),
                    batch_commits=tuple(item["commit_sha"] for item in batches),
                    fencing_token=value["fencing_token"],
-                   completed_phases=tuple(event["type"] for event in value.get("events") or ()))
+                   completed_phases=tuple(event["type"] for event in value.get("events") or ()),
+                   schema_version=int(value.get("schema_version") or 1),
+                   operation_ids=tuple(value.get("operation_ids") or ()),
+                   review_receipt_hash=value.get("review_receipt_hash") or "",
+                   projection_identity=value.get("projection_identity") or "")
 
     @property
     def digest(self):
@@ -94,10 +383,17 @@ class CompatibilityGate:
         raise ReleaseError("no compatible transient deployment order")
 
 
+def _require_https_url(value, purpose):
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ReleaseError(f"{purpose} requires HTTPS")
+
+
 class LedgerHTTP:
     """Concrete release-service adapter; authorization is intentionally absent."""
 
     def __init__(self, base_url, bearer, opener=urllib.request.urlopen):
+        _require_https_url(base_url, "release ledger")
         self.base_url, self._bearer, self._opener = base_url.rstrip("/"), bearer, opener
 
     def _request(self, path, body=None):
@@ -116,8 +412,9 @@ class LedgerHTTP:
     def preparation_context(self):
         return self._request("/edit/v1/prod/releases/frontier")["context"]
 
-    def claim_authorized(self):
-        result = self._request("/edit/v1/prod/releases/claim", {})
+    def claim_authorized(self, release_id=None):
+        result = self._request("/edit/v1/prod/releases/claim",
+                               {"id": release_id} if release_id else {})
         return FrozenRelease.from_ledger(result["release"]) if result.get("release") else None
 
     def claim_restore(self, release_id):
@@ -142,26 +439,74 @@ class LedgerHTTP:
 
 
 class GitRefAdapter:
-    def __init__(self, repo, run=subprocess.run):
-        self.repo, self._run = repo, run
+    def __init__(self, repo, run=subprocess.run, timeout=120):
+        self.repo, self._run, self.timeout = repo, run, timeout
+
+    def _git(self, argv, **kwargs):
+        try:
+            return self._run(argv, timeout=self.timeout, **kwargs)
+        except subprocess.TimeoutExpired:
+            raise ReleaseError("git operation exceeded its bounded timeout") from None
 
     def is_ancestor(self, base, candidate):
-        result = self._run(["git", "merge-base", "--is-ancestor", base, candidate],
+        result = self._git(["git", "merge-base", "--is-ancestor", base, candidate],
                            cwd=self.repo, check=False, capture_output=True)
         return result.returncode == 0
 
     def tree(self, sha):
-        result = self._run(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=self.repo,
+        result = self._git(["git", "rev-parse", f"{sha}^{{tree}}"], cwd=self.repo,
                            check=True, capture_output=True, text=True)
         return result.stdout.strip()
 
     def require_clean_candidate(self, sha):
-        head = self._run(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
+        head = self._git(["git", "rev-parse", "HEAD"], cwd=self.repo, check=True,
                          capture_output=True, text=True).stdout.strip()
-        status = self._run(["git", "status", "--porcelain", "--untracked-files=all"],
+        status = self._git(["git", "status", "--porcelain", "--untracked-files=all"],
                            cwd=self.repo, check=True, capture_output=True, text=True).stdout
         if head != sha or status.strip():
             raise ReleaseError("candidate checkout is not the clean frozen commit")
+
+    def commit_projected_tree(self, base_sha, timestamp):
+        """Create a deterministic synthetic commit without moving ambient HEAD."""
+        self._git(["git", "add", "-A"], cwd=self.repo, check=True,
+                  capture_output=True, text=True)
+        tree = self._git(["git", "write-tree"], cwd=self.repo, check=True,
+                         capture_output=True, text=True).stdout.strip()
+        env = dict(os.environ, GIT_AUTHOR_NAME="Sonsteng Release Service",
+                   GIT_AUTHOR_EMAIL="release@localhost",
+                   GIT_COMMITTER_NAME="Sonsteng Release Service",
+                   GIT_COMMITTER_EMAIL="release@localhost",
+                   GIT_AUTHOR_DATE=f"@{int(timestamp)} +0000",
+                   GIT_COMMITTER_DATE=f"@{int(timestamp)} +0000")
+        commit = self._git(["git", "commit-tree", tree, "-p", base_sha,
+                            "-m", "release: accepted-only projection"],
+                           cwd=self.repo, check=True, capture_output=True,
+                           text=True, env=env).stdout.strip()
+        return commit, tree
+
+    def retain_release_candidate(self, candidate_sha, identity):
+        """Pin a synthetic candidate for the lifetime of its release evidence."""
+        if not re.fullmatch(r"[0-9a-f]{64}", identity):
+            raise ReleaseError("candidate retention identity is invalid")
+        ref = f"refs/sonsteng/releases/{identity}"
+        existing = self._git(["git", "rev-parse", "--verify", "--quiet", ref],
+                             cwd=self.repo, check=False, capture_output=True,
+                             text=True).stdout.strip()
+        if existing and existing != candidate_sha:
+            raise ReleaseError("candidate retention ref conflicts with immutable evidence")
+        if not existing:
+            result = self._git(["git", "update-ref", ref, candidate_sha,
+                                "0" * 40], cwd=self.repo, check=False,
+                               capture_output=True, text=True)
+            if result.returncode != 0:
+                # A concurrent deterministic preparation may have won the
+                # create-only race. Accept only the identical pinned object.
+                existing = self._git(["git", "rev-parse", "--verify", "--quiet", ref],
+                                     cwd=self.repo, check=False, capture_output=True,
+                                     text=True).stdout.strip()
+                if existing != candidate_sha:
+                    raise ReleaseError("candidate retention ref could not be created")
+        return ref
 
     @contextmanager
     def isolated_checkout(self, sha):
@@ -169,13 +514,13 @@ class GitRefAdapter:
         root = pathlib.Path(tempfile.mkdtemp(prefix="sonsteng-prod-candidate-"))
         added = False
         try:
-            self._run(["git", "worktree", "add", "--detach", str(root), sha],
+            self._git(["git", "worktree", "add", "--detach", str(root), sha],
                       cwd=self.repo, check=True, capture_output=True, text=True)
             added = True
             yield root
         finally:
             if added:
-                self._run(["git", "worktree", "remove", "--force", str(root)],
+                self._git(["git", "worktree", "remove", "--force", str(root)],
                           cwd=self.repo, check=True, capture_output=True, text=True)
             shutil.rmtree(root, ignore_errors=True)
 
@@ -187,10 +532,21 @@ class CandidateValidator:
         self.git, self.manifest = git, dict(manifest)
 
     def __call__(self, release):
-        if self.manifest.get("base_sha") != release.base_sha or \
-           self.manifest.get("candidate_sha") != release.candidate_sha or \
-           tuple(self.manifest.get("suggestion_ids") or ()) != release.suggestion_ids or \
-           tuple(self.manifest.get("batch_commits") or ()) != release.batch_commits:
+        common_mismatch = self.manifest.get("base_sha") != release.base_sha or \
+           self.manifest.get("candidate_sha") != release.candidate_sha
+        if release.schema_version >= 2:
+            held = self.manifest.get("held_exclusions") or []
+            held_ids = {item.get("operation_id") for item in held if isinstance(item, dict)}
+            binding_mismatch = (tuple(self.manifest.get("accepted_operation_ids") or ()) !=
+                                release.operation_ids or
+                                self.manifest.get("review_receipt_hash") != release.review_receipt_hash or
+                                self.manifest.get("production_scope") != "prose_only_v1" or
+                                len(held_ids) != len(held) or
+                                bool(set(self.manifest.get("accepted_operation_ids") or ()) & held_ids))
+        else:
+            binding_mismatch = (tuple(self.manifest.get("suggestion_ids") or ()) != release.suggestion_ids or
+                                tuple(self.manifest.get("batch_commits") or ()) != release.batch_commits)
+        if common_mismatch or binding_mismatch:
             raise ReleaseError("manifest binding mismatch")
         manifest_hash = hashlib.sha256(_canonical(self.manifest)).hexdigest()
         if manifest_hash != release.manifest_hash:
@@ -202,15 +558,93 @@ class CandidateValidator:
         self.git.require_clean_candidate(release.candidate_sha)
 
 
+class AcceptedProjectionCandidateBuilder:
+    """Create a deterministic accepted-only commit from a verified PROD base."""
+
+    def __init__(self, git, manifest_path, writer=None, materializer=None):
+        self.git = git
+        self.manifest_path = pathlib.Path(manifest_path)
+        self.writer = writer or ProjectionTreeWriter()
+        self.materializer = materializer or AcceptedOnlyMaterializer()
+
+    def build(self, context):
+        projection_context = context.get("projection") or {}
+        if projection_context.get("blocked_reason"):
+            raise ReleaseError("production projection blocked: " +
+                               projection_context["blocked_reason"])
+        sources = projection_context.get("sources") or []
+        receipts = projection_context.get("review_receipts") or []
+        if not sources or not receipts:
+            return None
+        base_sha = context.get("base_sha") or sources[0].get("prod_base")
+        if not base_sha or any(not source.get("prod_base") for source in sources):
+            raise ReleaseError("submitted review does not match the verified production base")
+        # An unrelated release may advance the global PROD frontier after this
+        # source was reviewed. Permit that ancestry-only rebase here; the
+        # ProjectionTreeWriter still applies the immutable original value in an
+        # isolated checkout of `base_sha`, so any same-source drift fails closed
+        # before a candidate commit is created.
+        if any(source["prod_base"] != base_sha and
+               not self.git.is_ancestor(source["prod_base"], base_sha)
+               for source in sources):
+            raise ReleaseError("submitted review does not descend from the verified production base")
+        receipt_hashes = tuple(sorted(item["receipt_hash"] for item in receipts))
+        receipt_binding = hashlib.sha256(_canonical(receipt_hashes)).hexdigest()
+        timestamp = max(int(item.get("created_at", 0)) for item in receipts) // 1000
+        with self.git.isolated_checkout(base_sha) as root:
+            rebased = [source for source in sources if source["prod_base"] != base_sha]
+            if rebased:
+                verifier = getattr(self.writer,"verify_rebased_sources",None)
+                if verifier is None:
+                    raise ReleaseError("projection writer cannot verify rebased sources")
+                verifier(root,rebased)
+            materialized = self.materializer.materialize(sources)
+            if materialized.structural_operations:
+                raise ReleaseError("structural operations are deferred from production")
+            if not materialized.accepted_operation_ids:
+                return None
+            evidence = self.writer.write(root, materialized)
+            candidate_git = GitRefAdapter(root)
+            candidate_sha, candidate_tree = candidate_git.commit_projected_tree(base_sha,timestamp)
+            exclusions = [dataclasses.asdict(item) for item in materialized.exclusions]
+            manifest = {"schema_version":2,"target_environment":"production",
+                "production_scope":"prose_only_v1",
+                "base_sha":base_sha,"candidate_sha":candidate_sha,
+                "candidate_tree":candidate_tree,"generator_id":evidence["generator_id"],
+                "review_receipt_hash":receipt_binding,"review_receipts":list(receipt_hashes),
+                "accepted_operation_ids":list(materialized.accepted_operation_ids),
+                "held_exclusions":exclusions,"generated_parity":evidence["parity_verified"]}
+            manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
+            # commit-tree does not move a branch. Pin the object before the
+            # temporary worktree is removed so approval may safely be delayed
+            # and Git GC cannot erase the immutable candidate meanwhile.
+            self.git.retain_release_candidate(candidate_sha,manifest_hash)
+        self.manifest_path.parent.mkdir(parents=True,exist_ok=True)
+        payload = _canonical(manifest) + b"\n"
+        with tempfile.NamedTemporaryFile(dir=self.manifest_path.parent,delete=False) as target:
+            target.write(payload)
+            temporary = pathlib.Path(target.name)
+        temporary.replace(self.manifest_path)
+        return {"manifest":manifest,"manifest_hash":manifest_hash,
+            "candidate_sha":candidate_sha,"candidate_tree":candidate_tree,
+            "review_receipt_hash":receipt_binding,
+            "review_receipts":receipt_hashes,
+            "projection_identity":manifest_hash,
+            "accepted_operation_ids":materialized.accepted_operation_ids,
+            "held_exclusions":materialized.exclusions}
+
+
 class ProductionCandidateBuilder:
     """Freeze the latest contiguous DEV frontier for human Publisher review."""
 
     def __init__(self, ledger, git, manifest_path, bootstrap_base_sha=None,
-                 attempt_id_factory=None):
+                 attempt_id_factory=None, projection_builder=None):
         self.ledger, self.git = ledger, git
         self.manifest_path = pathlib.Path(manifest_path)
         self.bootstrap_base_sha = bootstrap_base_sha
         self.attempt_id_factory = attempt_id_factory or (lambda: secrets.token_hex(12))
+        self.projection_builder = projection_builder or AcceptedProjectionCandidateBuilder(
+            git,manifest_path)
 
     @staticmethod
     def _manifest(base_sha, candidate_sha, candidate_tree, generator_id,
@@ -242,6 +676,13 @@ class ProductionCandidateBuilder:
         context = self.ledger.preparation_context()
         active = context.get("active_release")
         if active:
+            if int(active.get("schema_version") or 1) >= 2:
+                if not self.manifest_path.is_file():
+                    raise ReleaseError("active operation release manifest is unavailable")
+                manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+                if hashlib.sha256(_canonical(manifest)).hexdigest() != active["manifest_hash"]:
+                    raise ReleaseError("active release manifest cannot be reproduced")
+                return {"ok":True,"replay":True,"release":active}
             batches = active.get("batches") or []
             manifest = self._manifest(active["base_sha"], active["candidate_sha"],
                 self.git.tree(active["candidate_sha"]), active["generator_id"],
@@ -251,6 +692,35 @@ class ProductionCandidateBuilder:
                 raise ReleaseError("active release manifest cannot be reproduced")
             self._write(manifest)
             return {"ok": True, "replay": True, "release": active}
+
+        if (context.get("projection") or {}).get("sources"):
+            built = self.projection_builder.build(context)
+            if built is None:
+                return None
+            manifest = built["manifest"]
+            release_id = "release-" + built["manifest_hash"][:16] + "-" + self.attempt_id_factory()
+            held = [{"operation_id":item.operation_id,"decision":item.reason,
+                     "reason":item.reason,"source_ref":item.source_ref}
+                    for item in built["held_exclusions"]]
+            evidence_hash = hashlib.sha256(_canonical({
+                "review_receipts":list(built["review_receipts"]),
+                "accepted_operation_ids":list(built["accepted_operation_ids"]),
+                "held_exclusions":held,
+                "generator_id":manifest["generator_id"]})).hexdigest()
+            binding = {"schema_version":2,"id":release_id,"idempotency_key":release_id,
+                "target_batch_id":"operation-frontier","base_sha":manifest["base_sha"],
+                "candidate_sha":built["candidate_sha"],"generator_id":manifest["generator_id"],
+                "evidence_hash":evidence_hash,"manifest_hash":built["manifest_hash"],
+                "ancestry_verified":True,"review_receipt_hash":built["review_receipt_hash"],
+                "review_receipts":list(built["review_receipts"]),
+                "projection_identity":built["projection_identity"],
+                "accepted_operation_ids":list(built["accepted_operation_ids"]),
+                "held_exclusions":held}
+            result = self.ledger.prepare(binding)
+            if not result or result.get("ok") is not True:
+                raise ReleaseError("ledger rejected preparation: " +
+                                   str((result or {}).get("reason","unknown")))
+            return result
 
         batches = context.get("batches") or []
         if context.get("blocked_reason"):
@@ -307,6 +777,7 @@ class WranglerPagesAdapter:
     def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
                  production_branch="main",
                  run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
+        _require_https_url(provenance_url, "Pages provenance")
         self.project, self.artifact_dir = project, artifact_dir
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
         self.production_branch = production_branch
@@ -364,6 +835,7 @@ class WranglerWorkerAdapter:
 
     def __init__(self, config, provenance_url, candidate_root=None, run=subprocess.run,
                  opener=urllib.request.urlopen, timeout=240):
+        _require_https_url(provenance_url, "Worker provenance")
         self.config, self.provenance_url = config, provenance_url
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(config).parents[2]).resolve()
         self._run, self._opener, self.timeout = run, opener, timeout
@@ -612,9 +1084,53 @@ class RecoveryRegistry:
         temporary.chmod(0o600)
         temporary.replace(self.path)
 
+    def record_pair(self, sha, pages_deployment_id, worker_version_id):
+        """Compare-and-set one complete recovery pair without exposing halves."""
+        if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
+            raise ReleaseError("recovery registry requires an exact candidate SHA")
+        if not pages_deployment_id or not worker_version_id:
+            raise ReleaseError("recovery registry requires a complete provider pair")
+        data = self._read()
+        expected = {
+            "pages_deployment_id": pages_deployment_id,
+            "worker_version_id": worker_version_id,
+        }
+        prior = data.get(sha)
+        if prior is not None:
+            if set(prior) != set(expected):
+                raise ReleaseError("partial recovery pair conflicts with audited bootstrap")
+            if prior != expected:
+                raise ReleaseError("complete pair conflict")
+            return True
+        data[sha] = expected
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", dir=self.path.parent, delete=False,
+                                         encoding="utf-8") as target_file:
+            json.dump(data, target_file, sort_keys=True, separators=(",", ":"))
+            target_file.write("\n")
+            temporary = pathlib.Path(target_file.name)
+        temporary.chmod(0o600)
+        temporary.replace(self.path)
+        return False
+
+    @staticmethod
+    def _complete_pair(pair):
+        required = {"pages_deployment_id", "worker_version_id"}
+        return dict(pair) if isinstance(pair, dict) and set(pair) == required and \
+            all(pair.get(key) for key in required) else None
+
+    def pair_state(self, sha):
+        data = self._read()
+        return sha in data, self._complete_pair(data.get(sha))
+
+    def pair(self, sha):
+        return self.pair_state(sha)[1]
+
     def target(self, sha, target):
         key = "pages_deployment_id" if target == "pages" else "worker_version_id"
         return self._read().get(sha, {}).get(key)
 
     def pairs(self):
-        return self._read()
+        data = self._read()
+        return {sha: complete for sha, pair in data.items()
+                if (complete := self._complete_pair(pair))}

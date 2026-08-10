@@ -58,9 +58,87 @@ ledger, inspecting git, or contacting Cloudflare. Keep it false until all of the
 5. credential separation, redaction, rotation, and revocation checks pass;
 6. supervised canary and exact-pair restore drills pass.
 
+For the existing legacy production pair, this is a hard evidence gate—not an
+operator judgment call. Record the exact Pages deployment ID, Worker version ID,
+matching source/candidate SHA and live provenance response; prove both provider
+IDs can still be reactivated; set that SHA as the verified bootstrap base; then
+restore and re-verify that exact pair in a drill. A current-looking web page, a
+git commit alone, or a legacy Worker without the provenance endpoint is not
+sufficient evidence. Until every item exists, keep
+`SONSTENG_PROD_RELEASE_ENABLED=false`; do not prepare a selective candidate,
+activate the timer, or use a direct deploy as a substitute canary.
+
+### Audited legacy-pair bootstrap
+
+Use `tools/prod_release_bootstrap.py` only from the privileged local operator
+environment. It is intentionally separate from `prod_release_daemon.py`: it
+has no release-ledger client, cannot prepare or authorize a candidate, and
+refuses to run when `SONSTENG_PROD_RELEASE_BEARER` is present. Keep the normal
+publication flag false throughout this procedure.
+
+Supply the exact source/candidate SHA, Pages deployment ID, Worker version ID,
+both SHA-bound provenance observations, trusted repository/artifact paths, and
+state paths through the existing `SONSTENG_PROD_*` environment-file convention.
+Also set `SONSTENG_PROD_BOOTSTRAP_AUTHORITY=local-operator`, a bounded
+`SONSTENG_PROD_BOOTSTRAP_OPERATOR_ID`, and a bounded
+`SONSTENG_PROD_BOOTSTRAP_AUTHORITY_CHANNEL`. Do not place credentials, edited
+text, or secret values in arguments. Provider credentials remain injected by
+the provider's existing protected environment.
+
+The command checks out the exact SHA in a detached temporary worktree, rejects
+outside-repository and symlinked artifact paths, proves both live provenance
+endpoints, reactivates the supplied pair in compatibility order, and repeats
+the pair in reverse order as a restoration drill. Only after every check passes
+does one locked compare-and-set write make the complete pair visible in the
+0600 recovery registry. An exact replay is idempotent; a changed pair or legacy
+partial entry fails closed. The append-only 0600 receipt binds operator,
+authority channel, SHA, time, redacted provider-ID digests, and the two proof
+results. Provider stdout/stderr, credentials, and edited text are discarded.
+
 Only after those gates may an operator set the flag to true and explicitly enable the timer. A
 config flip is operational authority, so it must be attributed in the release evidence. Do not use
 the legacy deploy script as a canary.
+
+### Editing Worker migration and rollback gate
+
+Before deploying the editing Worker migration, record its prior editing Worker version ID, the
+deployed source SHA, and a redacted live provenance response. Prove the new schema is compatible
+with that version before changing code: the old Worker can read the migrated Durable Object state,
+its read-only Publisher/status projections remain valid, and it does not interpret new rows as
+publication authority. Then activate the prior version, read back its exact version and provenance,
+run a config-off status smoke, reactivate the new version, and read that identity back too.
+
+This is a hard rollback gate. If the old Worker cannot read the migrated Durable Object state, stop
+before legacy backfill. Do not treat a successful forward migration as rollback proof, and do not
+backfill review revisions until the exact prior-version activation/readback and config-off smoke are
+recorded. Rolling back the editing Worker never changes the production Pages/Worker pair.
+
+### Routine activation ordering
+
+Routine activation is fail closed and ordered. First stop and disable the timer, prove no release
+service process is running and no live lease is owned, and retain `SONSTENG_PROD_RELEASE_ENABLED=false`.
+While stopped, set the intended non-secret configuration, compute and record its
+first-tick configuration digest, set `SONSTENG_PROD_EXPECTED_CONFIG_DIGEST`, then set the enabled flag and read
+both values back without printing credentials. Record the operator, time, reason, exact code SHA,
+configuration digest, and timer intent. Only then enable the timer and read back its enabled state.
+Compute the value with `python3 tools/print_prod_release_config_digest.py --env-file <protected-env-file>`;
+the parser allowlists non-secret release controls and neither evaluates nor hashes credential fields.
+
+The first tick recomputes the non-secret configuration digest before importing the executor, parsing
+arguments, reading credentials, opening the ledger, inspecting git, or contacting a provider. A
+mismatch stops the tick. If any stop/process/lease, environment readback, timer readback, or first-tick
+check fails, compensate by stopping and disabling the timer, restoring
+`SONSTENG_PROD_RELEASE_ENABLED=false`, reading both states back, and recording the failed intent.
+
+### Supervised one-shot canary
+
+The first publication uses a process-scoped one-shot canary, not routine enablement. The timer remains stopped and disabled,
+and the persisted environment remains config-off. In one supervised process,
+override `SONSTENG_PROD_RELEASE_ENABLED=true`, set `SONSTENG_PROD_RELEASE_MODE=canary`, bind
+`SONSTENG_PROD_CANARY_RELEASE_ID` to exactly one already human-authorized release, and bind the matching
+configuration digest. Canary mode never prepares a frontier and claims only that exact release. Return
+the process environment to config-off before the recovery drill. Routine timer activation is a later,
+separately attributed event after the canary and exact-pair recovery evidence pass.
 
 ## Credentials, rotation, and emergency revocation
 
@@ -74,10 +152,22 @@ Use distinct environment-scoped principals:
   named production Worker version only. It must have no DNS, Access-policy, account-admin, or DEV
   mutation rights.
 
+Every machine endpoint is TLS-only. The PROD release bearer has independent production scope and is
+not a renamed or shared DEV/admin credential. Human Access sessions require Publisher scope plus the
+existing same-origin/CSRF marker for every review submission and authorization mutation; the service
+bearer cannot submit or authorize. Conversely, Access sessions cannot prepare, claim, renew,
+transition, fence, restore, or bootstrap. Bootstrap is a separate local-operator authority and accepts
+neither the browser session nor the release-service bearer.
+
 Secrets live only in 0600 environment files or the provider's secret store. **Never copy credentials**
 into source, manifests, command arguments, journals, receipts, notifications, screenshots, or UAT
 notes. Evidence records opaque provider IDs and hashes only. Do not inspect or print secret values
 while verifying configuration.
+
+Never pass secrets in CLI arguments. They must not appear in the ledger, configuration digest,
+manifest, journal, receipt, logs, process listing, exception text, or provider-output capture. Canary
+tests use a sentinel secret and fail if it reaches any of those seams. Redact authorization headers and
+discard provider stdout/stderr before recording bounded error categories.
 
 For routine rotation: create the replacement with equal or narrower scope, inject it out of band,
 run a non-publishing authentication/status canary, switch the service environment, verify the old
@@ -87,9 +177,25 @@ canary result—not the value. For emergency revocation: set
 revoke the affected provider or service principal, and reconcile strictly toward the recorded
 manifest. Revocation never authorizes a different target.
 
+## Legacy applied-change backfill
+
+Applied DEV suggestions created before granular review have no release authority.
+The trusted apply/migration bearer may submit a named, immutable bulk backfill to
+`POST /edit/v1/publisher/review/backfill`. Each per-source cumulative revision
+must bind the verified PROD base, applied suggestion IDs, their completed apply
+batch/commit evidence, the complete ordered apply-batch base-to-commit chain,
+source hashes, and deterministic atomic operations. The store validates that
+the chain ends at the revision and includes every applied suggestion for that
+source in its named batches, validates the entire payload transactionally,
+writes an audit receipt, and treats an exact
+retry as an idempotent replay. Any pending row, mismatched source/commit/base, or
+changed retry rolls back or fails closed. Backfill creates no draft, decision,
+review receipt, release member, or implicit acceptance: every operation appears
+as unreviewed and requires a fresh human review.
+
 ## Preparation, authorization, execution
 
-The Publisher page may show eligible contiguous DEV batches, but its “Prepare immutable preview”
+The Publisher page may show eligible submitted-accepted operations, but its “Prepare immutable preview”
 control stays disabled. On each config-enabled service run, the trusted candidate builder reads the
 text-free contiguous frontier, proves the clean checkout, ancestry, exact membership, generator and
 candidate tree, writes the canonical manifest under the service state directory, and submits the
@@ -101,6 +207,15 @@ human Publisher page becomes the read-only preview plus one explicit authorizati
 The executor may claim only `authorized` records. On ambiguity or partial failure it records a
 bounded error, fences later releases, and reconciles or restores the recorded pair; it never falls
 forward to ambient `HEAD`.
+
+Accepted-only candidates are synthetic commits and therefore do not move a branch. Before the
+temporary candidate worktree is removed, the builder creates an immutable
+`refs/sonsteng/releases/<manifest-hash>` ref in the dedicated daemon repository. These refs share
+the release ledger's durable retention: they are not deleted after completion, because the same
+candidate identity remains audit and retry evidence. A repeated preparation may reuse the exact
+ref, but a ref that already names another commit fails closed. Consequently routine or aggressive
+Git garbage collection cannot prune a candidate while it awaits human authorization or later
+recovery inspection.
 
 ## Status vocabulary
 

@@ -72,6 +72,14 @@ def test_operations_docs_cover_bypasses_credentials_and_real_uat():
         "revocation",
         "Never copy credentials",
         "trusted candidate builder",
+        "first-tick configuration digest",
+        "process-scoped one-shot canary",
+        "prior editing Worker version ID",
+        "old Worker can read the migrated Durable Object state",
+        "timer remains stopped and disabled",
+        "compensate by stopping and disabling the timer",
+        "TLS-only",
+        "independent production scope",
     ]:
         assert phrase in operations
     for phrase in [
@@ -88,8 +96,31 @@ def test_operations_docs_cover_bypasses_credentials_and_real_uat():
         assert phrase in uat
 
 
+def test_installed_service_declares_config_digest_and_one_shot_mode_but_stays_off():
+    source = (ROOT / "tools/install-prod-release-daemon.sh").read_text(encoding="utf-8")
+    assert "SONSTENG_PROD_EXPECTED_CONFIG_DIGEST=" in source
+    assert "SONSTENG_PROD_RELEASE_MODE=routine" in source
+    assert "SONSTENG_PROD_CANARY_RELEASE_ID=" in source
+    assert "systemctl --user enable --now" not in source
+    digest_tool = (ROOT / "tools/print_prod_release_config_digest.py").read_text(encoding="utf-8")
+    assert "CONFIG_DIGEST_KEYS" in digest_tool
+    assert "--env-file" in digest_tool
+
+
 def test_production_release_lane_pins_wrangler_major_everywhere():
     executor = (ROOT / "tools/prod_release_executor.py").read_text(encoding="utf-8")
     assert 'WRANGLER_COMMAND = ("npx", "wrangler@4")' in executor
     assert '["npx", "wrangler"' not in executor
     assert '"npx wrangler' not in executor
+
+
+def test_legacy_bootstrap_is_operator_only_and_has_no_publication_authority():
+    bootstrap = (ROOT / "tools/prod_release_bootstrap.py").read_text(encoding="utf-8")
+    daemon = (ROOT / "tools/prod_release_daemon.py").read_text(encoding="utf-8")
+
+    assert "SONSTENG_PROD_BOOTSTRAP_AUTHORITY" in bootstrap
+    assert "SONSTENG_PROD_RELEASE_ENABLED" in bootstrap
+    assert "SONSTENG_PROD_RELEASE_BEARER" in bootstrap
+    assert "ProductionCandidateBuilder" not in bootstrap
+    assert "LedgerHTTP" not in bootstrap
+    assert "prod_release_bootstrap" not in daemon

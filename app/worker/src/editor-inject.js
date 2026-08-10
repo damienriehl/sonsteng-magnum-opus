@@ -17,7 +17,7 @@
 //   * Response carries the strict CSP + no-store + Vary:Cookie + Referrer-Policy
 //     (added by withEditHeaders in editor.js).
 
-import { buildUpstreamUrl, escapeJsonIsland, pageBlockDescriptors, projectPendingItems, resolvePagePath, MAP_VERSION } from "./editor-map.js";
+import { buildUpstreamUrl, escapeJsonIsland, pageBlockDescriptors, projectPendingItems, projectReviewAnnotations, resolvePagePath, MAP_VERSION } from "./editor-map.js";
 
 // The shared site assets the wrapped student pages reference. Each maps its
 // served basename (/edit/site-assets/<name>) to its EDIT_UPSTREAM-relative path.
@@ -184,7 +184,7 @@ class HeadInjector {
 // Serve an allowlisted page: fetch clean, inject, return HTML. `pending` is the
 // array of this editor's pending items for THIS page (resolved by the router
 // from the DO). Returns a Response (headers finalized by the router wrap).
-export async function handleEditPage(env, { pageKey, blocks, overrides = [], pending, heartbeatAgeS = null, directApply = false }) {
+export async function handleEditPage(env, { pageKey, blocks, overrides = [], pending, reviewAnnotations = [], heartbeatAgeS = null, directApply = false }) {
   const upstream = buildUpstreamUrl(pageKey, env.EDIT_UPSTREAM);
   if (!upstream) return friendly(404, "That page is not available for editing.");
 
@@ -205,6 +205,7 @@ export async function handleEditPage(env, { pageKey, blocks, overrides = [], pen
     blocks: pageBlockDescriptors(blocks), overrides });
   const editsIsland = escapeJsonIsland({
     items: projectPendingItems(pending),
+    review_annotations: projectReviewAnnotations(reviewAnnotations),
     heartbeat_age_s: heartbeatAgeS,
     direct_apply: directApply,
   });

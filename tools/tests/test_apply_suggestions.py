@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -73,6 +74,113 @@ class GeneratorIdentityTest(unittest.TestCase):
         with open(os.path.join(self.root, "ambient.txt"), "w", encoding="utf-8") as fh:
             fh.write("unrelated")
         self.assertEqual(ap.generator_identity(self.root), original)
+
+
+class AtomicReviewEvidenceTest(unittest.TestCase):
+    def _patch(self, suggestion_id, source_ref, old, new, group_id=None):
+        return ap.Patch(suggestion_id=suggestion_id,
+                        group_id=group_id or "solo:" + suggestion_id,
+                        source_ref=source_ref, relpath=source_ref.split("#", 1)[0],
+                        kind="prose_md", json_path="",
+                        original_text=old, new_text=new)
+
+    def test_cross_source_group_uses_one_shared_decision_identity(self):
+        patches = [
+            self._patch("s1", "data/a.md#baaaaaaaa", "Old alpha.", "New alpha.", "shared-1"),
+            self._patch("s2", "data/b.md#bbbbbbbbb", "Old beta.", "New beta.", "shared-1"),
+        ]
+        revisions = ap.build_review_revisions(patches, "dev-tip", "prod-tip")
+        operations = [operation for revision in revisions for operation in revision["operations"]]
+        self.assertEqual({operation["group_id"] for operation in operations}, {"shared-1"})
+        self.assertEqual(len({operation["decision_id"] for operation in operations}), 1)
+
+    def test_duplicate_structural_edits_keep_distinct_identity_and_order_evidence(self):
+        common = dict(group_id="shared-structural",source_ref="data/a.md#baaaaaaaa",
+                      relpath="data/a.md",kind="prose_md",json_path="",
+                      original_text="Anchor",new_text="Same addition",op="insert_after")
+        first = ap.Patch(suggestion_id="insert-1",created_at=1000,**common)
+        second = ap.Patch(suggestion_id="insert-2",created_at=2000,**common)
+
+        operations = [ap._atomic_review_operations(patch,"dev-tip","prod-tip")[0]
+                      for patch in (first,second)]
+
+        self.assertEqual([operation["created_at"] for operation in operations],[1000,2000])
+        self.assertEqual([operation["suggestion_id"] for operation in operations],
+                         ["insert-1","insert-2"])
+        self.assertEqual(len({operation["id"] for operation in operations}),2)
+
+    def test_distinctive_exact_prose_move_pairs_both_endpoints(self):
+        moved = "This distinctive sentence has enough words to qualify."
+        stationary = "The substantially longer middle passage remains exactly where it was throughout this careful move test."
+        patch = self._patch("s1", "data/a.md#baaaaaaaa",
+                            moved + "\n\n" + stationary,
+                            stationary + "\n\n" + moved)
+        operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+        endpoints = [operation for operation in operations if operation.get("move_pair_id")]
+        self.assertEqual({operation["move_role"] for operation in endpoints}, {"from", "to"})
+        self.assertEqual(len({operation["move_pair_id"] for operation in endpoints}), 1)
+        self.assertEqual(len({operation["decision_id"] for operation in endpoints}), 1)
+
+    def test_short_or_repeated_prose_is_not_falsely_paired_as_move(self):
+        short = self._patch("s1", "data/a.md#baaaaaaaa", "Tiny words move.\n\nKeep.",
+                            "Keep.\n\nTiny words move.")
+        repeated_text = "This repeated sentence has enough words to qualify."
+        repeated = self._patch("s2", "data/a.md#baaaaaaaa",
+                               repeated_text + "\n\n" + repeated_text + "\n\nKeep.",
+                               "Keep.\n\n" + repeated_text + "\n\n" + repeated_text)
+        for patch in (short, repeated):
+            operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+            self.assertFalse(any(operation.get("move_pair_id") for operation in operations))
+
+    def test_repetitive_near_limit_prose_bypasses_matcher_with_deterministic_fallback(self):
+        old = ("repeat " * 2300) + "old."
+        new = ("repeat " * 2300) + "new!"
+        patch = self._patch("s1", "data/a.md#baaaaaaaa", old, new)
+
+        started = time.monotonic()
+        with mock.patch.object(ap.difflib, "SequenceMatcher",
+                               side_effect=AssertionError("matcher must be bypassed")):
+            first = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+            second = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+        self.assertLess(time.monotonic() - started, 2.0)
+
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first, second)
+        self.assertEqual(first[0]["kind"], "replace")
+        self.assertEqual(first[0]["old_text"], old)
+        self.assertEqual(first[0]["new_text"], new)
+        self.assertEqual(first[0]["base_range"], [0, len(old)])
+        self.assertEqual(first[0]["proposed_range"], [0, len(new)])
+        self.assertEqual(first[0]["context_before"], [])
+        self.assertEqual(first[0]["context_after"], [])
+
+    def test_atomic_matcher_preserves_separated_punctuation_and_unicode_edits(self):
+        patch = self._patch(
+            "s1", "data/a.md#baaaaaaaa",
+            "Café strong points, and weak points.",
+            "Café strongest points, and weak points!",
+        )
+
+        operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+
+        self.assertEqual([(op["old_text"], op["new_text"]) for op in operations],
+                         [("strong", "strongest"), (".", "!")])
+        self.assertEqual(operations[0]["context_before"][-2:], ["Café", " "])
+
+    def test_oversized_review_matrix_bypasses_matcher_below_token_ceiling(self):
+        old = " ".join("old%d" % index for index in range(400))
+        new = " ".join("new%d" % index for index in range(400))
+        self.assertLess(len(ap._review_tokens(old)), ap.MAX_REVIEW_TOKENS)
+        self.assertGreater(len(ap._review_tokens(old)) * len(ap._review_tokens(new)),
+                           ap.MAX_REVIEW_MATRIX_CELLS)
+        patch = self._patch("s1", "data/a.md#baaaaaaaa", old, new)
+
+        with mock.patch.object(ap.difflib, "SequenceMatcher",
+                               side_effect=AssertionError("matcher must be bypassed")):
+            operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+
+        self.assertEqual([(op["kind"], op["old_text"], op["new_text"])
+                          for op in operations], [("replace", old, new)])
 
 
 def _bid_of(span):
@@ -165,6 +273,7 @@ class InMemoryEditorStore:
         self.batches = {}       # batch_id -> {phase, lease_expires_at}
         self._clock = clock
         self.lease_ms = 1000
+        self.prod_base = None
 
     def now(self):
         return self._clock
@@ -240,7 +349,7 @@ class InMemoryEditorStore:
             r["apply_batch_id"] = batch_id
             r["lease_expires_at"] = lease
         return {"ok": True, "batch_id": batch_id, "claimed": sorted(claim_ids),
-                "lease_expires_at": lease}
+                "lease_expires_at": lease, "prod_base": self.prod_base}
 
     def fetch_batch_rows(self, batch_id, claimed_ids):
         return [dict(self.rows[i]) for i in claimed_ids if i in self.rows]
@@ -255,7 +364,7 @@ class InMemoryEditorStore:
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
                  needs_human=None, drift=None, base_sha=None, commit_sha=None,
-                 generator_id=None):
+                 generator_id=None, review_revisions=None):
         b = self.batches.get(batch_id)
         if not b:
             return {"ok": False, "reason": "no_batch"}
@@ -265,6 +374,8 @@ class InMemoryEditorStore:
             b["commit_sha"] = commit_sha
         if generator_id is not None:
             b["generator_id"] = generator_id
+        if review_revisions is not None:
+            b["review_revisions"] = review_revisions
         for ids, st in ((applied, "applied"), (accepted_blocked, "accepted_blocked"),
                         (needs_human, "needs_human"), (drift, "drift")):
             for i in (ids or []):
@@ -448,6 +559,26 @@ def snapshot_data(root):
 # --------------------------------------------------------------------------- #
 # Tests
 # --------------------------------------------------------------------------- #
+class ReviewEvidenceTest(unittest.TestCase):
+    def test_sequential_same_source_edits_become_one_cumulative_revision(self):
+        common = dict(group_id=None,source_ref="data/copy/home.json#lead",
+            relpath="data/copy/home.json",kind="json_scalar",json_path="lead")
+        patches = [
+            ap.Patch(suggestion_id="s1",original_text="The bad idea",
+                new_text="The good idea",**common),
+            ap.Patch(suggestion_id="s2",original_text="The good idea",
+                new_text="The great idea",**common),
+        ]
+
+        revisions = ap.build_review_revisions(patches,"d" * 40,"p" * 40)
+
+        self.assertEqual(revisions[0]["suggestion_ids"],["s1","s2"])
+        self.assertEqual(revisions[0]["source_original_text"],"The bad idea")
+        self.assertEqual(revisions[0]["source_proposed_text"],"The great idea")
+        self.assertEqual([(item["old_text"],item["new_text"])
+                          for item in revisions[0]["operations"]],[("bad","great")])
+
+
 class ApplyEngineTest(unittest.TestCase):
     def setUp(self):
         self.root = make_repo()
@@ -493,6 +624,7 @@ class ApplyEngineTest(unittest.TestCase):
     def test_clean_prose_full_roundtrip_merges(self):
         ref = bref(self.root, M03_MD, 0)
         self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
+        self.store.prod_base = "trusted-production-tip"
         pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
         res = self._run("b1", pipe, deploy_plan_only=False)
 
@@ -502,9 +634,27 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertEqual(self.store.batches["b1"]["commit_sha"], ap.head_sha(self.root))
         self.assertEqual(self.store.batches["b1"]["generator_id"],
                          "sha256:test-generator")
+        revisions = self.store.batches["b1"]["review_revisions"]
+        self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0]["source_ref"], ref)
+        self.assertEqual(revisions[0]["source_revision"], ap.head_sha(self.root))
+        self.assertEqual(revisions[0]["prod_base"], "trusted-production-tip")
+        self.assertNotEqual(revisions[0]["prod_base"], res.base_sha)
+        self.assertEqual(revisions[0]["suggestion_ids"], ["s1"])
+        self.assertEqual([(op["kind"], op["old_text"], op["new_text"])
+                          for op in revisions[0]["operations"]],
+                         [("replace", "Intake", "Revised intake")])
         canonical = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
         self.assertIn("Revised intake notes", canonical)
         self.assertEqual(self._porcelain(), "")  # clean after merge
+
+    def test_apply_without_completed_production_frontier_omits_review_evidence(self):
+        ref = bref(self.root, M03_MD, 0)
+        self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
+        res = self._run("bootstrap", FakePipeline(SPEC), deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        self.assertNotIn("review_revisions", self.store.batches["bootstrap"])
 
     # 2) Money edit that breaks reconciliation (validator RED) -> accepted_blocked.
     def test_money_edit_validator_red_blocks_and_discards(self):
@@ -901,12 +1051,14 @@ class HttpRpcRoutingTest(unittest.TestCase):
             client = ap.HttpRpcClient("https://w.example.com/edit/v1", "tok")
             client.finalize("batch-1", phase=ap.PHASE_DONE, applied=["s1"],
                             commit_sha="a" * 40,
-                            generator_id="sha256:" + "b" * 64)
+                            generator_id="sha256:" + "b" * 64,
+                            review_revisions=[{"id": "revision-1"}])
         finally:
             urlreq.urlopen = orig
 
         self.assertEqual(seen["body"]["commit_sha"], "a" * 40)
         self.assertEqual(seen["body"]["generator_id"], "sha256:" + "b" * 64)
+        self.assertEqual(seen["body"]["review_revisions"], [{"id": "revision-1"}])
 
     def test_propose_companion_posts_to_system_suggest(self):
         import io

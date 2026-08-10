@@ -65,6 +65,22 @@ html.has-editor-banner body { padding-top: 3.6rem; padding-bottom: 5rem; }
 }
 .eb--pending.editing { border-left-color: var(--claret, #7c1e2b); }   /* editing wins */
 
+/* Submitted Publisher review, authenticated DEV only. Meaning is repeated in
+   adjacent text; color is never the sole status signal. */
+.eb-review-redline del { color:#8b1e2d; background:#f8e3e6; text-decoration:line-through; }
+.eb-review-redline ins { color:#174f8a; background:#e2eefb; text-decoration:underline 2px; }
+.eb-review-redline--accepted { outline:2px solid #2c6b43; outline-offset:1px; }
+.eb-review-redline--rejected { opacity:.72; }
+.eb-review-redline--questioned { outline:2px dashed #8a671e; outline-offset:1px; }
+.eb-review-annotation { margin:.25rem 0 .65rem;padding:.55rem .7rem;border-left:4px solid #6b6a68;background:#f4efe4;font-size:.88rem;overflow-wrap:anywhere; }
+.eb-review-annotation strong { display:block; }
+.eb-review-annotation p { margin:.3rem 0 0;white-space:pre-wrap; }
+.eb-review-annotation--accepted { border-left-color:#2c6b43; }
+.eb-review-annotation--rejected { border-left-color:#8b1e2d; }
+.eb-review-annotation--questioned,.eb-review-annotation--unanswered { border-left-color:#8a671e; }
+.eb-review-annotation--stale { border-left-color:#7c1e2b; }
+@media (forced-colors:active) { .eb-review-redline del,.eb-review-redline ins { color:CanvasText;background:Canvas;text-decoration-thickness:3px; } .eb-review-annotation { border-left-color:CanvasText; } }
+
 /* SL1 unmask: a needs_human suggestion still SHOWS its edited text, but the block
    is visibly framed as a warning — it is NOT applied and must never look live. */
 .eb--warn {

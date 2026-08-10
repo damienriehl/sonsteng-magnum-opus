@@ -5,7 +5,7 @@
 // (JOS/RSH) — the same "suggested by" signal the admin review surface stamps.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { projectPendingItems } from "../src/editor-map.js";
+import { projectPendingItems, projectReviewAnnotations } from "../src/editor-map.js";
 import { makeCore } from "./editor-sql-helper.mjs";
 
 const ROWS = [
@@ -159,4 +159,58 @@ test("a set-aside suggestion leaves the page quietly (declined never overlays)",
   const declined = core.listAll().concat(core.listForEditor("slot:john"))
     .filter((r) => r.source_ref === "sref-declined");
   if (declined.length) assert.equal(declined[0].status, "declined");
+});
+
+test("submitted review annotations retain every decision state and inert reviewer prose", () => {
+  const hostile = "Why <img src=x onerror=alert(1)> this wording?";
+  const projected = projectReviewAnnotations([{
+    source_ref:"sref-a", review_revision_id:"revision-1", source_revision:"dev-1",
+    proposed_hash:"current-hash", reviewer:"slot:damien", submitted_at:1234, stale:false,
+    operations:[
+      { id:"op-a",decision_id:"op-a",kind:"replace",old_text:"weak",new_text:"strong",
+        proposed_range:[4,10] },
+      { id:"op-b",decision_id:"op-b",kind:"insert",old_text:"",new_text:"!",
+        proposed_range:[10,11] },
+      { id:"op-c",decision_id:"op-c",kind:"delete",old_text:"very ",new_text:"",
+        proposed_range:[0,0] },
+      { id:"op-d",decision_id:"op-d",kind:"insert",old_text:"",new_text:"clear ",
+        proposed_range:[0,6] },
+    ],
+    decisions:[
+      { operation_id:"op-a",decision:"accepted",note:"" },
+      { operation_id:"op-b",decision:"rejected",note:"Too emphatic." },
+      { operation_id:"op-c",decision:"questioned",note:hostile },
+    ],
+  }]);
+  assert.deepEqual(projected.map((item) => item.status),
+    ["accepted","rejected","questioned","unanswered"]);
+  assert.equal(projected[0].reviewer,"DR");
+  assert.equal(projected[2].note,hostile, "projection keeps text as data for textContent rendering");
+  assert.equal(projected[3].operation_id,"op-d");
+});
+
+test("a later source revision yields stale annotation evidence, never a new-span attachment", () => {
+  const core = makeCore(() => 1000);
+  const operation = { id:"old-op",decision_id:"old-op",kind:"replace",source_ref:"sref-a",
+    source_revision:"dev-1",prod_base:"prod-1",base_range:[0,3],proposed_range:[0,4],
+    old_text:"bad",new_text:"good" };
+  core.recordReviewRevision({ id:"rev-1",source_ref:"sref-a",source_revision:"dev-1",
+    prod_base:"prod-1",commit_sha:"dev-1",original_hash:"old",proposed_hash:"reviewed",
+    original_text:"bad",proposed_text:"good",suggestion_ids:["s1"],operations:[operation] });
+  core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"rev-1",
+    source_revision:"dev-1",prod_base:"prod-1",decisions:[{operation_id:"old-op",decision:"rejected"}] });
+  core.submitPublisherReview({ id:"review-1",idempotency_key:"submit-1",request_digest:"digest-1",
+    actor:"slot:damien",review_revision_id:"rev-1",source_revision:"dev-1",prod_base:"prod-1",
+    decisions:[{operation_id:"old-op",decision:"rejected"}] });
+  core.recordReviewRevision({ id:"rev-2",source_ref:"sref-a",source_revision:"dev-2",
+    prod_base:"prod-1",commit_sha:"dev-2",original_hash:"reviewed",proposed_hash:"current",
+    original_text:"good",proposed_text:"better",suggestion_ids:["s2"],operations:[{
+      ...operation,id:"new-op",decision_id:"new-op",source_revision:"dev-2",old_text:"good",new_text:"better"
+    }] });
+
+  const annotations = core.getDevReviewAnnotations(["sref-a"]);
+  assert.equal(annotations.length,1);
+  assert.equal(annotations[0].review_revision_id,"rev-1");
+  assert.equal(annotations[0].stale,true);
+  assert.equal(annotations[0].current_proposed_hash,"current");
 });

@@ -7,7 +7,7 @@ import { json } from "./errors.js";
 import { csrfOk, editError } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import {
-  lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, MAP_VERSION,
+  lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, projectReviewAnnotations, MAP_VERSION,
   enumerateScope, EDITOR_MAP_FACTS, EDITOR_MAP,
 } from "./editor-map.js";
 import { STRUCTURAL_KINDS } from "./editor-store-core.js";
@@ -87,6 +87,11 @@ function resolveStructuralOp(body, block, scope) {
 
 function editorStub(env) {
   return env.EDITOR.getByName("global-v1");
+}
+
+function humanPublisher(auth) {
+  return !!auth?.editor && auth?.scopes?.publisher?.granted === true &&
+    auth.credential_channel === "access" && !auth.service;
 }
 
 // Ceilings resolved from deploy vars (fallback to the spec defaults).
@@ -449,9 +454,14 @@ export async function pendingEndpoint(request, env, auth) {
   // plus the SL6 liveness signals the client banner reads: heartbeat_age_s (null
   // if the daemon has never checked in) and direct_apply (auto-apply mode on/off).
   const heartbeat_age_s = await stub.heartbeatAgeS();
+  const sourceRefs = page && EDITOR_MAP.pages?.[page]
+    ? EDITOR_MAP.pages[page].map((block) => block.source_ref) : [];
+  const reviewRows = sourceRefs.length && typeof stub.getDevReviewAnnotations === "function"
+    ? await stub.getDevReviewAnnotations(sourceRefs) : [];
   return json({
     ok: true,
     items: projectPendingItems(rows),
+    review_annotations: projectReviewAnnotations(reviewRows),
     heartbeat_age_s,
     direct_apply: env.DIRECT_APPLY === "true",
   });
@@ -565,6 +575,8 @@ export async function revertRecordEndpoint(request, env, auth) {
     source_ref:body.source_ref,original_text:body.original_text,new_text:body.new_text,
     base_sha:body.base_sha,commit_sha:body.commit_sha,generator_id:body.generator_id,
     original_hash:await sha256Hex(body.original_text),new_hash:await sha256Hex(body.new_text),
+    review_revision:body.review_revision && typeof body.review_revision === "object" ?
+      body.review_revision : undefined,
   };
   const result = body.action === "record" ?
     await editorStub(env).recordCanonicalMutation(binding) :
@@ -823,8 +835,28 @@ export async function finalizeEndpoint(request, env, auth) {
     applied: body.applied, accepted_blocked: body.accepted_blocked,
     needs_human: body.needs_human, drift: body.drift, base_sha: body.base_sha,
     commit_sha: body.commit_sha, generator_id: body.generator_id,
+    review_revisions:Array.isArray(body.review_revisions) ? body.review_revisions : undefined,
   });
   return json(result, result.ok ? 200 : 409);
+}
+
+export async function reviewBackfillEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  // Backfill carries source evidence and is intentionally unavailable to a
+  // human browser session. Only the dedicated trusted apply/migration channel
+  // may introduce pre-review evidence; it still cannot introduce decisions.
+  if (auth?.credential_channel !== "bearer" || !auth?.scopes?.admin?.granted)
+    return editError("forbidden", "Trusted migration service required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).backfillReviewRevisions({
+    migration_id:typeof body.migration_id === "string" ? body.migration_id : "",
+    prod_base:typeof body.prod_base === "string" ? body.prod_base : "",
+    revisions:Array.isArray(body.revisions) ? body.revisions : null,
+    actor:auth.editor || "service:migration",
+  });
+  return json(result,result.ok ? (result.replay ? 200 : 201) :
+    result.reason === "idempotency_conflict" ? 409 : 400);
 }
 
 export async function reconcileEndpoint(request, env, auth) {
@@ -834,13 +866,60 @@ export async function reconcileEndpoint(request, env, auth) {
   return json(result);
 }
 
+// Publisher review authority is human-only. Service credentials may later
+// consume a frozen receipt to build a candidate, but may not create decisions.
+export async function publisherReviewEndpoint(_request, env, auth) {
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  return json(await editorStub(env).getPublisherReview(auth.editor));
+}
+
+export async function publisherReviewDraftEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).savePublisherReviewDraft({ actor:auth.editor,
+    review_revision_id:typeof body.review_revision_id === "string" ? body.review_revision_id : "",
+    source_revision:typeof body.source_revision === "string" ? body.source_revision : "",
+    prod_base:typeof body.prod_base === "string" ? body.prod_base : "",
+    decisions:body.decisions });
+  if (!result.ok) return editError(result.reason || "validation_error",
+    "The review draft could not be saved.", ["stale_revision","stale_prod_base","revision_mismatch",
+      "draft_owned","review_submitted","operation_mismatch"].includes(result.reason) ? 409 : 400);
+  return json(result);
+}
+
+export async function publisherReviewSubmitEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!humanPublisher(auth)) return editError("forbidden", "A human Publisher using Access is required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const text = (key) => typeof body[key] === "string" ? body[key] : "";
+  const legacy = { review_revision_id:text("review_revision_id"),source_revision:text("source_revision"),
+    prod_base:text("prod_base"),decisions:body.decisions };
+  const sources = Array.isArray(body.sources) ? body.sources.map((source) => ({
+    review_revision_id:typeof source?.review_revision_id === "string" ? source.review_revision_id : "",
+    source_revision:typeof source?.source_revision === "string" ? source.source_revision : "",
+    prod_base:typeof source?.prod_base === "string" ? source.prod_base : "",decisions:source?.decisions })) : [legacy];
+  const binding = { id:text("id"),idempotency_key:text("idempotency_key"),sources };
+  if (!sources.length || [binding.id,binding.idempotency_key,...sources.flatMap((source) =>
+    [source.review_revision_id,source.source_revision,source.prod_base])].some((value) => !value || value.length > 256))
+    return editError("validation_error", "Incomplete review binding.", 400);
+  const request_digest = await sha256Hex(JSON.stringify(binding));
+  const result = await editorStub(env).submitPublisherReview({ ...binding,request_digest,actor:auth.editor });
+  if (!result.ok) return editError(result.reason || "validation_error",
+    "The review was not submitted.", ["stale_revision","stale_prod_base","revision_mismatch",
+      "draft_owned","draft_mismatch","partial_group","idempotency_conflict","review_exists",
+      "review_submitted"].includes(result.reason) ? 409 : 400);
+  return json(result,result.replay ? 200 : 201);
+}
+
 // Human-only publication authority. Bearer credentials remain valid for the
 // later executor API, but cannot mint or enlarge a production authorization.
 export async function publisherAuthorizeEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!auth?.editor || !auth?.scopes?.publisher?.granted ||
-      auth.credential_channel !== "access" || auth.service)
+  if (!humanPublisher(auth))
     return editError("forbidden", "A human Publisher using Access is required.", 403);
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
@@ -898,12 +977,27 @@ export async function productionPrepareEndpoint(request, env, auth) {
     "generator_id","evidence_hash","manifest_hash"];
   if (allowed.some((key) => typeof body[key] !== "string" || !body[key] || body[key].length > 256))
     return editError("validation_error", "Incomplete release binding.", 400);
+  if (body.schema_version === 2 &&
+      ([body.review_receipt_hash,body.projection_identity].some((value) =>
+        typeof value !== "string" || !value || value.length > 256) ||
+       !Array.isArray(body.review_receipts) || !Array.isArray(body.accepted_operation_ids) ||
+       !Array.isArray(body.held_exclusions)))
+    return editError("validation_error", "Incomplete operation release binding.", 400);
   const binding = Object.fromEntries(allowed.map((key) => [key,body[key]]));
+  const operationBinding = body.schema_version === 2 ? {
+    schema_version:2,review_receipt_hash:body.review_receipt_hash,
+    projection_identity:body.projection_identity,
+    review_receipts:Array.isArray(body.review_receipts) ? body.review_receipts : undefined,
+    accepted_operation_ids:Array.isArray(body.accepted_operation_ids) ? body.accepted_operation_ids : undefined,
+    held_exclusions:Array.isArray(body.held_exclusions) ? body.held_exclusions : undefined,
+  } : {};
+  const requestBinding = { ...binding,...operationBinding };
   const result = await editorStub(env).prepareProductionRelease({ ...binding,
-    request_digest:await sha256Hex(JSON.stringify(binding)), actor:auth.editor || "service:release",
+    request_digest:await sha256Hex(JSON.stringify(requestBinding)), actor:auth.editor || "service:release",
     credential_channel:"bearer",target_environment:"production",ancestry_verified:body.ancestry_verified === true,
     expected_batch_ids:Array.isArray(body.expected_batch_ids) ? body.expected_batch_ids : undefined,
-    expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined });
+    expected_suggestion_ids:Array.isArray(body.expected_suggestion_ids) ? body.expected_suggestion_ids : undefined,
+    ...operationBinding });
   return result.ok ? json(result, result.replay ? 200 : 201) :
     editError(result.reason || "validation_error", "Release preparation rejected.", 409);
 }

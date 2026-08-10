@@ -21,9 +21,10 @@ import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
   scopeEndpoint, scopedRequestEndpoint, scopedRequestsEndpoint,
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
-  decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
+  decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reviewBackfillEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
   revertRecordEndpoint,
+  publisherReviewEndpoint, publisherReviewDraftEndpoint, publisherReviewSubmitEndpoint,
   publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint,
   productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
@@ -201,10 +202,18 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await claimEndpoint(request, env, auth));
   if (path === "/edit/v1/finalize" && request.method === "POST")
     return wrap(await finalizeEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/backfill" && request.method === "POST")
+    return wrap(await reviewBackfillEndpoint(request, env, auth));
   if (path === "/edit/v1/reconcile" && request.method === "POST")
     return wrap(await reconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/heartbeat" && request.method === "POST")
     return wrap(await heartbeatEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review" && request.method === "GET")
+    return wrap(await publisherReviewEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/draft" && request.method === "POST")
+    return wrap(await publisherReviewDraftEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/submit" && request.method === "POST")
+    return wrap(await publisherReviewSubmitEndpoint(request, env, auth));
   if (path === "/edit/v1/prod/releases/authorize" && request.method === "POST")
     return wrap(await publisherAuthorizeEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/prepare" && request.method === "POST")
@@ -317,8 +326,12 @@ export async function editorFetch(request, env, ctx) {
     if (request.method !== "GET" || env.PROD_RELEASE_LEDGER !== "true" ||
         !auth.scopes.publisher.granted || auth.credential_channel !== "access" || auth.service)
       return wrap(uniform404());
-    const context = await editorStub(env).publisherContext();
-    return wrap(renderPublisherPage(context, attributionLabel(auth.editor)));
+    const stub = editorStub(env);
+    const [context, review] = await Promise.all([
+      stub.publisherContext(),
+      typeof stub.getPublisherReview === "function" ? stub.getPublisherReview(auth.editor) : Promise.resolve(null),
+    ]);
+    return wrap(renderPublisherPage({ ...context, review }, attributionLabel(auth.editor)));
   }
 
   // ---- instructor view ------------------------------------------------------
@@ -343,13 +356,18 @@ export async function editorFetch(request, env, ctx) {
     // the caller's own. The edit-scope gate above already fenced non-editors out —
     // only an edit-scope holder (admin preview included) ever reaches this source.
     const stub = editorStub(env);
-    const pending = await stub.listForPage(resolved.pageKey);
+    const [pending, reviewAnnotations] = await Promise.all([
+      stub.listForPage(resolved.pageKey),
+      typeof stub.getDevReviewAnnotations === "function"
+        ? stub.getDevReviewAnnotations(resolved.blocks.map((block) => block.source_ref))
+        : Promise.resolve([]),
+    ]);
     // SL6 liveness for the injected island (same signals GET /pending carries):
     // the daemon-heartbeat age + whether auto-apply (DIRECT_APPLY) is on, so the
     // banner reads honestly on first paint (before any repoll).
     const heartbeatAgeS = await stub.heartbeatAgeS();
     const directApply = env.DIRECT_APPLY === "true";
-    return wrap(await handleEditPage(env, { ...resolved, pending, heartbeatAgeS, directApply }));
+    return wrap(await handleEditPage(env, { ...resolved, pending, reviewAnnotations, heartbeatAgeS, directApply }));
   }
 
   return wrap(uniform404());

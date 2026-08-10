@@ -361,14 +361,21 @@ re-review — never straight to accepted).
 ## Apply-engine RPCs — `POST /edit/v1/{claim,finalize,reconcile}` (admin/service)
 
 The `tools/apply_suggestions.py` loop drives these (admin token = service scope).
-- `claim` `{ batch_id, base_sha?, ids? }` → `accepted → in_flight` for **whole
+- `claim` `{ batch_id, base_sha?, ids? }` → `{ ..., prod_base }` and `accepted → in_flight` for **whole
   groups only** (never partially), stamps a **lease** + `apply_batch_id`, opens
-  the `apply_batches` journal at phase `claimed`.
+  the `apply_batches` journal at phase `claimed`. `prod_base` is the candidate
+  SHA of the latest completed production release, selected by the Worker; it is
+  `null` before a production frontier exists and is never inferred from DEV
+  `base_sha`. In that bootstrap state normal apply omits review revisions and
+  the Publisher remains fail-closed pending the explicit trusted backfill.
 - `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
-  drift?, commit_sha?, generator_id? }` → journals the phase and resolves the
+  drift?, commit_sha?, generator_id?, review_revisions? }` → journals the phase and resolves the
   batch's `in_flight` rows. The terminal `done` call records the exact canonical
   commit and content identity of the authoritative generator entrypoints plus
-  their complete transitive local-Python dependency closure.
+  their complete transitive local-Python dependency closure. The normal apply
+  client attaches deterministic per-source atomic review evidence in the same
+  transaction, so successfully applied DEV copy is immediately available to
+  the Publisher without a migration backfill.
 - `reconcile` → startup crash recovery: expired-lease batches pre-`merged` roll
   `in_flight → accepted` (re-queue) + phase `rolled_back`; post-`merged` complete
   `in_flight → applied`. Orphan `in_flight` (expired lease, no live batch) → back
@@ -417,6 +424,82 @@ and its preparation control remains disabled; see
 `POST /authorize` requires a current human Access identity with independent
 `publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
 fail closed. It authorizes only the already-prepared immutable binding.
+
+### Granular Publisher review and legacy backfill
+
+`GET /edit/v1/publisher/review` requires an authenticated human Publisher and
+returns `{ ok:true, review:{ revisions, counts, blocked_reason? } }`. Each
+revision includes immutable source evidence, classified operations, an
+actor-owned draft when present, and any submitted review. `403` means the
+Publisher scope is absent.
+
+`POST /edit/v1/publisher/review/draft` requires the same Access identity plus
+CSRF proof. Its JSON body binds `review_revision_id`, `source_revision`,
+`prod_base`, and the complete draft `decisions`. Success returns
+`{ ok:true, draft }`; invalid or stale evidence returns `400`, an ownership or
+scope failure returns `403`, and an already-submitted revision returns `409`.
+
+`POST /edit/v1/publisher/review/submit` requires the same human Publisher and
+CSRF proof. Its body contains one idempotency key and a `sources` array whose
+entries bind every submitted revision and decision. The first atomic submit
+returns `201` with one shared immutable review receipt; an exact replay returns
+`200`. Changed replay, stale evidence, partial groups, or incomplete source
+bindings return `409`; malformed input returns `400`. A service bearer cannot
+read, draft, or submit Publisher judgments.
+
+The review source is the cumulative value from the **verified PROD base** to the
+current DEV value for one durable `source_ref`. Sequential DEV suggestions are
+immutable attribution evidence; they are not overlapping review decisions.
+Review display text is a normalized, Unicode-aware prose projection used only
+to calculate and render redlines. Immutable source-patch evidence (source value,
+hashes, source revision, source location, topology operation/arguments, and
+surrounding anchors) remains authoritative for applying a reviewed change.
+
+An **operation** is the smallest independently reviewable edit and binds a
+deterministic `operation_id`, durable `source_ref`, contributing suggestion and
+group IDs, original and proposed values/hashes, verified PROD base, DEV source
+revision, base range, replacement text, and context anchors. Adjacent delete and
+insert spans forming one replacement share one operation. A structural group or
+move pair is indivisible and receives one operation ID and one decision.
+
+A Publisher **draft decision** is actor-bound, mutable, revision-bound, and has
+exactly one value: `accepted`, `rejected`, or `questioned`; `questioned` requires
+text. A draft has no release authority. **Submit review** atomically freezes an
+immutable decision for each answered operation; absence is `unanswered`, never
+accepted. Any relevant PROD-base or DEV-source advance makes affected drafts,
+submitted decisions, and unexecuted previews `stale` and ineligible.
+
+A **review receipt** hash-binds its reviewer and timestamp, verified PROD base
+manifest, DEV frontier, immutable operation payloads, group identities, and the
+complete submitted decision/note set. An **accepted-only manifest** starts from
+that verified PROD base and names only submitted-accepted operation IDs plus the
+review receipt. Rejected, questioned, unanswered, stale, ambiguous, or partially
+grouped operations are held. The candidate is projected from source-patch
+evidence and regenerated; filtering legacy suggestion rows or contiguous DEV
+commits is not selective publication and must fail closed.
+
+The first production-capable granular lane is prose-only. An operation whose
+`op` is `insert_after`, `delete`, `split`, `merge`, or `move` remains visible on
+DEV but is classified `held` with reason `structural_prod_deferred`; prose in
+the same structural group or an affected source is held as
+`depends_on_structural_prod_deferred`. These cards are counted and filterable as
+**Held / Not publishable**, not unanswered or rejected, and expose no decision
+or authorization control. Markdown prose, human-readable `json_scalar` text,
+punctuation, and prose move pairs without a structural `op` remain eligible.
+The Worker projection/preparation and Python materializer/manifest validator
+enforce this boundary independently.
+
+Applied rows that predate operation evidence remain unreviewable until an explicit
+backfill. `POST /edit/v1/publisher/review/backfill` is restricted to the trusted
+bearer/admin migration channel; human Access sessions cannot call it. One named
+transaction binds a verified PROD base and per-source cumulative revision
+snapshots to applied suggestion IDs, per-suggestion batch/commit evidence, and
+the complete ordered apply-batch base-to-commit chain ending at the revision.
+The store matches every chain entry to a completed batch and requires the
+snapshot to include every applied suggestion for that source in those batches. Exact
+replay is idempotent and audited; changed replay, pending rows, and mismatched
+source/commit/base evidence fail atomically. Backfill creates operations only—no
+drafts, decisions, reviews, release membership, or implicit acceptance.
 
 `POST /claim` returns only authorized releases plus a fencing token.
 `POST /transition` journals bounded identifiers/hashes and rejects stale fences

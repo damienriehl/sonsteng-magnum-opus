@@ -34,6 +34,157 @@ function authorize(prepared, over = {}) {
     membership_hash:prepared.membership_hash, ...over };
 }
 
+function reviewedProjection(core) {
+  const sourceRef = "data/copy/home.json#lead";
+  const operations = [
+    { id:"op-accepted",decision_id:"op-accepted",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-base",base_range:[4,7],old_text:"bad",new_text:"good" },
+    { id:"op-held",decision_id:"op-held",kind:"insert",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-base",base_range:[12,12],old_text:"",new_text:"," },
+  ];
+  assert.equal(core.recordReviewRevision({ id:"revision-v2",source_ref:sourceRef,
+    source_revision:"dev-1",prod_base:"prod-base",commit_sha:"dev-1",
+    original_hash:"old",proposed_hash:"new",original_text:"The bad idea",
+    proposed_text:"The good idea,",suggestion_ids:["suggestion-parent"],operations }).ok,true);
+  const decisions = [{ operation_id:"op-accepted",decision:"accepted" },
+    { operation_id:"op-held",decision:"rejected",note:"Hold." }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"revision-v2",
+    source_revision:"dev-1",prod_base:"prod-base",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-v2",idempotency_key:"review-v2",
+    request_digest:"review-v2",actor:"slot:damien",review_revision_id:"revision-v2",
+    source_revision:"dev-1",prod_base:"prod-base",decisions }).ok,true);
+  return core.productionPreparationContext().projection;
+}
+
+test("v2 preparation freezes exact reviewed operation membership and held exclusions", () => {
+  const core = makeCore(() => 2000);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const input = release({ schema_version:2,target_batch_id:"operation-frontier",
+    candidate_sha:"candidate-v2",review_receipt_hash:receipt,
+    projection_identity:"projection-v2",accepted_operation_ids:["op-accepted"],
+    held_exclusions:[{ operation_id:"op-held",decision:"rejected",reason:"held" }] });
+  const enlarged = core.prepareProductionRelease({ ...input,id:"release-enlarged",
+    idempotency_key:"release-enlarged",request_digest:"release-enlarged",
+    accepted_operation_ids:["op-accepted","op-held"] });
+  assert.equal(enlarged.reason,"operation_membership_mismatch");
+  const prepared = core.prepareProductionRelease(input);
+  assert.equal(prepared.ok,true);
+  assert.equal(prepared.release.schema_version,2);
+  assert.deepEqual(prepared.release.operation_ids,["op-accepted"]);
+  assert.deepEqual(prepared.release.held_exclusions.map((x) => x.operation_id),["op-held"]);
+  assert.equal(prepared.release.review_receipt_hash,receipt);
+  assert.equal(prepared.release.projection_identity,"projection-v2");
+
+});
+
+test("v2 preparation expands one accepted move decision to both immutable endpoints", () => {
+  const core = makeCore(() => 2500);
+  const sourceRef = "data/copy/home.json#lead";
+  const operations = [
+    { id:"move-from",decision_id:"move-1",move_pair_id:"move-1",move_role:"from",
+      kind:"delete",source_ref:sourceRef,source_revision:"dev-1",prod_base:"prod-base",
+      base_range:[0,26],proposed_range:[0,0],old_text:"Distinctive moved phrase. ",new_text:"" },
+    { id:"move-to",decision_id:"move-1",move_pair_id:"move-1",move_role:"to",
+      kind:"insert",source_ref:sourceRef,source_revision:"dev-1",prod_base:"prod-base",
+      base_range:[31,31],proposed_range:[5,31],old_text:"",new_text:"Distinctive moved phrase. " },
+  ];
+  assert.equal(core.recordReviewRevision({ id:"revision-move",source_ref:sourceRef,
+    source_revision:"dev-1",prod_base:"prod-base",commit_sha:"dev-1",
+    original_hash:"old",proposed_hash:"new",original_text:"Distinctive moved phrase. Rest",
+    proposed_text:"Rest Distinctive moved phrase.",suggestion_ids:["suggestion-parent"],operations }).ok,true);
+  const decisions = [{ operation_id:"move-1",decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"revision-move",
+    source_revision:"dev-1",prod_base:"prod-base",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-move",idempotency_key:"review-move",
+    request_digest:"review-move",actor:"slot:damien",sources:[{
+      review_revision_id:"revision-move",source_revision:"dev-1",prod_base:"prod-base",decisions }] }).ok,true);
+  const receipt = core.productionPreparationContext().projection.review_receipts[0].receipt_hash;
+
+  const prepared = core.prepareProductionRelease(release({ id:"release-move",idempotency_key:"release-move",
+    request_digest:"release-move",schema_version:2,target_batch_id:"operation-frontier",
+    candidate_sha:"candidate-move",review_receipt_hash:receipt,projection_identity:"projection-move",
+    accepted_operation_ids:["move-from","move-to"],held_exclusions:[] }));
+
+  assert.equal(prepared.ok,true);
+  assert.deepEqual(prepared.release.operation_ids,["move-from","move-to"]);
+});
+
+test("structural operations and dependent prose stay held outside production membership", () => {
+  const core = makeCore(() => 2750);
+  const sourceA = "data/copy/home.json#a";
+  const sourceB = "data/copy/home.json#b";
+  const operations = [{ id:"merge-operation",decision_id:"merge-operation",kind:"merge",op:"merge",
+    source_ref:sourceA,op_arg:sourceB,source_revision:"dev-merge",prod_base:"prod-base" }];
+  assert.equal(core.recordReviewRevision({ id:"revision-merge",source_ref:sourceA,
+    source_revision:"dev-merge",prod_base:"prod-base",commit_sha:"dev-merge",
+    original_hash:"a-old",proposed_hash:"a-new",original_text:"A",proposed_text:"A B",
+    suggestion_ids:["suggestion-merge"],operations }).ok,true);
+  assert.equal(core.recordReviewRevision({ id:"revision-b",source_ref:sourceB,
+    source_revision:"dev-b",prod_base:"prod-base",commit_sha:"dev-b",
+    original_hash:"b-old",proposed_hash:"b-new",original_text:"B",proposed_text:"B edited",
+    suggestion_ids:["suggestion-b"],operations:[{ id:"operation-b",kind:"replace",
+      source_ref:sourceB,source_revision:"dev-b",prod_base:"prod-base",base_range:[0,1],
+      old_text:"B",new_text:"B edited" }] }).ok,true);
+  const decisions = [{ operation_id:"merge-operation",decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-merge",source_revision:"dev-merge",prod_base:"prod-base",
+    decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-merge",idempotency_key:"review-merge",
+    request_digest:"review-merge",actor:"slot:damien",sources:[{
+      review_revision_id:"revision-merge",source_revision:"dev-merge",prod_base:"prod-base",
+      decisions }] }).ok,true);
+  const proseDecisions = [{ operation_id:"operation-b",decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-b",source_revision:"dev-b",prod_base:"prod-base",
+    decisions:proseDecisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-b",idempotency_key:"review-b",
+    request_digest:"review-b",actor:"slot:damien",sources:[{
+      review_revision_id:"revision-b",source_revision:"dev-b",prod_base:"prod-base",
+      decisions:proseDecisions }] }).ok,true);
+  const projection = core.productionPreparationContext().projection;
+  assert.equal(projection.eligible_operation_count,0);
+  const reviewContext = core.getPublisherReview("slot:damien");
+  assert.equal(reviewContext.counts.held,2);
+  assert.equal(reviewContext.counts.unreviewed,0);
+  assert.equal(reviewContext.counts.reviewed,0);
+  assert.equal(reviewContext.counts.accepted,0);
+  assert.deepEqual(projection.sources.flatMap((source) => source.operations)
+    .map(({ id,production_hold_reason }) => [id,production_hold_reason]).sort(),[
+      ["merge-operation","structural_prod_deferred"],
+      ["operation-b","depends_on_structural_prod_deferred"],
+    ]);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-merge",
+    idempotency_key:"release-merge",request_digest:"release-merge",schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-merge",
+    review_receipt_hash:receipt,projection_identity:"projection-merge",
+    review_receipts:projection.review_receipts.map((item) => item.receipt_hash),
+    accepted_operation_ids:["merge-operation"],held_exclusions:[] }));
+  assert.equal(prepared.reason,"operation_membership_mismatch");
+});
+
+test("v2 partial completion publishes operations without stamping their parent suggestion", () => {
+  const core = makeCore(() => 3000);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-v2",
+    review_receipt_hash:receipt,projection_identity:"projection-v2",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[
+      { operation_id:"op-held",decision:"rejected",reason:"held" }] })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    review_receipt_hash:receipt,projection_identity:"projection-v2"})).release;
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer",id:authorized.id }).release;
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
+      credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:"candidate-v2"} }).ok,true);
+  assert.deepEqual(core.getProductionRelease(prepared.id).published_operation_ids,["op-accepted"]);
+  assert.equal(core._one("SELECT production_release_id FROM suggestions WHERE id='suggestion-parent'"),undefined);
+});
+
 test("Publisher freezes every complete apply batch through the chosen frontier", () => {
   const core = makeCore(() => 1000);
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
@@ -46,6 +197,21 @@ test("Publisher freezes every complete apply batch through the chosen frontier",
     ["suggestion-0001", "suggestion-0002", "suggestion-0003"]);
   assert.equal(made.release.state, "authorized");
   assert.deepEqual(made.release.events.map((e) => e.type), ["prepared", "authorized"]);
+});
+
+test("characterization: filtering ledger rows cannot exclude one applied sibling", () => {
+  const core = makeCore(() => 1000);
+  seedApplied(core, "batch-1", ["accepted-intent", "rejected-intent"], 1100);
+
+  // The legacy frontier is suggestion/batch membership, not accepted atomic operations. Asking
+  // preparation to omit a sibling fails; an unfiltered preparation freezes both DEV members.
+  assert.equal(core.prepareProductionRelease(release({ target_batch_id:"batch-1",
+    candidate_sha:"commit-batch-1", expected_suggestion_ids:["accepted-intent"] })).reason,
+    "membership_mismatch");
+  const prepared = core.prepareProductionRelease(release({ id:"release-all-dev",
+    idempotency_key:"idem-all-dev", request_digest:"digest-all-dev",
+    target_batch_id:"batch-1", candidate_sha:"commit-batch-1" })).release;
+  assert.deepEqual(prepared.suggestion_ids, ["accepted-intent", "rejected-intent"]);
 });
 
 test("trusted builder sees a text-free exact DEV frontier", () => {
@@ -61,6 +227,167 @@ test("trusted builder sees a text-free exact DEV frontier", () => {
     ]);
   assert.equal(JSON.stringify(context).includes("original_text"), false);
   assert.equal(JSON.stringify(context).includes("new_text"), false);
+});
+
+test("trusted builder freezes submitted projection evidence and held leak canaries", () => {
+  const core = makeCore(() => 1200);
+  const sourceRef = "data/copy/home.json#lead";
+  const operations = [
+    { id:"accepted",decision_id:"accepted",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-1",base_range:[4,7],old_text:"bad",new_text:"good" },
+    { id:"held",decision_id:"held",kind:"insert",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-1",base_range:[12,12],old_text:"",new_text:"," },
+  ];
+  assert.equal(core.recordReviewRevision({ id:"revision-1",source_ref:sourceRef,
+    source_revision:"dev-1",prod_base:"prod-1",commit_sha:"dev-1",
+    original_hash:"old",proposed_hash:"new",original_text:"The bad idea",
+    proposed_text:"The good idea,",suggestion_ids:["s1"],operations }).ok,true);
+  const decisions = [{ operation_id:"accepted",decision:"accepted" },
+    { operation_id:"held",decision:"rejected",note:"Keep this out." }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"revision-1",
+    source_revision:"dev-1",prod_base:"prod-1",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-1",idempotency_key:"submit-1",
+    request_digest:"digest-1",actor:"slot:damien",review_revision_id:"revision-1",
+    source_revision:"dev-1",prod_base:"prod-1",decisions }).ok,true);
+
+  const projection = core.productionPreparationContext().projection;
+  assert.ok(projection.review_receipts[0].receipt_hash);
+  assert.deepEqual(projection.sources[0].decisions.map((item) => item.decision),
+    ["accepted","rejected"]);
+  assert.equal(projection.sources[0].operations[1].new_text,","); // positive leak canary
+  assert.equal(projection.sources[0].stale,false);
+  assert.equal("draft" in projection.sources[0],false);
+});
+
+test("trusted builder omits fully published reviews without blocking later sources", () => {
+  const core = makeCore(() => 1250);
+  const recordAccepted = ({ suffix, sourceRef, prodBase }) => {
+    const revisionId = `revision-${suffix}`;
+    const operationId = `operation-${suffix}`;
+    const reviewId = `review-${suffix}`;
+    const operations = [{ id:operationId,decision_id:operationId,kind:"replace",
+      source_ref:sourceRef,source_revision:`dev-${suffix}`,prod_base:prodBase,
+      base_range:[0,3],old_text:"old",new_text:"new" }];
+    assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+      source_revision:`dev-${suffix}`,prod_base:prodBase,commit_sha:`dev-${suffix}`,
+      original_hash:`old-${suffix}`,proposed_hash:`new-${suffix}`,original_text:"old",
+      proposed_text:"new",suggestion_ids:[`suggestion-${suffix}`],operations }).ok,true);
+    const decisions = [{ operation_id:operationId,decision:"accepted" }];
+    assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+      review_revision_id:revisionId,source_revision:`dev-${suffix}`,prod_base:prodBase,
+      decisions }).ok,true);
+    assert.equal(core.submitPublisherReview({ id:reviewId,idempotency_key:reviewId,
+      request_digest:reviewId,actor:"slot:damien",sources:[{ review_revision_id:revisionId,
+        source_revision:`dev-${suffix}`,prod_base:prodBase,decisions }] }).ok,true);
+    return { operationId, reviewId, revisionId, sourceRef };
+  };
+
+  const published = recordAccepted({ suffix:"published",
+    sourceRef:"data/copy/home.json#lead",prodBase:"prod-base" });
+  core.sql.exec(`INSERT INTO production_published_operations
+    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at)
+    VALUES (?,?,?,?,?,?,?)`,published.operationId,"release-published",published.revisionId,
+    published.sourceRef,"dev-published","candidate-published",1240);
+  const pending = recordAccepted({ suffix:"pending",
+    sourceRef:"data/copy/home.json#cta",prodBase:"candidate-published" });
+
+  const projection = core.productionPreparationContext().projection;
+  assert.deepEqual(projection.sources.map((source) => source.source_ref),[pending.sourceRef]);
+  assert.deepEqual(projection.review_receipts.map((receipt) => receipt.id),[pending.reviewId]);
+  assert.equal(projection.sources[0].stale,false);
+});
+
+test("unpublished semantic groups retain superseded endpoints across sources", () => {
+  const core = makeCore(() => 1275);
+  const groupId = "group-cross-source";
+  const record = ({ revisionId,sourceRef,operationId,sourceRevision,group = groupId }) => {
+    const operations = [{ id:operationId,decision_id:group ? "group-decision" : operationId,
+      group_id:group,kind:"replace",source_ref:sourceRef,source_revision:sourceRevision,
+      prod_base:"prod-base",base_range:[0,3],old_text:"old",new_text:"new" }];
+    assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+      source_revision:sourceRevision,prod_base:"prod-base",commit_sha:sourceRevision,
+      original_hash:`old-${revisionId}`,proposed_hash:`new-${revisionId}`,
+      original_text:"old",proposed_text:"new",suggestion_ids:[`suggestion-${revisionId}`],
+      operations }).ok,true);
+    const decisions = [{ operation_id:group ? "group-decision" : operationId,
+      decision:"accepted" }];
+    assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:revisionId,
+      source_revision:sourceRevision,prod_base:"prod-base",decisions }).ok,true);
+    return { review_revision_id:revisionId,source_revision:sourceRevision,
+      prod_base:"prod-base",decisions };
+  };
+  const sourceA = "data/copy/home.json#a";
+  const sourceB = "data/copy/home.json#b";
+  const firstSources = [
+    record({ revisionId:"revision-a1",sourceRef:sourceA,
+      operationId:"operation-a1",sourceRevision:"dev-1" }),
+    record({ revisionId:"revision-b1",sourceRef:sourceB,
+      operationId:"operation-b1",sourceRevision:"dev-1" }),
+  ];
+  assert.equal(core.submitPublisherReview({ id:"review-group",idempotency_key:"review-group",
+    request_digest:"review-group",actor:"slot:damien",sources:firstSources }).ok,true);
+  const later = record({ revisionId:"revision-a2",sourceRef:sourceA,
+    operationId:"operation-a2",sourceRevision:"dev-2",group:null });
+  assert.equal(core.submitPublisherReview({ id:"review-a2",idempotency_key:"review-a2",
+    request_digest:"review-a2",actor:"slot:damien",sources:[later] }).ok,true);
+
+  const projection = core.productionPreparationContext().projection;
+  assert.deepEqual(projection.sources.map((source) => source.review_revision_id).sort(),
+    ["revision-a1","revision-a2","revision-b1"]);
+  assert.equal(projection.sources.find((source) => source.review_revision_id === "revision-a1").stale,
+    true);
+  const prepared = core.prepareProductionRelease(release({ id:"release-superseded-group",
+    idempotency_key:"release-superseded-group",request_digest:"release-superseded-group",
+    schema_version:2,target_batch_id:"operation-frontier",candidate_sha:"candidate-a2",
+    review_receipt_hash:"multi-receipt",projection_identity:"projection-a2",
+    accepted_operation_ids:["operation-a2"],held_exclusions:[
+      { operation_id:"operation-a1",decision:"accepted",reason:"stale" },
+      { operation_id:"operation-b1",decision:"accepted",reason:"group_held" },
+    ] }));
+  assert.equal(prepared.ok,true);
+  assert.deepEqual(prepared.release.operation_ids,["operation-a2"]);
+});
+
+test("v2 completion removes published operations from the eligibility summary", () => {
+  const core = makeCore(() => 1280);
+  seedApplied(core,"batch-parent",["suggestion-parent"],1200);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-summary-v2",
+    idempotency_key:"release-summary-v2",request_digest:"release-summary-v2",schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-summary-v2",
+    review_receipt_hash:receipt,projection_identity:"projection-summary-v2",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[
+      { operation_id:"op-held",decision:"rejected",reason:"held" }] })).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{ id:prepared.id,
+    review_receipt_hash:receipt,projection_identity:"projection-summary-v2" })).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer",id:authorized.id }).release;
+  assert.equal(core.publisherSummary().eligible,0);
+  for (const state of ["pages_deployed","worker_deployed","verified"]) {
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
+      credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:"candidate-summary-v2"} }).ok,true);
+    assert.equal(core.publisherSummary().eligible,0);
+  }
+  assert.equal(core.transitionProductionRelease({ id:claimed.id,state:"complete",actor:"service:release",
+    credential_channel:"bearer",fencing_token:claimed.fencing_token,
+    detail:{ candidate_sha:"candidate-summary-v2"} }).ok,true);
+  assert.equal(core.publisherSummary().eligible,0);
+});
+
+test("normalized frontier backfills existing submitted reviews and drives the first v2 summary", () => {
+  const core = makeCore(() => 1285);
+  reviewedProjection(core);
+  assert.equal(core.publisherSummary().eligible,1);
+  core.sql.exec("DELETE FROM production_review_operations WHERE operation_id='op-accepted'");
+  core.sql.exec("DELETE FROM editor_schema_migrations WHERE id='production-review-operations-v1'");
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,1);
+  core.initSchema();
+  assert.equal(core.publisherSummary().eligible,1);
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,2);
 });
 
 test("History revert batches are first-class production frontier members", () => {
@@ -470,6 +797,15 @@ test("trusted release service alone can prepare, claim, and transition", async (
     base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
     manifest_hash:"manifest",ancestry_verified:true };
   assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare", binding),env,auth)).status,201);
+  const operationBinding = { ...binding,id:"release-v2",idempotency_key:"prepare-v2",
+    schema_version:2,review_receipt_hash:"receipt-set",review_receipts:["receipt-1"],
+    projection_identity:"projection-v2",accepted_operation_ids:["op-1"],
+    held_exclusions:[{ operation_id:"op-2",decision:"rejected",reason:"rejected" }] };
+  assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare",
+    operationBinding),env,auth)).status,201);
+  assert.deepEqual(calls.at(-1)[1].accepted_operation_ids,["op-1"]);
+  assert.equal((await productionPrepareEndpoint(req("/edit/v1/prod/releases/prepare",
+    { ...operationBinding,id:"bad-v2",review_receipts:undefined }),env,auth)).status,400);
   assert.equal((await productionPreparationContextEndpoint(
     new Request("https://edit.example/edit/v1/prod/releases/frontier"),env,auth)).status,200);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
@@ -480,11 +816,44 @@ test("trusted release service alone can prepare, claim, and transition", async (
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
+  assert.equal((await productionPrepareEndpoint(req(
+    "/edit/v1/prod/releases/prepare",binding),env,humanAdmin)).status,403);
+  assert.equal((await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,humanAdmin)).status,403);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
   assert.equal((await productionRestoreClaimEndpoint(req(
     "/edit/v1/prod/releases/restore-claim",{ id:"release-1" }),env,humanAdmin)).status,403);
+  assert.equal((await productionRenewEndpoint(req("/edit/v1/prod/releases/renew",
+    { id:"release-1",fencing_token:"fence" }),env,humanAdmin)).status,403);
+  assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
+    { id:"release-1",state:"verified",fencing_token:"fence" }),env,humanAdmin)).status,403);
   const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),
-    ["prepare","frontier","claim","restore-claim","renew","transition"]);
+    ["prepare","prepare","frontier","claim","restore-claim","renew","transition"]);
+});
+
+test("schema-v2 preparation idempotency binds the operation membership", async () => {
+  let prior;
+  const stub = { prepareProductionRelease:async (input) => {
+    if (!prior) { prior = input; return { ok:true,release:{ id:input.id } }; }
+    return input.idempotency_key === prior.idempotency_key && input.request_digest !== prior.request_digest
+      ? { ok:false,reason:"idempotency_conflict" } : { ok:true,replay:true,release:{ id:input.id } };
+  } };
+  const env = { EDIT_ORIGIN:"https://edit.example",PROD_RELEASE_LEDGER:"true",
+    EDITOR:{ getByName:() => stub } };
+  const auth = { editor:"service:release",credential_channel:"bearer",scopes:scopes(false,false,true) };
+  const postPrepare = (body) => productionPrepareEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/prepare",{ method:"POST",
+      headers:{ "Content-Type":"application/json","X-Edit-Request":"1",
+        Origin:"https://edit.example","Sec-Fetch-Site":"same-origin" },body:JSON.stringify(body) }),env,auth);
+  const body = { id:"release-v2",idempotency_key:"prepare-v2",target_batch_id:"operation-frontier",
+    base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
+    manifest_hash:"manifest",ancestry_verified:true,schema_version:2,
+    review_receipt_hash:"receipt-set",review_receipts:["receipt-1"],
+    projection_identity:"projection-v2",accepted_operation_ids:["op-1"],held_exclusions:[] };
+
+  assert.equal((await postPrepare(body)).status,201);
+  assert.equal((await postPrepare(body)).status,200);
+  assert.equal((await postPrepare({ ...body,accepted_operation_ids:["op-1","op-2"] })).status,409);
 });

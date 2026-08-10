@@ -51,7 +51,23 @@ function renderTargets(vm) {
     "<p class=\"pub-help\" id=\"pub-prepare-help\">Choosing a target does not publish it. The trusted release service will enable preparation when it can freeze the exact evidence; authorization is unavailable until then.</p></fieldset>";
 }
 
+function frozenOperationMembers(release) {
+  if (Array.isArray(release?.operation_members) && release.operation_members.length)
+    return release.operation_members;
+  return (release?.operation_ids || []).map((operation_id, ordinal) => ({ operation_id, ordinal }));
+}
+
 function renderChanges(vm) {
+  if (vm.release && Number(vm.release.schema_version || 1) >= 2) {
+    const members = frozenOperationMembers(vm.release);
+    if (!members.length) return "<p class=\"pub-empty\">No frozen atomic operation membership is available.</p>";
+    return "<ol class=\"pub-operation-members\">" + members.map((member, index) =>
+      "<li><article class=\"pub-change\"><header><strong>Frozen atomic operation " + (index + 1) +
+      "</strong><span>" + escapeHtml(member.operation_id) + "</span></header><dl class=\"pub-binding\">" +
+      [["Source", member.source_ref], ["Review revision", member.review_revision_id], ["Atomic group", member.group_id]]
+        .filter(([, value]) => value).map(([label, value]) => "<div><dt>" + label + "</dt><dd>" +
+          escapeHtml(value) + "</dd></div>").join("") + "</dl></article></li>").join("") + "</ol>";
+  }
   const releaseIds = new Set(vm.release?.suggestion_ids || []);
   const batches = vm.release
     ? vm.batches.filter((b) => (vm.release.batches || []).some((rb) => rb.batch_id === b.batch_id))
@@ -70,6 +86,119 @@ function renderChanges(vm) {
       "</ins></p></section></div></article>");
   }
   return rows.length ? rows.join("") : "<p class=\"pub-empty\">No enclosed change detail is available.</p>";
+}
+
+function decisionMap(item) {
+  const source = item.submitted_review?.decisions || item.draft?.decisions || [];
+  return new Map(source.map((decision) => [decision.operation_id, decision]));
+}
+
+function pageFor(sourceRef) {
+  const path = String(sourceRef || "Unknown source").split("#", 1)[0];
+  return path.replace(/^site\/platform\//, "/platform/");
+}
+
+function contextText(parts) {
+  const text = Array.isArray(parts) ? parts.join("") : "";
+  return text.length > 180 ? text.slice(-180) : text;
+}
+
+function renderMarkedOperation(operation) {
+  const before = escapeHtml(contextText(operation.context_before));
+  const afterRaw = Array.isArray(operation.context_after) ? operation.context_after.join("") : "";
+  const after = escapeHtml(afterRaw.length > 180 ? afterRaw.slice(0, 180) : afterRaw);
+  const moved = !!operation.move_pair_id;
+  const deleteLabel = moved ? "Moved from" : "Deleted text";
+  const insertLabel = moved ? "Moved to" : "Added text";
+  const deleted = operation.old_text ? "<span class=\"pub-sr-label\">" + deleteLabel +
+    "</span><del aria-label=\"" + deleteLabel + "\">" + escapeHtml(operation.old_text) + "</del>" : "";
+  const inserted = operation.new_text ? "<span class=\"pub-sr-label\">" + insertLabel +
+    "</span><ins aria-label=\"" + insertLabel + "\">" + escapeHtml(operation.new_text) + "</ins>" : "";
+  return "<p class=\"pub-excerpt\">" + before + deleted + inserted + after + "</p>";
+}
+
+function renderDecisionCard(item, operations, position, total, decision) {
+  const operation = operations[0];
+  const decisionId = operation.decision_id || operation.id;
+  const safeId = escapeHtml(decisionId);
+  const checked = (value) => decision?.decision === value ? " checked" : "";
+  const submitted = item.submitted_review ? " disabled" : "";
+  const stale = item.stale ? " disabled" : "";
+  const excerpts = operations.map((op) => renderMarkedOperation(op)).join("");
+  const holdReason = operations.find((op) => op.production_hold_reason)?.production_hold_reason;
+  if (holdReason) {
+    const explanation = holdReason === "structural_prod_deferred" ?
+      "Structural publication is deferred until its topology-specific review contract ships." :
+      "This prose depends on a structurally held block and cannot publish separately.";
+    return "<article class=\"pub-operation pub-operation-held\" id=\"change-" + safeId +
+      "\" data-operation-id=\"" + safeId + "\" data-review-status=\"held\"><header><h4>Change " +
+      position + " of " + total + "</h4><span class=\"pub-change-status\">Not currently publishable</span></header>" +
+      excerpts + "<p class=\"pub-hold-reason\"><strong>Not currently publishable.</strong> " +
+      escapeHtml(explanation) + "</p></article>";
+  }
+  const status = item.stale ? "Stale" : decision ? String(decision.decision || "Unreviewed").replace(/^./, (c) => c.toUpperCase()) : "Unreviewed";
+  return "<article class=\"pub-operation\" id=\"change-" + safeId + "\" data-operation-id=\"" + safeId +
+    "\" data-review-status=\"" + escapeHtml(status.toLowerCase()) + "\"><header><h4>Change " + position +
+    " of " + total + "</h4><span class=\"pub-change-status\">" + escapeHtml(status) + "</span></header>" + excerpts +
+    "<fieldset class=\"pub-decision\"" + (item.stale ? " disabled" : "") +
+    "><legend>Decision for change " + position + " in " + escapeHtml(item.revision.source_ref) + "</legend>" +
+    [
+      ["accepted", "Accept"], ["rejected", "Reject"], ["questioned", "Ask question"],
+    ].map(([value, label]) => "<label><input type=\"radio\" name=\"decision-" + safeId +
+      "\" value=\"" + value + "\"" + checked(value) + submitted + stale + "> " + label + "</label>").join("") +
+    "<div class=\"pub-note pub-reject-note\"><label for=\"reject-" + safeId + "\">Rejection note (optional)</label>" +
+    "<textarea id=\"reject-" + safeId + "\" data-note-for=\"rejected\" rows=\"2\"" + submitted + stale + ">" +
+    escapeHtml(decision?.decision === "rejected" ? decision.note || "" : "") + "</textarea></div>" +
+    "<div class=\"pub-note pub-question-note\"><label for=\"question-" + safeId + "\">Question (required when asking)</label>" +
+    "<textarea id=\"question-" + safeId + "\" data-note-for=\"questioned\" rows=\"2\"" +
+    (decision?.decision === "questioned" ? " required" : "") + submitted + stale + ">" +
+    escapeHtml(decision?.decision === "questioned" ? decision.note || "" : "") + "</textarea></div>" +
+    "<p class=\"pub-inline-error\" id=\"error-" + safeId + "\" hidden></p></fieldset></article>";
+}
+
+function renderGranularReview(review) {
+  const revisions = Array.isArray(review?.revisions) ? review.revisions : [];
+  if (!revisions.length) return "<section class=\"pub-review\" aria-labelledby=\"pub-review-title\"><h2 id=\"pub-review-title\">Review changes</h2><p class=\"pub-empty\">No atomic review evidence is available yet.</p></section>";
+  const counts = review.counts || {};
+  const filters = [["all", counts.total], ["held", counts.held], ["reviewed", counts.reviewed], ["unreviewed", counts.unreviewed], ["accepted", counts.accepted],
+    ["rejected", counts.rejected], ["questioned", counts.questioned]];
+  let ordinal = 0;
+  const sources = revisions.map((item) => {
+    const decisions = decisionMap(item);
+    const units = new Map();
+    for (const operation of (item.revision?.operations || [])) {
+      const id = operation.decision_id || operation.id;
+      if (!units.has(id)) units.set(id, []);
+      units.get(id).push(operation);
+    }
+    const cards = [...units.entries()].map(([id, operations]) => {
+      ordinal += 1;
+      return renderDecisionCard(item, operations, ordinal, Number(counts.total || units.size), decisions.get(id));
+    }).join("");
+    const submitted = item.submitted_review ? "<p class=\"pub-submitted\">Submitted review: " +
+      escapeHtml(item.submitted_review.id) + "</p>" : "";
+    return "<section class=\"pub-source\" data-review-revision=\"" + escapeHtml(item.revision.id) +
+      "\" data-source-revision=\"" + escapeHtml(item.revision.source_revision) + "\" data-prod-base=\"" +
+      escapeHtml(item.revision.prod_base) + "\"><header><p class=\"pub-page\">" + escapeHtml(pageFor(item.revision.source_ref)) +
+      "</p><h3>" + escapeHtml(item.revision.source_ref) + "</h3></header>" + submitted + cards +
+      "<p class=\"pub-save-state\" role=\"status\" aria-live=\"polite\">" +
+      (item.submitted_review ? "Submitted" : "Saved") + "</p><button class=\"pub-retry\" type=\"button\" hidden>Retry save</button>" +
+      "<details class=\"pub-context\"><summary>Show more context</summary><h4>Original field</h4><p>" +
+      escapeHtml(item.revision.original_text || "") + "</p><h4>Proposed DEV field</h4><p>" +
+      escapeHtml(item.revision.proposed_text || "") + "</p></details></section>";
+  }).join("");
+  return "<section class=\"pub-review\" aria-labelledby=\"pub-review-title\"><h2 id=\"pub-review-title\">Review changes</h2>" +
+    "<p>Decide each atomic change. Draft choices remain private until you submit the review.</p>" +
+    "<div class=\"pub-counts\" aria-label=\"Filter changes by review status\">" + filters.map(([name, count]) =>
+      "<button type=\"button\" data-filter=\"" + name + "\" aria-pressed=\"" + (name === "all" ? "true" : "false") +
+      "\">" + (name === "held" ? "Held / Not publishable" : name.replace(/^./, (c) => c.toUpperCase())) +
+      " <span>" + Number(count || 0) + "</span></button>").join("") + "</div>" +
+    "<div class=\"pub-jump\"><button type=\"button\" id=\"pub-next-unreviewed\">Next unreviewed</button>" +
+    "<button type=\"button\" id=\"pub-next-problem\">Next problem</button></div>" +
+    "<div id=\"error-summary\" class=\"pub-error-summary\" role=\"alert\" tabindex=\"-1\" hidden><h3>Review needs attention</h3><ul></ul></div>" +
+    "<form id=\"publisher-review-form\" novalidate>" + sources +
+    "<section class=\"pub-submit\"><h3>Submit review</h3><p>Submitting records these decisions and makes accepted changes eligible for a later preview. <strong>Submitting this review does not authorize production.</strong></p>" +
+    "<button type=\"submit\" id=\"pub-submit-review\">Submit review</button></section></form></section>";
 }
 
 function renderEvidence(release) {
@@ -96,16 +225,23 @@ function renderEvidence(release) {
 export function renderPublisherPage(context = {}, viewerLabel = "") {
   const vm = publisherViewModel(context);
   const release = vm.release;
+  const hasGranularReview = Array.isArray(context.review?.revisions) && context.review.revisions.length > 0;
   const [label, explanation] = STATE[vm.state] || [vm.state, "No release action is available for this state."];
   const binding = release ? escapeJsonIsland({ id: release.id, target_batch_id: release.target_batch_id,
     base_sha: release.base_sha, candidate_sha: release.candidate_sha, generator_id: release.generator_id,
     evidence_hash: release.evidence_hash, manifest_hash: release.manifest_hash,
     membership_hash: release.membership_hash }) : "{}";
+  const frozenMemberCount = release && Number(release.schema_version || 1) >= 2
+    ? frozenOperationMembers(release).length
+    : (release?.suggestion_ids || []).length;
+  const frozenMemberLabel = release && Number(release.schema_version || 1) >= 2
+    ? "atomic operation" + (frozenMemberCount === 1 ? "" : "s")
+    : "change" + (frozenMemberCount === 1 ? "" : "s");
   const authorize = vm.state === "prepared" ?
     "<section class=\"pub-authority\"><h2>Authorize this exact production release</h2>" +
     "<p><strong>Consequence:</strong> automation may publish only release <strong>" + escapeHtml(release.id) +
     "</strong>, through batch <strong>" + escapeHtml(release.target_batch_id) + "</strong>, containing <strong>" +
-    (release.suggestion_ids || []).length + " changes</strong>, from <strong>" + escapeHtml(short(release.base_sha)) +
+    frozenMemberCount + " " + frozenMemberLabel + "</strong>, from <strong>" + escapeHtml(short(release.base_sha)) +
     "</strong> to <strong>" + escapeHtml(short(release.candidate_sha)) + "</strong>.</p>" +
     "<label class=\"pub-confirm\"><input id=\"pub-confirm\" type=\"checkbox\"> I reviewed every enclosed change and authorize this exact production batch.</label>" +
     "<button type=\"button\" id=\"pub-authorize\" disabled>Authorize release to production</button>" +
@@ -118,9 +254,10 @@ export function renderPublisherPage(context = {}, viewerLabel = "") {
     "</p><h1>Production Publisher</h1><p>Approval and DEV availability do not publish production.</p></header>" +
     "<section class=\"pub-state\" aria-labelledby=\"pub-state-title\"><h2 id=\"pub-state-title\">" + escapeHtml(label) +
     "</h2><p>" + escapeHtml(explanation) + "</p><p class=\"pub-status\">" + escapeHtml(vm.productionStatus) + "</p></section>" +
+    renderGranularReview(context.review) +
     (!release ? renderTargets(vm) : "") +
     "<section><h2>" + (release ? "Immutable prepared preview" : "Eligible DEV changes") + "</h2>" +
-    renderChanges(vm) +
+    (hasGranularReview && !release ? "<p>Atomic review decisions above replace the legacy whole-field preview.</p>" : renderChanges(vm)) +
     "<details><summary>Evidence, manifest, and event record</summary>" + renderEvidence(release) +
     "<p>Secondary evidence is disclosed here; the exact identity and consequence remain above the release control.</p></details></section>" +
     authorize + "<p id=\"pub-live\" class=\"pub-live\" aria-live=\"polite\" tabindex=\"-1\"></p></main>" +

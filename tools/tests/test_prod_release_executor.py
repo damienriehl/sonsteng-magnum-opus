@@ -3,12 +3,18 @@ import sys
 import hashlib
 import json
 import time
+import dataclasses
+import subprocess
 
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 
 from prod_release_executor import (  # noqa: E402
+    AcceptedOnlyMaterializer,
+    ProjectionExclusion,
+    AcceptedProjectionCandidateBuilder,
+    ProjectionTreeWriter,
     CompatibilityGate,
     CandidateValidator,
     ProductionCandidateBuilder,
@@ -22,6 +28,448 @@ from prod_release_executor import (  # noqa: E402
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
 )
+
+
+def projection_source(**overrides):
+    value = {
+        "review_revision_id": "revision-1",
+        "source_ref": "data/copy/home.json#lead",
+        "source_revision": "dev-1",
+        "prod_base": "prod-1",
+        "original_text": "The bad idea",
+        "operations": [
+            {"id": "op-word", "decision_id": "op-word", "kind": "replace",
+             "source_ref": "data/copy/home.json#lead", "old_text": "bad",
+             "new_text": "good", "base_range": [4, 7], "created_at": 1,
+             "context_before": ["The "], "context_after": [" idea"]},
+            {"id": "op-comma", "decision_id": "op-comma", "kind": "insert",
+             "source_ref": "data/copy/home.json#lead", "old_text": "",
+             "new_text": ",", "base_range": [12, 12], "created_at": 2,
+             "context_before": [" idea"], "context_after": []},
+        ],
+        "decisions": [
+            {"operation_id": "op-word", "decision": "accepted"},
+            {"operation_id": "op-comma", "decision": "rejected"},
+        ],
+        "stale": False,
+    }
+    value.update(overrides)
+    return value
+
+
+def test_accepted_only_materializer_projects_atoms_and_records_held_canaries():
+    materialized = AcceptedOnlyMaterializer().materialize([projection_source()])
+    assert materialized.patches[0].original_text == "The bad idea"
+    assert materialized.patches[0].new_text == "The good idea"
+    assert [item.reason for item in materialized.exclusions] == ["rejected"]
+    assert "op-comma" not in materialized.accepted_operation_ids
+
+
+def test_accepted_only_materializer_holds_whole_group_when_one_source_is_stale():
+    group_id = "group-cross-source"
+    source_a = projection_source(review_revision_id="revision-a", stale=True,
+        source_ref="data/copy/home.json#a")
+    source_a["operations"] = [{"id":"operation-a","decision_id":"group-decision",
+        "group_id":group_id,"kind":"replace","source_ref":source_a["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7],
+        "context_before":["The "],"context_after":[" idea"]}]
+    source_a["decisions"] = [{"operation_id":"group-decision","decision":"accepted",
+        "group_id":group_id}]
+    source_b = projection_source(review_revision_id="revision-b",
+        source_ref="data/copy/home.json#b")
+    source_b["operations"] = [{"id":"operation-b","decision_id":"group-decision",
+        "group_id":group_id,"kind":"replace","source_ref":source_b["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7],
+        "context_before":["The "],"context_after":[" idea"]}]
+    source_b["decisions"] = [{"operation_id":"group-decision","decision":"accepted",
+        "group_id":group_id}]
+
+    result = AcceptedOnlyMaterializer().materialize([source_a,source_b])
+
+    assert result.accepted_operation_ids == ()
+    assert {(item.operation_id,item.reason) for item in result.exclusions} == {
+        ("operation-a","stale"),("operation-b","group_held")}
+
+
+@pytest.mark.parametrize("held_decision", ["rejected", "questioned", None])
+def test_accepted_only_materializer_holds_mixed_decision_groups(held_decision):
+    group_id = "group-mixed"
+    accepted = projection_source(review_revision_id="revision-accepted")
+    accepted["operations"] = [{"id":"operation-accepted","decision_id":"accepted-decision",
+        "group_id":group_id,"kind":"replace","source_ref":accepted["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7]}]
+    accepted["decisions"] = [{"operation_id":"accepted-decision","decision":"accepted"}]
+    held = projection_source(review_revision_id="revision-held",
+        source_ref="data/copy/home.json#held")
+    held["operations"] = [{"id":"operation-held","decision_id":"held-decision",
+        "group_id":group_id,"kind":"replace","source_ref":held["source_ref"],
+        "old_text":"bad","new_text":"good","base_range":[4,7]}]
+    held["decisions"] = [] if held_decision is None else [
+        {"operation_id":"held-decision","decision":held_decision}]
+
+    result = AcceptedOnlyMaterializer().materialize([accepted, held])
+
+    assert result.accepted_operation_ids == ()
+    assert {item.operation_id for item in result.exclusions} == {
+        "operation-accepted", "operation-held"}
+    assert next(item for item in result.exclusions
+                if item.operation_id == "operation-accepted").reason == "group_held"
+
+
+@pytest.mark.parametrize(("kind", "original", "old_text", "new_text", "base_range", "expected"), [
+    ("replace", "old word", "old", "new", [0, 3], "new word"),
+    ("insert", "word", "", "new ", [0, 0], "new word"),
+    ("delete", "extra word", "extra ", "", [0, 6], "word"),
+])
+def test_accepted_only_materializer_treats_atomic_prose_kinds_as_text(
+        kind, original, old_text, new_text, base_range, expected):
+    source = projection_source(original_text=original)
+    source["operations"] = [{
+        "id":"atomic", "decision_id":"atomic", "kind":kind,
+        "source_ref":source["source_ref"], "old_text":old_text,
+        "new_text":new_text, "base_range":base_range, "created_at":1,
+        "context_before":[], "context_after":[original] if kind == "insert" else [],
+    }]
+    source["decisions"] = [{"operation_id":"atomic", "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.patches[0].new_text == expected
+    assert result.structural_operations == ()
+
+
+def test_accepted_only_materializer_preserves_review_revision_operation_order():
+    source = projection_source(original_text="alpha beta")
+    source["operations"] = [
+        {"id":"z-first", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"alpha", "new_text":"one", "base_range":[0,5], "created_at":2},
+        {"id":"a-second", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"beta", "new_text":"two", "base_range":[6,10], "created_at":1},
+    ]
+    source["decisions"] = [
+        {"operation_id":"z-first", "decision":"accepted"},
+        {"operation_id":"a-second", "decision":"accepted"},
+    ]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.accepted_operation_ids == ("z-first", "a-second")
+    assert result.patches[0].new_text == "one two"
+
+
+def test_accepted_only_materializer_resolves_overlapping_contexts_before_editing():
+    source = projection_source(original_text="alpha beta gamma")
+    source["operations"] = [
+        {"id":"one", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"alpha", "new_text":"first", "base_range":[0,5], "created_at":1,
+         "context_before":[], "context_after":[" beta"]},
+        {"id":"two", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"beta", "new_text":"second", "base_range":[6,10], "created_at":2,
+         "context_before":["alpha "], "context_after":[" gamma"]},
+    ]
+    source["decisions"] = [
+        {"operation_id":"one", "decision":"accepted"},
+        {"operation_id":"two", "decision":"accepted"},
+    ]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.patches[0].new_text == "first second gamma"
+    assert result.accepted_operation_ids == ("one", "two")
+
+
+@pytest.mark.parametrize("decision,stale,reason", [
+    ("rejected", False, "rejected"),
+    ("questioned", False, "questioned"),
+    (None, False, "unanswered"),
+    ("accepted", True, "stale"),
+])
+def test_accepted_only_materializer_positive_held_leak_canaries(decision, stale, reason):
+    source = projection_source(stale=stale)
+    source["operations"] = [source["operations"][0]]
+    source["decisions"] = [] if decision is None else [
+        {"operation_id": "op-word", "decision": decision}
+    ]
+    result = AcceptedOnlyMaterializer().materialize([source])
+    assert result.patches == ()
+    assert result.exclusions[0].operation_id == "op-word"
+    assert result.exclusions[0].reason == reason
+
+
+def test_accepted_only_materializer_projects_later_unique_anchor_across_held_edit():
+    source = projection_source(original_text="One plain sentence.")
+    source["operations"] = [
+        {"id":"held", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"plain", "new_text":"short", "base_range":[4,9], "created_at":1,
+         "context_before":["One "], "context_after":[" sentence."]},
+        {"id":"accepted", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"sentence", "new_text":"example", "base_range":[10,18], "created_at":2,
+         "context_before":["plain "], "context_after":["."]},
+    ]
+    source["decisions"] = [
+        {"operation_id":"held", "decision":"rejected"},
+        {"operation_id":"accepted", "decision":"accepted"},
+    ]
+    result = AcceptedOnlyMaterializer().materialize([source])
+    assert result.patches[0].new_text == "One plain example."
+
+
+def test_accepted_only_materializer_fails_before_output_on_ambiguous_or_overlap():
+    ambiguous = projection_source(original_text="bad and bad")
+    ambiguous["operations"] = [{"id":"op", "kind":"replace",
+        "source_ref":ambiguous["source_ref"], "old_text":"bad", "new_text":"good",
+        "base_range":[0,3], "created_at":1, "context_before":[], "context_after":[]}]
+    ambiguous["decisions"] = [{"operation_id":"op", "decision":"accepted"}]
+    with pytest.raises(ReleaseError, match="unique anchor"):
+        AcceptedOnlyMaterializer().materialize([ambiguous])
+
+    overlap = projection_source(original_text="abcdef")
+    overlap["operations"] = [
+        {"id":"a", "kind":"replace", "source_ref":overlap["source_ref"],
+         "old_text":"bcd", "new_text":"X", "base_range":[1,4], "created_at":1},
+        {"id":"b", "kind":"replace", "source_ref":overlap["source_ref"],
+         "old_text":"cde", "new_text":"Y", "base_range":[2,5], "created_at":2},
+    ]
+    overlap["decisions"] = [{"operation_id":x, "decision":"accepted"} for x in ("a","b")]
+    with pytest.raises(ReleaseError, match="overlapping"):
+        AcceptedOnlyMaterializer().materialize([overlap])
+
+
+def test_accepted_only_materializer_defers_structural_group_from_prod():
+    source = projection_source(original_text="A\n\nB")
+    source["operations"] = [
+        {"id":"move-from", "decision_id":"move-1", "group_id":"group-1",
+         "kind":"move", "source_ref":source["source_ref"], "op":"move",
+         "op_arg":"data/copy/home.json#b22222222", "created_at":1},
+        {"id":"move-to", "decision_id":"move-1", "group_id":"group-1",
+         "kind":"move", "source_ref":source["source_ref"], "op":"move",
+         "op_arg":"data/copy/home.json#b22222222", "created_at":1},
+    ]
+    source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
+    accepted = AcceptedOnlyMaterializer().materialize([source])
+    assert accepted.accepted_operation_ids == ()
+    assert accepted.structural_operations == ()
+    assert {item.reason for item in accepted.exclusions} == {"structural_prod_deferred"}
+
+    source["decisions"] = [{"operation_id":"move-1", "decision":"rejected"}]
+    held = AcceptedOnlyMaterializer().materialize([source])
+    assert held.structural_operations == ()
+    assert {item.reason for item in held.exclusions} == {"structural_prod_deferred"}
+
+    source["operations"][1]["decision_id"] = "move-2"
+    source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
+    partial = AcceptedOnlyMaterializer().materialize([source])
+    assert {item.reason for item in partial.exclusions} == {"structural_prod_deferred"}
+
+
+@pytest.mark.parametrize("op", ["insert_after", "delete", "split", "merge", "move"])
+def test_accepted_only_materializer_defers_every_structural_operation(op):
+    source = projection_source()
+    source["operations"] = [{"id":op, "decision_id":op, "kind":op, "op":op,
+        "source_ref":source["source_ref"]}]
+    source["decisions"] = [{"operation_id":op, "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([source])
+
+    assert result.accepted_operation_ids == ()
+    assert [(item.operation_id,item.reason) for item in result.exclusions] == [
+        (op,"structural_prod_deferred")]
+
+
+def test_accepted_only_materializer_holds_prose_dependent_on_structural_target():
+    structural = projection_source(source_ref="data/copy/home.json#a")
+    structural["operations"] = [{"id":"merge", "decision_id":"merge", "kind":"merge",
+        "op":"merge", "op_arg":"data/copy/home.json#b",
+        "source_ref":"data/copy/home.json#a"}]
+    structural["decisions"] = [{"operation_id":"merge", "decision":"accepted"}]
+    prose = projection_source(source_ref="data/copy/home.json#b")
+    prose["operations"] = [prose["operations"][0] | {
+        "source_ref":"data/copy/home.json#b"}]
+    prose["decisions"] = [{"operation_id":"op-word", "decision":"accepted"}]
+
+    result = AcceptedOnlyMaterializer().materialize([structural, prose])
+
+    assert result.accepted_operation_ids == ()
+    assert {(item.operation_id, item.reason) for item in result.exclusions} == {
+        ("merge", "structural_prod_deferred"),
+        ("op-word", "depends_on_structural_prod_deferred"),
+    }
+
+
+def test_projection_builder_is_deterministic_and_never_moves_or_dirties_ambient_head(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.name","Test"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.email","test@example.invalid"],cwd=repo,check=True)
+    (repo / "data").mkdir()
+    (repo / "data" / "copy.txt").write_text("base\n",encoding="utf-8")
+    subprocess.run(["git","add","data/copy.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","base"],cwd=repo,check=True)
+    base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+
+    class Writer:
+        def write(self, root, projection):
+            pathlib.Path(root,"data","copy.txt").write_text(
+                projection.patches[0].new_text + "\n",encoding="utf-8")
+            return {"generator_id":"generator-v2","parity_verified":True}
+
+    source = projection_source(prod_base=base,original_text="The bad idea")
+    context = {"base_sha":base,"projection":{"sources":[source],
+        "review_receipts":[{"receipt_hash":"receipt-1","created_at":120000}]}}
+    builder = AcceptedProjectionCandidateBuilder(GitRefAdapter(repo),tmp_path / "manifest.json",
+                                                  writer=Writer())
+    first = builder.build(context)
+    second = builder.build(context)
+    assert first["candidate_sha"] == second["candidate_sha"]
+    assert first["manifest_hash"] == second["manifest_hash"]
+    assert subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip() == base
+    assert subprocess.run(["git","status","--porcelain"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout == ""
+    candidate_copy = subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],
+        cwd=repo,check=True,capture_output=True,text=True).stdout
+    assert candidate_copy == "The good idea\n"  # rejected comma is a positive leak canary
+    retained_ref = "refs/sonsteng/releases/" + first["manifest_hash"]
+    assert subprocess.run(["git","rev-parse",retained_ref],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip() == first["candidate_sha"]
+
+    # A prepared release may wait indefinitely for human authorization. Its
+    # synthetic commit must remain reachable even under an aggressive GC.
+    subprocess.run(["git","reflog","expire","--expire=now","--all"],cwd=repo,check=True)
+    subprocess.run(["git","gc","--prune=now"],cwd=repo,check=True)
+    assert subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "The good idea\n"
+
+
+def test_release_candidate_retention_is_create_only_and_conflict_safe(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    (repo / "one").write_text("one",encoding="utf-8")
+    subprocess.run(["git","add","one"],cwd=repo,check=True)
+    subprocess.run(["git","-c","user.name=Test","-c","user.email=test@example.invalid",
+                    "commit","-q","-m","one"],cwd=repo,check=True)
+    first = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    (repo / "two").write_text("two",encoding="utf-8")
+    subprocess.run(["git","add","two"],cwd=repo,check=True)
+    subprocess.run(["git","-c","user.name=Test","-c","user.email=test@example.invalid",
+                    "commit","-q","-m","two"],cwd=repo,check=True)
+    second = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    adapter = GitRefAdapter(repo)
+    identity = "a" * 64
+    assert adapter.retain_release_candidate(first,identity) == \
+        "refs/sonsteng/releases/" + identity
+    assert adapter.retain_release_candidate(first,identity) == \
+        "refs/sonsteng/releases/" + identity
+    with pytest.raises(ReleaseError,match="conflicts with immutable evidence"):
+        adapter.retain_release_candidate(second,identity)
+    with pytest.raises(ReleaseError,match="identity is invalid"):
+        adapter.retain_release_candidate(first,"../unsafe")
+
+
+def test_git_ref_adapter_bounds_every_subprocess():
+    calls = []
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+    adapter = GitRefAdapter("/tmp/repo", run=run, timeout=7)
+    with pytest.raises(ReleaseError, match="bounded timeout"):
+        adapter.tree("a" * 40)
+    assert calls[0][1]["timeout"] == 7
+
+
+def test_projection_builder_rebases_unchanged_source_after_unrelated_release(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.name","Test"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.email","test@example.invalid"],cwd=repo,check=True)
+    (repo / "data").mkdir()
+    (repo / "data" / "copy.txt").write_text("The bad idea\n",encoding="utf-8")
+    subprocess.run(["git","add","data/copy.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","review base"],cwd=repo,check=True)
+    reviewed_base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    (repo / "unrelated.txt").write_text("released elsewhere\n",encoding="utf-8")
+    subprocess.run(["git","add","unrelated.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","unrelated release"],cwd=repo,check=True)
+    current_base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+
+    class Writer:
+        def verify_rebased_sources(self, root, sources):
+            assert pathlib.Path(root,"data","copy.txt").read_text(encoding="utf-8") == \
+                sources[0]["original_text"] + "\n"
+        def write(self, root, projection):
+            target = pathlib.Path(root,"data","copy.txt")
+            assert target.read_text(encoding="utf-8") == projection.patches[0].original_text + "\n"
+            target.write_text(projection.patches[0].new_text + "\n",encoding="utf-8")
+            return {"generator_id":"generator-v2","parity_verified":True}
+
+    source = projection_source(prod_base=reviewed_base,original_text="The bad idea")
+    context = {"base_sha":current_base,"projection":{"sources":[source],
+        "review_receipts":[{"receipt_hash":"receipt-1","created_at":120000}]}}
+    result = AcceptedProjectionCandidateBuilder(GitRefAdapter(repo),tmp_path / "manifest.json",
+        writer=Writer()).build(context)
+
+    assert result["manifest"]["base_sha"] == current_base
+    assert subprocess.run(["git","show",f"{result['candidate_sha']}:unrelated.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "released elsewhere\n"
+    assert subprocess.run(["git","show",f"{result['candidate_sha']}:data/copy.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "The good idea\n"
+
+
+@pytest.mark.parametrize("kind",["json_scalar","prose","structural_md"])
+def test_projection_writer_rejects_rebased_source_drift_before_writing(tmp_path,kind):
+    root = tmp_path / "candidate"
+    (root / "data").mkdir(parents=True)
+    target = root / "data" / "home.json"
+    target.write_text('{"lead":"newer production wording"}\n',encoding="utf-8")
+
+    class Pipeline:
+        def regenerate_map(self, _worktree):
+            return {"data/home.json#lead":{"kind":kind,"json_path":"lead",
+                "original_text":"newer production wording"}}
+
+    writer = ProjectionTreeWriter(Pipeline())
+    with pytest.raises(ReleaseError,match="reviewed source changed"):
+        writer.verify_rebased_sources(root,[projection_source(
+            source_ref="data/home.json#lead",source_original_text="The bad idea")])
+    assert json.loads(target.read_text(encoding="utf-8"))["lead"] == "newer production wording"
+
+
+def test_projection_tree_writer_uses_existing_atomic_writer_and_runs_parity(tmp_path):
+    root = tmp_path / "candidate"
+    (root / "data").mkdir(parents=True)
+    target = root / "data" / "home.json"
+    target.write_text('{"lead":"The bad idea"}\n',encoding="utf-8")
+
+    class Pipeline:
+        calls = []
+        def regenerate_map(self, worktree):
+            self.calls.append("map")
+            return {"data/home.json#lead":{"kind":"json_scalar","json_path":"lead"}}
+        def validate(self, worktree): self.calls.append("validate"); return True,{}
+        def build(self, worktree): self.calls.append("build"); return True,{}
+        def parity(self, worktree): self.calls.append("parity"); return True,{}
+        def generator_identity(self, worktree): return "generator-v2"
+
+    pipeline = Pipeline()
+    projection = AcceptedOnlyMaterializer().materialize([projection_source(
+        source_ref="data/home.json#lead",operations=[
+            {**item,"source_ref":"data/home.json#lead"}
+            for item in projection_source()["operations"]])])
+    assert ProjectionTreeWriter(pipeline).write(root,projection) == {
+        "generator_id":"generator-v2","parity_verified":True}
+    assert json.loads(target.read_text(encoding="utf-8"))["lead"] == "The good idea"
+    assert pipeline.calls == ["map","map","validate","build","parity"]
 
 
 class Ledger:
@@ -250,6 +698,33 @@ def test_candidate_validator_binds_git_tree_ancestry_frontier_and_membership():
         CandidateValidator(Git(), {**manifest,"suggestion_ids":["s1"]})(item)
 
 
+def test_candidate_validator_requires_prose_only_scope_and_disjoint_holds():
+    class Git:
+        def is_ancestor(self, base, candidate): return True
+        def tree(self, candidate): return "tree-1"
+        def require_clean_candidate(self, candidate): return None
+
+    item = release(schema_version=2, operation_ids=("prose-1",), suggestion_ids=(),
+                   batch_commits=(), review_receipt_hash="receipt",
+                   projection_identity="projection")
+    manifest = {"base_sha":item.base_sha,"candidate_sha":item.candidate_sha,
+        "candidate_tree":"tree-1","accepted_operation_ids":["prose-1"],
+        "review_receipt_hash":"receipt","production_scope":"structural_v1",
+        "held_exclusions":[]}
+    item = dataclasses.replace(item, manifest_hash=hashlib.sha256(
+        json.dumps(manifest,sort_keys=True,separators=(",", ":")).encode()).hexdigest())
+    with pytest.raises(ReleaseError, match="manifest binding mismatch"):
+        CandidateValidator(Git(), manifest)(item)
+
+    manifest["production_scope"] = "prose_only_v1"
+    manifest["held_exclusions"] = [{"operation_id":"prose-1",
+                                      "reason":"structural_prod_deferred"}]
+    item = dataclasses.replace(item, manifest_hash=hashlib.sha256(
+        json.dumps(manifest,sort_keys=True,separators=(",", ":")).encode()).hexdigest())
+    with pytest.raises(ReleaseError, match="manifest binding mismatch"):
+        CandidateValidator(Git(), manifest)(item)
+
+
 def test_restoration_uses_recorded_base_and_failure_remains_fenced():
     item = release(state="restoring")
     ledger = Ledger(item)
@@ -329,6 +804,25 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert seen["X-edit-request"] == "1"
     assert seen["Authorization"] == "Bearer secret"
     assert seen["User-agent"] == "sonsteng-prod-release/1.0"
+
+
+def test_ledger_http_requires_tls_and_can_claim_one_exact_authorized_release():
+    with pytest.raises(ReleaseError, match="HTTPS"):
+        LedgerHTTP("http://edit.example", "secret")
+    seen = {}
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def read(self, *_): return b'{"ok":true,"release":null}'
+    def opener(request, timeout):
+        seen["body"] = json.loads(request.data)
+        return Response()
+    assert LedgerHTTP("https://edit.example", "secret", opener).claim_authorized("release-7") is None
+    assert seen["body"] == {"id":"release-7"}
+    with pytest.raises(ReleaseError, match="Pages provenance requires HTTPS"):
+        WranglerPagesAdapter("pages", "/candidate/site", "http://pages.example")
+    with pytest.raises(ReleaseError, match="Worker provenance requires HTTPS"):
+        WranglerWorkerAdapter("/candidate/app/worker/wrangler.jsonc", "http://worker.example")
 
 
 def test_ledger_http_restore_claim_is_named_and_returns_fresh_fence():
@@ -441,6 +935,30 @@ def test_recovery_registry_persists_exact_pair_atomically(tmp_path):
     assert registry.target(sha, "pages") == "pagesdeploy123"
     with pytest.raises(ReleaseError, match="conflict"):
         registry.record_target(sha, "worker", "different")
+
+
+def test_recovery_registry_lists_complete_pairs_from_one_snapshot(tmp_path):
+    class CountingRegistry(RecoveryRegistry):
+        reads = 0
+
+        def _read(self):
+            self.reads += 1
+            return super()._read()
+
+    path = tmp_path / "known-good.json"
+    path.write_text(json.dumps({
+        "a" * 40:{"pages_deployment_id":"pages-a","worker_version_id":"worker-a"},
+        "b" * 40:{"pages_deployment_id":"pages-only"},
+    }), encoding="utf-8")
+    registry = CountingRegistry(path)
+
+    pairs = registry.pairs()
+
+    assert registry.reads == 1
+    assert pairs == {"a" * 40:{
+        "pages_deployment_id":"pages-a","worker_version_id":"worker-a"}}
+    pairs["a" * 40]["pages_deployment_id"] = "changed-copy"
+    assert registry.pair("a" * 40)["pages_deployment_id"] == "pages-a"
 
 
 def test_registry_reconciles_crash_before_ledger_receipt_without_redeploy(tmp_path):
@@ -579,6 +1097,37 @@ def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):
     assert ledger.binding["candidate_sha"] == "b" * 40
     assert ledger.binding["expected_suggestion_ids"] == ["s1","s2"]
     assert ledger.binding["id"].endswith("-attempt-1")
+
+
+def test_candidate_builder_prepares_only_service_materialized_operation_binding(tmp_path):
+    exclusion = ProjectionExclusion(
+        "op-held","data/copy/home.json#lead","rejected")
+    built = {"manifest":{"schema_version":2,"base_sha":"a" * 40,
+              "candidate_sha":"b" * 40,"generator_id":"generator-v2"},
+             "manifest_hash":"manifest-v2","candidate_sha":"b" * 40,
+             "review_receipt_hash":"receipt-set","review_receipts":("receipt-1",),
+             "projection_identity":"projection-v2",
+             "accepted_operation_ids":("op-accepted",),"held_exclusions":(exclusion,)}
+    class ProjectionBuilder:
+        def build(self, context):
+            assert context["projection"]["sources"]
+            return built
+    class Ledger:
+        binding = None
+        def preparation_context(self):
+            return {"active_release":None,"projection":{"sources":[{"source_ref":"x"}]}}
+        def prepare(self,binding):
+            self.binding = binding
+            return {"ok":True,"release":binding}
+    ledger = Ledger()
+    made = ProductionCandidateBuilder(ledger,object(),tmp_path / "manifest.json",
+        attempt_id_factory=lambda:"attempt-v2",projection_builder=ProjectionBuilder()).prepare_latest()
+    assert made["release"]["schema_version"] == 2
+    assert ledger.binding["accepted_operation_ids"] == ["op-accepted"]
+    assert ledger.binding["held_exclusions"] == [{"operation_id":"op-held",
+        "decision":"rejected","reason":"rejected","source_ref":"data/copy/home.json#lead"}]
+    assert ledger.binding["review_receipts"] == ["receipt-1"]
+    assert ledger.binding["projection_identity"] == "projection-v2"
 
 
 def test_candidate_builder_creates_fresh_attempt_after_restoration_and_replays_active(tmp_path):

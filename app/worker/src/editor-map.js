@@ -265,6 +265,36 @@ export function projectPendingItems(items, previewMax = 200) {
   });
 }
 
+// Submitted Publisher review evidence for authenticated DEV chrome. Notes stay
+// plain data and the client renders them with textContent. One item is emitted
+// per operation location (a move can therefore show both endpoints) while its
+// shared decision identity remains intact.
+export function projectReviewAnnotations(reviews) {
+  const out = [];
+  for (const review of reviews || []) {
+    const decisions = new Map((review.decisions || []).map((item) => [item.operation_id,item]));
+    for (const operation of review.operations || []) {
+      const decisionId = operation.decision_id || operation.id;
+      const decision = decisions.get(decisionId);
+      out.push({
+        source_ref:review.source_ref, review_revision_id:review.review_revision_id,
+        source_revision:review.source_revision, proposed_hash:review.proposed_hash,
+        current_proposed_hash:review.current_proposed_hash,
+        operation_id:operation.id, decision_id:decisionId,
+        kind:operation.kind, old_text:operation.old_text || "", new_text:operation.new_text || "",
+        proposed_range:Array.isArray(operation.proposed_range) ? operation.proposed_range : null,
+        move_pair_id:operation.move_pair_id || null, move_role:operation.move_role || null,
+        status:review.stale ? "stale" : (decision?.decision || "unanswered"),
+        reviewer:attributionLabel(review.reviewer) || "Publisher",
+        submitted_at:review.submitted_at,
+        note:decision?.note || "",
+        stale:!!review.stale,
+      });
+    }
+  }
+  return out;
+}
+
 export { EDITOR_MAP, INSTRUCTOR_BUNDLE };
 
 // ---- U6: the scope ladder — deterministic enumeration -----------------------
