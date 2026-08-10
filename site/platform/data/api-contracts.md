@@ -418,7 +418,7 @@ and its preparation control remains disabled; see
 `publisher` scope. Approver, admin-only, bearer, cookie, and AI/service paths
 fail closed. It authorizes only the already-prepared immutable binding.
 
-### Granular Publisher review vocabulary (frozen contract; implementation pending)
+### Granular Publisher review and legacy backfill
 
 The review source is the cumulative value from the **verified PROD base** to the
 current DEV value for one durable `source_ref`. Sequential DEV suggestions are
@@ -450,6 +450,15 @@ review receipt. Rejected, questioned, unanswered, stale, ambiguous, or partially
 grouped operations are held. The candidate is projected from source-patch
 evidence and regenerated; filtering legacy suggestion rows or contiguous DEV
 commits is not selective publication and must fail closed.
+
+Applied rows that predate operation evidence remain unreviewable until an explicit
+backfill. `POST /edit/v1/publisher/review/backfill` is restricted to the trusted
+bearer/admin migration channel; human Access sessions cannot call it. One named
+transaction binds a verified PROD base and per-source cumulative revision
+snapshots to applied suggestion IDs and their completed apply commits. Exact
+replay is idempotent and audited; changed replay, pending rows, and mismatched
+source/commit/base evidence fail atomically. Backfill creates operations only—no
+drafts, decisions, reviews, release membership, or implicit acceptance.
 
 `POST /claim` returns only authorized releases plus a fencing token.
 `POST /transition` journals bounded identifiers/hashes and rejects stale fences

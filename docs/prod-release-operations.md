@@ -58,6 +58,16 @@ ledger, inspecting git, or contacting Cloudflare. Keep it false until all of the
 5. credential separation, redaction, rotation, and revocation checks pass;
 6. supervised canary and exact-pair restore drills pass.
 
+For the existing legacy production pair, this is a hard evidence gate—not an
+operator judgment call. Record the exact Pages deployment ID, Worker version ID,
+matching source/candidate SHA and live provenance response; prove both provider
+IDs can still be reactivated; set that SHA as the verified bootstrap base; then
+restore and re-verify that exact pair in a drill. A current-looking web page, a
+git commit alone, or a legacy Worker without the provenance endpoint is not
+sufficient evidence. Until every item exists, keep
+`SONSTENG_PROD_RELEASE_ENABLED=false`; do not prepare a selective candidate,
+activate the timer, or use a direct deploy as a substitute canary.
+
 Only after those gates may an operator set the flag to true and explicitly enable the timer. A
 config flip is operational authority, so it must be attributed in the release evidence. Do not use
 the legacy deploy script as a canary.
@@ -87,9 +97,22 @@ canary result—not the value. For emergency revocation: set
 revoke the affected provider or service principal, and reconcile strictly toward the recorded
 manifest. Revocation never authorizes a different target.
 
+## Legacy applied-change backfill
+
+Applied DEV suggestions created before granular review have no release authority.
+The trusted apply/migration bearer may submit a named, immutable bulk backfill to
+`POST /edit/v1/publisher/review/backfill`. Each per-source cumulative revision
+must bind the verified PROD base, applied suggestion IDs, their completed apply
+commit, source hashes, and deterministic atomic operations. The store validates
+the entire payload transactionally, writes an audit receipt, and treats an exact
+retry as an idempotent replay. Any pending row, mismatched source/commit/base, or
+changed retry rolls back or fails closed. Backfill creates no draft, decision,
+review receipt, release member, or implicit acceptance: every operation appears
+as unreviewed and requires a fresh human review.
+
 ## Preparation, authorization, execution
 
-The Publisher page may show eligible contiguous DEV batches, but its “Prepare immutable preview”
+The Publisher page may show eligible submitted-accepted operations, but its “Prepare immutable preview”
 control stays disabled. On each config-enabled service run, the trusted candidate builder reads the
 text-free contiguous frontier, proves the clean checkout, ancestry, exact membership, generator and
 candidate tree, writes the canonical manifest under the service state directory, and submits the

@@ -51,6 +51,7 @@ run "site build + link/leak sweeps"         python3 tools/build_site.py --check
 run "public source repository (anonymous)"  curl -fsSIL https://github.com/damienriehl/sonsteng-magnum-opus
 run "bundle parity"                         python3 tools/check_build_parity.py
 run "python unit tests"                     python3 -m pytest tools/tests/ -q
+run "granular review migration contract"    bash -c 'cd app/worker && node --test test/editor-publisher-review.test.js >/dev/null 2>&1'
 run "worker unit tests"                     bash -c 'cd app/worker && node --test test/*.test.js >/dev/null 2>&1'
 run "offline red-team probe"                bash -c 'node tools/offline_redteam_probe.mjs | grep -q "0/8" || node tools/offline_redteam_probe.mjs | tail -3'
 

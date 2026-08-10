@@ -840,6 +840,25 @@ export async function finalizeEndpoint(request, env, auth) {
   return json(result, result.ok ? 200 : 409);
 }
 
+export async function reviewBackfillEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  // Backfill carries source evidence and is intentionally unavailable to a
+  // human browser session. Only the dedicated trusted apply/migration channel
+  // may introduce pre-review evidence; it still cannot introduce decisions.
+  if (auth?.credential_channel !== "bearer" || !auth?.scopes?.admin?.granted)
+    return editError("forbidden", "Trusted migration service required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).backfillReviewRevisions({
+    migration_id:typeof body.migration_id === "string" ? body.migration_id : "",
+    prod_base:typeof body.prod_base === "string" ? body.prod_base : "",
+    revisions:Array.isArray(body.revisions) ? body.revisions : null,
+    actor:auth.editor || "service:migration",
+  });
+  return json(result,result.ok ? (result.replay ? 200 : 201) :
+    result.reason === "idempotency_conflict" ? 409 : 400);
+}
+
 export async function reconcileEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);

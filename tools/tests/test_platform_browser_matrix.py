@@ -108,5 +108,5 @@ def test_semantic_heading_repairs_preserve_the_existing_visible_words():
     # full-corpus digests alongside the visual heading repair.
     baseline = json.loads((TOOLS / "tests/fixtures/platform-semantic-baseline.json").read_text())
     assert baseline["fields"]["links"] == "96a682b9834d1b99f3a54b48945bbfebd994c3bc644a86c7402bd5f171f70f7b"
-    assert baseline["fields"]["editor_blocks"] == "d279c7c020eb187eaa4ecfe706711f3b5944ad21484cf0e58395cf63a7368304"
+    assert baseline["fields"]["editor_blocks"] == "d4135cea5b354b2f5e489f26c692074d626057bf80356e95be71140a7ffd54d4"
     assert baseline["fields"]["reading_order"] == "1f2205a4c933aba2c0050568394c4d2bec3166f726332803c83220b4b6ae88cc"

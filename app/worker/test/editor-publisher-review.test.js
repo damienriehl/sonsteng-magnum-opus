@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherReviewEndpoint, publisherReviewDraftEndpoint,
-  publisherReviewSubmitEndpoint } from "../src/editor-endpoints.js";
+  publisherReviewSubmitEndpoint,reviewBackfillEndpoint } from "../src/editor-endpoints.js";
 
 const operations = [
   { id:"op-word", decision_id:"op-word", kind:"replace", source_ref:"data/copy/home.json#lead",
@@ -180,13 +180,68 @@ test("schema migration is repeatable and the Durable Object forwards every revie
   const core = makeCore(() => 3500);
   assert.doesNotThrow(() => core.initSchema());
   const wrapper = readFileSync(new URL("../src/editor-store.js", import.meta.url), "utf8");
-  for (const method of ["recordReviewRevision","getPublisherReview","savePublisherReviewDraft",
+  for (const method of ["recordReviewRevision","backfillReviewRevisions","getPublisherReview","savePublisherReviewDraft",
     "submitPublisherReview"]) {
     assert.match(wrapper, new RegExp(`${method}\\(.*this\\.core\\.${method}\\(`));
   }
   const router = readFileSync(new URL("../src/editor.js", import.meta.url), "utf8");
   for (const path of ["/edit/v1/publisher/review","/edit/v1/publisher/review/draft",
-    "/edit/v1/publisher/review/submit"]) assert.match(router, new RegExp(path));
+    "/edit/v1/publisher/review/submit","/edit/v1/publisher/review/backfill"])
+    assert.match(router, new RegExp(path));
+});
+
+test("legacy backfill is atomic, idempotent, audited, and never assigns a decision", () => {
+  const core = makeCore(() => 3600);
+  for (const [id, source_ref] of [["suggestion-1","data/copy/home.json#lead"],
+    ["suggestion-2","data/copy/skills.json#lead"]]) {
+    core.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",source_ref,
+      original_text:"Old copy",original_hash:"old-hash",new_text:"New copy",map_version:"v1" },
+      {}, { directApply:true });
+    core.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id=? WHERE id=?",`batch-${id}`,id);
+    core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+      `batch-${id}`,"prod-1",`dev-${id}`,"generator-v1","done",3500,3500);
+  }
+  const revisions = [revision(), revision({ id:"revision-skills",source_ref:"data/copy/skills.json#lead",
+    commit_sha:"dev-suggestion-2",suggestion_ids:["suggestion-2"],operations:operations.map((op) => ({
+      ...op,id:`skills-${op.id}`,decision_id:`skills-${op.id}`,source_ref:"data/copy/skills.json#lead" })) })];
+  revisions[0] = revision({ commit_sha:"dev-suggestion-1" });
+  const payload = { migration_id:"legacy-20260810",prod_base:"prod-1",revisions };
+  assert.deepEqual(core.backfillReviewRevisions(payload),
+    { ok:true,migration_id:"legacy-20260810",inserted:2,replayed:0 });
+  assert.deepEqual(core.backfillReviewRevisions(payload),
+    { ok:true,migration_id:"legacy-20260810",inserted:0,replayed:2,replay:true });
+  const view = core.getPublisherReview("slot:damien");
+  assert.equal(view.counts.total,4);
+  assert.equal(view.counts.unreviewed,4);
+  assert.equal(view.counts.accepted,0);
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,1);
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_decisions").n,0);
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_submission_decisions").n,0);
+  assert.equal(core.backfillReviewRevisions({ ...payload,revisions:[revision({
+    commit_sha:"dev-suggestion-1",proposed_hash:"tampered" }),revisions[1]] }).reason,
+    "idempotency_conflict");
+});
+
+test("legacy backfill rejects non-applied or mismatched evidence without partial writes", () => {
+  const core = makeCore(() => 3700);
+  core.suggest({ id:"pending-1",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+    source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old-hash",
+    new_text:"New",map_version:"v1" }, {}, { directApply:false });
+  const result = core.backfillReviewRevisions({ migration_id:"bad-migration",prod_base:"prod-1",
+    revisions:[revision({ suggestion_ids:["pending-1"] })] });
+  assert.equal(result.reason,"legacy_suggestion_not_applied");
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_revisions").n,0);
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,0);
+});
+
+test("legacy backfill endpoint is bearer-only and never grants browser migration authority", async () => {
+  const core = makeCore(() => 3725);
+  const req = request("/edit/v1/publisher/review/backfill","POST",{
+    migration_id:"legacy-http",prod_base:"prod-1",revisions:[revision()] });
+  assert.equal((await reviewBackfillEndpoint(req,envFor(core),publisher())).status,403);
+  assert.equal((await reviewBackfillEndpoint(req,envFor(core),{
+    ...publisher("service:apply"),credential_channel:"bearer",service:"apply",
+    scopes:{ admin:{ granted:true } } })).status,400);
 });
 
 test("apply finalization records revision evidence atomically and rolls back a bad binding", () => {

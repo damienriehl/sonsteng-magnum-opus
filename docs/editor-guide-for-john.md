@@ -108,7 +108,11 @@ a bigger change is **expected** — it is waiting for Damien, not lost.
 - **Your edit becomes available on the editing site.** The system double-checks it, rebuilds that
   DEV site, and keeps the source and history. Its production status is **Available on DEV — waiting for Publisher**.
   Damien reviews the exact immutable batch and explicitly authorizes the public
-  production release under the separate Publisher role; approval alone does not publish it.
+  production release under the separate Publisher role. Damien reviews the smallest meaningful
+  wording changes independently; accepted, rejected, and questioned redlines remain visible in
+  the authenticated editing view, while only accepted changes may enter a later production
+  candidate. A question about one change does not hold unrelated accepted changes;
+  approval alone does not publish it.
 - **Your wording is right there when you come back.** Open your link again and the page shows
   what you wrote, exactly as you left it. Click the paragraph to keep refining it.
 - **If a change can't be applied cleanly** it stays on the page with a **"Needs attention — not

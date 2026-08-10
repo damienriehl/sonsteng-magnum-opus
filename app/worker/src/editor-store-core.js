@@ -182,6 +182,10 @@ export const SCHEMA_SQL = `
     operation_digest TEXT NOT NULL, group_id TEXT,
     PRIMARY KEY(review_id, review_revision_id, operation_id)
   );
+  CREATE TABLE IF NOT EXISTS production_review_migrations (
+    id TEXT PRIMARY KEY, prod_base TEXT NOT NULL, evidence_digest TEXT NOT NULL,
+    revision_count INTEGER NOT NULL, actor TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
 
   -- Single-row apply-daemon liveness beacon (SL6 heartbeat). id is pinned to 1
   -- so recordHeartbeat is an upsert of the ONE latest run. received_at is the
@@ -1226,6 +1230,48 @@ export class EditorStoreCore {
       this._canonical([...input.suggestion_ids].sort()),
       this._canonical(input.operations),digest,now);
     return { ok:true,id:input.id };
+  }
+
+  // One-time trusted migration seam for applied rows created before finalize()
+  // could attach review evidence. It only records immutable review revisions:
+  // it never creates a draft, decision, review, release member, or authority.
+  // The whole migration is transactional so one suspect legacy row cannot leave
+  // a partially reviewable frontier.
+  backfillReviewRevisions(input = {}) {
+    if (typeof input.migration_id !== "string" || !input.migration_id ||
+        typeof input.prod_base !== "string" || !input.prod_base ||
+        !Array.isArray(input.revisions) || input.revisions.length === 0)
+      return { ok:false,reason:"validation_error" };
+    const evidence = { prod_base:input.prod_base,revisions:input.revisions };
+    const digest = this._digest(evidence);
+    const prior = this._one("SELECT evidence_digest,revision_count FROM production_review_migrations WHERE id=?",
+      input.migration_id);
+    if (prior) return prior.evidence_digest === digest ?
+      { ok:true,migration_id:input.migration_id,inserted:0,replayed:prior.revision_count,replay:true } :
+      { ok:false,reason:"idempotency_conflict" };
+    try { return this.transactionSync(() => {
+      for (const revision of input.revisions) {
+        if (revision?.prod_base !== input.prod_base) throw { backfillFailure:"prod_base_mismatch" };
+        if (!Array.isArray(revision.suggestion_ids) || revision.suggestion_ids.length === 0)
+          throw { backfillFailure:"missing_revision_evidence" };
+        for (const suggestionId of revision.suggestion_ids) {
+          const row = this._one("SELECT source_ref,status,apply_batch_id FROM suggestions WHERE id=?",suggestionId);
+          if (!row || row.status !== STATUS.APPLIED) throw { backfillFailure:"legacy_suggestion_not_applied" };
+          if (row.source_ref !== revision.source_ref) throw { backfillFailure:"legacy_source_mismatch" };
+          const batch = this._one("SELECT commit_sha,phase FROM apply_batches WHERE batch_id=?",row.apply_batch_id);
+          if (!batch || batch.phase !== "done" || batch.commit_sha !== revision.commit_sha)
+            throw { backfillFailure:"legacy_commit_mismatch" };
+        }
+        const recorded = this.recordReviewRevision(revision);
+        if (!recorded.ok) throw { backfillFailure:recorded.reason };
+      }
+      this.sql.exec("INSERT INTO production_review_migrations (id,prod_base,evidence_digest,revision_count,actor,created_at) VALUES (?,?,?,?,?,?)",
+        input.migration_id,input.prod_base,digest,input.revisions.length,input.actor || "migration-service",this.now());
+      return { ok:true,migration_id:input.migration_id,inserted:input.revisions.length,replayed:0 };
+    }); } catch (error) {
+      if (error?.backfillFailure) return { ok:false,reason:error.backfillFailure };
+      throw error;
+    }
   }
 
   _reviewRevision(id) {

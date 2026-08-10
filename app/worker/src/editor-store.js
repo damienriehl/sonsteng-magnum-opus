@@ -57,6 +57,7 @@ export class EditorStore extends DurableObject {
   renewProductionReleaseLease(input) { return this.core.renewProductionReleaseLease(input); }
   transitionProductionRelease(input) { return this.core.transitionProductionRelease(input); }
   recordReviewRevision(input) { return this.core.recordReviewRevision(input); }
+  backfillReviewRevisions(input) { return this.core.backfillReviewRevisions(input); }
   getPublisherReview(actor) { return this.core.getPublisherReview(actor); }
   getDevReviewAnnotations(sourceRefs) { return this.core.getDevReviewAnnotations(sourceRefs); }
   savePublisherReviewDraft(input) { return this.core.savePublisherReviewDraft(input); }
