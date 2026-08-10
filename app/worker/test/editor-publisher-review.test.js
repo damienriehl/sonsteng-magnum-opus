@@ -166,6 +166,29 @@ test("stale, missing, tampered, and split-group evidence fail closed", () => {
   assert.equal(core.savePublisherReviewDraft({ ...base, decisions:[] }).reason, "stale_revision");
 });
 
+test("semantic groups are indivisible across every source in one submission", () => {
+  const core = makeCore(() => 3100);
+  const groupId = "cross-source-group";
+  const homeOperation = { ...operations[0],group_id:groupId,decision_id:"group-decision" };
+  const skillsRef = "data/copy/skills.json#lead";
+  const skillsOperation = { ...operations[0],id:"skills-op-word",group_id:groupId,
+    decision_id:"group-decision",source_ref:skillsRef };
+  core.recordReviewRevision(revision({ operations:[homeOperation] }));
+  core.recordReviewRevision(revision({ id:"revision-skills",source_ref:skillsRef,
+    operations:[skillsOperation] }));
+  const sources = [
+    { review_revision_id:"revision-1",source_revision:"dev-1",prod_base:"prod-1",
+      decisions:[{ operation_id:"group-decision",decision:"accepted" }] },
+    { review_revision_id:"revision-skills",source_revision:"dev-1",prod_base:"prod-1",
+      decisions:[{ operation_id:"group-decision",decision:"rejected",note:"Hold this wording." }] },
+  ];
+  for (const source of sources)
+    assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",...source }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-cross-group",idempotency_key:"cross-group",
+    request_digest:"cross-group",actor:"slot:damien",sources }).reason,"partial_group");
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_submissions").n,0);
+});
+
 test("a verified PROD frontier advance stales drafts even when DEV did not change", () => {
   const core = makeCore(() => 3250);
   core.recordReviewRevision(revision());
@@ -342,6 +365,29 @@ test("canonical-mutation completion records the same immutable review evidence",
   assert.equal(core.getPublisherReview("slot:damien").revision.id,"revision-1");
   assert.equal(core.completeCanonicalMutation({ ...mutation,review_revision:revision({ proposed_hash:"tampered" }) }).reason,
     "idempotency_conflict");
+});
+
+test("canonical reverts cannot complete without review evidence after PROD exists", () => {
+  const core = makeCore(() => 3950);
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,"release-complete","release-key","release-digest",
+    "complete","service:release","service","PROD","release-batch","prod-0","prod-1",
+    "generator","evidence","manifest","membership",3900,3900);
+  core.fileRevertRequest({ id:"revert-no-review",editor:"slot:damien",doc:"data/copy/home.json",
+    run_first:"aaaaaaa",run_last:"bbbbbbb",approved:true });
+  const mutation = { id:"revert-no-review",batch_id:"revert-no-review",actor:"slot:damien",
+    kind:"history_revert",source_ref:"data/copy/home.json#lead",original_text:"Before",
+    new_text:"After",original_hash:"old-hash",new_hash:"new-hash",base_sha:"prod-1",
+    commit_sha:"dev-2",generator_id:"generator-v1" };
+  assert.equal(core.recordCanonicalMutation(mutation).ok,true);
+  assert.equal(core.completeCanonicalMutation(mutation).reason,"missing_revision_evidence");
+  assert.equal(core._one("SELECT phase FROM apply_batches WHERE batch_id=?",mutation.batch_id).phase,
+    "merged");
+  assert.equal(core._one("SELECT status FROM revert_requests WHERE id=?",mutation.id).status,
+    "approved");
 });
 
 test("Publisher review endpoints require a current human Access Publisher and CSRF", async () => {

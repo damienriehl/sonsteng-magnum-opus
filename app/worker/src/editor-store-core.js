@@ -800,6 +800,10 @@ export class EditorStoreCore {
         return { ok:false,reason:"idempotency_conflict" };
     for (const key of ["base_sha","commit_sha","generator_id"])
       if (input[key] !== batch[key]) return { ok:false,reason:"idempotency_conflict" };
+    const production = this._one(
+      "SELECT id FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
+    if (production && !input.review_revision)
+      return { ok:false,reason:"missing_revision_evidence" };
     if (batch.phase === "done") {
       if (input.review_revision) {
         const recorded = this.recordReviewRevision(input.review_revision);
@@ -1571,6 +1575,25 @@ export class EditorStoreCore {
       }
       prepared.push({ revision,decisions:normalized.decisions });
     }
+    const submittedGroups = new Map();
+    for (const { revision,decisions } of prepared) {
+      for (const operation of revision.operations) {
+        if (!operation.group_id) continue;
+        if (!submittedGroups.has(operation.group_id))
+          submittedGroups.set(operation.group_id,{ members:0,answered:0,decisions:new Set() });
+        const group = submittedGroups.get(operation.group_id);
+        group.members += 1;
+        const decision = decisions.find((item) => item.operation_id ===
+          (operation.decision_id || operation.id));
+        if (decision) {
+          group.answered += 1;
+          group.decisions.add(decision.decision);
+        }
+      }
+    }
+    for (const group of submittedGroups.values())
+      if (group.answered && (group.answered !== group.members || group.decisions.size !== 1))
+        return { ok:false,reason:"partial_group" };
     const now = this.now();
     const receipt = { review_id:input.id,actor:input.actor,created_at:now,
       sources:prepared.map(({ revision,decisions }) => ({ review_revision_id:revision.id,
