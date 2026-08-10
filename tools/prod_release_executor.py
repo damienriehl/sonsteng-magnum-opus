@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 import pathlib
 import re
 import secrets
@@ -30,6 +31,7 @@ class ReleaseError(RuntimeError):
 MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
 SERVICE_USER_AGENT = "sonsteng-prod-release/1.0"
 WRANGLER_COMMAND = ("npx", "wrangler@4")
+STRUCTURAL_OPERATIONS = frozenset({"insert_after", "delete", "split", "merge", "move"})
 
 
 def _wrangler(*args):
@@ -38,6 +40,226 @@ def _wrangler(*args):
 
 def _canonical(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+@dataclasses.dataclass(frozen=True)
+class ProjectionPatch:
+    """One synthetic whole-value patch for an existing durable source."""
+
+    source_ref: str
+    original_text: str
+    new_text: str
+    operation_ids: tuple[str, ...]
+    review_revision_id: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ProjectionExclusion:
+    operation_id: str
+    source_ref: str
+    reason: str
+
+
+@dataclasses.dataclass(frozen=True)
+class MaterializedProjection:
+    patches: tuple[ProjectionPatch, ...]
+    structural_operations: tuple[dict, ...]
+    exclusions: tuple[ProjectionExclusion, ...]
+    accepted_operation_ids: tuple[str, ...]
+
+
+class AcceptedOnlyMaterializer:
+    """Pure accepted-operation projection; performs no filesystem writes.
+
+    Submitted review evidence is already immutable and server-derived.  This
+    class deliberately resolves every prose operation before a caller may open
+    or modify an isolated checkout, so ambiguity cannot leave a partial tree.
+    """
+
+    @staticmethod
+    def _operation_id(operation):
+        return operation.get("decision_id") or operation.get("id")
+
+    @staticmethod
+    def _source_evidence(operation):
+        evidence = operation.get("source_patch") or {}
+        return {
+            "old_text": evidence.get("old_text", operation.get("old_text", "")),
+            "new_text": evidence.get("new_text", operation.get("new_text", "")),
+            "context_before": evidence.get("context_before", operation.get("context_before", [])),
+            "context_after": evidence.get("context_after", operation.get("context_after", [])),
+        }
+
+    @staticmethod
+    def _unique_span(value, evidence, operation_id):
+        old = evidence["old_text"]
+        before = "".join(evidence["context_before"] or [])
+        after = "".join(evidence["context_after"] or [])
+        if old:
+            starts = [match.start() for match in re.finditer(re.escape(old), value)]
+            starts = [start for start in starts
+                      if (not before or value[:start].endswith(before)) and
+                      (not after or value[start + len(old):].startswith(after))]
+            if len(starts) != 1:
+                raise ReleaseError(f"operation {operation_id} lacks a unique anchor")
+            return starts[0], starts[0] + len(old)
+        # Insertions anchor the boundary between unchanged before/after text.
+        starts = []
+        for position in range(len(value) + 1):
+            if (not before or value[:position].endswith(before)) and \
+               (not after or value[position:].startswith(after)):
+                starts.append(position)
+        if len(starts) != 1:
+            raise ReleaseError(f"operation {operation_id} lacks a unique anchor")
+        return starts[0], starts[0]
+
+    def materialize(self, sources):
+        patches, structural, exclusions, accepted_ids = [], [], [], []
+        seen_operation_ids = set()
+        for source in sorted(sources, key=lambda item: (item.get("source_ref", ""),
+                                                         item.get("review_revision_id", ""))):
+            source_ref = source.get("source_ref")
+            original = source.get("source_original_text", source.get("original_text"))
+            if not source_ref or not isinstance(original, str):
+                raise ReleaseError("projection source lacks durable source evidence")
+            decisions = {item.get("operation_id"): item.get("decision")
+                         for item in source.get("decisions") or []}
+            operations = sorted(source.get("operations") or [], key=lambda item: (
+                item.get("created_at", 0), item.get("id", "")))
+            groups = {}
+            for operation in operations:
+                operation_id = self._operation_id(operation)
+                payload_id = operation.get("id")
+                if not payload_id or not operation_id or operation.get("source_ref") != source_ref:
+                    raise ReleaseError("operation does not bind its durable source")
+                if payload_id in seen_operation_ids:
+                    raise ReleaseError("duplicate operation identity")
+                seen_operation_ids.add(payload_id)
+                group_id = operation.get("group_id") or operation.get("move_pair_id")
+                if group_id:
+                    groups.setdefault(group_id, set()).add(operation_id)
+
+            for group_id, members in groups.items():
+                group_decisions = {decisions.get(member) for member in members}
+                if not source.get("stale") and "accepted" in group_decisions and \
+                   group_decisions != {"accepted"}:
+                    raise ReleaseError(f"partial structural group {group_id}")
+
+            projected = original
+            accepted_ranges = []
+            source_accepted = []
+            for operation in operations:
+                operation_id = self._operation_id(operation)
+                decision = decisions.get(operation_id)
+                reason = "stale" if source.get("stale") else (
+                    decision if decision in {"rejected", "questioned"} else
+                    "unanswered" if decision is None else None)
+                if reason:
+                    exclusions.append(ProjectionExclusion(operation["id"], source_ref, reason))
+                    continue
+                if decision != "accepted":
+                    raise ReleaseError(f"unknown submitted decision for {operation_id}")
+                op_name = operation.get("op") or operation.get("kind")
+                if op_name in STRUCTURAL_OPERATIONS:
+                    structural.append(dict(operation))
+                    accepted_ids.append(operation["id"])
+                    continue
+                base_range = operation.get("base_range")
+                if not (isinstance(base_range, list) and len(base_range) == 2 and
+                        all(isinstance(value, int) for value in base_range)):
+                    raise ReleaseError(f"operation {operation_id} lacks a base range")
+                start, end = base_range
+                if end < start:
+                    raise ReleaseError(f"operation {operation_id} has an invalid base range")
+                if any(max(start, prior_start) < min(end, prior_end)
+                       for prior_start, prior_end in accepted_ranges
+                       if end > start and prior_end > prior_start):
+                    raise ReleaseError(f"overlapping accepted operations at {operation_id}")
+                evidence = self._source_evidence(operation)
+                anchor_start, anchor_end = self._unique_span(projected, evidence, operation_id)
+                projected = projected[:anchor_start] + evidence["new_text"] + projected[anchor_end:]
+                accepted_ranges.append((start, end))
+                source_accepted.append(operation["id"])
+                accepted_ids.append(operation["id"])
+            if source_accepted:
+                patches.append(ProjectionPatch(source_ref, original, projected,
+                    tuple(source_accepted), source.get("review_revision_id", "")))
+        return MaterializedProjection(tuple(patches), tuple(structural), tuple(exclusions),
+                                      tuple(accepted_ids))
+
+
+class ProjectionTreeWriter:
+    """Apply a materialized projection atomically, then rebuild all consumers."""
+
+    def __init__(self, pipeline=None):
+        if pipeline is None:
+            from apply_suggestions import SubprocessPipeline
+            pipeline = SubprocessPipeline()
+        self.pipeline = pipeline
+
+    @staticmethod
+    def _patch_for(block, operation_id, source_ref, old_text, new_text, operation=None):
+        from apply_suggestions import Patch, classify
+        operation = operation or {}
+        relpath = source_ref.split("#", 1)[0]
+        op_name = operation.get("op") or (operation.get("kind")
+            if operation.get("kind") in STRUCTURAL_OPERATIONS else None)
+        kind, json_path = classify(source_ref, block, op_name)
+        return Patch(suggestion_id=operation_id,
+            group_id=operation.get("group_id") or operation.get("move_pair_id"),
+            source_ref=source_ref,relpath=relpath,kind=kind,json_path=json_path,
+            original_text=old_text,new_text=new_text,op=op_name,
+            op_arg=operation.get("op_arg"),created_at=operation.get("created_at",0))
+
+    def write(self, root, projection):
+        from apply_suggestions import apply_file_patches
+        root = pathlib.Path(root)
+        source_index = self.pipeline.regenerate_map(str(root))
+        patches = []
+        for item in projection.patches:
+            block = source_index.get(item.source_ref)
+            if not block:
+                raise ReleaseError(f"durable source is absent from production base: {item.source_ref}")
+            patches.append(self._patch_for(block,"projection:" + "+".join(item.operation_ids),
+                item.source_ref,item.original_text,item.new_text))
+        for operation in projection.structural_operations:
+            source_ref = operation["source_ref"]
+            block = source_index.get(source_ref)
+            if not block:
+                raise ReleaseError(f"structural source is absent from production base: {source_ref}")
+            evidence = AcceptedOnlyMaterializer._source_evidence(operation)
+            patches.append(self._patch_for(block,operation.get("id"),source_ref,
+                evidence["old_text"],evidence["new_text"],operation))
+
+        by_file = {}
+        for patch in patches:
+            by_file.setdefault(patch.relpath, []).append(patch)
+        # Resolve every file against a private data copy.  Only after all files
+        # succeed are their bytes installed in the disposable candidate tree.
+        with tempfile.TemporaryDirectory(prefix="sonsteng-projection-stage-") as stage:
+            stage_root = pathlib.Path(stage)
+            shutil.copytree(root / "data", stage_root / "data")
+            for relpath, file_patches in sorted(by_file.items()):
+                results = apply_file_patches(str(stage_root),relpath,file_patches)
+                if not results or not all(value is True for value in results.values()):
+                    failed = sorted(key for key,value in results.items()
+                                    if value is not True)
+                    raise ReleaseError("projection patch is ambiguous or invalid: " + ",".join(failed))
+            for relpath in sorted(by_file):
+                shutil.copy2(stage_root / relpath, root / relpath)
+
+        # The real pipeline owns the complete generator dependency closure.
+        self.pipeline.regenerate_map(str(root))
+        valid, detail = self.pipeline.validate(str(root))
+        if not valid:
+            raise ReleaseError("projected candidate validation failed: " + str(detail.get("step", "validate")))
+        built, detail = self.pipeline.build(str(root))
+        if not built:
+            raise ReleaseError("projected candidate build failed: " + str(detail.get("step", "build")))
+        parity, detail = self.pipeline.parity(str(root))
+        if not parity:
+            raise ReleaseError("projected candidate parity failed: " + str(detail.get("step", "parity")))
+        return {"generator_id":self.pipeline.generator_identity(str(root)),"parity_verified":True}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -163,6 +385,24 @@ class GitRefAdapter:
         if head != sha or status.strip():
             raise ReleaseError("candidate checkout is not the clean frozen commit")
 
+    def commit_projected_tree(self, base_sha, timestamp):
+        """Create a deterministic synthetic commit without moving ambient HEAD."""
+        self._run(["git", "add", "-A"], cwd=self.repo, check=True,
+                  capture_output=True, text=True)
+        tree = self._run(["git", "write-tree"], cwd=self.repo, check=True,
+                         capture_output=True, text=True).stdout.strip()
+        env = dict(os.environ, GIT_AUTHOR_NAME="Sonsteng Release Service",
+                   GIT_AUTHOR_EMAIL="release@localhost",
+                   GIT_COMMITTER_NAME="Sonsteng Release Service",
+                   GIT_COMMITTER_EMAIL="release@localhost",
+                   GIT_AUTHOR_DATE=f"@{int(timestamp)} +0000",
+                   GIT_COMMITTER_DATE=f"@{int(timestamp)} +0000")
+        commit = self._run(["git", "commit-tree", tree, "-p", base_sha,
+                            "-m", "release: accepted-only projection"],
+                           cwd=self.repo, check=True, capture_output=True,
+                           text=True, env=env).stdout.strip()
+        return commit, tree
+
     @contextmanager
     def isolated_checkout(self, sha):
         """Materialize an immutable candidate without pinning the DEV checkout."""
@@ -200,6 +440,58 @@ class CandidateValidator:
         if self.git.tree(release.candidate_sha) != self.manifest.get("candidate_tree"):
             raise ReleaseError("candidate tree mismatch")
         self.git.require_clean_candidate(release.candidate_sha)
+
+
+class AcceptedProjectionCandidateBuilder:
+    """Create a deterministic accepted-only commit from a verified PROD base."""
+
+    def __init__(self, git, manifest_path, writer=None, materializer=None):
+        self.git = git
+        self.manifest_path = pathlib.Path(manifest_path)
+        self.writer = writer or ProjectionTreeWriter()
+        self.materializer = materializer or AcceptedOnlyMaterializer()
+
+    def build(self, context):
+        projection_context = context.get("projection") or {}
+        if projection_context.get("blocked_reason"):
+            raise ReleaseError("production projection blocked: " +
+                               projection_context["blocked_reason"])
+        sources = projection_context.get("sources") or []
+        receipts = projection_context.get("review_receipts") or []
+        if not sources or not receipts:
+            return None
+        base_sha = context.get("base_sha") or sources[0].get("prod_base")
+        if not base_sha or any(source.get("prod_base") != base_sha for source in sources):
+            raise ReleaseError("submitted review does not match the verified production base")
+        materialized = self.materializer.materialize(sources)
+        if not materialized.accepted_operation_ids:
+            return None
+        receipt_hashes = tuple(sorted(item["receipt_hash"] for item in receipts))
+        receipt_binding = hashlib.sha256(_canonical(receipt_hashes)).hexdigest()
+        timestamp = max(int(item.get("created_at", 0)) for item in receipts) // 1000
+        with self.git.isolated_checkout(base_sha) as root:
+            evidence = self.writer.write(root, materialized)
+            candidate_git = GitRefAdapter(root)
+            candidate_sha, candidate_tree = candidate_git.commit_projected_tree(base_sha,timestamp)
+        exclusions = [dataclasses.asdict(item) for item in materialized.exclusions]
+        manifest = {"schema_version":2,"target_environment":"production",
+            "base_sha":base_sha,"candidate_sha":candidate_sha,
+            "candidate_tree":candidate_tree,"generator_id":evidence["generator_id"],
+            "review_receipt_hash":receipt_binding,"review_receipts":list(receipt_hashes),
+            "accepted_operation_ids":list(materialized.accepted_operation_ids),
+            "held_exclusions":exclusions,"generated_parity":evidence["parity_verified"]}
+        manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
+        self.manifest_path.parent.mkdir(parents=True,exist_ok=True)
+        payload = _canonical(manifest) + b"\n"
+        with tempfile.NamedTemporaryFile(dir=self.manifest_path.parent,delete=False) as target:
+            target.write(payload)
+            temporary = pathlib.Path(target.name)
+        temporary.replace(self.manifest_path)
+        return {"manifest":manifest,"manifest_hash":manifest_hash,
+            "candidate_sha":candidate_sha,"candidate_tree":candidate_tree,
+            "review_receipt_hash":receipt_binding,
+            "accepted_operation_ids":materialized.accepted_operation_ids,
+            "held_exclusions":materialized.exclusions}
 
 
 class ProductionCandidateBuilder:

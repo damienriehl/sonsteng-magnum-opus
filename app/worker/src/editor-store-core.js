@@ -129,6 +129,7 @@ export const SCHEMA_SQL = `
     id TEXT PRIMARY KEY, source_ref TEXT NOT NULL, source_revision TEXT NOT NULL,
     prod_base TEXT NOT NULL, commit_sha TEXT NOT NULL, original_hash TEXT NOT NULL,
     proposed_hash TEXT NOT NULL, original_text TEXT NOT NULL, proposed_text TEXT NOT NULL,
+    source_original_text TEXT, source_proposed_text TEXT,
     suggestion_ids_json TEXT NOT NULL, operations_json TEXT NOT NULL,
     evidence_digest TEXT NOT NULL, created_at INTEGER NOT NULL,
     UNIQUE(source_ref, source_revision, prod_base)
@@ -273,6 +274,8 @@ export class EditorStoreCore {
     this._ensureColumn("production_releases", "provider_json", "TEXT");
     this._ensureColumn("suggestions", "production_release_id", "TEXT");
     this._ensureColumn("suggestions", "production_published_at", "INTEGER");
+    this._ensureColumn("production_review_revisions", "source_original_text", "TEXT");
+    this._ensureColumn("production_review_revisions", "source_proposed_text", "TEXT");
   }
 
   _ensureColumn(table, col, type) {
@@ -1077,6 +1080,8 @@ export class EditorStoreCore {
     const evidence = { source_ref:input.source_ref, source_revision:input.source_revision,
       prod_base:input.prod_base, commit_sha:input.commit_sha, original_hash:input.original_hash,
       proposed_hash:input.proposed_hash, suggestion_ids:[...input.suggestion_ids].sort(),
+      source_original_text:input.source_original_text || input.original_text,
+      source_proposed_text:input.source_proposed_text || input.proposed_text,
       operations:input.operations };
     const digest = this._digest(evidence);
     const existing = this._one("SELECT evidence_digest FROM production_review_revisions WHERE id=?", input.id);
@@ -1085,9 +1090,11 @@ export class EditorStoreCore {
     if (this._one("SELECT id FROM production_review_revisions WHERE source_ref=? AND source_revision=? AND prod_base=?",
       input.source_ref,input.source_revision,input.prod_base)) return { ok:false,reason:"revision_exists" };
     const now = this.now();
-    this.sql.exec("INSERT INTO production_review_revisions (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,original_text,proposed_text,suggestion_ids_json,operations_json,evidence_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    this.sql.exec("INSERT INTO production_review_revisions (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,original_text,proposed_text,source_original_text,source_proposed_text,suggestion_ids_json,operations_json,evidence_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       input.id,input.source_ref,input.source_revision,input.prod_base,input.commit_sha,input.original_hash,
-      input.proposed_hash,input.original_text,input.proposed_text,this._canonical([...input.suggestion_ids].sort()),
+      input.proposed_hash,input.original_text,input.proposed_text,
+      input.source_original_text || input.original_text,input.source_proposed_text || input.proposed_text,
+      this._canonical([...input.suggestion_ids].sort()),
       this._canonical(input.operations),digest,now);
     return { ok:true,id:input.id };
   }
@@ -1387,7 +1394,34 @@ export class EditorStoreCore {
         batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
         "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
         .map((row) => row.id)] }));
-    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches };
+    const submittedRows = this._all(
+      "SELECT s.id,s.actor,s.created_at,s.receipt_hash,x.review_revision_id FROM production_review_submissions s JOIN production_review_submission_sources x ON x.review_id=s.id ORDER BY s.created_at DESC,s.id DESC,x.review_revision_id");
+    const seenSources = new Set();
+    const projectionSources = [];
+    const receiptIds = new Set();
+    for (const row of submittedRows) {
+      const revision = this._reviewRevision(row.review_revision_id);
+      if (!revision || seenSources.has(revision.source_ref)) continue;
+      seenSources.add(revision.source_ref);
+      receiptIds.add(row.id);
+      projectionSources.push({ review_id:row.id,review_revision_id:revision.id,
+        source_ref:revision.source_ref,source_revision:revision.source_revision,
+        prod_base:revision.prod_base,original_hash:revision.original_hash,
+        proposed_hash:revision.proposed_hash,original_text:revision.original_text,
+        source_original_text:revision.source_original_text || revision.original_text,
+        operations:revision.operations,stale:!!this._reviewStaleReason(revision),
+        decisions:this._all("SELECT operation_id,decision,note,group_id FROM production_review_submission_decisions WHERE review_id=? AND review_revision_id=? ORDER BY operation_id",
+          row.id,revision.id) });
+    }
+    projectionSources.sort((a,b) => a.source_ref.localeCompare(b.source_ref));
+    const reviewReceipts = [...receiptIds].map((id) => {
+      const row = this._one("SELECT id,actor,created_at,receipt_hash FROM production_review_submissions WHERE id=?",id);
+      return { id:row.id,actor:row.actor,created_at:row.created_at,receipt_hash:row.receipt_hash };
+    }).sort((a,b) => a.created_at-b.created_at || a.id.localeCompare(b.id));
+    const bases = new Set(projectionSources.map((source) => source.prod_base));
+    const projection = { review_receipts:reviewReceipts,sources:projectionSources };
+    if (bases.size > 1) projection.blocked_reason = "mixed_prod_bases";
+    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches, projection };
   }
 
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is

@@ -9,6 +9,9 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 
 from prod_release_executor import (  # noqa: E402
+    AcceptedOnlyMaterializer,
+    AcceptedProjectionCandidateBuilder,
+    ProjectionTreeWriter,
     CompatibilityGate,
     CandidateValidator,
     ProductionCandidateBuilder,
@@ -22,6 +25,188 @@ from prod_release_executor import (  # noqa: E402
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
 )
+
+
+def projection_source(**overrides):
+    value = {
+        "review_revision_id": "revision-1",
+        "source_ref": "data/copy/home.json#lead",
+        "source_revision": "dev-1",
+        "prod_base": "prod-1",
+        "original_text": "The bad idea",
+        "operations": [
+            {"id": "op-word", "decision_id": "op-word", "kind": "replace",
+             "source_ref": "data/copy/home.json#lead", "old_text": "bad",
+             "new_text": "good", "base_range": [4, 7], "created_at": 1,
+             "context_before": ["The "], "context_after": [" idea"]},
+            {"id": "op-comma", "decision_id": "op-comma", "kind": "insert",
+             "source_ref": "data/copy/home.json#lead", "old_text": "",
+             "new_text": ",", "base_range": [12, 12], "created_at": 2,
+             "context_before": [" idea"], "context_after": []},
+        ],
+        "decisions": [
+            {"operation_id": "op-word", "decision": "accepted"},
+            {"operation_id": "op-comma", "decision": "rejected"},
+        ],
+        "stale": False,
+    }
+    value.update(overrides)
+    return value
+
+
+def test_accepted_only_materializer_projects_atoms_and_records_held_canaries():
+    materialized = AcceptedOnlyMaterializer().materialize([projection_source()])
+    assert materialized.patches[0].original_text == "The bad idea"
+    assert materialized.patches[0].new_text == "The good idea"
+    assert [item.reason for item in materialized.exclusions] == ["rejected"]
+    assert "op-comma" not in materialized.accepted_operation_ids
+
+
+@pytest.mark.parametrize("decision,stale,reason", [
+    ("rejected", False, "rejected"),
+    ("questioned", False, "questioned"),
+    (None, False, "unanswered"),
+    ("accepted", True, "stale"),
+])
+def test_accepted_only_materializer_positive_held_leak_canaries(decision, stale, reason):
+    source = projection_source(stale=stale)
+    source["operations"] = [source["operations"][0]]
+    source["decisions"] = [] if decision is None else [
+        {"operation_id": "op-word", "decision": decision}
+    ]
+    result = AcceptedOnlyMaterializer().materialize([source])
+    assert result.patches == ()
+    assert result.exclusions[0].operation_id == "op-word"
+    assert result.exclusions[0].reason == reason
+
+
+def test_accepted_only_materializer_projects_later_unique_anchor_across_held_edit():
+    source = projection_source(original_text="One plain sentence.")
+    source["operations"] = [
+        {"id":"held", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"plain", "new_text":"short", "base_range":[4,9], "created_at":1,
+         "context_before":["One "], "context_after":[" sentence."]},
+        {"id":"accepted", "kind":"replace", "source_ref":source["source_ref"],
+         "old_text":"sentence", "new_text":"example", "base_range":[10,18], "created_at":2,
+         "context_before":["plain "], "context_after":["."]},
+    ]
+    source["decisions"] = [
+        {"operation_id":"held", "decision":"rejected"},
+        {"operation_id":"accepted", "decision":"accepted"},
+    ]
+    result = AcceptedOnlyMaterializer().materialize([source])
+    assert result.patches[0].new_text == "One plain example."
+
+
+def test_accepted_only_materializer_fails_before_output_on_ambiguous_or_overlap():
+    ambiguous = projection_source(original_text="bad and bad")
+    ambiguous["operations"] = [{"id":"op", "kind":"replace",
+        "source_ref":ambiguous["source_ref"], "old_text":"bad", "new_text":"good",
+        "base_range":[0,3], "created_at":1, "context_before":[], "context_after":[]}]
+    ambiguous["decisions"] = [{"operation_id":"op", "decision":"accepted"}]
+    with pytest.raises(ReleaseError, match="unique anchor"):
+        AcceptedOnlyMaterializer().materialize([ambiguous])
+
+    overlap = projection_source(original_text="abcdef")
+    overlap["operations"] = [
+        {"id":"a", "kind":"replace", "source_ref":overlap["source_ref"],
+         "old_text":"bcd", "new_text":"X", "base_range":[1,4], "created_at":1},
+        {"id":"b", "kind":"replace", "source_ref":overlap["source_ref"],
+         "old_text":"cde", "new_text":"Y", "base_range":[2,5], "created_at":2},
+    ]
+    overlap["decisions"] = [{"operation_id":x, "decision":"accepted"} for x in ("a","b")]
+    with pytest.raises(ReleaseError, match="overlapping"):
+        AcceptedOnlyMaterializer().materialize([overlap])
+
+
+def test_accepted_only_materializer_never_splits_structural_group():
+    source = projection_source(original_text="A\n\nB")
+    source["operations"] = [
+        {"id":"move-from", "decision_id":"move-1", "group_id":"group-1",
+         "kind":"move", "source_ref":source["source_ref"], "op":"move",
+         "op_arg":"data/copy/home.json#b22222222", "created_at":1},
+        {"id":"move-to", "decision_id":"move-1", "group_id":"group-1",
+         "kind":"move", "source_ref":source["source_ref"], "op":"move",
+         "op_arg":"data/copy/home.json#b22222222", "created_at":1},
+    ]
+    source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
+    accepted = AcceptedOnlyMaterializer().materialize([source])
+    assert len(accepted.structural_operations) == 2
+
+    source["decisions"] = [{"operation_id":"move-1", "decision":"rejected"}]
+    held = AcceptedOnlyMaterializer().materialize([source])
+    assert held.structural_operations == ()
+    assert {item.reason for item in held.exclusions} == {"rejected"}
+
+    source["operations"][1]["decision_id"] = "move-2"
+    source["decisions"] = [{"operation_id":"move-1", "decision":"accepted"}]
+    with pytest.raises(ReleaseError, match="partial structural group"):
+        AcceptedOnlyMaterializer().materialize([source])
+
+
+def test_projection_builder_is_deterministic_and_never_moves_or_dirties_ambient_head(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.name","Test"],cwd=repo,check=True)
+    subprocess.run(["git","config","user.email","test@example.invalid"],cwd=repo,check=True)
+    (repo / "data").mkdir()
+    (repo / "data" / "copy.txt").write_text("base\n",encoding="utf-8")
+    subprocess.run(["git","add","data/copy.txt"],cwd=repo,check=True)
+    subprocess.run(["git","commit","-q","-m","base"],cwd=repo,check=True)
+    base = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+
+    class Writer:
+        def write(self, root, projection):
+            pathlib.Path(root,"data","copy.txt").write_text(
+                projection.patches[0].new_text + "\n",encoding="utf-8")
+            return {"generator_id":"generator-v2","parity_verified":True}
+
+    source = projection_source(prod_base=base,original_text="The bad idea")
+    context = {"base_sha":base,"projection":{"sources":[source],
+        "review_receipts":[{"receipt_hash":"receipt-1","created_at":120000}]}}
+    builder = AcceptedProjectionCandidateBuilder(GitRefAdapter(repo),tmp_path / "manifest.json",
+                                                  writer=Writer())
+    first = builder.build(context)
+    second = builder.build(context)
+    assert first["candidate_sha"] == second["candidate_sha"]
+    assert first["manifest_hash"] == second["manifest_hash"]
+    assert subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip() == base
+    assert subprocess.run(["git","status","--porcelain"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout == ""
+    candidate_copy = subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],
+        cwd=repo,check=True,capture_output=True,text=True).stdout
+    assert candidate_copy == "The good idea\n"  # rejected comma is a positive leak canary
+
+
+def test_projection_tree_writer_uses_existing_atomic_writer_and_runs_parity(tmp_path):
+    root = tmp_path / "candidate"
+    (root / "data").mkdir(parents=True)
+    target = root / "data" / "home.json"
+    target.write_text('{"lead":"The bad idea"}\n',encoding="utf-8")
+
+    class Pipeline:
+        calls = []
+        def regenerate_map(self, worktree):
+            self.calls.append("map")
+            return {"data/home.json#lead":{"kind":"json_scalar","json_path":"lead"}}
+        def validate(self, worktree): self.calls.append("validate"); return True,{}
+        def build(self, worktree): self.calls.append("build"); return True,{}
+        def parity(self, worktree): self.calls.append("parity"); return True,{}
+        def generator_identity(self, worktree): return "generator-v2"
+
+    pipeline = Pipeline()
+    projection = AcceptedOnlyMaterializer().materialize([projection_source(
+        source_ref="data/home.json#lead",operations=[
+            {**item,"source_ref":"data/home.json#lead"}
+            for item in projection_source()["operations"]])])
+    assert ProjectionTreeWriter(pipeline).write(root,projection) == {
+        "generator_id":"generator-v2","parity_verified":True}
+    assert json.loads(target.read_text(encoding="utf-8"))["lead"] == "The good idea"
+    assert pipeline.calls == ["map","map","validate","build","parity"]
 
 
 class Ledger:

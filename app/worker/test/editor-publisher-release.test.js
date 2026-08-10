@@ -78,6 +78,36 @@ test("trusted builder sees a text-free exact DEV frontier", () => {
   assert.equal(JSON.stringify(context).includes("new_text"), false);
 });
 
+test("trusted builder freezes submitted projection evidence and held leak canaries", () => {
+  const core = makeCore(() => 1200);
+  const sourceRef = "data/copy/home.json#lead";
+  const operations = [
+    { id:"accepted",decision_id:"accepted",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-1",base_range:[4,7],old_text:"bad",new_text:"good" },
+    { id:"held",decision_id:"held",kind:"insert",source_ref:sourceRef,
+      source_revision:"dev-1",prod_base:"prod-1",base_range:[12,12],old_text:"",new_text:"," },
+  ];
+  assert.equal(core.recordReviewRevision({ id:"revision-1",source_ref:sourceRef,
+    source_revision:"dev-1",prod_base:"prod-1",commit_sha:"dev-1",
+    original_hash:"old",proposed_hash:"new",original_text:"The bad idea",
+    proposed_text:"The good idea,",suggestion_ids:["s1"],operations }).ok,true);
+  const decisions = [{ operation_id:"accepted",decision:"accepted" },
+    { operation_id:"held",decision:"rejected",note:"Keep this out." }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:"revision-1",
+    source_revision:"dev-1",prod_base:"prod-1",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-1",idempotency_key:"submit-1",
+    request_digest:"digest-1",actor:"slot:damien",review_revision_id:"revision-1",
+    source_revision:"dev-1",prod_base:"prod-1",decisions }).ok,true);
+
+  const projection = core.productionPreparationContext().projection;
+  assert.ok(projection.review_receipts[0].receipt_hash);
+  assert.deepEqual(projection.sources[0].decisions.map((item) => item.decision),
+    ["accepted","rejected"]);
+  assert.equal(projection.sources[0].operations[1].new_text,","); // positive leak canary
+  assert.equal(projection.sources[0].stale,false);
+  assert.equal("draft" in projection.sources[0],false);
+});
+
 test("History revert batches are first-class production frontier members", () => {
   const core = makeCore(() => 1300);
   core.fileRevertRequest({ id:"revert-1",editor:"slot:damien",doc:"data/copy/home.json",
