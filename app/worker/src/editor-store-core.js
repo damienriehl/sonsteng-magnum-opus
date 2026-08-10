@@ -92,6 +92,12 @@ export const SCHEMA_SQL = `
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS canonical_mutations (
+    id TEXT PRIMARY KEY, batch_id TEXT NOT NULL UNIQUE, actor TEXT NOT NULL,
+    kind TEXT NOT NULL, source_ref TEXT NOT NULL, original_text TEXT NOT NULL,
+    new_text TEXT NOT NULL, original_hash TEXT NOT NULL, new_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 
   CREATE TABLE IF NOT EXISTS production_releases (
     id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE,
@@ -643,6 +649,66 @@ export class EditorStoreCore {
     return { ok: true };
   }
 
+  recordCanonicalMutation(input = {}) {
+    const required = ["id","batch_id","actor","kind","source_ref","original_text",
+      "new_text","original_hash","new_hash","base_sha","commit_sha","generator_id"];
+    if (required.some((key) => typeof input[key] !== "string") ||
+        required.filter((key) => !["original_text","new_text"].includes(key)).some((key) => !input[key]))
+      return { ok:false, reason:"validation_error" };
+    if (input.kind !== "history_revert" || input.original_text === input.new_text ||
+        new TextEncoder().encode(input.original_text).byteLength > 131072 ||
+        new TextEncoder().encode(input.new_text).byteLength > 131072 ||
+        !/^data\//.test(input.source_ref) || /(^|\/)(?:twin-secrets|\.secrets)(?:\/|$)|\.(?:pem|key)$/i.test(input.source_ref))
+      return { ok:false, reason:"validation_error" };
+    const request = this._one("SELECT editor,status FROM revert_requests WHERE id=?", input.id);
+    if (!request || request.status !== REVERT_STATUS.APPROVED || request.editor !== input.actor)
+      return { ok:false, reason:"revert_not_approved" };
+    const existing = this._one("SELECT * FROM canonical_mutations WHERE id=?", input.id);
+    if (existing) {
+      const batch = this._one("SELECT base_sha,commit_sha,generator_id,phase FROM apply_batches WHERE batch_id=?",
+        existing.batch_id);
+      return existing.batch_id === input.batch_id && existing.actor === input.actor &&
+        existing.source_ref === input.source_ref && existing.original_text === input.original_text &&
+        existing.new_text === input.new_text && existing.original_hash === input.original_hash &&
+        existing.new_hash === input.new_hash && batch?.commit_sha === input.commit_sha &&
+        batch?.generator_id === input.generator_id && batch?.base_sha === input.base_sha ?
+        { ok:true,replay:true,phase:batch.phase } :
+        { ok:false,reason:"idempotency_conflict" };
+    }
+    if (this._one("SELECT batch_id FROM apply_batches WHERE batch_id=?", input.batch_id))
+      return { ok:false,reason:"batch_exists" };
+    const now = this.now();
+    this.transactionSync(() => {
+      this.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,lease_expires_at,created_at,updated_at) VALUES (?,?,?,?, 'merged',NULL,?,?)",
+        input.batch_id,input.base_sha,input.commit_sha,input.generator_id,now,now);
+      this.sql.exec("INSERT INTO canonical_mutations (id,batch_id,actor,kind,source_ref,original_text,new_text,original_hash,new_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        input.id,input.batch_id,input.actor,input.kind,input.source_ref,input.original_text,input.new_text,
+        input.original_hash,input.new_hash,now);
+    });
+    return { ok:true,batch_id:input.batch_id,phase:"merged" };
+  }
+
+  completeCanonicalMutation(input = {}) {
+    const mutation = this._one("SELECT * FROM canonical_mutations WHERE id=?", input.id || "");
+    if (!mutation) return { ok:false,reason:"not_found" };
+    const batch = this._one("SELECT * FROM apply_batches WHERE batch_id=?", mutation.batch_id);
+    for (const key of ["batch_id","actor","source_ref","original_text","new_text","original_hash","new_hash"])
+      if (input[key] !== (key === "batch_id" ? mutation.batch_id : mutation[key]))
+        return { ok:false,reason:"idempotency_conflict" };
+    for (const key of ["base_sha","commit_sha","generator_id"])
+      if (input[key] !== batch[key]) return { ok:false,reason:"idempotency_conflict" };
+    if (batch.phase === "done") return { ok:true,replay:true,phase:"done" };
+    if (batch.phase !== "merged") return { ok:false,reason:"invalid_phase" };
+    const now = this.now();
+    this.transactionSync(() => {
+      this.sql.exec("UPDATE apply_batches SET phase='done',updated_at=? WHERE batch_id=?",
+        now,batch.batch_id);
+      this.sql.exec("UPDATE revert_requests SET status=?,updated_at=? WHERE id=? AND status=?",
+        REVERT_STATUS.DONE,now,input.id,REVERT_STATUS.APPROVED);
+    });
+    return { ok:true,batch_id:batch.batch_id,phase:"done" };
+  }
+
   prepareProductionRelease(input = {}) {
     const required = ["id", "idempotency_key", "request_digest", "actor", "base_sha",
       "candidate_sha", "generator_id", "evidence_hash", "manifest_hash", "target_batch_id"];
@@ -673,7 +739,8 @@ export class EditorStoreCore {
       "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
     const done = allDone.filter((batch) => this._one(
       "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
-      batch.batch_id, STATUS.APPLIED));
+      batch.batch_id, STATUS.APPLIED) || this._one(
+      "SELECT id FROM canonical_mutations WHERE batch_id=? LIMIT 1", batch.batch_id));
     let start = 0;
     if (frontier) {
       if (frontier.candidate_sha !== input.base_sha) return { ok:false, reason:"stale_base" };
@@ -696,7 +763,9 @@ export class EditorStoreCore {
       const rows = this._all(
         "SELECT id,group_id,status FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
         batch.batch_id, STATUS.APPLIED);
-      if (!rows.length) return { ok:false, reason:"stale_member" };
+      const mutations = this._all(
+        "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id);
+      if (!rows.length && !mutations.length) return { ok:false, reason:"stale_member" };
       for (const row of rows) {
         if (row.group_id) {
           if (!groups.has(row.group_id)) groups.set(row.group_id, this._all(
@@ -707,6 +776,8 @@ export class EditorStoreCore {
         }
         members.push({ suggestion_id:row.id, batch_id:batch.batch_id });
       }
+      for (const mutation of mutations)
+        members.push({ suggestion_id:mutation.id, batch_id:batch.batch_id });
     }
     const batchIds = batches.map((b) => b.batch_id);
     const memberIds = members.map((m) => m.suggestion_id);
@@ -893,9 +964,11 @@ export class EditorStoreCore {
     }
     const visible = release ? release.batches.map((frozen) =>
       done.find((batch) => batch.batch_id === frozen.batch_id)).filter(Boolean) : done.slice(start);
-    const batches = visible.map((batch) => ({ ...batch, changes: this._all(
+    const batches = visible.map((batch) => ({ ...batch, changes: [...this._all(
       "SELECT id,editor,origin,kind,page,source_ref,original_text,new_text,comment,group_id,status,apply_batch_id,created_at,updated_at FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
-      batch.batch_id, STATUS.APPLIED) }));
+      batch.batch_id, STATUS.APPLIED), ...this._all(
+      "SELECT id,actor AS editor,'human' AS origin,kind,NULL AS page,source_ref,original_text,new_text,NULL AS comment,NULL AS group_id,'applied' AS status,batch_id AS apply_batch_id,created_at,created_at AS updated_at FROM canonical_mutations WHERE batch_id=? ORDER BY id",
+      batch.batch_id)] }));
     return { release, batches };
   }
 
@@ -907,7 +980,11 @@ export class EditorStoreCore {
       STATUS.APPLIED,frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
       "SELECT COUNT(*) AS count FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done'",
       STATUS.APPLIED);
-    return { eligible:Number(row?.count || 0) };
+    const mutationRow = frontier ? this._one(
+      "SELECT COUNT(*) AS count FROM canonical_mutations m JOIN apply_batches b ON b.batch_id=m.batch_id WHERE b.phase='done' AND (b.created_at>? OR (b.created_at=? AND b.batch_id>?))",
+      frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
+      "SELECT COUNT(*) AS count FROM canonical_mutations m JOIN apply_batches b ON b.batch_id=m.batch_id WHERE b.phase='done'");
+    return { eligible:Number(row?.count || 0) + Number(mutationRow?.count || 0) };
   }
 
   // Minimal, text-free projection for the trusted candidate builder.  The
@@ -927,16 +1004,19 @@ export class EditorStoreCore {
       "SELECT batch_id,commit_sha,generator_id,created_at FROM apply_batches WHERE phase='done' ORDER BY created_at,batch_id");
     const done = allDone.filter((batch) => this._one(
       "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? LIMIT 1",
-      batch.batch_id, STATUS.APPLIED));
+      batch.batch_id, STATUS.APPLIED) || this._one(
+      "SELECT id FROM canonical_mutations WHERE batch_id=? LIMIT 1", batch.batch_id));
     let start = 0;
     if (frontier) {
       const at = done.findIndex((batch) => batch.batch_id === frontier.target_batch_id);
       start = at < 0 ? done.length : at + 1;
     }
     const batches = done.slice(start).map((batch) => ({ ...batch,
-      suggestion_ids:this._all(
+      suggestion_ids:[...this._all(
         "SELECT id FROM suggestions WHERE apply_batch_id=? AND status=? ORDER BY id",
-        batch.batch_id, STATUS.APPLIED).map((row) => row.id) }));
+        batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
+        "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
+        .map((row) => row.id)] }));
     return { active_release:null, base_sha:frontier?.candidate_sha || null, batches };
   }
 
@@ -1035,7 +1115,7 @@ export class EditorStoreCore {
   listRevertRequests(status = null) {
     if (status) {
       return this._all(
-        "SELECT * FROM revert_requests WHERE status=? ORDER BY created_at ASC", status);
+        "SELECT r.*,m.batch_id,m.actor AS mutation_actor,m.source_ref,m.original_text,m.new_text,m.original_hash,m.new_hash,b.base_sha,b.commit_sha,b.generator_id,b.phase AS mutation_phase FROM revert_requests r LEFT JOIN canonical_mutations m ON m.id=r.id LEFT JOIN apply_batches b ON b.batch_id=m.batch_id WHERE r.status=? ORDER BY r.created_at ASC", status);
     }
     return this._all("SELECT * FROM revert_requests ORDER BY created_at DESC");
   }

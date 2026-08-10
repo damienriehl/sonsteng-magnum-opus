@@ -62,6 +62,81 @@ test("trusted builder sees a text-free exact DEV frontier", () => {
   assert.equal(JSON.stringify(context).includes("new_text"), false);
 });
 
+test("History revert batches are first-class production frontier members", () => {
+  const core = makeCore(() => 1300);
+  core.fileRevertRequest({ id:"revert-1",editor:"slot:damien",doc:"data/copy/home.json",
+    run_first:"aaaaaaa",run_last:"bbbbbbb",approved:true });
+  const recorded = core.recordCanonicalMutation({ id:"revert-1",batch_id:"revert-revert-1",
+    actor:"slot:damien",kind:"history_revert",source_ref:"data/copy/home.json",
+    original_text:"Edited copy",new_text:"Restored copy",base_sha:"before-revert",
+    original_hash:"edited-hash",new_hash:"restored-hash",
+    commit_sha:"commit-revert",generator_id:"generator-v1" });
+  assert.equal(recorded.ok,true);
+  assert.equal(recorded.phase,"merged");
+  assert.equal(core.recordCanonicalMutation({ id:"revert-1",batch_id:"revert-revert-1",
+    actor:"slot:damien",kind:"history_revert",source_ref:"data/copy/home.json",
+    original_text:"Edited copy",new_text:"Restored copy",base_sha:"before-revert",
+    original_hash:"edited-hash",new_hash:"restored-hash",
+    commit_sha:"commit-revert",generator_id:"generator-v1" }).replay,true);
+  assert.equal(core.recordCanonicalMutation({ id:"revert-1",batch_id:"revert-revert-1",
+    actor:"slot:damien",kind:"history_revert",source_ref:"data/copy/home.json",
+    original_text:"DIFFERENT",new_text:"Restored copy",base_sha:"before-revert",
+    original_hash:"different-hash",new_hash:"restored-hash",
+    commit_sha:"commit-revert",generator_id:"generator-v1" }).reason,"idempotency_conflict");
+  assert.equal(core.productionPreparationContext().batches.length,0);
+  const binding = { id:"revert-1",batch_id:"revert-revert-1",actor:"slot:damien",
+    source_ref:"data/copy/home.json",original_text:"Edited copy",new_text:"Restored copy",
+    original_hash:"edited-hash",new_hash:"restored-hash",
+    base_sha:"before-revert",commit_sha:"commit-revert",generator_id:"generator-v1" };
+  assert.equal(core.completeCanonicalMutation({ ...binding,commit_sha:"wrong" }).reason,
+    "idempotency_conflict");
+  assert.equal(core.completeCanonicalMutation(binding).ok,true);
+  assert.equal(core.completeCanonicalMutation(binding).replay,true);
+  let context = core.productionPreparationContext();
+  assert.deepEqual(context.batches.map((batch) => ({ id:batch.batch_id,
+    commit:batch.commit_sha,members:batch.suggestion_ids })), [
+      { id:"revert-revert-1",commit:"commit-revert",members:["revert-1"] },
+    ]);
+  const preview = core.publisherContext();
+  assert.equal(preview.batches[0].changes[0].kind,"history_revert");
+  assert.equal(preview.batches[0].changes[0].editor,"slot:damien");
+  assert.equal(preview.batches[0].changes[0].original_text,"Edited copy");
+  assert.equal(preview.batches[0].changes[0].new_text,"Restored copy");
+
+  seedApplied(core,"batch-after-revert",["suggestion-after-revert"],1400);
+  context = core.productionPreparationContext();
+  assert.deepEqual(context.batches.map((batch) => batch.batch_id),
+    ["revert-revert-1","batch-after-revert"]);
+  assert.deepEqual(context.batches.flatMap((batch) => batch.suggestion_ids),
+    ["revert-1","suggestion-after-revert"]);
+  const prepared = core.prepareProductionRelease(release({ id:"release-revert-plus-edit",
+    idempotency_key:"idem-revert-plus-edit",request_digest:"digest-revert-plus-edit",
+    base_sha:"prod-base",target_batch_id:"batch-after-revert",
+    candidate_sha:"commit-batch-after-revert",expected_batch_ids:
+      ["revert-revert-1","batch-after-revert"],expected_suggestion_ids:
+      ["revert-1","suggestion-after-revert"] })).release;
+  assert.deepEqual(prepared.suggestion_ids,["revert-1","suggestion-after-revert"]);
+  assert.deepEqual(prepared.batches.map((batch) => batch.commit_sha),
+    ["commit-revert","commit-batch-after-revert"]);
+});
+
+test("History revert evidence is bounded and restricted to public data", () => {
+  const core = makeCore();
+  for (const [id,source,text] of [
+    ["private-revert","twin-secrets/private.json","before"],
+    ["oversized-revert","data/public.json","x".repeat(131073)],
+    ["multibyte-revert","data/public.json","é".repeat(70000)],
+  ]) {
+    core.fileRevertRequest({ id,editor:"slot:damien",doc:source,
+      run_first:"aaaaaaa",run_last:"bbbbbbb",approved:true });
+    assert.equal(core.recordCanonicalMutation({ id,batch_id:`revert-${id}`,
+      actor:"slot:damien",kind:"history_revert",source_ref:source,original_text:text,
+      new_text:"after",original_hash:"before-hash",new_hash:"after-hash",
+      base_sha:"base",commit_sha:"commit",generator_id:"generator-v1" }).reason,
+      "validation_error");
+  }
+});
+
 test("executor claims only authorization and stale fences cannot advance it", () => {
   const core = makeCore(() => 2000);
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);

@@ -550,6 +550,28 @@ export async function revertResolveEndpoint(request, env, auth) {
   return json({ ok: true, id: result.id, status: result.status });
 }
 
+export async function revertRecordEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);
+  const body = await readJson(request);
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  if (!["record","complete"].includes(body.action) ||
+      typeof body.original_text !== "string" || typeof body.new_text !== "string" ||
+      new TextEncoder().encode(body.original_text).byteLength > 131072 ||
+      new TextEncoder().encode(body.new_text).byteLength > 131072)
+    return editError("validation_error", "Invalid or oversized revert evidence.", 400);
+  const binding = {
+    id:body.id,batch_id:body.batch_id,actor:body.actor,kind:"history_revert",
+    source_ref:body.source_ref,original_text:body.original_text,new_text:body.new_text,
+    base_sha:body.base_sha,commit_sha:body.commit_sha,generator_id:body.generator_id,
+    original_hash:await sha256Hex(body.original_text),new_hash:await sha256Hex(body.new_text),
+  };
+  const result = body.action === "record" ?
+    await editorStub(env).recordCanonicalMutation(binding) :
+    await editorStub(env).completeCanonicalMutation(binding);
+  return json(result, result.ok ? (result.replay ? 200 : 201) : 409);
+}
+
 // ---- GET /edit/v1/scope (edit/instructor/admin) -----------------------------
 // U6: deterministic blast-radius enumeration for the scope ladder. Read-only,
 // map-derived, and cheap enough to show interactively while an editor chooses

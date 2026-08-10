@@ -23,6 +23,7 @@ import {
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
+  revertRecordEndpoint,
   publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint,
   productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
@@ -223,6 +224,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await revertRequestsEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-resolve" && request.method === "POST")
     return wrap(await revertResolveEndpoint(request, env, auth));
+  if (path === "/edit/v1/revert-record" && request.method === "POST")
+    return wrap(await revertRecordEndpoint(request, env, auth));
 
   // ---- editor-gated redline History browser (edit/instructor scope) ---------
   // Same gate as /edit/v1/pending. Index + per-doc slice from the inlined bundle.

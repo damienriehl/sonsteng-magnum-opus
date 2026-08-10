@@ -36,6 +36,8 @@ export class EditorStore extends DurableObject {
   reanchor(id, patch) { return this.core.reanchor(id, patch); }
   claimBatch(batchId, opts) { return this.core.claimBatch(batchId, opts); }
   finalize(batchId, outcome) { return this.core.finalize(batchId, outcome); }
+  recordCanonicalMutation(input) { return this.core.recordCanonicalMutation(input); }
+  completeCanonicalMutation(input) { return this.core.completeCanonicalMutation(input); }
   reconcile() { return this.core.reconcile(); }
   digest() { return this.core.digest(); }
   purge(days) { return this.core.purge(days); }

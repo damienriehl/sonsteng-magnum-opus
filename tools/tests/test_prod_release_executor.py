@@ -453,6 +453,32 @@ def test_candidate_builder_creates_fresh_attempt_after_restoration_and_replays_a
     assert len(ledger.bindings) == 2
 
 
+def test_candidate_builder_freezes_revert_only_frontier_with_exact_evidence(tmp_path):
+    class Git:
+        def require_clean_candidate(self, candidate): assert candidate == "b" * 40
+        def is_ancestor(self, _base, _candidate): return True
+        def tree(self, _candidate): return "revert-tree"
+    class Ledger:
+        binding = None
+        def preparation_context(self):
+            return {"base_sha":"a" * 40,"active_release":None,"batches":[{
+                "batch_id":"revert-r1","commit_sha":"b" * 40,
+                "generator_id":"generator-revert","suggestion_ids":["r1"]}]}
+        def prepare(self, binding):
+            self.binding = binding
+            return {"ok":True,"release":binding}
+    ledger = Ledger()
+    path = tmp_path / "revert-manifest.json"
+    ProductionCandidateBuilder(ledger,Git(),path,
+        attempt_id_factory=lambda: "revert-attempt").prepare_latest()
+    manifest = json.loads(path.read_text())
+    assert manifest["batch_ids"] == ["revert-r1"]
+    assert manifest["batch_commits"] == ["b" * 40]
+    assert manifest["suggestion_ids"] == ["r1"]
+    assert manifest["generator_id"] == "generator-revert"
+    assert ledger.binding["expected_suggestion_ids"] == ["r1"]
+
+
 def test_candidate_builder_requires_recorded_first_base_and_reproduces_active(tmp_path):
     class Git:
         def tree(self, candidate): return "tree-1"

@@ -59,8 +59,11 @@ function renderChanges(vm) {
   const rows = [];
   for (const batch of batches) for (const change of (batch.changes || [])) {
     if (vm.release && !releaseIds.has(change.id)) continue;
-    rows.push("<article class=\"pub-change\"><header><strong>" + escapeHtml(change.source_ref || change.id) +
-      "</strong><span>Suggested by " + escapeHtml(attributionLabel(change.editor) || "Unknown") +
+    const action = change.kind === "history_revert" ? "Approved History revert" : "Suggested change";
+    rows.push("<article class=\"pub-change\"><header><strong>" + escapeHtml(action) + ": " +
+      escapeHtml(change.source_ref || change.id) +
+      "</strong><span>" + (change.kind === "history_revert" ? "Requested by " : "By ") +
+      escapeHtml(attributionLabel(change.editor) || "Unknown") +
       (change.group_id ? " · group " + escapeHtml(change.group_id) : "") + "</span></header>" +
       "<div class=\"pub-redline\"><section><h4>Before</h4><p><del>" + escapeHtml(change.original_text || "") +
       "</del></p></section><section><h4>After</h4><p><ins>" + escapeHtml(change.new_text || "") +

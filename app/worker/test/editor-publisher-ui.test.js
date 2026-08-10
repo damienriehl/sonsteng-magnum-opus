@@ -111,6 +111,21 @@ test("prepared page discloses exact immutable release before one deliberate cont
   assert.doesNotMatch(html, /Publish automatically|Execute now|Retry deployment/);
 });
 
+test("Publisher preview labels an attributed History revert redline", async () => {
+  const revertContext = { release:{ ...prepared,suggestion_ids:["revert-1"],batches:[
+    { ordinal:0,batch_id:"revert-batch",commit_sha:"revert-commit" }] }, batches:[{
+      batch_id:"revert-batch",commit_sha:"revert-commit",changes:[{
+        id:"revert-1",kind:"history_revert",editor:"slot:damien",
+        source_ref:"data/copy/home.json",original_text:"Edited copy",new_text:"Restored copy",
+      }],
+    }] };
+  const html = await renderPublisherPage(revertContext,"DR").text();
+  assert.match(html,/Approved History revert: data\/copy\/home\.json/);
+  assert.match(html,/Requested by DR/);
+  assert.match(html,/<del>Edited copy<\/del>/);
+  assert.match(html,/<ins>Restored copy<\/ins>/);
+});
+
 test("non-prepared lifecycle states explain status and never render authorization", async () => {
   for (const state of ["draft", "authorized", "executing", "delayed", "failed_fenced",
     "restoring", "restored", "verified", "complete"]) {
