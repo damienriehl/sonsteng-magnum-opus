@@ -1068,9 +1068,44 @@ class RecoveryRegistry:
         temporary.chmod(0o600)
         temporary.replace(self.path)
 
+    def record_pair(self, sha, pages_deployment_id, worker_version_id):
+        """Compare-and-set one complete recovery pair without exposing halves."""
+        if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
+            raise ReleaseError("recovery registry requires an exact candidate SHA")
+        if not pages_deployment_id or not worker_version_id:
+            raise ReleaseError("recovery registry requires a complete provider pair")
+        data = self._read()
+        expected = {
+            "pages_deployment_id": pages_deployment_id,
+            "worker_version_id": worker_version_id,
+        }
+        prior = data.get(sha)
+        if prior is not None:
+            if set(prior) != set(expected):
+                raise ReleaseError("partial recovery pair conflicts with audited bootstrap")
+            if prior != expected:
+                raise ReleaseError("complete pair conflict")
+            return True
+        data[sha] = expected
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", dir=self.path.parent, delete=False,
+                                         encoding="utf-8") as target_file:
+            json.dump(data, target_file, sort_keys=True, separators=(",", ":"))
+            target_file.write("\n")
+            temporary = pathlib.Path(target_file.name)
+        temporary.chmod(0o600)
+        temporary.replace(self.path)
+        return False
+
+    def pair(self, sha):
+        pair = self._read().get(sha)
+        required = {"pages_deployment_id", "worker_version_id"}
+        return dict(pair) if isinstance(pair, dict) and set(pair) == required and \
+            all(pair.get(key) for key in required) else None
+
     def target(self, sha, target):
         key = "pages_deployment_id" if target == "pages" else "worker_version_id"
         return self._read().get(sha, {}).get(key)
 
     def pairs(self):
-        return self._read()
+        return {sha: pair for sha in self._read() if (pair := self.pair(sha))}

@@ -93,3 +93,15 @@ def test_production_release_lane_pins_wrangler_major_everywhere():
     assert 'WRANGLER_COMMAND = ("npx", "wrangler@4")' in executor
     assert '["npx", "wrangler"' not in executor
     assert '"npx wrangler' not in executor
+
+
+def test_legacy_bootstrap_is_operator_only_and_has_no_publication_authority():
+    bootstrap = (ROOT / "tools/prod_release_bootstrap.py").read_text(encoding="utf-8")
+    daemon = (ROOT / "tools/prod_release_daemon.py").read_text(encoding="utf-8")
+
+    assert "SONSTENG_PROD_BOOTSTRAP_AUTHORITY" in bootstrap
+    assert "SONSTENG_PROD_RELEASE_ENABLED" in bootstrap
+    assert "SONSTENG_PROD_RELEASE_BEARER" in bootstrap
+    assert "ProductionCandidateBuilder" not in bootstrap
+    assert "LedgerHTTP" not in bootstrap
+    assert "prod_release_bootstrap" not in daemon

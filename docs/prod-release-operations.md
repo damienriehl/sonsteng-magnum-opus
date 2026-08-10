@@ -68,6 +68,33 @@ sufficient evidence. Until every item exists, keep
 `SONSTENG_PROD_RELEASE_ENABLED=false`; do not prepare a selective candidate,
 activate the timer, or use a direct deploy as a substitute canary.
 
+### Audited legacy-pair bootstrap
+
+Use `tools/prod_release_bootstrap.py` only from the privileged local operator
+environment. It is intentionally separate from `prod_release_daemon.py`: it
+has no release-ledger client, cannot prepare or authorize a candidate, and
+refuses to run when `SONSTENG_PROD_RELEASE_BEARER` is present. Keep the normal
+publication flag false throughout this procedure.
+
+Supply the exact source/candidate SHA, Pages deployment ID, Worker version ID,
+both SHA-bound provenance observations, trusted repository/artifact paths, and
+state paths through the existing `SONSTENG_PROD_*` environment-file convention.
+Also set `SONSTENG_PROD_BOOTSTRAP_AUTHORITY=local-operator`, a bounded
+`SONSTENG_PROD_BOOTSTRAP_OPERATOR_ID`, and a bounded
+`SONSTENG_PROD_BOOTSTRAP_AUTHORITY_CHANNEL`. Do not place credentials, edited
+text, or secret values in arguments. Provider credentials remain injected by
+the provider's existing protected environment.
+
+The command checks out the exact SHA in a detached temporary worktree, rejects
+outside-repository and symlinked artifact paths, proves both live provenance
+endpoints, reactivates the supplied pair in compatibility order, and repeats
+the pair in reverse order as a restoration drill. Only after every check passes
+does one locked compare-and-set write make the complete pair visible in the
+0600 recovery registry. An exact replay is idempotent; a changed pair or legacy
+partial entry fails closed. The append-only 0600 receipt binds operator,
+authority channel, SHA, time, redacted provider-ID digests, and the two proof
+results. Provider stdout/stderr, credentials, and edited text are discarded.
+
 Only after those gates may an operator set the flag to true and explicitly enable the timer. A
 config flip is operational authority, so it must be attributed in the release evidence. Do not use
 the legacy deploy script as a canary.
