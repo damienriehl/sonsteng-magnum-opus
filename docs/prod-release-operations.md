@@ -128,6 +128,15 @@ The executor may claim only `authorized` records. On ambiguity or partial failur
 bounded error, fences later releases, and reconciles or restores the recorded pair; it never falls
 forward to ambient `HEAD`.
 
+Accepted-only candidates are synthetic commits and therefore do not move a branch. Before the
+temporary candidate worktree is removed, the builder creates an immutable
+`refs/sonsteng/releases/<manifest-hash>` ref in the dedicated daemon repository. These refs share
+the release ledger's durable retention: they are not deleted after completion, because the same
+candidate identity remains audit and retry evidence. A repeated preparation may reuse the exact
+ref, but a ref that already names another commit fails closed. Consequently routine or aggressive
+Git garbage collection cannot prune a candidate while it awaits human authorization or later
+recovery inspection.
+
 ## Status vocabulary
 
 - **Saved / waiting for review:** stored, not approved.

@@ -243,6 +243,45 @@ def test_projection_builder_is_deterministic_and_never_moves_or_dirties_ambient_
     candidate_copy = subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],
         cwd=repo,check=True,capture_output=True,text=True).stdout
     assert candidate_copy == "The good idea\n"  # rejected comma is a positive leak canary
+    retained_ref = "refs/sonsteng/releases/" + first["manifest_hash"]
+    assert subprocess.run(["git","rev-parse",retained_ref],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip() == first["candidate_sha"]
+
+    # A prepared release may wait indefinitely for human authorization. Its
+    # synthetic commit must remain reachable even under an aggressive GC.
+    subprocess.run(["git","reflog","expire","--expire=now","--all"],cwd=repo,check=True)
+    subprocess.run(["git","gc","--prune=now"],cwd=repo,check=True)
+    assert subprocess.run(["git","show",f"{first['candidate_sha']}:data/copy.txt"],cwd=repo,
+        check=True,capture_output=True,text=True).stdout == "The good idea\n"
+
+
+def test_release_candidate_retention_is_create_only_and_conflict_safe(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git","init","-q","-b","main"],cwd=repo,check=True)
+    (repo / "one").write_text("one",encoding="utf-8")
+    subprocess.run(["git","add","one"],cwd=repo,check=True)
+    subprocess.run(["git","-c","user.name=Test","-c","user.email=test@example.invalid",
+                    "commit","-q","-m","one"],cwd=repo,check=True)
+    first = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    (repo / "two").write_text("two",encoding="utf-8")
+    subprocess.run(["git","add","two"],cwd=repo,check=True)
+    subprocess.run(["git","-c","user.name=Test","-c","user.email=test@example.invalid",
+                    "commit","-q","-m","two"],cwd=repo,check=True)
+    second = subprocess.run(["git","rev-parse","HEAD"],cwd=repo,check=True,
+        capture_output=True,text=True).stdout.strip()
+    adapter = GitRefAdapter(repo)
+    identity = "a" * 64
+    assert adapter.retain_release_candidate(first,identity) == \
+        "refs/sonsteng/releases/" + identity
+    assert adapter.retain_release_candidate(first,identity) == \
+        "refs/sonsteng/releases/" + identity
+    with pytest.raises(ReleaseError,match="conflicts with immutable evidence"):
+        adapter.retain_release_candidate(second,identity)
+    with pytest.raises(ReleaseError,match="identity is invalid"):
+        adapter.retain_release_candidate(first,"../unsafe")
 
 
 def test_projection_builder_rebases_unchanged_source_after_unrelated_release(tmp_path):

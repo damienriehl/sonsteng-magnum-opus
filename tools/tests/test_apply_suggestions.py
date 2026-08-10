@@ -255,7 +255,7 @@ class InMemoryEditorStore:
 
     def finalize(self, batch_id, phase=None, applied=None, accepted_blocked=None,
                  needs_human=None, drift=None, base_sha=None, commit_sha=None,
-                 generator_id=None):
+                 generator_id=None, review_revisions=None):
         b = self.batches.get(batch_id)
         if not b:
             return {"ok": False, "reason": "no_batch"}
@@ -265,6 +265,8 @@ class InMemoryEditorStore:
             b["commit_sha"] = commit_sha
         if generator_id is not None:
             b["generator_id"] = generator_id
+        if review_revisions is not None:
+            b["review_revisions"] = review_revisions
         for ids, st in ((applied, "applied"), (accepted_blocked, "accepted_blocked"),
                         (needs_human, "needs_human"), (drift, "drift")):
             for i in (ids or []):
@@ -448,6 +450,26 @@ def snapshot_data(root):
 # --------------------------------------------------------------------------- #
 # Tests
 # --------------------------------------------------------------------------- #
+class ReviewEvidenceTest(unittest.TestCase):
+    def test_sequential_same_source_edits_become_one_cumulative_revision(self):
+        common = dict(group_id=None,source_ref="data/copy/home.json#lead",
+            relpath="data/copy/home.json",kind="json_scalar",json_path="lead")
+        patches = [
+            ap.Patch(suggestion_id="s1",original_text="The bad idea",
+                new_text="The good idea",**common),
+            ap.Patch(suggestion_id="s2",original_text="The good idea",
+                new_text="The great idea",**common),
+        ]
+
+        revisions = ap.build_review_revisions(patches,"d" * 40,"p" * 40)
+
+        self.assertEqual(revisions[0]["suggestion_ids"],["s1","s2"])
+        self.assertEqual(revisions[0]["source_original_text"],"The bad idea")
+        self.assertEqual(revisions[0]["source_proposed_text"],"The great idea")
+        self.assertEqual([(item["old_text"],item["new_text"])
+                          for item in revisions[0]["operations"]],[("bad","great")])
+
+
 class ApplyEngineTest(unittest.TestCase):
     def setUp(self):
         self.root = make_repo()
@@ -502,6 +524,15 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertEqual(self.store.batches["b1"]["commit_sha"], ap.head_sha(self.root))
         self.assertEqual(self.store.batches["b1"]["generator_id"],
                          "sha256:test-generator")
+        revisions = self.store.batches["b1"]["review_revisions"]
+        self.assertEqual(len(revisions), 1)
+        self.assertEqual(revisions[0]["source_ref"], ref)
+        self.assertEqual(revisions[0]["source_revision"], ap.head_sha(self.root))
+        self.assertEqual(revisions[0]["prod_base"], res.base_sha)
+        self.assertEqual(revisions[0]["suggestion_ids"], ["s1"])
+        self.assertEqual([(op["kind"], op["old_text"], op["new_text"])
+                          for op in revisions[0]["operations"]],
+                         [("replace", "Intake", "Revised intake")])
         canonical = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
         self.assertIn("Revised intake notes", canonical)
         self.assertEqual(self._porcelain(), "")  # clean after merge
@@ -901,12 +932,14 @@ class HttpRpcRoutingTest(unittest.TestCase):
             client = ap.HttpRpcClient("https://w.example.com/edit/v1", "tok")
             client.finalize("batch-1", phase=ap.PHASE_DONE, applied=["s1"],
                             commit_sha="a" * 40,
-                            generator_id="sha256:" + "b" * 64)
+                            generator_id="sha256:" + "b" * 64,
+                            review_revisions=[{"id": "revision-1"}])
         finally:
             urlreq.urlopen = orig
 
         self.assertEqual(seen["body"]["commit_sha"], "a" * 40)
         self.assertEqual(seen["body"]["generator_id"], "sha256:" + "b" * 64)
+        self.assertEqual(seen["body"]["review_revisions"], [{"id": "revision-1"}])
 
     def test_propose_companion_posts_to_system_suggest(self):
         import io

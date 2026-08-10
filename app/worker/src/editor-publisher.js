@@ -51,7 +51,23 @@ function renderTargets(vm) {
     "<p class=\"pub-help\" id=\"pub-prepare-help\">Choosing a target does not publish it. The trusted release service will enable preparation when it can freeze the exact evidence; authorization is unavailable until then.</p></fieldset>";
 }
 
+function frozenOperationMembers(release) {
+  if (Array.isArray(release?.operation_members) && release.operation_members.length)
+    return release.operation_members;
+  return (release?.operation_ids || []).map((operation_id, ordinal) => ({ operation_id, ordinal }));
+}
+
 function renderChanges(vm) {
+  if (vm.release && Number(vm.release.schema_version || 1) >= 2) {
+    const members = frozenOperationMembers(vm.release);
+    if (!members.length) return "<p class=\"pub-empty\">No frozen atomic operation membership is available.</p>";
+    return "<ol class=\"pub-operation-members\">" + members.map((member, index) =>
+      "<li><article class=\"pub-change\"><header><strong>Frozen atomic operation " + (index + 1) +
+      "</strong><span>" + escapeHtml(member.operation_id) + "</span></header><dl class=\"pub-binding\">" +
+      [["Source", member.source_ref], ["Review revision", member.review_revision_id], ["Atomic group", member.group_id]]
+        .filter(([, value]) => value).map(([label, value]) => "<div><dt>" + label + "</dt><dd>" +
+          escapeHtml(value) + "</dd></div>").join("") + "</dl></article></li>").join("") + "</ol>";
+  }
   const releaseIds = new Set(vm.release?.suggestion_ids || []);
   const batches = vm.release
     ? vm.batches.filter((b) => (vm.release.batches || []).some((rb) => rb.batch_id === b.batch_id))
@@ -203,11 +219,17 @@ export function renderPublisherPage(context = {}, viewerLabel = "") {
     base_sha: release.base_sha, candidate_sha: release.candidate_sha, generator_id: release.generator_id,
     evidence_hash: release.evidence_hash, manifest_hash: release.manifest_hash,
     membership_hash: release.membership_hash }) : "{}";
+  const frozenMemberCount = release && Number(release.schema_version || 1) >= 2
+    ? frozenOperationMembers(release).length
+    : (release?.suggestion_ids || []).length;
+  const frozenMemberLabel = release && Number(release.schema_version || 1) >= 2
+    ? "atomic operation" + (frozenMemberCount === 1 ? "" : "s")
+    : "change" + (frozenMemberCount === 1 ? "" : "s");
   const authorize = vm.state === "prepared" ?
     "<section class=\"pub-authority\"><h2>Authorize this exact production release</h2>" +
     "<p><strong>Consequence:</strong> automation may publish only release <strong>" + escapeHtml(release.id) +
     "</strong>, through batch <strong>" + escapeHtml(release.target_batch_id) + "</strong>, containing <strong>" +
-    (release.suggestion_ids || []).length + " changes</strong>, from <strong>" + escapeHtml(short(release.base_sha)) +
+    frozenMemberCount + " " + frozenMemberLabel + "</strong>, from <strong>" + escapeHtml(short(release.base_sha)) +
     "</strong> to <strong>" + escapeHtml(short(release.candidate_sha)) + "</strong>.</p>" +
     "<label class=\"pub-confirm\"><input id=\"pub-confirm\" type=\"checkbox\"> I reviewed every enclosed change and authorize this exact production batch.</label>" +
     "<button type=\"button\" id=\"pub-authorize\" disabled>Authorize release to production</button>" +

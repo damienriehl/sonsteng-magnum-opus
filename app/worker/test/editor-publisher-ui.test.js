@@ -135,6 +135,35 @@ test("prepared page discloses exact immutable release before one deliberate cont
   assert.doesNotMatch(html, /Publish automatically|Execute now|Retry deployment/);
 });
 
+test("schema-v2 prepared preview reports and renders frozen operation membership", async () => {
+  const core = makeCore(() => 1000);
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at,schema_version,review_receipt_hash,projection_identity)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    "release-v2-ui","idem-v2-ui","digest-v2-ui","prepared","service:release","bearer",
+    "production","operation-frontier","base-v2","candidate-v2","generator-v2","evidence-v2",
+    "manifest-v2","membership-v2",1000,1000,2,"receipt-v2","projection-v2");
+  core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,group_id,ordinal) VALUES (?,?,?,?,?,?)`,
+    "release-v2-ui","op-word","revision-home","data/copy/home.json#lead",null,0);
+  core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,group_id,ordinal) VALUES (?,?,?,?,?,?)`,
+    "release-v2-ui","op-comma","revision-home","data/copy/home.json#lead","punctuation-group",1);
+  const release = core.getProductionRelease("release-v2-ui");
+  assert.deepEqual(release.suggestion_ids,[]);
+  assert.deepEqual(release.operation_ids,["op-word","op-comma"]);
+  const html = await renderPublisherPage({ release,batches:[] },"DR").text();
+  assert.match(html,/containing <strong>2 atomic operations<\/strong>/);
+  assert.match(html,/Frozen atomic operation 1/);
+  assert.match(html,/op-word/);
+  assert.match(html,/op-comma/);
+  assert.match(html,/data\/copy\/home\.json#lead/);
+  assert.match(html,/punctuation-group/);
+  assert.doesNotMatch(html,/containing <strong>0 changes<\/strong>/);
+});
+
 test("characterization: Publisher redlines whole values even for separated word and punctuation edits", async () => {
   const original = "Weigh both sides' strong points, and weak points.";
   const proposed = "Weigh both sides' strongest points and weak points!";

@@ -426,6 +426,30 @@ class GitRefAdapter:
                            text=True, env=env).stdout.strip()
         return commit, tree
 
+    def retain_release_candidate(self, candidate_sha, identity):
+        """Pin a synthetic candidate for the lifetime of its release evidence."""
+        if not re.fullmatch(r"[0-9a-f]{64}", identity):
+            raise ReleaseError("candidate retention identity is invalid")
+        ref = f"refs/sonsteng/releases/{identity}"
+        existing = self._run(["git", "rev-parse", "--verify", "--quiet", ref],
+                             cwd=self.repo, check=False, capture_output=True,
+                             text=True).stdout.strip()
+        if existing and existing != candidate_sha:
+            raise ReleaseError("candidate retention ref conflicts with immutable evidence")
+        if not existing:
+            result = self._run(["git", "update-ref", ref, candidate_sha,
+                                "0" * 40], cwd=self.repo, check=False,
+                               capture_output=True, text=True)
+            if result.returncode != 0:
+                # A concurrent deterministic preparation may have won the
+                # create-only race. Accept only the identical pinned object.
+                existing = self._run(["git", "rev-parse", "--verify", "--quiet", ref],
+                                     cwd=self.repo, check=False, capture_output=True,
+                                     text=True).stdout.strip()
+                if existing != candidate_sha:
+                    raise ReleaseError("candidate retention ref could not be created")
+        return ref
+
     @contextmanager
     def isolated_checkout(self, sha):
         """Materialize an immutable candidate without pinning the DEV checkout."""
@@ -517,14 +541,18 @@ class AcceptedProjectionCandidateBuilder:
             evidence = self.writer.write(root, materialized)
             candidate_git = GitRefAdapter(root)
             candidate_sha, candidate_tree = candidate_git.commit_projected_tree(base_sha,timestamp)
-        exclusions = [dataclasses.asdict(item) for item in materialized.exclusions]
-        manifest = {"schema_version":2,"target_environment":"production",
-            "base_sha":base_sha,"candidate_sha":candidate_sha,
-            "candidate_tree":candidate_tree,"generator_id":evidence["generator_id"],
-            "review_receipt_hash":receipt_binding,"review_receipts":list(receipt_hashes),
-            "accepted_operation_ids":list(materialized.accepted_operation_ids),
-            "held_exclusions":exclusions,"generated_parity":evidence["parity_verified"]}
-        manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
+            exclusions = [dataclasses.asdict(item) for item in materialized.exclusions]
+            manifest = {"schema_version":2,"target_environment":"production",
+                "base_sha":base_sha,"candidate_sha":candidate_sha,
+                "candidate_tree":candidate_tree,"generator_id":evidence["generator_id"],
+                "review_receipt_hash":receipt_binding,"review_receipts":list(receipt_hashes),
+                "accepted_operation_ids":list(materialized.accepted_operation_ids),
+                "held_exclusions":exclusions,"generated_parity":evidence["parity_verified"]}
+            manifest_hash = hashlib.sha256(_canonical(manifest)).hexdigest()
+            # commit-tree does not move a branch. Pin the object before the
+            # temporary worktree is removed so approval may safely be delayed
+            # and Git GC cannot erase the immutable candidate meanwhile.
+            self.git.retain_release_candidate(candidate_sha,manifest_hash)
         self.manifest_path.parent.mkdir(parents=True,exist_ok=True)
         payload = _canonical(manifest) + b"\n"
         with tempfile.NamedTemporaryFile(dir=self.manifest_path.parent,delete=False) as target:
