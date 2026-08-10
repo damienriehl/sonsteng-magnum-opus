@@ -119,7 +119,8 @@ export const SCHEMA_SQL = `
   );
   CREATE TABLE IF NOT EXISTS production_release_operation_members (
     release_id TEXT NOT NULL, operation_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
-    source_ref TEXT NOT NULL, group_id TEXT, ordinal INTEGER NOT NULL DEFAULT 0,
+    source_ref TEXT NOT NULL, affected_source_refs_json TEXT NOT NULL DEFAULT '[]',
+    group_id TEXT, ordinal INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (release_id, operation_id)
   );
   CREATE TABLE IF NOT EXISTS production_release_held_exclusions (
@@ -130,6 +131,11 @@ export const SCHEMA_SQL = `
     operation_id TEXT PRIMARY KEY, release_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
     source_ref TEXT NOT NULL, source_revision TEXT NOT NULL, candidate_sha TEXT NOT NULL,
     published_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS production_published_operation_sources (
+    operation_id TEXT NOT NULL, source_ref TEXT NOT NULL, release_id TEXT NOT NULL,
+    candidate_sha TEXT NOT NULL, published_at INTEGER NOT NULL,
+    PRIMARY KEY(operation_id, source_ref)
   );
   CREATE TABLE IF NOT EXISTS production_release_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, release_id TEXT NOT NULL, type TEXT NOT NULL,
@@ -198,6 +204,8 @@ export const SCHEMA_SQL = `
     ON production_review_operations(review_revision_id, lifecycle_state);
   CREATE INDEX IF NOT EXISTS idx_published_operation_source
     ON production_published_operations(source_ref, published_at DESC, operation_id DESC);
+  CREATE INDEX IF NOT EXISTS idx_published_operation_all_sources
+    ON production_published_operation_sources(source_ref, published_at DESC, operation_id DESC);
   CREATE TABLE IF NOT EXISTS editor_schema_migrations (
     id TEXT PRIMARY KEY, applied_at INTEGER NOT NULL
   );
@@ -313,11 +321,16 @@ export class EditorStoreCore {
     this._ensureColumn("production_releases", "review_receipt_hash", "TEXT");
     this._ensureColumn("production_releases", "projection_identity", "TEXT");
     this._ensureColumn("production_release_operation_members", "ordinal", "INTEGER NOT NULL DEFAULT 0");
+    this._ensureColumn("production_release_operation_members", "affected_source_refs_json", "TEXT NOT NULL DEFAULT '[]'");
     this._ensureColumn("suggestions", "production_release_id", "TEXT");
     this._ensureColumn("suggestions", "production_published_at", "INTEGER");
     this._ensureColumn("production_review_revisions", "source_original_text", "TEXT");
     this._ensureColumn("production_review_revisions", "source_proposed_text", "TEXT");
     this._backfillReviewOperations();
+    this.sql.exec(`INSERT OR IGNORE INTO production_published_operation_sources
+      (operation_id,source_ref,release_id,candidate_sha,published_at)
+      SELECT operation_id,source_ref,release_id,candidate_sha,published_at
+      FROM production_published_operations`);
   }
 
   _backfillReviewOperations() {
@@ -1018,8 +1031,11 @@ export class EditorStoreCore {
         const decision = decisions.get(operation.decision_id || operation.id);
         const groupId = operation.group_id || operation.move_pair_id;
         if (!source.stale && !heldGroups.has(groupId) && decision?.decision === "accepted") {
+          const affectedSourceRefs = [...new Set([source.source_ref,operation.op_arg]
+            .filter((value) => typeof value === "string" && value))].sort();
           members.push({ operation_id:operation.id,review_revision_id:source.review_revision_id,
             source_ref:source.source_ref,source_revision:source.source_revision,
+            affected_source_refs:affectedSourceRefs,
             group_id:decision.group_id || operation.group_id || null });
         } else {
           const reason = source.stale ? "stale" : heldGroups.has(groupId) ? "group_held" :
@@ -1051,8 +1067,9 @@ export class EditorStoreCore {
         input.evidence_hash,input.manifest_hash,membershipHash,now,now,2,input.review_receipt_hash,
         input.projection_identity);
       members.forEach((item,ordinal) => this.sql.exec(
-        "INSERT INTO production_release_operation_members (release_id,operation_id,review_revision_id,source_ref,group_id,ordinal) VALUES (?,?,?,?,?,?)",
-        input.id,item.operation_id,item.review_revision_id,item.source_ref,item.group_id,ordinal));
+        "INSERT INTO production_release_operation_members (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,ordinal) VALUES (?,?,?,?,?,?,?)",
+        input.id,item.operation_id,item.review_revision_id,item.source_ref,
+        JSON.stringify(item.affected_source_refs),item.group_id,ordinal));
       for (const item of held) this.sql.exec(
         "INSERT INTO production_release_held_exclusions (release_id,operation_id,decision,reason) VALUES (?,?,?,?)",
         input.id,item.operation_id,item.decision,item.reason);
@@ -1107,7 +1124,9 @@ export class EditorStoreCore {
       "SELECT suggestion_id FROM production_release_members WHERE release_id=? ORDER BY suggestion_id", id)
       .map((r) => r.suggestion_id);
     const operation_members = this._all(
-      "SELECT operation_id,review_revision_id,source_ref,group_id,ordinal FROM production_release_operation_members WHERE release_id=? ORDER BY ordinal,operation_id",id);
+      "SELECT operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,ordinal FROM production_release_operation_members WHERE release_id=? ORDER BY ordinal,operation_id",id)
+      .map((item) => ({ ...item,
+        affected_source_refs:JSON.parse(item.affected_source_refs_json || "[]") }));
     const held_exclusions = this._all(
       "SELECT operation_id,decision,reason FROM production_release_held_exclusions WHERE release_id=? ORDER BY operation_id",id);
     const published_operation_ids = this._all(
@@ -1240,12 +1259,16 @@ export class EditorStoreCore {
       release.id,input.state,input.actor,JSON.stringify(detail),now);
     if (input.state === "complete") {
       if ((release.schema_version || 1) >= 2) {
-        const members = this._all("SELECT operation_id,review_revision_id,source_ref FROM production_release_operation_members WHERE release_id=?",release.id);
+        const members = this._all("SELECT operation_id,review_revision_id,source_ref,affected_source_refs_json FROM production_release_operation_members WHERE release_id=?",release.id);
         for (const member of members) {
           const revision = this._one("SELECT source_revision FROM production_review_revisions WHERE id=?",member.review_revision_id);
           this.sql.exec("INSERT OR IGNORE INTO production_published_operations (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at) VALUES (?,?,?,?,?,?,?)",
             member.operation_id,release.id,member.review_revision_id,member.source_ref,
             revision?.source_revision || "",release.candidate_sha,now);
+          const affected = JSON.parse(member.affected_source_refs_json || "[]");
+          for (const sourceRef of affected.length ? affected : [member.source_ref])
+            this.sql.exec("INSERT OR IGNORE INTO production_published_operation_sources (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)",
+              member.operation_id,sourceRef,release.id,release.candidate_sha,now);
           this.sql.exec("UPDATE production_review_operations SET lifecycle_state='published' WHERE operation_id=?",
             member.operation_id);
         }
@@ -1393,7 +1416,7 @@ export class EditorStoreCore {
     const latest = this._one("SELECT id FROM production_review_revisions WHERE source_ref=? ORDER BY created_at DESC,id DESC LIMIT 1",
       revision.source_ref);
     if (!latest || latest.id !== revision.id) return "stale_revision";
-    const sourceProd = this._one("SELECT candidate_sha FROM production_published_operations WHERE source_ref=? ORDER BY published_at DESC,operation_id DESC LIMIT 1",revision.source_ref);
+    const sourceProd = this._one("SELECT candidate_sha FROM production_published_operation_sources WHERE source_ref=? ORDER BY published_at DESC,operation_id DESC LIMIT 1",revision.source_ref);
     if (sourceProd && sourceProd.candidate_sha !== revision.prod_base) return "stale_prod_base";
     // Legacy releases cannot prove source-level independence, so retain their
     // historical global-frontier fail-closed behavior. Versioned operation
@@ -1551,7 +1574,7 @@ export class EditorStoreCore {
       }
       const publishedBySource = new Map(this._all(`SELECT source_ref,candidate_sha FROM (
         SELECT source_ref,candidate_sha,ROW_NUMBER() OVER (PARTITION BY source_ref ORDER BY published_at DESC,operation_id DESC) AS row_num
-        FROM production_published_operations WHERE source_ref IN (${marks}))
+        FROM production_published_operation_sources WHERE source_ref IN (${marks}))
         WHERE row_num=1`,...chunk).map((row) => [row.source_ref,row]));
       for (const sourceRef of chunk) {
         const current = currentBySource.get(sourceRef),reviewed = reviewedBySource.get(sourceRef);
@@ -1782,7 +1805,7 @@ export class EditorStoreCore {
       .map((row) => [row.source_ref,row.id]));
     const publishedBySource = new Map(this._all(`SELECT source_ref,candidate_sha FROM (
       SELECT source_ref,candidate_sha,ROW_NUMBER() OVER (PARTITION BY source_ref ORDER BY published_at DESC,operation_id DESC) AS row_num
-      FROM production_published_operations WHERE source_ref IN (${sourceMarks})) WHERE row_num=1`,...sourceRefs)
+      FROM production_published_operation_sources WHERE source_ref IN (${sourceMarks})) WHERE row_num=1`,...sourceRefs)
       .map((row) => [row.source_ref,row.candidate_sha]));
     const legacyProd = this._one("SELECT candidate_sha FROM production_releases WHERE state IN ('verified','complete') AND COALESCE(schema_version,1)=1 ORDER BY updated_at DESC,id DESC LIMIT 1");
     const candidateOperationIds = [...lifecycleByOperation.keys()];
