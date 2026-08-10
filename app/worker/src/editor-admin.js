@@ -340,6 +340,25 @@ function renderStudentView(studentViewUrl) {
     "</section>";
 }
 
+// The Access landing routes admins to this desk, not to /edit/index.html. Keep
+// the ordinary editing doors on the desk itself so admin scope does not become
+// a navigation dead end that requires knowing an internal URL.
+function renderEditDoors() {
+  const links = [
+    ["Practicum home", "/edit/index.html"],
+    ["Skills", "/edit/skills/index.html"],
+    ["Matter library", "/edit/matters/index.html"],
+    ["Modules", "/edit/modules/m1.html"],
+    ["Templates", "/edit/templates/index.html"],
+    ["Firm dashboard", "/edit/firm/index.html"],
+  ].map(([label, href]) =>
+    "<li><a href=\"" + href + "\">" + label + "</a></li>"
+  ).join("");
+  return "<section class=\"ad-card ad-edit-doors\"><h2>Edit practicum copy</h2>" +
+    "<p class=\"ad-lede\">Open a page with its editing controls.</p>" +
+    "<nav aria-label=\"Editable practicum pages\"><ul>" + links + "</ul></nav></section>";
+}
+
 // Inline because EDIT_CSP allows 'unsafe-inline' for styles but not for scripts,
 // and because this page must render correctly even if an asset request does not.
 // Colours are the Practicum-Press palette from editor.css (--pp-*), taken through
@@ -363,6 +382,9 @@ main.ad{max-width:52rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
 .ad-card h2,.ad-student h2{font-size:1.05rem;letter-spacing:.02em;margin:0 0 .5em;
  text-transform:uppercase;font-weight:700;color:#3a2f22}
 .ad-lede{margin:0 0 .7em;font-size:1.05rem}
+.ad-edit-doors ul{list-style:none;margin:.25rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.55rem 1.1rem}
+.ad-edit-doors a{color:var(--pp-accent,#7a1f2b);font-weight:600;text-underline-offset:.2em}
+.ad-edit-doors a:focus{outline:3px solid var(--pp-focus,#c9a227);outline-offset:3px}
 .ad-empty{margin:0;color:#6b5b46;font-style:italic}
 .ad-tallies{list-style:none;margin:0 0 .8rem;padding:0;display:grid;gap:.35rem}
 .ad-tally{display:flex;gap:.55rem;align-items:baseline;flex-wrap:wrap;
@@ -428,6 +450,7 @@ export function renderAdminPage({ items, reverts, flags, viewerLabel, studentVie
     (who ? "Signed in as <span class=\"ad-attr\">" + who + "</span> — everything " : "Everything ") +
     "the practicum needs from you opens from this page.</p>" +
     "</header>" +
+    renderEditDoors() +
     renderStudentView(studentViewUrl) +
     renderQueue(items) +
     renderFlags(flags, viewerLabel) +

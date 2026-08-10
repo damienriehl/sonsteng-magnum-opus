@@ -204,6 +204,22 @@ test("admin page renders a populated queue and links to review and history", asy
   assert.match(html, />DR</);
 });
 
+test("admin desk provides direct routes into the editable practicum", async () => {
+  const html = await renderText();
+  assert.match(html, /Edit practicum copy/);
+  assert.match(html, /aria-label="Editable practicum pages"/);
+  for (const href of [
+    "/edit/index.html",
+    "/edit/skills/index.html",
+    "/edit/matters/index.html",
+    "/edit/modules/m1.html",
+    "/edit/templates/index.html",
+    "/edit/firm/index.html",
+  ]) {
+    assert.ok(html.includes(`href="${href}"`), `missing editable destination ${href}`);
+  }
+});
+
 test("admin page summarizes revert requests and links to where they are reviewed", async () => {
   const reverts = [
     { id: "r1", editor: "slot:john", doc: "data/firm/firm.json", status: "requested" },
