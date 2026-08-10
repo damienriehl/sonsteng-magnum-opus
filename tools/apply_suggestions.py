@@ -1396,11 +1396,16 @@ def _atomic_review_operations(patch, source_revision, prod_base):
     """
     metadata = {"source_ref": patch.source_ref,
                 "source_revision": source_revision, "prod_base": prod_base}
+    group_id = (patch.group_id if patch.group_id and
+                not patch.group_id.startswith("solo:") else None)
+    group_decision_id = (_stable_evidence_id("group", {"group_id": group_id})
+                         if group_id else None)
     if patch.op is not None:
         identity = {**metadata, "op": patch.op, "op_arg": patch.op_arg,
                     "old_text": patch.original_text, "new_text": patch.new_text}
         operation_id = _stable_evidence_id("op", identity)
-        return [{"id": operation_id, "decision_id": operation_id,
+        return [{"id": operation_id, "decision_id": group_decision_id or operation_id,
+                 "group_id": group_id,
                  "kind": patch.op, **identity, "base_range": [0, len(patch.original_text)],
                  "proposed_range": [0, len(patch.new_text)],
                  "context_before": [], "context_after": []}]
@@ -1426,13 +1431,45 @@ def _atomic_review_operations(patch, source_revision, prod_base):
                     "proposed_range": [proposed_start, proposed_end],
                     "old_text": old_text, "new_text": new_text}
         operation_id = _stable_evidence_id("op", identity)
-        operations.append({"id": operation_id, "decision_id": operation_id,
+        operations.append({"id": operation_id, "decision_id": group_decision_id or operation_id,
+                           "group_id": group_id,
                            "kind": kind, **identity,
                            "context_before": [token[0] for token in
                                               old_tokens[max(0, i1 - context_size):i1]],
                            "context_after": [token[0] for token in
                                              old_tokens[i2:i2 + context_size]]})
+    _pair_review_moves(operations, str(patch.original_text), str(patch.new_text),
+                       metadata, group_decision_id)
     return operations
+
+
+def _pair_review_moves(operations, original_text, proposed_text, metadata,
+                       group_decision_id=None):
+    """Pair only distinctive, exact prose moves; ambiguity remains unpaired."""
+    deletes = [operation for operation in operations if operation["kind"] == "delete"]
+    inserts = [operation for operation in operations if operation["kind"] == "insert"]
+    for deletion in deletes:
+        exact = deletion["old_text"].strip()
+        words = [token[0] for token in _review_tokens(exact)
+                 if re.match(r"^\w", token[0], re.UNICODE)]
+        if len(words) < 4 or len(exact) < 24:
+            continue
+        probe = " ".join(words[:3])
+        if original_text.count(probe) != 1 or proposed_text.count(probe) != 1:
+            continue
+        candidates = [operation for operation in inserts
+                      if operation["new_text"].strip() == exact and not operation.get("move_pair_id")]
+        if len(candidates) != 1:
+            continue
+        insertion = candidates[0]
+        pair_id = _stable_evidence_id("move", {
+            **metadata, "text": exact,
+            "from": deletion["base_range"], "to": insertion["proposed_range"],
+        })
+        deletion.update({"move_pair_id": pair_id, "move_role": "from",
+                         "decision_id": group_decision_id or pair_id})
+        insertion.update({"move_pair_id": pair_id, "move_role": "to",
+                          "decision_id": group_decision_id or pair_id})
 
 
 def build_review_revisions(applied_patches, source_revision, prod_base):
@@ -1564,6 +1601,9 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
         return ApplyResult(batch_id, base_sha, [], [], [], [], [], {}, "", False,
                            reason=claim.get("reason", "claim_failed"))
     claimed_ids = claim.get("claimed", [])
+    # The Worker owns the production frontier. The ambient DEV base_sha is not
+    # production evidence and must never be substituted for a missing frontier.
+    prod_base = claim.get("prod_base")
     rows = client.fetch_batch_rows(batch_id, claimed_ids)
     logger("claimed %d rows across %d groups" % (
         len(rows), len({r.get("group_id") or r["id"] for r in rows})))
@@ -1753,7 +1793,8 @@ def run_apply(client, pipeline, batch_id, *, worktree_parent=None, deploy_plan_o
 
         # 14) Finalize applied + terminal statuses.
         commit_sha = head_sha(canonical_root)
-        review_revisions = build_review_revisions(applied_patches, commit_sha, base_sha)
+        review_revisions = (build_review_revisions(applied_patches, commit_sha, prod_base)
+                            if prod_base else None)
         client.finalize(batch_id, phase=PHASE_DONE,
                         applied=[p.suggestion_id for p in applied_patches],
                         drift=[_id(r) for r in drift],

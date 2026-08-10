@@ -75,6 +75,48 @@ class GeneratorIdentityTest(unittest.TestCase):
         self.assertEqual(ap.generator_identity(self.root), original)
 
 
+class AtomicReviewEvidenceTest(unittest.TestCase):
+    def _patch(self, suggestion_id, source_ref, old, new, group_id=None):
+        return ap.Patch(suggestion_id=suggestion_id,
+                        group_id=group_id or "solo:" + suggestion_id,
+                        source_ref=source_ref, relpath=source_ref.split("#", 1)[0],
+                        kind="prose_md", json_path="",
+                        original_text=old, new_text=new)
+
+    def test_cross_source_group_uses_one_shared_decision_identity(self):
+        patches = [
+            self._patch("s1", "data/a.md#baaaaaaaa", "Old alpha.", "New alpha.", "shared-1"),
+            self._patch("s2", "data/b.md#bbbbbbbbb", "Old beta.", "New beta.", "shared-1"),
+        ]
+        revisions = ap.build_review_revisions(patches, "dev-tip", "prod-tip")
+        operations = [operation for revision in revisions for operation in revision["operations"]]
+        self.assertEqual({operation["group_id"] for operation in operations}, {"shared-1"})
+        self.assertEqual(len({operation["decision_id"] for operation in operations}), 1)
+
+    def test_distinctive_exact_prose_move_pairs_both_endpoints(self):
+        moved = "This distinctive sentence has enough words to qualify."
+        stationary = "The substantially longer middle passage remains exactly where it was throughout this careful move test."
+        patch = self._patch("s1", "data/a.md#baaaaaaaa",
+                            moved + "\n\n" + stationary,
+                            stationary + "\n\n" + moved)
+        operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+        endpoints = [operation for operation in operations if operation.get("move_pair_id")]
+        self.assertEqual({operation["move_role"] for operation in endpoints}, {"from", "to"})
+        self.assertEqual(len({operation["move_pair_id"] for operation in endpoints}), 1)
+        self.assertEqual(len({operation["decision_id"] for operation in endpoints}), 1)
+
+    def test_short_or_repeated_prose_is_not_falsely_paired_as_move(self):
+        short = self._patch("s1", "data/a.md#baaaaaaaa", "Tiny words move.\n\nKeep.",
+                            "Keep.\n\nTiny words move.")
+        repeated_text = "This repeated sentence has enough words to qualify."
+        repeated = self._patch("s2", "data/a.md#baaaaaaaa",
+                               repeated_text + "\n\n" + repeated_text + "\n\nKeep.",
+                               "Keep.\n\n" + repeated_text + "\n\n" + repeated_text)
+        for patch in (short, repeated):
+            operations = ap._atomic_review_operations(patch, "dev-tip", "prod-tip")
+            self.assertFalse(any(operation.get("move_pair_id") for operation in operations))
+
+
 def _bid_of(span):
     """The trailing {#b:xxxxxxxx} durable-ID of a source paragraph."""
     m = BID_RE.search(span)
@@ -165,6 +207,7 @@ class InMemoryEditorStore:
         self.batches = {}       # batch_id -> {phase, lease_expires_at}
         self._clock = clock
         self.lease_ms = 1000
+        self.prod_base = None
 
     def now(self):
         return self._clock
@@ -240,7 +283,7 @@ class InMemoryEditorStore:
             r["apply_batch_id"] = batch_id
             r["lease_expires_at"] = lease
         return {"ok": True, "batch_id": batch_id, "claimed": sorted(claim_ids),
-                "lease_expires_at": lease}
+                "lease_expires_at": lease, "prod_base": self.prod_base}
 
     def fetch_batch_rows(self, batch_id, claimed_ids):
         return [dict(self.rows[i]) for i in claimed_ids if i in self.rows]
@@ -515,6 +558,7 @@ class ApplyEngineTest(unittest.TestCase):
     def test_clean_prose_full_roundtrip_merges(self):
         ref = bref(self.root, M03_MD, 0)
         self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
+        self.store.prod_base = "trusted-production-tip"
         pipe = FakePipeline(SPEC, validate_ok=True, parity_ok=True)
         res = self._run("b1", pipe, deploy_plan_only=False)
 
@@ -528,7 +572,8 @@ class ApplyEngineTest(unittest.TestCase):
         self.assertEqual(len(revisions), 1)
         self.assertEqual(revisions[0]["source_ref"], ref)
         self.assertEqual(revisions[0]["source_revision"], ap.head_sha(self.root))
-        self.assertEqual(revisions[0]["prod_base"], res.base_sha)
+        self.assertEqual(revisions[0]["prod_base"], "trusted-production-tip")
+        self.assertNotEqual(revisions[0]["prod_base"], res.base_sha)
         self.assertEqual(revisions[0]["suggestion_ids"], ["s1"])
         self.assertEqual([(op["kind"], op["old_text"], op["new_text"])
                           for op in revisions[0]["operations"]],
@@ -536,6 +581,14 @@ class ApplyEngineTest(unittest.TestCase):
         canonical = open(os.path.join(self.root, M03_MD), encoding="utf-8").read()
         self.assertIn("Revised intake notes", canonical)
         self.assertEqual(self._porcelain(), "")  # clean after merge
+
+    def test_apply_without_completed_production_frontier_omits_review_evidence(self):
+        ref = bref(self.root, M03_MD, 0)
+        self._add_edit("s1", ref, "Revised intake notes for the tort matter.")
+        res = self._run("bootstrap", FakePipeline(SPEC), deploy_plan_only=False)
+
+        self.assertTrue(res.committed)
+        self.assertNotIn("review_revisions", self.store.batches["bootstrap"])
 
     # 2) Money edit that breaks reconciliation (validator RED) -> accepted_blocked.
     def test_money_edit_validator_red_blocks_and_discards(self):

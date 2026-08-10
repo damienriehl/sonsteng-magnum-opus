@@ -190,6 +190,29 @@ test("claim: accepted -> in_flight for whole groups only, with a lease", () => {
   assert.equal(core._get("c1").status, STATUS.IN_FLIGHT);
   assert.equal(core._get("c1").apply_batch_id, "batch-1");
   assert.ok(core._get("c1").lease_expires_at > 0);
+  assert.equal(r.prod_base, null);
+});
+
+test("claim returns only the latest completed production frontier", () => {
+  const core = makeCore();
+  for (const [id,state,candidate,updated] of [
+    ["release-old","complete","prod-old",100],
+    ["release-new","complete","prod-new",300],
+    ["release-untrusted","verified","prod-untrusted",400],
+  ]) core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,id,`key-${id}`,`digest-${id}`,state,"service:test",
+    "service","PROD",`batch-${id}`,"ambient-dev",candidate,"generator","evidence","manifest",
+    "membership",updated,updated);
+  core.suggest(suggestInput({ id:"frontier-claim",source_ref:"frontier#1" }));
+  core.decide({ id:"frontier-claim",decision:"accept" });
+
+  const claimed = core.claimBatch("frontier-batch", { base_sha:"ambient-dev" });
+
+  assert.equal(claimed.prod_base,"prod-new");
+  assert.notEqual(claimed.prod_base,"ambient-dev");
 });
 
 test("claim never partially claims a group (all members must be accepted)", () => {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherReviewEndpoint, publisherReviewDraftEndpoint,
-  publisherReviewSubmitEndpoint,reviewBackfillEndpoint } from "../src/editor-endpoints.js";
+  publisherReviewSubmitEndpoint,reviewBackfillEndpoint,claimEndpoint } from "../src/editor-endpoints.js";
 
 const operations = [
   { id:"op-word", decision_id:"op-word", kind:"replace", source_ref:"data/copy/home.json#lead",
@@ -307,6 +307,26 @@ test("apply finalization records revision evidence atomically and rolls back a b
   assert.equal(core.finalize("batch-1",{ phase:"done",applied:["suggestion-1"],commit_sha:"dev-1",
     generator_id:"generator-v1",review_revisions:[revision()] }).ok,true);
   assert.equal(core.getPublisherReview("slot:damien").revision.id,"revision-1");
+});
+
+test("claim endpoint returns the Worker-owned completed PROD frontier", async () => {
+  const core = makeCore(() => 3775);
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,"release-complete","release-key","release-digest",
+    "complete","service:release","service","PROD","release-batch","dev-ambient","prod-trusted",
+    "generator","evidence","manifest","membership",3700,3700);
+  core.suggest({ id:"claimable-1",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+    source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old-hash",
+    new_text:"New",map_version:"v1" }, {}, { directApply:true });
+  const response = await claimEndpoint(request("/edit/v1/claim","POST",{
+    batch_id:"claim-endpoint",base_sha:"dev-ambient",ids:["claimable-1"] }),envFor(core),{
+    editor:"service:apply",credential_channel:"bearer",scopes:{ admin:{ granted:true } } });
+
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).prod_base,"prod-trusted");
 });
 
 test("canonical-mutation completion records the same immutable review evidence", () => {

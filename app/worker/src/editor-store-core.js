@@ -698,7 +698,15 @@ export class EditorStoreCore {
     for (const id of claimIds) {
       this._transition(id, STATUS.IN_FLIGHT, { apply_batch_id: batchId, lease_expires_at: leaseExp });
     }
-    return { ok: true, batch_id: batchId, claimed: [...claimIds], lease_expires_at: leaseExp };
+    // The production frontier is Worker-owned release evidence. Never let an
+    // apply client infer it from ambient DEV HEAD/base_sha. A null frontier is
+    // an explicit bootstrap state: finalize may apply DEV, but must omit review
+    // revisions until the trusted migration establishes production ancestry.
+    const production = this._one(
+      "SELECT candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1"
+    );
+    return { ok: true, batch_id: batchId, claimed: [...claimIds], lease_expires_at: leaseExp,
+      prod_base: production?.candidate_sha || null };
   }
 
   // Journal a phase transition, and (on outcome) resolve the batch's suggestions.

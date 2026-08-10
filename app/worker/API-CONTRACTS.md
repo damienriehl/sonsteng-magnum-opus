@@ -361,9 +361,13 @@ re-review — never straight to accepted).
 ## Apply-engine RPCs — `POST /edit/v1/{claim,finalize,reconcile}` (admin/service)
 
 The `tools/apply_suggestions.py` loop drives these (admin token = service scope).
-- `claim` `{ batch_id, base_sha?, ids? }` → `accepted → in_flight` for **whole
+- `claim` `{ batch_id, base_sha?, ids? }` → `{ ..., prod_base }` and `accepted → in_flight` for **whole
   groups only** (never partially), stamps a **lease** + `apply_batch_id`, opens
-  the `apply_batches` journal at phase `claimed`.
+  the `apply_batches` journal at phase `claimed`. `prod_base` is the candidate
+  SHA of the latest completed production release, selected by the Worker; it is
+  `null` before a production frontier exists and is never inferred from DEV
+  `base_sha`. In that bootstrap state normal apply omits review revisions and
+  the Publisher remains fail-closed pending the explicit trusted backfill.
 - `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
   drift?, commit_sha?, generator_id?, review_revisions? }` → journals the phase and resolves the
   batch's `in_flight` rows. The terminal `done` call records the exact canonical
