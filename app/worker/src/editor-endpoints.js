@@ -926,6 +926,19 @@ export async function productionClaimEndpoint(request, env, auth) {
   return result.ok ? json(result) : editError(result.reason || "conflict", "Release claim rejected.", 409);
 }
 
+export async function productionRestoreClaimEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed","Bad request.",403);
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found","Not found.",404);
+  if (!releaseService(auth)) return editError("forbidden","Release service required.",403);
+  const body = await readJson(request);
+  if (!body || typeof body.id !== "string")
+    return editError("validation_error","Restore release id required.",400);
+  const result = await editorStub(env).claimProductionRestore({ id:body.id,
+    lease_ms:Number.isInteger(body.lease_ms) ? body.lease_ms : undefined,
+    actor:auth.editor || "service:release",credential_channel:"bearer" });
+  return result.ok ? json(result) : editError(result.reason || "conflict","Restore claim rejected.",409);
+}
+
 export async function productionRenewEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);

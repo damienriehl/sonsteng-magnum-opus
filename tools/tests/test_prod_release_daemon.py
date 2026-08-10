@@ -77,7 +77,7 @@ def test_restore_materializes_recorded_base_config_and_exact_provider_ids(tmp_pa
         def restore_recorded_base(self,item):
             self.restorer.restore(item.base_sha,("worker","pages"))
 
-    daemon._restore_recorded_release(args,SimpleNamespace(get_release=lambda _id:release),object(),
+    daemon._restore_recorded_release(args,SimpleNamespace(claim_restore=lambda _id:release),object(),
         GitRefAdapter(repo),registry_factory=RecoveryRegistry,pages_factory=pages_factory,
         worker_factory=worker_factory,restorer_factory=RecordedPairRestorer,
         executor_factory=Executor,git_factory=GitRefAdapter)
@@ -104,7 +104,7 @@ def test_restore_checkout_cleans_up_on_error_and_paths_fail_closed(tmp_path):
         roots.append(pathlib.Path(kwargs["candidate_root"]))
         raise RuntimeError("factory failed")
     with pytest.raises(RuntimeError,match="factory failed"):
-        daemon._restore_recorded_release(args,SimpleNamespace(get_release=lambda _id:release),object(),
+        daemon._restore_recorded_release(args,SimpleNamespace(claim_restore=lambda _id:release),object(),
             GitRefAdapter(repo),registry_factory=RecoveryRegistry,pages_factory=fail_pages,
             worker_factory=lambda *_a,**_k:None,restorer_factory=RecordedPairRestorer,
             executor_factory=lambda *_a,**_k:None,git_factory=GitRefAdapter)

@@ -115,6 +115,10 @@ class LedgerHTTP:
         result = self._request("/edit/v1/prod/releases/claim", {})
         return FrozenRelease.from_ledger(result["release"]) if result.get("release") else None
 
+    def claim_restore(self, release_id):
+        result = self._request("/edit/v1/prod/releases/restore-claim",{"id":release_id})
+        return FrozenRelease.from_ledger(result["release"])
+
     def get_release(self, release_id):
         result = self._request("/edit/v1/prod/releases/status?id=" +
                                urllib.parse.quote(release_id, safe=""))
@@ -525,13 +529,22 @@ class ProductionExecutor:
         """Operator recovery toward the recorded known-good pair, never HEAD."""
         if self.restorer is None:
             raise ReleaseError("recorded-pair restore adapter is required; release remains fenced")
-        if release.state != "restoring":
-            self._event(release, "restoring", candidate_sha=release.base_sha)
+        if release.state != "restoring" or not release.fencing_token:
+            raise ReleaseError("restore requires an exclusive claimed restore lease")
         try:
-            self.restorer.restore(release.base_sha,
-                                  tuple(reversed(self.compatibility.deployment_order())))
-            if any(target.provenance() != release.base_sha for target in (self.pages, self.worker)):
-                raise ReleaseError("restored provenance mismatch")
+            targets = {"pages":self.pages,"worker":self.worker}
+            for name in reversed(self.compatibility.deployment_order()):
+                target = targets[name]
+                live = target.provenance()
+                if live == release.base_sha:
+                    continue
+                if live != release.candidate_sha:
+                    raise ReleaseError("restore target provenance is neither candidate nor base")
+                artifact = self.restorer.artifact(release.base_sha,name)
+                self._provider_operation(release,target,
+                    lambda target=target,artifact=artifact:target.restore(artifact))
+                if target.provenance() != release.base_sha:
+                    raise ReleaseError("restored provenance mismatch")
             self._event(release, "restored", candidate_sha=release.base_sha)
             return {"id":release.id,"state":"restored","sha":release.base_sha}
         except Exception as exc:
@@ -551,13 +564,17 @@ class RecordedPairRestorer:
         self.restore_pages, self.restore_worker = restore_pages, restore_worker
 
     def restore(self, sha, order=("pages", "worker")):
-        pair = self.known_good.get(sha)
-        if not pair or not pair.get("pages_deployment_id") or not pair.get("worker_version_id"):
-            raise ReleaseError("exact recorded known-good pair is unavailable")
-        callbacks = {"pages": lambda: self.restore_pages(pair["pages_deployment_id"]),
-                     "worker": lambda: self.restore_worker(pair["worker_version_id"])}
+        callbacks = {"pages":lambda:self.restore_pages(self.artifact(sha,"pages")),
+                     "worker":lambda:self.restore_worker(self.artifact(sha,"worker"))}
         for target in order:
             callbacks[target]()
+
+    def artifact(self,sha,target):
+        pair = self.known_good.get(sha)
+        key = "pages_deployment_id" if target == "pages" else "worker_version_id"
+        if target not in {"pages","worker"} or not pair or not pair.get(key):
+            raise ReleaseError("exact recorded known-good pair is unavailable")
+        return pair[key]
 
 
 class RecoveryRegistry:

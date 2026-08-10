@@ -30,7 +30,7 @@ def _path_in_checkout(checkout_root, configured_repo, configured_path):
 def _restore_recorded_release(args, ledger, gate, git, *, registry_factory,
                               pages_factory, worker_factory, restorer_factory,
                               executor_factory, git_factory):
-    release = ledger.get_release(args.restore_release_id)
+    release = ledger.claim_restore(args.restore_release_id)
     if not release or not release.base_sha:
         raise RuntimeError("restore release lacks a recorded base SHA")
     registry = registry_factory(args.recovery_registry)

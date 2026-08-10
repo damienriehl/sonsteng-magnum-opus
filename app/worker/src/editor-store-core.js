@@ -876,6 +876,29 @@ export class EditorStoreCore {
     return { ok:true, release:this.getProductionRelease(release.id) };
   }
 
+  claimProductionRestore(input = {}) {
+    if (!input.id || !input.actor || input.credential_channel !== "bearer")
+      return { ok:false,reason:"service_bearer_required" };
+    const release = this._one("SELECT * FROM production_releases WHERE id=?",input.id);
+    if (!release) return { ok:false,reason:"not_found" };
+    const now = this.now();
+    if (release.state === "restoring" && release.lease_expires_at > now)
+      return { ok:false,reason:"lease_active" };
+    if (!['failed_fenced','restoring'].includes(release.state))
+      return { ok:false,reason:"not_fenced" };
+    const token = this._fingerprint(release.id,release.fencing_token || "",
+      `${now}:${input.actor}:restore`);
+    const lease = now + Math.max(1000,Math.min(
+      input.lease_ms || CEILINGS.productionLeaseMs,CEILINGS.productionLeaseMs));
+    this.transactionSync(() => {
+      this.sql.exec("UPDATE production_releases SET state='restoring',fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
+        token,lease,now,release.id);
+      this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
+        release.id,"restoring",input.actor,JSON.stringify({ restore_claim:true }),now);
+    });
+    return { ok:true,release:this.getProductionRelease(release.id) };
+  }
+
   renewProductionReleaseLease(input = {}) {
     const release = this._one("SELECT * FROM production_releases WHERE id=?", input.id || "");
     if (!release) return { ok:false, reason:"not_found" };
@@ -883,7 +906,7 @@ export class EditorStoreCore {
       return { ok:false, reason:"service_bearer_required" };
     if (!input.fencing_token || input.fencing_token !== release.fencing_token)
       return { ok:false, reason:"stale_fence" };
-    if (!['executing','pages_deployed','worker_deployed','verified'].includes(release.state))
+    if (!['executing','pages_deployed','worker_deployed','verified','restoring'].includes(release.state))
       return { ok:false, reason:"not_executing" };
     const now = this.now();
     if (!release.lease_expires_at || release.lease_expires_at <= now)
@@ -902,7 +925,7 @@ export class EditorStoreCore {
       return { ok:false, reason:"service_bearer_required" };
     if (!input.fencing_token || input.fencing_token !== release.fencing_token)
       return { ok:false, reason:"stale_fence" };
-    if (['executing','pages_deployed','worker_deployed','verified'].includes(release.state) &&
+    if (['executing','pages_deployed','worker_deployed','verified','restoring'].includes(release.state) &&
         (!release.lease_expires_at || release.lease_expires_at <= this.now()))
       return { ok:false, reason:"lease_expired" };
     const replayable = new Set(["executing","pages_deployed","worker_deployed","verified","complete"]);
@@ -923,7 +946,7 @@ export class EditorStoreCore {
       pages_deployed:new Set(["worker_deployed","verified","failed_fenced"]),
       worker_deployed:new Set(["pages_deployed","verified","failed_fenced"]),
       verified:new Set(["complete","failed_fenced"]),
-      failed_fenced:new Set(["restoring"]), restoring:new Set(["restored","failed_fenced"]),
+      failed_fenced:new Set(), restoring:new Set(["restored","failed_fenced"]),
     };
     if (!allowed[release.state]?.has(input.state)) return { ok:false, reason:"invalid_transition" };
     const detail = input.detail && typeof input.detail === "object" ? input.detail : {};

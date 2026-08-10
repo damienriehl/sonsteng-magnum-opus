@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint, productionClaimEndpoint,
-  productionRenewEndpoint, productionTransitionEndpoint } from "../src/editor-endpoints.js";
+  productionRenewEndpoint, productionTransitionEndpoint,
+  productionRestoreClaimEndpoint } from "../src/editor-endpoints.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -300,8 +301,26 @@ test("restored manifest can start a fresh Publisher-authorized attempt", () => {
   const move = (state) => core.transitionProductionRelease({ id:first.id,state,detail:{},
     fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer" });
   assert.equal(move("failed_fenced").ok,true);
-  assert.equal(move("restoring").ok,true);
-  assert.equal(move("restored").ok,true);
+  assert.equal(move("restoring").reason,"invalid_transition");
+  const restore = core.claimProductionRestore({ id:first.id,actor:"service:release",
+    credential_channel:"bearer",lease_ms:1000 }).release;
+  assert.equal(restore.state,"restoring");
+  assert.notEqual(restore.fencing_token,claimed.fencing_token);
+  assert.equal(core.claimProductionRestore({ id:first.id,actor:"service:other",
+    credential_channel:"bearer" }).reason,"lease_active");
+  assert.equal(core.transitionProductionRelease({ id:first.id,state:"restored",detail:{},
+    fencing_token:claimed.fencing_token,actor:"service:release",
+    credential_channel:"bearer" }).reason,"stale_fence");
+  now += 1001;
+  const reclaimed = core.claimProductionRestore({ id:first.id,actor:"service:other",
+    credential_channel:"bearer",lease_ms:1000 }).release;
+  assert.notEqual(reclaimed.fencing_token,restore.fencing_token);
+  assert.equal(core.renewProductionReleaseLease({ id:first.id,
+    fencing_token:restore.fencing_token,actor:"service:release",
+    credential_channel:"bearer" }).reason,"stale_fence");
+  assert.equal(core.transitionProductionRelease({ id:first.id,state:"restored",detail:{},
+    fencing_token:reclaimed.fencing_token,actor:"service:other",
+    credential_channel:"bearer" }).ok,true);
 
   now += 1;
   const retryInput = { ...firstInput,id:"release-attempt-2",idempotency_key:"attempt-2",
@@ -436,6 +455,8 @@ test("trusted release service alone can prepare, claim, and transition", async (
     prepareProductionRelease:async (x) => (calls.push(["prepare",x]), { ok:true,release:{id:x.id} }),
     productionPreparationContext:async () => (calls.push(["frontier"]), { batches:[] }),
     claimAuthorizedProductionRelease:async (x) => (calls.push(["claim",x]), { ok:true,release:null }),
+    claimProductionRestore:async (x) => (calls.push(["restore-claim",x]),
+      { ok:true,release:{ id:x.id,state:"restoring" } }),
     renewProductionReleaseLease:async (x) => (calls.push(["renew",x]), { ok:true }),
     transitionProductionRelease:async (x) => (calls.push(["transition",x]), { ok:true }),
   };
@@ -452,14 +473,18 @@ test("trusted release service alone can prepare, claim, and transition", async (
   assert.equal((await productionPreparationContextEndpoint(
     new Request("https://edit.example/edit/v1/prod/releases/frontier"),env,auth)).status,200);
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,auth)).status,200);
+  assert.equal((await productionRestoreClaimEndpoint(req(
+    "/edit/v1/prod/releases/restore-claim",{ id:"release-1" }),env,auth)).status,200);
   assert.equal((await productionRenewEndpoint(req("/edit/v1/prod/releases/renew",
     { id:"release-1",fencing_token:"fence" }),env,auth)).status,200);
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
   const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,humanAdmin)).status,403);
+  assert.equal((await productionRestoreClaimEndpoint(req(
+    "/edit/v1/prod/releases/restore-claim",{ id:"release-1" }),env,humanAdmin)).status,403);
   const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),
-    ["prepare","frontier","claim","renew","transition"]);
+    ["prepare","frontier","claim","restore-claim","renew","transition"]);
 });

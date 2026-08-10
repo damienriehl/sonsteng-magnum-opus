@@ -251,39 +251,69 @@ def test_candidate_validator_binds_git_tree_ancestry_frontier_and_membership():
 
 
 def test_restoration_uses_recorded_base_and_failure_remains_fenced():
-    item = release(state="executing")
+    item = release(state="restoring")
     ledger = Ledger(item)
-    pages, worker = Target("pages"), Target("worker")
-    restored = []
+    pages = ArtifactTarget("pages",item.base_sha,{"p-old":item.base_sha},
+                           observed=item.candidate_sha)
+    worker = ArtifactTarget("worker",item.base_sha,{"w-old":item.base_sha},
+                            observed=item.candidate_sha)
     restorer = RecordedPairRestorer({item.base_sha:{"pages_deployment_id":"p-old",
-      "worker_version_id":"w-old"}},lambda value:restored.append(value),lambda value:restored.append(value))
-    # Provider probes observe the exact recorded base after restoration.
-    class ProbeRestorer:
-        def restore(self, sha, order):
-            restorer.restore(sha, order); pages.observed = sha; worker.observed = sha
-    assert ProductionExecutor(ledger,pages,worker,restorer=ProbeRestorer()).restore_recorded_base(item)["sha"] == item.base_sha
-    assert restored == ["w-old","p-old"]
+      "worker_version_id":"w-old"}},pages.restore,worker.restore)
+    assert ProductionExecutor(ledger,pages,worker,restorer=restorer,
+        heartbeat_interval=.005).restore_recorded_base(item)["sha"] == item.base_sha
+    assert worker.reactivated == ["w-old"] and pages.reactivated == ["p-old"]
     assert ledger.events[-1][1] == "restored"
     with pytest.raises(ReleaseError, match="remains fenced"):
         ProductionExecutor(Ledger(item),Target("pages"),Target("worker")).restore_recorded_base(item)
 
     resumed = release(state="restoring", completed_phases=("restoring",))
     resumed_ledger = Ledger(resumed)
-    pages, worker = Target("pages"), Target("worker")
-    class ResumedRestorer:
-        def restore(self, sha, order): pages.observed = sha; worker.observed = sha
+    pages = ArtifactTarget("pages",resumed.base_sha,{"p-old":resumed.base_sha},
+                           observed=resumed.base_sha)
+    worker = ArtifactTarget("worker",resumed.base_sha,{"w-old":resumed.base_sha},
+                            observed=resumed.candidate_sha)
     ProductionExecutor(resumed_ledger,pages,worker,
-        restorer=ResumedRestorer()).restore_recorded_base(resumed)
+        restorer=RecordedPairRestorer({resumed.base_sha:{"pages_deployment_id":"p-old",
+          "worker_version_id":"w-old"}},pages.restore,worker.restore)).restore_recorded_base(resumed)
+    assert pages.reactivated == [] and worker.reactivated == ["w-old"]
     assert [event[1] for event in resumed_ledger.events] == ["restored"]
 
-    retry = release(state="failed_fenced", completed_phases=("restoring", "failed_fenced"))
-    retry_ledger = Ledger(retry)
-    pages, worker = Target("pages"), Target("worker")
-    class RetryRestorer:
-        def restore(self, sha, order): pages.observed = sha; worker.observed = sha
-    ProductionExecutor(retry_ledger,pages,worker,
-        restorer=RetryRestorer()).restore_recorded_base(retry)
-    assert [event[1] for event in retry_ledger.events] == ["restoring", "restored"]
+    with pytest.raises(ReleaseError,match="exclusive claimed"):
+        ProductionExecutor(Ledger(release(state="failed_fenced")),pages,worker,
+            restorer=restorer).restore_recorded_base(release(state="failed_fenced"))
+
+
+def test_long_restore_is_heartbeated_and_stale_fence_halts_partial_recovery():
+    item = release(state="restoring")
+    ledger = Ledger(item)
+    class SlowTarget(ArtifactTarget):
+        max_operation_seconds = 2
+        def restore(self,artifact_id):
+            deadline = time.monotonic() + 1
+            while ledger.renewals < 2 and time.monotonic() < deadline:
+                time.sleep(.002)
+            return super().restore(artifact_id)
+    pages = ArtifactTarget("pages",item.base_sha,{"p-old":item.base_sha},
+                           observed=item.candidate_sha)
+    worker = SlowTarget("worker",item.base_sha,{"w-old":item.base_sha},
+                        observed=item.candidate_sha)
+    restorer = RecordedPairRestorer({item.base_sha:{"pages_deployment_id":"p-old",
+      "worker_version_id":"w-old"}},pages.restore,worker.restore)
+    ProductionExecutor(ledger,pages,worker,restorer=restorer,
+        heartbeat_interval=.005).restore_recorded_base(item)
+    assert ledger.renewals >= 4
+
+    class StaleLedger(Ledger):
+        def renew(self,*args,**kwargs): return {"ok":False,"reason":"stale_fence"}
+    pages = ArtifactTarget("pages",item.base_sha,{"p-old":item.base_sha},
+                           observed=item.candidate_sha)
+    worker = ArtifactTarget("worker",item.base_sha,{"w-old":item.base_sha},
+                            observed=item.candidate_sha)
+    with pytest.raises(ReleaseError,match="fenced"):
+        ProductionExecutor(StaleLedger(item),pages,worker,restorer=RecordedPairRestorer(
+          {item.base_sha:{"pages_deployment_id":"p-old","worker_version_id":"w-old"}},
+          pages.restore,worker.restore)).restore_recorded_base(item)
+    assert not pages.reactivated and not worker.reactivated
 
 
 def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
@@ -299,6 +329,27 @@ def test_ledger_http_sends_bearer_csrf_marker_without_leaking_token():
     assert seen["X-edit-request"] == "1"
     assert seen["Authorization"] == "Bearer secret"
     assert seen["User-agent"] == "sonsteng-prod-release/1.0"
+
+
+def test_ledger_http_restore_claim_is_named_and_returns_fresh_fence():
+    seen = {}
+    item = release(state="restoring",fencing_token="restore-fence")
+    payload = {"ok":True,"release":{"id":item.id,"state":item.state,
+      "base_sha":item.base_sha,"candidate_sha":item.candidate_sha,
+      "manifest_hash":item.manifest_hash,"membership_hash":item.membership_hash,
+      "suggestion_ids":list(item.suggestion_ids),"fencing_token":item.fencing_token,
+      "batches":[{"commit_sha":sha} for sha in item.batch_commits],"events":[]}}
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self,*_): pass
+        def read(self,*_): return json.dumps(payload).encode()
+    def opener(request,timeout):
+        seen["url"],seen["body"] = request.full_url,json.loads(request.data)
+        return Response()
+    claimed = LedgerHTTP("https://edit.example","secret",opener).claim_restore("rel-1")
+    assert seen == {"url":"https://edit.example/edit/v1/prod/releases/restore-claim",
+                    "body":{"id":"rel-1"}}
+    assert claimed.state == "restoring" and claimed.fencing_token == "restore-fence"
 
 
 def test_both_provenance_probes_send_cloudflare_safe_service_user_agent(tmp_path):

@@ -27,6 +27,7 @@ import {
   publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint,
   productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
+  productionRestoreClaimEndpoint,
 } from "./editor-endpoints.js";
 
 function editorStub(env) {
@@ -212,6 +213,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await productionPreparationContextEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/claim" && request.method === "POST")
     return wrap(await productionClaimEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/restore-claim" && request.method === "POST")
+    return wrap(await productionRestoreClaimEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/renew" && request.method === "POST")
     return wrap(await productionRenewEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/transition" && request.method === "POST")
