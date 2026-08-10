@@ -211,6 +211,45 @@ test("expired verified release is reclaimable and completes under a fresh fence"
   assert.equal(move(resumed.fencing_token,"complete").ok,true);
 });
 
+test("restored manifest can start a fresh Publisher-authorized attempt", () => {
+  let now = 2000;
+  const core = makeCore(() => now);
+  seedApplied(core, "batch-1", ["suggestion-0301"], 1100);
+  core.now = () => now;
+  const firstInput = release({ id:"release-attempt-1",idempotency_key:"attempt-1",
+    target_batch_id:"batch-1",candidate_sha:"commit-batch-1" });
+  const first = core.prepareProductionRelease(firstInput).release;
+  core.authorizeProductionRelease(authorize(first));
+  const claimed = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer" }).release;
+  const move = (state) => core.transitionProductionRelease({ id:first.id,state,detail:{},
+    fencing_token:claimed.fencing_token,actor:"service:release",credential_channel:"bearer" });
+  assert.equal(move("failed_fenced").ok,true);
+  assert.equal(move("restoring").ok,true);
+  assert.equal(move("restored").ok,true);
+
+  now += 1;
+  const retryInput = { ...firstInput,id:"release-attempt-2",idempotency_key:"attempt-2",
+    request_digest:"digest-attempt-2" };
+  const retried = core.prepareProductionRelease(retryInput);
+  assert.equal(retried.ok,true);
+  assert.equal(retried.replay,undefined);
+  assert.equal(retried.release.state,"prepared");
+  assert.equal(retried.release.manifest_hash,first.manifest_hash);
+  assert.equal(core.publisherContext().release.id,"release-attempt-2");
+
+  const replay = core.prepareProductionRelease(retryInput);
+  assert.equal(replay.ok,true);
+  assert.equal(replay.replay,true);
+  assert.equal(replay.release.id,"release-attempt-2");
+  assert.equal(core.authorizeProductionRelease(authorize(retried.release, {
+    idempotency_key:"authorize-attempt-2",request_digest:"authorize-digest-attempt-2" })).ok,true);
+  const retryClaim = core.claimAuthorizedProductionRelease({ actor:"service:release",
+    credential_channel:"bearer" }).release;
+  assert.equal(retryClaim.id,"release-attempt-2");
+  assert.equal(retryClaim.state,"executing");
+});
+
 test("authorization is immutable and idempotent only for the identical binding", () => {
   const core = makeCore();
   seedApplied(core, "batch-1", ["suggestion-0001"], 1100);

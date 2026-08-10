@@ -917,9 +917,9 @@ old_cross_tasks = {item["id"]: item for item in old_cross_doc.get("tasks", [])}
 
 
 def preserve(obj, old, fields):
-    """Overlay only explicitly authored wording; structure stays generated."""
+    """Overlay authored wording only for slots the generator still declares."""
     for field in fields:
-        if isinstance(old.get(field), str):
+        if field in obj and isinstance(old.get(field), str):
             obj[field] = old[field]
 
 

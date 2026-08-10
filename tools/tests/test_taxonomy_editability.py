@@ -112,6 +112,7 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
         identities_path = os.path.join(tax, "taxonomy-identities.json")
         identities_before = json.load(open(identities_path, encoding="utf-8"))
         skills["skills"][0]["name"] = "Edited <script>alert(1)</script> skill"
+        skills["skills"][4]["alt_name"] = "Edited still-declared alternate name"
         tasks["tasks"][0]["name"] = "Edited task wording"
         tasks["tasks"][0]["subtasks"][0]["name"] = "Edited subtask wording"
         tasks["tasks"][0]["subtasks"][0]["description"] = "Edited subtask wording"
@@ -143,6 +144,7 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
         regenerated_tasks = json.load(open(tasks_path, encoding="utf-8"))
         regenerated_crosswalk = json.load(open(crosswalk_path, encoding="utf-8"))
         assert regenerated_skills["skills"][0]["name"] == "Edited <script>alert(1)</script> skill"
+        assert regenerated_skills["skills"][4]["alt_name"] == "Edited still-declared alternate name"
         assert regenerated_tasks["tasks"][0]["name"] == "Edited task wording"
         assert regenerated_tasks["tasks"][0]["subtasks"][0]["name"] == "Edited subtask wording"
         assert regenerated_tasks["tasks"][0]["subtasks"][0]["description"] == "Edited subtask wording"
@@ -152,6 +154,40 @@ def test_generator_round_trip_preserves_wording_by_literal_id():
             (task["id"], [sub["id"] for sub in task["subtasks"]])
             for task in regenerated_tasks["tasks"]
         ] == before_ids
+
+
+def test_generator_does_not_resurrect_removed_optional_alt_name():
+    import shutil
+    with tempfile.TemporaryDirectory(prefix="taxonomy-alt-removal-") as tmp:
+        data = os.path.join(tmp, "data")
+        tax = os.path.join(data, "taxonomy")
+        shutil.copytree(TAXONOMY, tax)
+        shutil.copytree(os.path.join(REPO, "data", "schemas"), os.path.join(data, "schemas"))
+        os.makedirs(os.path.join(data, "matters"))
+        shutil.copy2(os.path.join(REPO, "data", "matters", "manifest.json"),
+                     os.path.join(data, "matters", "manifest.json"))
+
+        skills_path = os.path.join(tax, "skills.json")
+        skills = json.load(open(skills_path, encoding="utf-8"))
+        skill = next(item for item in skills["skills"] if item["id"] == "SK-LP-05")
+        skill["alt_name"] = "Previously authored alternate name"
+        with open(skills_path, "w", encoding="utf-8") as fh:
+            json.dump(skills, fh, ensure_ascii=False, indent=2)
+
+        generator_path = os.path.join(tax, "_build_taxonomy.py")
+        source = open(generator_path, encoding="utf-8").read()
+        original = '("SK-LP-05","Library legal research","Skills to conduct legal library research","legal_practice",False,'
+        replacement = '("SK-LP-05","Library legal research",None,"legal_practice",False,'
+        assert original in source
+        with open(generator_path, "w", encoding="utf-8") as fh:
+            fh.write(source.replace(original, replacement, 1))
+
+        subprocess.run([sys.executable, generator_path], check=True, cwd=tmp,
+                       capture_output=True, text=True)
+        regenerated = json.load(open(skills_path, encoding="utf-8"))
+        regenerated_skill = next(item for item in regenerated["skills"]
+                                 if item["id"] == "SK-LP-05")
+        assert "alt_name" not in regenerated_skill
 
 
 def test_generator_drops_obsolete_notes_when_authoritative_mapping_is_added():

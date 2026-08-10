@@ -403,7 +403,8 @@ def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):
         def tree(self, candidate): return "tree-1"
     ledger = BuilderLedger()
     manifest_path = tmp_path / "state" / "manifest.json"
-    made = ProductionCandidateBuilder(ledger,Git(),manifest_path).prepare_latest()
+    made = ProductionCandidateBuilder(ledger,Git(),manifest_path,
+        attempt_id_factory=lambda: "attempt-1").prepare_latest()
     manifest = json.loads(manifest_path.read_text())
     assert made["release"]["state"] == "prepared"
     assert manifest["batch_ids"] == ["batch-1","batch-2"]
@@ -411,6 +412,45 @@ def test_candidate_builder_freezes_latest_frontier_for_human_review(tmp_path):
     assert ledger.binding["target_batch_id"] == "batch-2"
     assert ledger.binding["candidate_sha"] == "b" * 40
     assert ledger.binding["expected_suggestion_ids"] == ["s1","s2"]
+    assert ledger.binding["id"].endswith("-attempt-1")
+
+
+def test_candidate_builder_creates_fresh_attempt_after_restoration_and_replays_active(tmp_path):
+    class Git:
+        def require_clean_candidate(self, _candidate): pass
+        def is_ancestor(self, _base, _candidate): return True
+        def tree(self, _candidate): return "tree-1"
+
+    batches = [{"batch_id":"batch-1","commit_sha":"b" * 40,
+                "generator_id":"generator-1","suggestion_ids":["s1"]}]
+
+    class RetryLedger:
+        def __init__(self):
+            self.active = None
+            self.bindings = []
+        def preparation_context(self):
+            if self.active:
+                return {"active_release":self.active,"batches":[]}
+            return {"base_sha":"a" * 40,"active_release":None,"batches":batches}
+        def prepare(self, binding):
+            self.bindings.append(binding)
+            self.active = {**binding,"state":"prepared","batches":[
+                {"batch_id":"batch-1","commit_sha":"b" * 40}],
+                "suggestion_ids":["s1"]}
+            return {"ok":True,"release":self.active}
+
+    attempts = iter(["restored-attempt", "retry-attempt"])
+    ledger = RetryLedger()
+    builder = ProductionCandidateBuilder(ledger,Git(),tmp_path / "manifest.json",
+        attempt_id_factory=lambda: next(attempts))
+    first = builder.prepare_latest()["release"]
+    ledger.active = None  # the ledger now reports the first attempt as restored
+    second = builder.prepare_latest()["release"]
+    assert first["manifest_hash"] == second["manifest_hash"]
+    assert first["id"] != second["id"]
+    assert second["id"].endswith("-retry-attempt")
+    assert builder.prepare_latest()["replay"] is True
+    assert len(ledger.bindings) == 2
 
 
 def test_candidate_builder_requires_recorded_first_base_and_reproduces_active(tmp_path):

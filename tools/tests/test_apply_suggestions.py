@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,40 @@ import apply_suggestions as ap  # noqa: E402
 import stamp_block_ids as sb  # noqa: E402
 
 BID_RE = sb.BID_RE
+
+
+class GeneratorIdentityTest(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.mkdtemp(prefix="generator-identity-")
+        shutil.copytree(TOOLS, os.path.join(self.root, "tools"))
+
+    def tearDown(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def _append(self, relpath, text):
+        with open(os.path.join(self.root, relpath), "a", encoding="utf-8") as fh:
+            fh.write(text)
+
+    def test_dependency_closure_includes_transitive_generator_helpers(self):
+        paths = ap.generator_dependency_paths(self.root)
+        self.assertIn("tools/student_archives.py", paths)
+        self.assertIn("tools/text_norm.py", paths)
+        self.assertIn("tools/render_diff_lib.py", paths)
+
+    def test_identity_changes_when_transitive_helpers_change(self):
+        original = ap.generator_identity(self.root)
+        self._append("tools/student_archives.py", "\n# identity catch-power\n")
+        student_changed = ap.generator_identity(self.root)
+        self.assertNotEqual(student_changed, original)
+        self._append("tools/text_norm.py", "\n# second helper catch-power\n")
+        self.assertNotEqual(ap.generator_identity(self.root), student_changed)
+
+    def test_identity_ignores_unrelated_ambient_files(self):
+        original = ap.generator_identity(self.root)
+        self._append("tools/prod_release_executor.py", "\n# unrelated\n")
+        with open(os.path.join(self.root, "ambient.txt"), "w", encoding="utf-8") as fh:
+            fh.write("unrelated")
+        self.assertEqual(ap.generator_identity(self.root), original)
 
 
 def _bid_of(span):

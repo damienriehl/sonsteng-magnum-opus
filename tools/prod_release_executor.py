@@ -12,6 +12,7 @@ import hashlib
 import json
 import pathlib
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -194,10 +195,12 @@ class CandidateValidator:
 class ProductionCandidateBuilder:
     """Freeze the latest contiguous DEV frontier for human Publisher review."""
 
-    def __init__(self, ledger, git, manifest_path, bootstrap_base_sha=None):
+    def __init__(self, ledger, git, manifest_path, bootstrap_base_sha=None,
+                 attempt_id_factory=None):
         self.ledger, self.git = ledger, git
         self.manifest_path = pathlib.Path(manifest_path)
         self.bootstrap_base_sha = bootstrap_base_sha
+        self.attempt_id_factory = attempt_id_factory or (lambda: secrets.token_hex(12))
 
     @staticmethod
     def _manifest(base_sha, candidate_sha, candidate_tree, generator_id,
@@ -267,7 +270,11 @@ class ProductionCandidateBuilder:
         evidence_hash = hashlib.sha256(_canonical({"batch_ids":batch_ids,
             "batch_commits":batch_commits,"generator_id":generator_id,
             "suggestion_ids":suggestion_ids})).hexdigest()
-        release_id = "release-" + manifest_hash[:24]
+        # A manifest identifies immutable release content, not an execution
+        # attempt. A restored attempt must receive fresh human authorization
+        # before the exact same content can run again, so the trusted service
+        # (never the Publisher client) adds an opaque attempt identity.
+        release_id = "release-" + manifest_hash[:16] + "-" + self.attempt_id_factory()
         binding = {"id":release_id, "idempotency_key":release_id,
             "target_batch_id":batch_ids[-1], "base_sha":base_sha,
             "candidate_sha":candidate_sha, "generator_id":generator_id,

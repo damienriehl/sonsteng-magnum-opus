@@ -367,7 +367,8 @@ The `tools/apply_suggestions.py` loop drives these (admin token = service scope)
 - `finalize` `{ batch_id, phase, applied?, accepted_blocked?, needs_human?,
   drift?, commit_sha?, generator_id? }` → journals the phase and resolves the
   batch's `in_flight` rows. The terminal `done` call records the exact canonical
-  commit and content identity of the generators used for the deployable bundles.
+  commit and content identity of the authoritative generator entrypoints plus
+  their complete transitive local-Python dependency closure.
 - `reconcile` → startup crash recovery: expired-lease batches pre-`merged` roll
   `in_flight → accepted` (re-queue) + phase `rolled_back`; post-`merged` complete
   `in_flight → applied`. Orphan `in_flight` (expired lease, no live batch) → back

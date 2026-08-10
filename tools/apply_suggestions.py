@@ -56,6 +56,7 @@ tools/tests/test_apply_suggestions.py).
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import dataclasses
 import datetime
@@ -86,6 +87,14 @@ LOCK_PATH = os.path.join(LOCK_DIR, "apply.lock")
 ENV_API_BASE = "EDIT_API_BASE"          # e.g. https://<worker>/edit/v1  (no trailing slash)
 ENV_SERVICE_TOKEN = "EDIT_SERVICE_TOKEN"  # admin/service bookmark token (opaque). NEVER commit/log.
 ENV_DEPLOY = "APPLY_DEPLOY"             # "1" => actually deploy; anything else => build+verify only.
+
+GENERATOR_ENTRYPOINTS = (
+    "tools/build_site.py",
+    "tools/build_worker_personas.py",
+    "tools/build_instructor_bundle.py",
+    "tools/check_build_parity.py",
+    "tools/spine_stamp.py",
+)
 
 # apply_batches journal phases (Worker-owned enum).
 PHASE_CLAIMED = "claimed"
@@ -252,6 +261,54 @@ def assert_clean_tree(root):
 
 def head_sha(root):
     return git(["rev-parse", "HEAD"], root).stdout.strip()
+
+
+def generator_dependency_paths(root):
+    """Return the deterministic local-Python closure for deployable generators."""
+    root = os.path.abspath(root)
+    pending = list(GENERATOR_ENTRYPOINTS)
+    found = set()
+    while pending:
+        relpath = pending.pop()
+        if relpath in found:
+            continue
+        path = os.path.join(root, relpath)
+        if not os.path.isfile(path):
+            raise ApplyError("generator dependency is missing: " + relpath)
+        found.add(relpath)
+        try:
+            tree = ast.parse(open(path, encoding="utf-8").read(), filename=relpath)
+        except (OSError, SyntaxError) as exc:
+            raise ApplyError("generator dependency cannot be parsed: %s: %s" %
+                             (relpath, exc)) from exc
+        modules = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                modules.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                modules.append(node.module)
+        for module in modules:
+            module_path = module.replace(".", "/")
+            candidates = (
+                "tools/%s.py" % module_path,
+                "tools/%s/__init__.py" % module_path,
+            )
+            for candidate in candidates:
+                if os.path.isfile(os.path.join(root, candidate)):
+                    pending.append(candidate)
+                    break
+    return tuple(sorted(found))
+
+
+def generator_identity(root):
+    """Hash the authoritative generator entrypoints and all local dependencies."""
+    digest = hashlib.sha256()
+    for relpath in generator_dependency_paths(root):
+        digest.update(relpath.encode("utf-8") + b"\0")
+        with open(os.path.join(root, relpath), "rb") as fh:
+            digest.update(fh.read())
+        digest.update(b"\0")
+    return "sha256:" + digest.hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -428,23 +485,7 @@ class SubprocessPipeline:
         return rc == 0, {"stdout": out}
 
     def generator_identity(self, worktree):
-        """Content identity of the code that materializes deployable bundles.
-
-        This stays equal across content-only apply batches, but changes whenever
-        any authoritative generator or its shared spine-stamp contract changes.
-        """
-        digest = hashlib.sha256()
-        for relpath in (
-            "tools/build_site.py",
-            "tools/build_worker_personas.py",
-            "tools/build_instructor_bundle.py",
-            "tools/spine_stamp.py",
-        ):
-            digest.update(relpath.encode("utf-8") + b"\0")
-            with open(os.path.join(worktree, relpath), "rb") as fh:
-                digest.update(fh.read())
-            digest.update(b"\0")
-        return "sha256:" + digest.hexdigest()
+        return generator_identity(worktree)
 
     def deploy(self, worktree, branch, plan_only):
         """Deploy the site (Hetzner DEV) + Worker (wrangler). GATED: only executes
