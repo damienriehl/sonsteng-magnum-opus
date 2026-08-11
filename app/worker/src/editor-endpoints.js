@@ -849,6 +849,10 @@ export async function reviewBackfillEndpoint(request, env, auth) {
     return editError("forbidden", "Trusted migration service required.", 403);
   const body = await readJson(request);
   if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  if (typeof body.migration_id !== "string" || typeof body.prod_base !== "string" ||
+      new TextEncoder().encode(body.migration_id).byteLength > 256 ||
+      new TextEncoder().encode(body.prod_base).byteLength > 256)
+    return editError("validation_error", "Migration identity is invalid.", 400);
   const result = await editorStub(env).backfillReviewRevisions({
     migration_id:typeof body.migration_id === "string" ? body.migration_id : "",
     prod_base:typeof body.prod_base === "string" ? body.prod_base : "",
@@ -1006,6 +1010,12 @@ export async function productionPreparationContextEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
   return json({ ok:true, context:await editorStub(env).productionPreparationContext() });
+}
+
+export async function productionAuditEndpoint(request, env, auth) {
+  if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
+  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  return json({ ok:true, audit:await editorStub(env).productionReleaseAudit() });
 }
 
 export async function productionClaimEndpoint(request, env, auth) {

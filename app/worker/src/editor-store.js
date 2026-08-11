@@ -64,5 +64,6 @@ export class EditorStore extends DurableObject {
   submitPublisherReview(submission) { return this.core.submitPublisherReview(submission); }
   publisherContext() { return this.core.publisherContext(); }
   publisherSummary() { return this.core.publisherSummary(); }
+  productionReleaseAudit() { return this.core.productionReleaseAudit(); }
   productionPreparationContext() { return this.core.productionPreparationContext(); }
 }

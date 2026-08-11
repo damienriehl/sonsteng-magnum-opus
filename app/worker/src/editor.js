@@ -26,7 +26,7 @@ import {
   revertRecordEndpoint,
   publisherReviewEndpoint, publisherReviewDraftEndpoint, publisherReviewSubmitEndpoint,
   publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
-  productionPreparationContextEndpoint,
+  productionPreparationContextEndpoint, productionAuditEndpoint,
   productionClaimEndpoint, productionRenewEndpoint, productionTransitionEndpoint,
   productionRestoreClaimEndpoint,
 } from "./editor-endpoints.js";
@@ -220,6 +220,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await productionPrepareEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/frontier" && request.method === "GET")
     return wrap(await productionPreparationContextEndpoint(request, env, auth));
+  if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/audit" && request.method === "GET")
+    return wrap(await productionAuditEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/claim" && request.method === "POST")
     return wrap(await productionClaimEndpoint(request, env, auth));
   if (env.PROD_RELEASE_LEDGER === "true" && path === "/edit/v1/prod/releases/restore-claim" && request.method === "POST")

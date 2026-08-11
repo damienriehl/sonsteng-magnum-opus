@@ -4,7 +4,8 @@ import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint, productionClaimEndpoint,
   productionRenewEndpoint, productionTransitionEndpoint,
-  productionRestoreClaimEndpoint } from "../src/editor-endpoints.js";
+  productionRestoreClaimEndpoint, productionAuditEndpoint } from "../src/editor-endpoints.js";
+import { editorFetch } from "../src/editor.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -25,6 +26,118 @@ function release(over = {}) {
     generator_id:"generator-v1", evidence_hash:"evidence-1", manifest_hash:"manifest-1",
     ancestry_verified:true, ...over };
 }
+
+test("production audit is text-free and reports migration integrity", async () => {
+  const core = makeCore(() => 1250);
+  seedApplied(core,"batch-audit",["audit-suggestion"],1000);
+  const result = core.productionReleaseAudit();
+  assert.equal(result.schema_version,1);
+  assert.equal(result.counts.apply_batches_done,1);
+  assert.equal(result.counts.applied_suggestions,1);
+  assert.equal(result.counts.review_migrations,0);
+  assert.equal(result.invariants.legacy_receipts_without_operations,0);
+  assert.equal(result.invariants.submitted_sources_without_revision,0);
+  assert.equal(result.invariants.operations_without_revision,0);
+  assert.deepEqual(result.active_releases,[]);
+  assert.equal(result.migrations_truncated,false);
+  assert.equal(result.active_releases_truncated,false);
+  assert.equal(JSON.stringify(result).includes("old"),false);
+  assert.equal(JSON.stringify(result).includes("new"),false);
+
+  core.sql.exec("INSERT INTO production_review_submission_decisions (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?,?)",
+    "orphan-review","orphan-revision","orphan-operation","accepted","private note","digest",null);
+  const broken = core.productionReleaseAudit();
+  assert.equal(broken.invariants.decisions_without_operation,1);
+  assert.equal(JSON.stringify(broken).includes("private note"),false);
+
+  const grouped = makeCore(() => 1260);
+  grouped.sql.exec("INSERT INTO production_review_submission_decisions (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?,?)",
+    "group-review","group-revision","group-decision","accepted","","digest","group-1");
+  grouped.sql.exec("INSERT INTO production_review_operations (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)",
+    "physical-operation","group-decision","group-review","group-revision","data/copy/home.json#lead","group-1","accepted","","unpublished");
+  assert.equal(grouped.productionReleaseAudit().invariants.decisions_without_operation,0,
+    "a shared group decision is backed by its physical operation through decision_id");
+
+  const corruptionCases = [
+    ["legacy_receipts_without_operations",(c) => c.sql.exec("INSERT INTO production_reviews (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)","legacy","key","digest","reviewer","missing-revision","source-v1","prod","receipt","{}",1)],
+    ["submitted_sources_without_revision",(c) => c.sql.exec("INSERT INTO production_review_submission_sources (review_id,review_revision_id,source_revision,prod_base,evidence_digest) VALUES (?,?,?,?,?)","review","missing-revision","source-v1","prod","digest")],
+    ["decisions_without_operation",(c) => c.sql.exec("INSERT INTO production_review_submission_decisions (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?,?)","review","revision","missing-decision","accepted","","digest",null)],
+    ["operations_without_revision",(c) => c.sql.exec("INSERT INTO production_review_operations (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)","operation","operation","review","missing-revision","source",null,"accepted","","unpublished")],
+    ["published_operations_without_release",(c) => c.sql.exec("INSERT INTO production_published_operations (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at) VALUES (?,?,?,?,?,?,?)","operation","missing-release","revision","source","source-v1","candidate",1)],
+  ];
+  for (const [name,corrupt] of corruptionCases) {
+    const corruptCore = makeCore(() => 1270);
+    corrupt(corruptCore);
+    assert.equal(corruptCore.productionReleaseAudit().invariants[name],1,
+      `${name} must have a positive corruption canary`);
+  }
+
+  const request = new Request("https://worker.example/edit/v1/prod/releases/audit");
+  const env = { PROD_RELEASE_LEDGER:"true", EDITOR:{ getByName:() => ({
+    productionReleaseAudit:async () => result }) } };
+  const service = { editor:"service:release",credential_channel:"bearer",
+    scopes:{ release_service:{ granted:true } } };
+  assert.equal((await productionAuditEndpoint(request,env,service)).status,200);
+  assert.equal((await productionAuditEndpoint(request,env,{ ...service,
+    credential_channel:"access" })).status,403);
+  assert.equal((await productionAuditEndpoint(request,env,{ editor:"slot:damien",
+    credential_channel:"access",scopes:{ publisher:{ granted:true } } })).status,403);
+  assert.equal((await productionAuditEndpoint(request,{ ...env,PROD_RELEASE_LEDGER:"false" },service)).status,404);
+});
+
+test("production audit bounds migrations and active releases", () => {
+  const core = makeCore(() => 1300);
+  for (let i=0;i<101;i++) core.sql.exec(
+    "INSERT INTO production_review_migrations (id,prod_base,evidence_digest,revision_count,actor,created_at) VALUES (?,?,?,?,?,?)",
+    `migration-${String(i).padStart(3,"0")}`,"prod-base","digest",1,"service",i);
+  for (let i=0;i<21;i++) core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `release-${i}`,`key-${i}`,`digest-${i}`,"prepared","service","bearer","production",
+    `batch-${i}`,"base","candidate","generator","evidence","manifest",`membership-${i}`,i,i);
+  const audit = core.productionReleaseAudit();
+  assert.equal(audit.migrations.length,100);
+  assert.equal(audit.migrations_truncated,true);
+  assert.equal(audit.active_releases.length,20);
+  assert.equal(audit.active_releases_truncated,true);
+
+  core.sql.exec("INSERT INTO production_review_migrations (id,prod_base,evidence_digest,revision_count,actor,created_at) VALUES (?,?,?,?,?,?)",
+    "é".repeat(129),"prod","digest",1,"service",999);
+  const bounded = core.productionReleaseAudit();
+  assert.equal(bounded.invariants.oversized_migration_fields,1);
+  assert.equal(bounded.migrations.at(-1).id,null);
+});
+
+test("routed production audit requires the dedicated release-service bearer", async () => {
+  const audit = { schema_version:1,counts:{},invariants:{},migrations:[],release_states:[],
+    active_releases:[],migrations_truncated:false,active_releases_truncated:false };
+  let calls = 0;
+  const env = {
+    PROD_RELEASE_LEDGER:"true",SESSION_SIGNING_KEY:"test-signing-key",
+    EDIT_TOKEN_SCOPES:JSON.stringify({ release:{ release_service:1 },admin:{ admin:1 } }),
+    EDIT_TOKEN_RELEASE:"release-secret",EDIT_TOKEN_ADMIN:"admin-secret",
+    EDIT_ORIGIN:"https://edit.example",EDITOR:{ getByName:() => ({
+      productionReleaseAudit:async () => { calls++; return audit; },
+    }) },
+  };
+  const routed = (token) => editorFetch(new Request(
+    "https://edit.example/edit/v1/prod/releases/audit",{
+      headers:{ Authorization:`Bearer ${token}`,"X-Edit-Request":"1" },
+    }),env,{});
+  const ok = await routed("release-secret");
+  assert.equal(ok.status,200);
+  assert.deepEqual((await ok.json()).audit,audit);
+  assert.equal(calls,1);
+  assert.equal((await routed("admin-secret")).status,403);
+  assert.equal((await routed("wrong-secret")).status,403);
+  assert.equal(calls,1,"forbidden callers never reach the Durable Object RPC");
+  assert.equal((await editorFetch(new Request(
+    "https://edit.example/edit/v1/prod/releases/audit",{
+      headers:{ Authorization:"Bearer release-secret","X-Edit-Request":"1" },
+    }),{ ...env,PROD_RELEASE_LEDGER:"false" },{})).status,404);
+});
 
 function authorize(prepared, over = {}) {
   return { id:prepared.id, idempotency_key:"authorize-1", request_digest:"authorize-digest-1",
