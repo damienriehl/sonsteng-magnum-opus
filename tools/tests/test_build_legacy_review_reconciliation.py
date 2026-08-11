@@ -158,6 +158,74 @@ def test_rejects_correctly_named_commit_that_did_not_apply_target_edit(legacy_re
     with pytest.raises(BackfillError, match="exclusion apply commit"):
         build_reconciliation(evidence, forged, repo, "legacy-1", prod_base)
 
+
+def test_legacy_file_transition_proofs_are_operation_specific(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    path = repo / "data/example.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "Anchor {#b:11111111}\n\nMove me {#b:22222222}\n\n"
+        "Delete me {#b:33333333}\n\nTail {#b:44444444}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "data"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    base = git(repo, "rev-parse", "HEAD")
+    path.write_text(
+        "Anchor {#b:11111111}\n\nInserted {#b:55555555}\n\n"
+        "Tail {#b:44444444}\n\nMove me {#b:22222222}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "data"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "apply: batch structural three edits"], cwd=repo, check=True)
+    commit = git(repo, "rev-parse", "HEAD")
+    batch = {"batch_id": "structural", "base_sha": base}
+
+    from build_legacy_review_reconciliation import _commit_applies_suggestion
+    assert _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b11111111", "kind": "insert_after",
+        "original_text": "Anchor", "new_text": "Inserted"})
+    assert _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b33333333", "kind": "delete",
+        "original_text": "Delete me", "new_text": None})
+    assert _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b22222222", "kind": "move",
+        "original_text": "Move me", "new_text": None})
+    assert not _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b11111111", "kind": "delete",
+        "original_text": "Anchor", "new_text": None})
+
+
+def test_insert_and_move_proofs_reject_unrelated_position_changes(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    path = repo / "data/example.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("Anchor {#b:11111111}\n\nMove me {#b:22222222}\n\nTail {#b:33333333}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "data"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    base = git(repo, "rev-parse", "HEAD")
+    path.write_text("Prefix {#b:44444444}\n\nAnchor {#b:11111111}\n\nMove me {#b:22222222}\n\nTail {#b:33333333}\n\nInserted {#b:55555555}\n", encoding="utf-8")
+    subprocess.run(["git", "add", "data"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "apply: batch unrelated positional edits"], cwd=repo, check=True)
+    commit = git(repo, "rev-parse", "HEAD")
+    batch = {"batch_id": "unrelated", "base_sha": base}
+
+    from build_legacy_review_reconciliation import _commit_applies_suggestion
+    assert not _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b11111111", "kind": "insert_after",
+        "original_text": "Anchor", "new_text": "Inserted"})
+    assert not _commit_applies_suggestion(repo, commit, batch, {
+        "source_ref": "data/example.md#b22222222", "kind": "move",
+        "original_text": "Move me", "new_text": None})
+
 def test_ignores_uncommitted_worktree_content(legacy_repo):
     repo, prod_base, evidence, classification = legacy_repo
     write_json(repo / "data/copy/reverted.json", {"lead": "Uncommitted drift"})
