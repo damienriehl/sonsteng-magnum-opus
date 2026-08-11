@@ -22,7 +22,7 @@ import {
   scopeEndpoint, scopedRequestEndpoint, scopedRequestsEndpoint,
   scopedClaimEndpoint, scopedResolveEndpoint, groupStatusEndpoint,
   decideEndpoint, digestEndpoint, claimEndpoint, finalizeEndpoint, reviewBackfillEndpoint,
-  reviewBackfillEvidenceEndpoint, reconcileEndpoint,
+  reviewBackfillEvidenceEndpoint, reviewLegacyReconcileEndpoint, reconcileEndpoint,
   heartbeatEndpoint, revertRequestEndpoint, revertRequestsEndpoint, revertResolveEndpoint,
   revertRecordEndpoint,
   publisherReviewEndpoint, publisherReviewDraftEndpoint, publisherReviewSubmitEndpoint,
@@ -207,6 +207,8 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await reviewBackfillEndpoint(request, env, auth));
   if (path === "/edit/v1/publisher/review/backfill-evidence" && request.method === "GET")
     return wrap(await reviewBackfillEvidenceEndpoint(request, env, auth));
+  if (path === "/edit/v1/publisher/review/reconcile-legacy" && request.method === "POST")
+    return wrap(await reviewLegacyReconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/reconcile" && request.method === "POST")
     return wrap(await reconcileEndpoint(request, env, auth));
   if (path === "/edit/v1/heartbeat" && request.method === "POST")

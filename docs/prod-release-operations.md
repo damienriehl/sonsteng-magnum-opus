@@ -199,6 +199,27 @@ changed retry rolls back or fails closed. Backfill creates no draft, decision,
 review receipt, release member, or implicit acceptance: every operation appears
 as unreviewed and requires a fresh human review.
 
+If the captured legacy rows do not form one contiguous chain because test/UAT
+edits were later reverted, stop: the bulk backfill would make obsolete copy
+reviewable again. Create a 0600 operator classification that places every legacy
+suggestion in exactly one class: still effective, or excluded as
+`reverted_legacy_uat`. Run `tools/build_legacy_review_reconciliation.py` and its
+`--check` mode against the canonical repository, protected evidence, exact
+verified PROD SHA, and that classification. For every exclusion the generator
+requires the exact Git apply commit and either a `proof_base_sha` whose complete
+source file equals current canonical bytes or restored original/new-text proof.
+For every effective edit it requires exact PROD and current source values plus
+proof that the completed apply commit changed the exact durable locator from the
+recorded original value to the recorded new value. The payload carries the exact
+batch/base/commit evidence that the Worker independently binds to its ledger.
+Submit the resulting protected payload once to
+`POST /edit/v1/publisher/review/reconcile-legacy` with the bearer-admin migration
+credential and CSRF header. The first receipt permanently closes new migration
+identities; only a byte-identical same-ID replay remains valid. Then require the text-free release audit to report
+the expected exclusion/revision counts and
+`unreconciled_applied_suggestions: 0`. Exclusions remain immutable historical
+attribution only; they never become operations, decisions, or release members.
+
 ## Preparation, authorization, execution
 
 The Publisher page may show eligible submitted-accepted operations, but its “Prepare immutable preview”
