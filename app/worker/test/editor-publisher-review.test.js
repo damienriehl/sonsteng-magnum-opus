@@ -330,6 +330,10 @@ test("legacy reconciliation excludes reverted rows and records only effective re
   assert.equal(core.reconcileLegacyReview(payload).replay,true);
   assert.equal(core.reconcileLegacyReview({ ...payload,migration_id:"legacy-reconcile-2" }).reason,
     "migration_closed");
+  assert.equal(core.backfillReviewRevisions({ migration_id:"ordinary-after-reconcile",prod_base:prod,
+    revisions:[{ ...effective,batch_chain:[{ batch_id:"b2",base_sha:prod,
+      commit_sha:"b".repeat(40) }],suggestion_evidence:[{ suggestion_id:"effective",
+      batch_id:"b2",commit_sha:"b".repeat(40) }] }] }).reason,"migration_closed");
   const incomplete = makeCore(() => 3750);
   for (const id of ["covered","uncovered"]) {
     incomplete.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",

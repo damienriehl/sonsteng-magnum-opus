@@ -1402,6 +1402,8 @@ export class EditorStoreCore {
     if (prior) return prior.evidence_digest === digest ?
       { ok:true,migration_id:input.migration_id,inserted:0,replayed:prior.revision_count,replay:true } :
       { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_review_migrations LIMIT 1"))
+      return { ok:false,reason:"migration_closed" };
     try { return this.transactionSync(() => {
       for (const revision of input.revisions) {
         if (revision?.prod_base !== input.prod_base) throw { backfillFailure:"prod_base_mismatch" };
@@ -1435,6 +1437,8 @@ export class EditorStoreCore {
         if (evidenceById.size !== new Set(revision.suggestion_ids).size)
           throw { backfillFailure:"missing_apply_evidence" };
         for (const suggestionId of revision.suggestion_ids) {
+          if (this._one("SELECT suggestion_id FROM production_legacy_exclusions WHERE suggestion_id=?",suggestionId))
+            throw { backfillFailure:"legacy_evidence_mismatch" };
           const item = evidenceById.get(suggestionId);
           if (!item || batches.get(item.batch_id) !== item.commit_sha)
             throw { backfillFailure:"legacy_commit_mismatch" };

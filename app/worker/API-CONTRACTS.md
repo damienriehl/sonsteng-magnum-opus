@@ -522,7 +522,8 @@ transaction, records append-only exclusion evidence plus review revisions for
 still-effective edits. The classification must cover every applied suggestion
 exactly once. The endpoint reads at most 1 MiB of actual request bytes. An exact
 same-ID replay is idempotent; any other migration identity is permanently closed
-after the first receipt. It creates no decisions or release authority; effective
+after the first receipt. That receipt also closes the earlier contiguous-backfill
+endpoint, and excluded suggestion IDs are rejected there defensively. It creates no decisions or release authority; effective
 operations remain unreviewed until a human Publisher submits a review.
 
 `GET /edit/v1/prod/releases/audit` is a text-free, read-only rollout audit. It
