@@ -226,12 +226,13 @@ test("schema migration is repeatable and the Durable Object forwards every revie
   assert.doesNotThrow(() => core.initSchema());
   const wrapper = readFileSync(new URL("../src/editor-store.js", import.meta.url), "utf8");
   for (const method of ["recordReviewRevision","backfillReviewRevisions","getPublisherReview","savePublisherReviewDraft",
-    "submitPublisherReview"]) {
+    "submitPublisherReview","productionReleaseAudit"]) {
     assert.match(wrapper, new RegExp(`${method}\\(.*this\\.core\\.${method}\\(`));
   }
   const router = readFileSync(new URL("../src/editor.js", import.meta.url), "utf8");
   for (const path of ["/edit/v1/publisher/review","/edit/v1/publisher/review/draft",
-    "/edit/v1/publisher/review/submit","/edit/v1/publisher/review/backfill"])
+    "/edit/v1/publisher/review/submit","/edit/v1/publisher/review/backfill",
+    "/edit/v1/prod/releases/audit"])
     assert.match(router, new RegExp(path));
 });
 
@@ -336,6 +337,13 @@ test("legacy backfill endpoint is bearer-only and never grants browser migration
   assert.equal((await reviewBackfillEndpoint(req,envFor(core),{
     ...publisher("service:apply"),credential_channel:"bearer",service:"apply",
     scopes:{ admin:{ granted:true } } })).status,400);
+  const oversized = request("/edit/v1/publisher/review/backfill","POST",{
+    migration_id:"é".repeat(129),prod_base:"prod-1",revisions:[revision()] });
+  assert.equal((await reviewBackfillEndpoint(oversized,envFor(core),{
+    ...publisher("service:apply"),credential_channel:"bearer",service:"apply",
+    scopes:{ admin:{ granted:true } } })).status,400);
+  assert.equal(core.backfillReviewRevisions({ migration_id:"é".repeat(129),prod_base:"prod-1",
+    revisions:[revision()] }).reason,"validation_error");
 });
 
 test("apply finalization records revision evidence atomically and rolls back a bad binding", () => {

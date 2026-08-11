@@ -501,6 +501,19 @@ replay is idempotent and audited; changed replay, pending rows, and mismatched
 source/commit/base evidence fail atomically. Backfill creates operations only—no
 drafts, decisions, reviews, release membership, or implicit acceptance.
 
+`GET /edit/v1/prod/releases/audit` is a text-free, read-only rollout audit. It
+is available only when `PROD_RELEASE_LEDGER=true` and only to a bearer holding
+`release_service`; Access/Publisher sessions and other bearer scopes receive
+`403 forbidden`. Its versioned `audit` object contains row counts, immutable
+review-migration receipts, release-state counts, bounded active-release
+identities, and zero-expected relationship-invariant counts. It returns no
+authored text, decision notes, credentials, or provider output. Any nonzero
+invariant count is a rollout stop. Migration IDs and production bases are
+limited to 256 UTF-8 bytes at both the HTTP and store boundaries; defensive
+audit projection omits and flags any oversized legacy value. The response is
+bounded to the newest 100 migration receipts and 20 active releases and reports
+truncation explicitly. A disabled ledger returns `404`.
+
 `POST /claim` returns only authorized releases plus a fencing token.
 `POST /transition` journals bounded identifiers/hashes and rejects stale fences
 or illegal/incomplete phases. `GET /status?id=…` exposes machine-readable state

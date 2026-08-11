@@ -1381,6 +1381,8 @@ export class EditorStoreCore {
   backfillReviewRevisions(input = {}) {
     if (typeof input.migration_id !== "string" || !input.migration_id ||
         typeof input.prod_base !== "string" || !input.prod_base ||
+        new TextEncoder().encode(input.migration_id).byteLength > 256 ||
+        new TextEncoder().encode(input.prod_base).byteLength > 256 ||
         !Array.isArray(input.revisions) || input.revisions.length === 0)
       return { ok:false,reason:"validation_error" };
     const evidence = { prod_base:input.prod_base,revisions:input.revisions };
@@ -1941,6 +1943,51 @@ export class EditorStoreCore {
       frontier.created_at,frontier.created_at,frontier.batch_id) : this._one(
       "SELECT COUNT(*) AS count FROM canonical_mutations m JOIN apply_batches b ON b.batch_id=m.batch_id WHERE b.phase='done'");
     return { eligible:Number(row?.count || 0) + Number(mutationRow?.count || 0) };
+  }
+
+  // Text-free, read-only evidence for config-off migration and rollout gates.
+  // This deliberately returns counts, immutable receipt identities, and broken
+  // relationship counts only. It never returns authored copy or decisions.
+  productionReleaseAudit() {
+    const count = (sql, ...args) => Number(this._one(sql, ...args)?.count || 0);
+    const counts = {
+      apply_batches_done:count("SELECT COUNT(*) AS count FROM apply_batches WHERE phase='done'"),
+      applied_suggestions:count("SELECT COUNT(*) AS count FROM suggestions WHERE status=?", STATUS.APPLIED),
+      canonical_mutations:count("SELECT COUNT(*) AS count FROM canonical_mutations"),
+      review_migrations:count("SELECT COUNT(*) AS count FROM production_review_migrations"),
+      review_revisions:count("SELECT COUNT(*) AS count FROM production_review_revisions"),
+      review_operations:count("SELECT COUNT(*) AS count FROM production_review_operations"),
+      review_submissions:count("SELECT COUNT(*) AS count FROM production_review_submissions"),
+      production_releases:count("SELECT COUNT(*) AS count FROM production_releases"),
+      published_operations:count("SELECT COUNT(*) AS count FROM production_published_operations"),
+    };
+    const invariants = {
+      legacy_receipts_without_operations:count(
+        "SELECT COUNT(*) AS count FROM production_reviews r WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_revision_id=r.review_revision_id)"),
+      submitted_sources_without_revision:count(
+        "SELECT COUNT(*) AS count FROM production_review_submission_sources s WHERE NOT EXISTS (SELECT 1 FROM production_review_revisions r WHERE r.id=s.review_revision_id)"),
+      submitted_revision_operations_missing:count(
+        "SELECT COUNT(*) AS count FROM production_review_submission_sources s JOIN production_review_revisions r ON r.id=s.review_revision_id JOIN json_each(r.operations_json) j WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_id=s.review_id AND o.review_revision_id=s.review_revision_id AND o.operation_id=json_extract(j.value,'$.id'))"),
+      decisions_without_operation:count(
+        "SELECT COUNT(*) AS count FROM production_review_submission_decisions d WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_id=d.review_id AND o.review_revision_id=d.review_revision_id AND o.decision_id=d.operation_id)"),
+      operations_without_revision:count(
+        "SELECT COUNT(*) AS count FROM production_review_operations o WHERE NOT EXISTS (SELECT 1 FROM production_review_revisions r WHERE r.id=o.review_revision_id)"),
+      published_operations_without_release:count(
+        "SELECT COUNT(*) AS count FROM production_published_operations p WHERE NOT EXISTS (SELECT 1 FROM production_releases r WHERE r.id=p.release_id AND r.state='complete')"),
+      oversized_migration_fields:count(
+        "SELECT COUNT(*) AS count FROM production_review_migrations WHERE length(CAST(id AS BLOB))>256 OR length(CAST(prod_base AS BLOB))>256"),
+    };
+    const migrations = this._all(
+      "SELECT CASE WHEN length(CAST(id AS BLOB))<=256 THEN id END AS id,CASE WHEN length(CAST(prod_base AS BLOB))<=256 THEN prod_base END AS prod_base,evidence_digest,revision_count,actor,created_at FROM production_review_migrations ORDER BY created_at DESC,id DESC LIMIT 100").reverse();
+    const release_states = this._all(
+      "SELECT state,COUNT(*) AS count FROM production_releases GROUP BY state ORDER BY state")
+      .map((row) => ({ state:row.state,count:Number(row.count || 0) }));
+    const activeRows = this._all(
+      "SELECT id,state,base_sha,candidate_sha,schema_version,updated_at FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 21");
+    const active_releases = activeRows.slice(0,20).reverse();
+    return { schema_version:1,counts,invariants,migrations,
+      migrations_truncated:counts.review_migrations > migrations.length,
+      release_states,active_releases,active_releases_truncated:activeRows.length > 20 };
   }
 
   // Minimal, text-free projection for the trusted candidate builder.  The
