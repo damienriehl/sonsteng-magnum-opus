@@ -10,7 +10,7 @@ import subprocess
 
 from apply_suggestions import Patch, STRUCTURAL_KINDS, build_review_revisions, json_get
 from build_prod_review_backfill import BackfillError, _canonical
-from structural_ops import StructuralError, locate_block
+from structural_ops import StructuralError, _blocks, locate_block
 
 
 def _git(repo, *args, text=True):
@@ -61,15 +61,34 @@ def _commit_applies_suggestion(repo, commit, batch, row):
     if kind in ("prose", "json_scalar") and old is not None and new is not None:
         return (before_file.count(str(old)) == 1 and after_file.count(str(old)) == 0 and
                 before_file.count(str(new)) == 0 and after_file.count(str(new)) == 1)
-    if kind == "insert_after" and old is not None and new is not None:
-        return (before_file.count(str(old)) == after_file.count(str(old)) == 1 and
-                before_file.count(str(new)) == 0 and after_file.count(str(new)) == 1)
-    if kind == "delete" and old is not None:
-        return before_file.count(str(old)) == 1 and after_file.count(str(old)) == 0
-    if kind == "move" and old is not None:
-        old = str(old)
-        return (before_file.count(old) == after_file.count(old) == 1 and
-                before_file.find(old) != after_file.find(old))
+    bid = locator.removeprefix("b")
+    if kind in ("insert_after", "delete", "move") and rel.endswith(".md"):
+        try:
+            before_blocks = _blocks(before_file)
+            after_blocks = _blocks(after_file)
+            before_index = next(i for i, block in enumerate(before_blocks) if block.bid == bid)
+        except (StructuralError, StopIteration):
+            return False
+        if kind == "insert_after" and new is not None:
+            try:
+                after_anchor = next(i for i, block in enumerate(after_blocks) if block.bid == bid)
+            except StopIteration:
+                return False
+            inserted = [i for i, block in enumerate(after_blocks) if block.raw == str(new)]
+            return len(inserted) == 1 and inserted[0] == after_anchor + 1
+        if kind == "delete":
+            return all(block.bid != bid for block in after_blocks)
+        if kind == "move":
+            try:
+                after_index = next(i for i, block in enumerate(after_blocks) if block.bid == bid)
+            except StopIteration:
+                return False
+            before_side = {block.bid: i < before_index for i, block in enumerate(before_blocks)
+                           if block.bid != bid}
+            after_side = {block.bid: i < after_index for i, block in enumerate(after_blocks)
+                          if block.bid != bid}
+            return any(before_side[other] != after_side[other]
+                       for other in before_side.keys() & after_side.keys())
     return False
 
 
@@ -125,6 +144,8 @@ def build_reconciliation(evidence, classification, repo, migration_id, prod_base
                 raise BackfillError("excluded source is not restored to its proof base")
         else:
             locator = row["source_ref"].split("#", 1)[1]
+            if row.get("kind") in ("insert_after", "move"):
+                raise BackfillError("structural exclusion requires an exact proof base")
             try:
                 restored_value = _source_value(repo, "HEAD", rel, locator)
                 restored = restored_value == row.get("original_text")
