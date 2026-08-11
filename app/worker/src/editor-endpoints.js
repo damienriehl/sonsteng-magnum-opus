@@ -863,6 +863,15 @@ export async function reviewBackfillEndpoint(request, env, auth) {
     result.reason === "idempotency_conflict" ? 409 : 400);
 }
 
+export async function reviewBackfillEvidenceEndpoint(request, env, auth) {
+  if (auth?.credential_channel !== "bearer" || !auth?.scopes?.admin?.granted)
+    return editError("forbidden", "Trusted migration service required.", 403);
+  const throughBatchId = new URL(request.url).searchParams.get("through_batch_id") || "";
+  const evidence = await editorStub(env).getLegacyBackfillEvidence(throughBatchId);
+  return evidence.ok ? json({ ok:true,evidence }) :
+    editError(evidence.reason,evidence.reason === "migration_closed" ? "Migration already recorded." : "Invalid migration frontier.",409);
+}
+
 export async function reconcileEndpoint(request, env, auth) {
   if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
   if (!auth.scopes.admin.granted) return editError("forbidden", "Admin/service scope required.", 403);

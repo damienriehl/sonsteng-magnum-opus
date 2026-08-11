@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import urllib.error
 import urllib.request
 import urllib.parse
 from collections.abc import Callable
@@ -26,6 +27,9 @@ from contextlib import contextmanager
 
 class ReleaseError(RuntimeError):
     pass
+
+
+BOUNDED_PROVIDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 MAX_PRODUCTION_LEASE_MS = 15 * 60 * 1000
@@ -776,11 +780,13 @@ class WranglerPagesAdapter:
 
     def __init__(self, project, artifact_dir, provenance_url, candidate_root=None,
                  production_branch="main",
-                 run=subprocess.run, opener=urllib.request.urlopen, timeout=240):
+                 run=subprocess.run, opener=urllib.request.urlopen, timeout=240,
+                 account_id="", api_token=""):
         _require_https_url(provenance_url, "Pages provenance")
         self.project, self.artifact_dir = project, artifact_dir
         self.candidate_root = pathlib.Path(candidate_root or pathlib.Path(artifact_dir).parent).resolve()
         self.production_branch = production_branch
+        self.account_id, self._api_token = account_id, api_token
         self.provenance_url, self._run, self._opener, self.timeout = provenance_url, run, opener, timeout
 
     @property
@@ -823,9 +829,30 @@ class WranglerPagesAdapter:
             return response.headers.get("X-Release-SHA", "")
 
     def restore(self, deployment_id):
-        self._run(_wrangler("pages", "deployment", "rollback", deployment_id,
-                   "--project-name", self.project, "--yes"), cwd=self.candidate_root,
-                  check=True, capture_output=True, text=True, timeout=self.timeout)
+        if not BOUNDED_PROVIDER_ID_RE.fullmatch(self.account_id or "") or \
+           not BOUNDED_PROVIDER_ID_RE.fullmatch(self.project or "") or \
+           not BOUNDED_PROVIDER_ID_RE.fullmatch(deployment_id or "") or not self._api_token:
+            raise ReleaseError("Pages rollback requires bounded API authority and identifiers")
+        url = ("https://api.cloudflare.com/client/v4/accounts/" + self.account_id +
+               "/pages/projects/" + self.project + "/deployments/" + deployment_id + "/rollback")
+        request = urllib.request.Request(url, data=b"{}", method="POST", headers={
+            "Authorization":"Bearer " + self._api_token,
+            "Content-Type":"application/json", "User-Agent":SERVICE_USER_AGENT})
+        try:
+            with self._opener(request, timeout=self.timeout) as response:
+                payload = json.load(response)
+        except urllib.error.HTTPError as exc:
+            try: payload = json.load(exc)
+            except Exception: payload = {}
+            # Cloudflare rejects rollback to the deployment already active.
+            # That response proves the requested exact ID is current and is an
+            # idempotent recovery success, not a reason to mutate another target.
+            if exc.code == 400 and any(item.get("code") == 8000039
+                                       for item in payload.get("errors", [])):
+                return
+            raise ReleaseError("Pages rollback API rejected the exact deployment") from None
+        if payload.get("success") is not True or (payload.get("result") or {}).get("id") != deployment_id:
+            raise ReleaseError("Pages rollback API did not bind the exact deployment")
 
 
 class WranglerWorkerAdapter:

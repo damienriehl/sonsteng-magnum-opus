@@ -179,6 +179,12 @@ manifest. Revocation never authorizes a different target.
 
 ## Legacy applied-change backfill
 
+Fetch `GET /edit/v1/publisher/review/backfill-evidence` only with the protected
+bearer-admin migration credential. Run `tools/build_prod_review_backfill.py` once
+to create the payload and again with `--check`; do not submit unless the second
+run is byte-identical. Both files contain authored text and belong only in a 0600
+operator state directory, never Git or logs.
+
 Applied DEV suggestions created before granular review have no release authority.
 The trusted apply/migration bearer may submit a named, immutable bulk backfill to
 `POST /edit/v1/publisher/review/backfill`. Each per-source cumulative revision

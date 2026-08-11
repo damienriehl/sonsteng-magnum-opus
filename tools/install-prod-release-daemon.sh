@@ -46,6 +46,9 @@ SONSTENG_PROD_RELEASE_BEARER=
 # This must be the distinct EDIT_TOKEN_RELEASE secret whose only grant is
 # release_service; never place the DEV apply/admin bearer here.
 SONSTENG_PROD_PAGES_PROJECT=sonsteng
+SONSTENG_PROD_CLOUDFLARE_ACCOUNT_ID=
+# Secret least-privilege Pages Write token; never include it in digests or logs.
+SONSTENG_PROD_CLOUDFLARE_API_TOKEN=
 SONSTENG_PROD_PAGES_BRANCH=main
 SONSTENG_PROD_PAGES_ARTIFACT=$DAEMON_ROOT/site
 SONSTENG_PROD_PAGES_PROVENANCE_URL=https://sonsteng.damienriehl.com/platform/

@@ -225,13 +225,14 @@ test("schema migration is repeatable and the Durable Object forwards every revie
   const core = makeCore(() => 3500);
   assert.doesNotThrow(() => core.initSchema());
   const wrapper = readFileSync(new URL("../src/editor-store.js", import.meta.url), "utf8");
-  for (const method of ["recordReviewRevision","backfillReviewRevisions","getPublisherReview","savePublisherReviewDraft",
+  for (const method of ["recordReviewRevision","backfillReviewRevisions","getLegacyBackfillEvidence","getPublisherReview","savePublisherReviewDraft",
     "submitPublisherReview","productionReleaseAudit"]) {
     assert.match(wrapper, new RegExp(`${method}\\(.*this\\.core\\.${method}\\(`));
   }
   const router = readFileSync(new URL("../src/editor.js", import.meta.url), "utf8");
   for (const path of ["/edit/v1/publisher/review","/edit/v1/publisher/review/draft",
     "/edit/v1/publisher/review/submit","/edit/v1/publisher/review/backfill",
+    "/edit/v1/publisher/review/backfill-evidence",
     "/edit/v1/prod/releases/audit"])
     assert.match(router, new RegExp(path));
 });
@@ -257,6 +258,10 @@ test("legacy backfill is atomic, idempotent, audited, and never assigns a decisi
   revisions[0] = withApplyEvidence(revision({ commit_sha:"dev-suggestion-1" }),"suggestion-1");
   revisions[1] = withApplyEvidence(revisions[1],"suggestion-2");
   const payload = { migration_id:"legacy-20260810",prod_base:"prod-1",revisions };
+  const exported = core.getLegacyBackfillEvidence("batch-suggestion-2");
+  assert.equal(exported.ok,true);
+  assert.deepEqual(exported.suggestions.map((item) => item.id),["suggestion-1","suggestion-2"]);
+  assert.equal("original_hash" in exported.suggestions[0],false);
   assert.deepEqual(core.backfillReviewRevisions(payload),
     { ok:true,migration_id:"legacy-20260810",inserted:2,replayed:0 });
   assert.deepEqual(core.backfillReviewRevisions(payload),
@@ -268,6 +273,7 @@ test("legacy backfill is atomic, idempotent, audited, and never assigns a decisi
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,1);
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_decisions").n,0);
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_submission_decisions").n,0);
+  assert.equal(core.getLegacyBackfillEvidence("batch-suggestion-2").reason,"migration_closed");
   assert.equal(core.backfillReviewRevisions({ ...payload,revisions:[revision({
     commit_sha:"dev-suggestion-1",proposed_hash:"tampered" }),revisions[1]] }).reason,
     "idempotency_conflict");

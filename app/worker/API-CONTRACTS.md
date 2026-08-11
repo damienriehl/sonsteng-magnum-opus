@@ -501,6 +501,12 @@ replay is idempotent and audited; changed replay, pending rows, and mismatched
 source/commit/base evidence fail atomically. Backfill creates operations only—no
 drafts, decisions, reviews, release membership, or implicit acceptance.
 
+`GET /edit/v1/publisher/review/backfill-evidence` uses the same bearer-admin-only
+migration channel and returns the applied suggestion text and completed batch
+evidence consumed by `tools/build_prod_review_backfill.py`. Human Access sessions
+cannot call it. The generator fails closed on incomplete or ambiguous chains and
+its `--check` mode requires byte-identical deterministic output before submission.
+
 `GET /edit/v1/prod/releases/audit` is a text-free, read-only rollout audit. It
 is available only when `PROD_RELEASE_LEDGER=true` and only to a bearer holding
 `release_service`; Access/Publisher sessions and other bearer scopes receive
