@@ -61,6 +61,12 @@ test("production audit is text-free and reports migration integrity", async () =
   const corruptionCases = [
     ["legacy_receipts_without_operations",(c) => c.sql.exec("INSERT INTO production_reviews (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)","legacy","key","digest","reviewer","missing-revision","source-v1","prod","receipt","{}",1)],
     ["submitted_sources_without_revision",(c) => c.sql.exec("INSERT INTO production_review_submission_sources (review_id,review_revision_id,source_revision,prod_base,evidence_digest) VALUES (?,?,?,?,?)","review","missing-revision","source-v1","prod","digest")],
+    ["submitted_revision_operations_missing",(c) => {
+      c.sql.exec("INSERT INTO production_review_revisions (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,original_text,proposed_text,source_original_text,source_proposed_text,suggestion_ids_json,operations_json,evidence_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "revision","source","source-v1","prod","commit","old","new","old","new","old","new","[]",JSON.stringify([{ id:"unanswered-operation" }]),"digest",1);
+      c.sql.exec("INSERT INTO production_review_submission_sources (review_id,review_revision_id,source_revision,prod_base,evidence_digest) VALUES (?,?,?,?,?)",
+        "review","revision","source-v1","prod","digest");
+    }],
     ["decisions_without_operation",(c) => c.sql.exec("INSERT INTO production_review_submission_decisions (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id) VALUES (?,?,?,?,?,?,?)","review","revision","missing-decision","accepted","","digest",null)],
     ["operations_without_revision",(c) => c.sql.exec("INSERT INTO production_review_operations (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)","operation","operation","review","missing-revision","source",null,"accepted","","unpublished")],
     ["published_operations_without_release",(c) => c.sql.exec("INSERT INTO production_published_operations (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at) VALUES (?,?,?,?,?,?,?)","operation","missing-release","revision","source","source-v1","candidate",1)],

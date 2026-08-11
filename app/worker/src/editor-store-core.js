@@ -1966,6 +1966,8 @@ export class EditorStoreCore {
         "SELECT COUNT(*) AS count FROM production_reviews r WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_revision_id=r.review_revision_id)"),
       submitted_sources_without_revision:count(
         "SELECT COUNT(*) AS count FROM production_review_submission_sources s WHERE NOT EXISTS (SELECT 1 FROM production_review_revisions r WHERE r.id=s.review_revision_id)"),
+      submitted_revision_operations_missing:count(
+        "SELECT COUNT(*) AS count FROM production_review_submission_sources s JOIN production_review_revisions r ON r.id=s.review_revision_id JOIN json_each(r.operations_json) j WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_id=s.review_id AND o.review_revision_id=s.review_revision_id AND o.operation_id=json_extract(j.value,'$.id'))"),
       decisions_without_operation:count(
         "SELECT COUNT(*) AS count FROM production_review_submission_decisions d WHERE NOT EXISTS (SELECT 1 FROM production_review_operations o WHERE o.review_id=d.review_id AND o.review_revision_id=d.review_revision_id AND o.decision_id=d.operation_id)"),
       operations_without_revision:count(
