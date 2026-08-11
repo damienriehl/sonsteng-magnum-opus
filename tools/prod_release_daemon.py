@@ -22,6 +22,7 @@ CONFIG_DIGEST_KEYS = (
     "SONSTENG_PROD_RELEASE_MODE", "SONSTENG_PROD_CANARY_RELEASE_ID",
     "SONSTENG_PROD_LEDGER_URL", "SONSTENG_PROD_PAGES_PROJECT",
     "SONSTENG_PROD_PAGES_BRANCH", "SONSTENG_PROD_PAGES_ARTIFACT",
+    "SONSTENG_PROD_CLOUDFLARE_ACCOUNT_ID",
     "SONSTENG_PROD_PAGES_PROVENANCE_URL", "SONSTENG_PROD_WORKER_CONFIG",
     "SONSTENG_PROD_WORKER_PROVENANCE_URL", "SONSTENG_PROD_REPO",
     "SONSTENG_PROD_MANIFEST", "SONSTENG_PROD_RECOVERY_REGISTRY",
@@ -65,7 +66,8 @@ def _restore_recorded_release(args, ledger, gate, git, *, registry_factory,
         worker_config = _path_in_checkout(base_root,args.repo,args.worker_config)
         pages = pages_factory(args.pages_project,pages_artifact,
             args.pages_provenance_url,candidate_root=base_root,
-            production_branch=args.pages_branch)
+            production_branch=args.pages_branch,account_id=args.cloudflare_account_id,
+            api_token=args.cloudflare_api_token)
         worker = worker_factory(worker_config,args.worker_provenance_url,
                                 candidate_root=base_root)
         restorer = restorer_factory(registry.pairs(),pages.restore,worker.restore)
@@ -96,6 +98,7 @@ def main(argv=None):
         name, default=env(key), required=not env(key))
     argument("--ledger-url", "SONSTENG_PROD_LEDGER_URL")
     argument("--pages-project", "SONSTENG_PROD_PAGES_PROJECT")
+    argument("--cloudflare-account-id", "SONSTENG_PROD_CLOUDFLARE_ACCOUNT_ID")
     argument("--pages-artifact", "SONSTENG_PROD_PAGES_ARTIFACT")
     argument("--pages-provenance-url", "SONSTENG_PROD_PAGES_PROVENANCE_URL")
     parser.add_argument("--pages-branch", default=env("SONSTENG_PROD_PAGES_BRANCH", "main"))
@@ -117,6 +120,9 @@ def main(argv=None):
     token = os.environ.get("SONSTENG_PROD_RELEASE_BEARER")
     if not token:
         parser.error("SONSTENG_PROD_RELEASE_BEARER must be injected")
+    args.cloudflare_api_token = os.environ.get("SONSTENG_PROD_CLOUDFLARE_API_TOKEN", "")
+    if not args.cloudflare_api_token:
+        parser.error("SONSTENG_PROD_CLOUDFLARE_API_TOKEN must be injected")
     pathlib.Path(args.lock).parent.mkdir(parents=True, exist_ok=True)
     with open(args.lock, "a", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -150,7 +156,9 @@ def main(argv=None):
             worker_config = _path_in_checkout(candidate_root,args.repo,args.worker_config)
             pages = WranglerPagesAdapter(args.pages_project,pages_artifact,args.pages_provenance_url,
                                          candidate_root=candidate_root,
-                                         production_branch=args.pages_branch)
+                                         production_branch=args.pages_branch,
+                                         account_id=args.cloudflare_account_id,
+                                         api_token=args.cloudflare_api_token)
             worker = WranglerWorkerAdapter(worker_config,args.worker_provenance_url,
                                            candidate_root=candidate_root)
             validator = CandidateValidator(isolated_git, manifest)

@@ -3,6 +3,7 @@ import pathlib
 import subprocess
 import sys
 import contextlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -94,7 +95,8 @@ def test_canary_claims_and_executes_only_the_named_release(monkeypatch, tmp_path
     values = {
       "SONSTENG_PROD_RELEASE_ENABLED":"true","SONSTENG_PROD_RELEASE_MODE":"canary",
       "SONSTENG_PROD_CANARY_RELEASE_ID":release_id,"SONSTENG_PROD_RELEASE_BEARER":"secret",
-      "SONSTENG_PROD_LEDGER_URL":"https://ledger.example","SONSTENG_PROD_PAGES_PROJECT":"pages",
+          "SONSTENG_PROD_LEDGER_URL":"https://ledger.example","SONSTENG_PROD_PAGES_PROJECT":"pages",
+          "SONSTENG_PROD_CLOUDFLARE_ACCOUNT_ID":"account123","SONSTENG_PROD_CLOUDFLARE_API_TOKEN":"pages-token",
       "SONSTENG_PROD_PAGES_ARTIFACT":str(pages),"SONSTENG_PROD_PAGES_PROVENANCE_URL":"https://pages.example",
       "SONSTENG_PROD_WORKER_CONFIG":str(worker),"SONSTENG_PROD_WORKER_PROVENANCE_URL":"https://worker.example",
       "SONSTENG_PROD_REPO":str(repo),"SONSTENG_PROD_MANIFEST":str(manifest),
@@ -141,7 +143,7 @@ def test_restore_materializes_recorded_base_config_and_exact_provider_ids(tmp_pa
         repo=str(repo),pages_artifact=str(repo / "site"),
         worker_config=str(repo / "app/worker/wrangler.jsonc"),pages_project="stable-pages",
         pages_provenance_url="https://pages.example",worker_provenance_url="https://worker.example",
-        pages_branch="main")
+            pages_branch="main",cloudflare_account_id="account123",cloudflare_api_token="pages-token")
     commands,roots = [],[]
     class Result:
         stdout = ""
@@ -149,12 +151,19 @@ def test_restore_materializes_recorded_base_config_and_exact_provider_ids(tmp_pa
         commands.append((argv,kwargs))
         return Result()
 
-    def pages_factory(project,path,url,*,candidate_root,production_branch):
+    page_requests = []
+    class PageResponse:
+        def __enter__(self): return self
+        def __exit__(self,*_): pass
+        def read(self): return json.dumps({"success":True,"result":{"id":"pages-base-id"}}).encode()
+    def pages_factory(project,path,url,*,candidate_root,production_branch,account_id,api_token):
         assert production_branch == "main"
+        assert (account_id,api_token) == ("account123","pages-token")
         roots.append(pathlib.Path(candidate_root))
         assert (pathlib.Path(path) / "index.html").read_text() == "base site\n"
         return WranglerPagesAdapter(project,path,url,candidate_root=candidate_root,
-            production_branch=production_branch,run=run)
+            production_branch=production_branch,run=run,account_id=account_id,
+            api_token=api_token,opener=lambda request,timeout:(page_requests.append(request) or PageResponse()))
     def worker_factory(path,url,*,candidate_root):
         roots.append(pathlib.Path(candidate_root))
         assert "base-worker" in pathlib.Path(path).read_text()
@@ -172,7 +181,7 @@ def test_restore_materializes_recorded_base_config_and_exact_provider_ids(tmp_pa
         executor_factory=Executor,git_factory=GitRefAdapter)
     assert commands[0][0][4] == "worker-base-id"
     assert pathlib.Path(commands[0][0][6]).name == "wrangler.jsonc"
-    assert commands[1][0][5] == "pages-base-id"
+    assert page_requests[0].full_url.endswith("/deployments/pages-base-id/rollback")
     assert all(argv[:2] == ["npx","wrangler@4"] for argv,_kwargs in commands)
     assert all(pathlib.Path(kwargs["cwd"]) in roots for _argv,kwargs in commands)
     assert roots and all(root != repo and not root.exists() for root in roots)
@@ -188,7 +197,8 @@ def test_restore_checkout_cleans_up_on_error_and_paths_fail_closed(tmp_path):
     args = SimpleNamespace(restore_release_id="release-1",recovery_registry=str(registry_path),
         repo=str(repo),pages_artifact=str(repo / "site"),
         worker_config=str(repo / "app/worker/wrangler.jsonc"),pages_project="stable-pages",
-        pages_provenance_url="https://pages.example",worker_provenance_url="https://worker.example",pages_branch="main")
+            pages_provenance_url="https://pages.example",worker_provenance_url="https://worker.example",pages_branch="main",
+            cloudflare_account_id="account123",cloudflare_api_token="pages-token")
     roots = []
     def fail_pages(*_args,**kwargs):
         roots.append(pathlib.Path(kwargs["candidate_root"]))

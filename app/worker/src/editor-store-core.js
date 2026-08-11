@@ -1455,6 +1455,21 @@ export class EditorStoreCore {
     }
   }
 
+  getLegacyBackfillEvidence(throughBatchId) {
+    if (this._one("SELECT COUNT(*) AS n FROM production_review_migrations").n)
+      return { ok:false,reason:"migration_closed" };
+    if (typeof throughBatchId !== "string" || !throughBatchId || throughBatchId.length > 256)
+      return { ok:false,reason:"validation_error" };
+    const target = this._one("SELECT created_at,batch_id FROM apply_batches WHERE batch_id=? AND phase='done'",throughBatchId);
+    if (!target) return { ok:false,reason:"unknown_batch" };
+    return {
+      ok:true,
+      schema_version:1,
+      suggestions:this._all("SELECT s.id,s.editor,s.kind,s.source_ref,s.original_text,s.new_text,s.group_id,s.apply_batch_id,s.created_at FROM suggestions s JOIN apply_batches b ON b.batch_id=s.apply_batch_id WHERE s.status=? AND b.phase='done' AND (b.created_at < ? OR (b.created_at=? AND b.batch_id<=?)) ORDER BY s.created_at,s.id",STATUS.APPLIED,target.created_at,target.created_at,target.batch_id),
+      batches:this._all("SELECT batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at FROM apply_batches WHERE phase='done' AND (created_at < ? OR (created_at=? AND batch_id<=?)) ORDER BY created_at,batch_id",target.created_at,target.created_at,target.batch_id),
+    };
+  }
+
   _reviewRevision(id) {
     const row = this._one("SELECT * FROM production_review_revisions WHERE id=?", id || "");
     if (!row) return null;

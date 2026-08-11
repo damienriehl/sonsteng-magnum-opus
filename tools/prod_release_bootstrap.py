@@ -25,6 +25,7 @@ from prod_release_executor import (
     ReleaseError,
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
+    BOUNDED_PROVIDER_ID_RE,
 )
 
 
@@ -72,9 +73,8 @@ def _validate_request(request):
     if request.expected_pages_provenance != request.source_sha or \
        request.expected_worker_provenance != request.source_sha:
         raise ReleaseError("provenance evidence must bind the exact source SHA")
-    safe_provider_id = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-    if not safe_provider_id.fullmatch(request.pages_deployment_id or "") or \
-       not safe_provider_id.fullmatch(request.worker_version_id or ""):
+    if not BOUNDED_PROVIDER_ID_RE.fullmatch(request.pages_deployment_id or "") or \
+       not BOUNDED_PROVIDER_ID_RE.fullmatch(request.worker_version_id or ""):
         raise ReleaseError("both exact provider identifiers are required")
     repo = request.repo.resolve()
     if not (repo / ".git").exists():
@@ -107,7 +107,9 @@ def _default_targets(root, request):
     return (
         WranglerPagesAdapter(
             request.pages_project, pages, request.pages_provenance_url,
-            candidate_root=root, production_branch=request.pages_branch),
+            candidate_root=root, production_branch=request.pages_branch,
+            account_id=os.environ.get("SONSTENG_PROD_CLOUDFLARE_ACCOUNT_ID", ""),
+            api_token=os.environ.get("SONSTENG_PROD_CLOUDFLARE_API_TOKEN", "")),
         WranglerWorkerAdapter(
             worker, request.worker_provenance_url, candidate_root=root),
     )
