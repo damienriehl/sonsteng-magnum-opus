@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherReviewEndpoint, publisherReviewDraftEndpoint,
-  publisherReviewSubmitEndpoint,reviewBackfillEndpoint,claimEndpoint } from "../src/editor-endpoints.js";
+  publisherReviewSubmitEndpoint,reviewBackfillEndpoint,reviewLegacyReconcileEndpoint,
+  claimEndpoint } from "../src/editor-endpoints.js";
 
 const operations = [
   { id:"op-word", decision_id:"op-word", kind:"replace", source_ref:"data/copy/home.json#lead",
@@ -225,14 +226,14 @@ test("schema migration is repeatable and the Durable Object forwards every revie
   const core = makeCore(() => 3500);
   assert.doesNotThrow(() => core.initSchema());
   const wrapper = readFileSync(new URL("../src/editor-store.js", import.meta.url), "utf8");
-  for (const method of ["recordReviewRevision","backfillReviewRevisions","getLegacyBackfillEvidence","getPublisherReview","savePublisherReviewDraft",
+  for (const method of ["recordReviewRevision","backfillReviewRevisions","reconcileLegacyReview","getLegacyBackfillEvidence","getPublisherReview","savePublisherReviewDraft",
     "submitPublisherReview","productionReleaseAudit"]) {
     assert.match(wrapper, new RegExp(`${method}\\(.*this\\.core\\.${method}\\(`));
   }
   const router = readFileSync(new URL("../src/editor.js", import.meta.url), "utf8");
   for (const path of ["/edit/v1/publisher/review","/edit/v1/publisher/review/draft",
     "/edit/v1/publisher/review/submit","/edit/v1/publisher/review/backfill",
-    "/edit/v1/publisher/review/backfill-evidence",
+    "/edit/v1/publisher/review/backfill-evidence","/edit/v1/publisher/review/reconcile-legacy",
     "/edit/v1/prod/releases/audit"])
     assert.match(router, new RegExp(path));
 });
@@ -293,6 +294,134 @@ test("legacy backfill rejects non-applied or mismatched evidence without partial
   assert.equal(result.reason,"legacy_suggestion_not_applied");
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_revisions").n,0);
   assert.equal(core._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,0);
+});
+
+test("legacy reconciliation excludes reverted rows and records only effective review evidence", () => {
+  const core = makeCore(() => 3750), prod = "a".repeat(40);
+  for (const [id,source,batch] of [["reverted","data/copy/home.json#lead","b1"],
+    ["effective","data/copy/skills.json#lead","b2"]]) {
+    core.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",source_ref:source,
+      original_text:"Old",original_hash:"old",new_text:"New",map_version:"v1" },{}, { directApply:true });
+    core.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id=? WHERE id=?",batch,id);
+  }
+  core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    "b1","e".repeat(40),null,null,"done",3700,3700);
+  core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    "b2",prod,"b".repeat(40),null,"done",3701,3701);
+  const effective = revision({ id:"effective-revision",source_ref:"data/copy/skills.json#lead",
+    source_revision:"b".repeat(40),prod_base:prod,commit_sha:"b".repeat(40),
+    suggestion_ids:["effective"],operations:operations.map((op) => ({ ...op,
+      id:`effective-${op.id}`,decision_id:`effective-${op.id}`,source_ref:"data/copy/skills.json#lead",
+      source_revision:"b".repeat(40),prod_base:prod })),
+    suggestion_evidence:[{ suggestion_id:"effective",batch_id:"b2",base_sha:prod,
+      commit_sha:"b".repeat(40) }] });
+  const payload = { migration_id:"legacy-reconcile",prod_base:prod,
+    exclusions:[{ suggestion_id:"reverted",source_ref:"data/copy/home.json#lead",apply_batch_id:"b1",
+      apply_commit:"c".repeat(40),apply_base:"e".repeat(40),reason:"reverted_legacy_uat",
+      evidence_hash:"d".repeat(64) }],
+    revisions:[effective] };
+  assert.deepEqual(core.reconcileLegacyReview(payload),{
+    ok:true,migration_id:"legacy-reconcile",inserted:1,excluded:1,replayed:0 });
+  assert.equal(core._one("SELECT COUNT(*) AS n FROM production_legacy_exclusions").n,1);
+  assert.equal(core._one("SELECT commit_sha FROM apply_batches WHERE batch_id='b1'").commit_sha,"c".repeat(40));
+  assert.equal(core.getPublisherReview("slot:damien").counts.unreviewed,2);
+  assert.equal(core.productionReleaseAudit().invariants.unreconciled_applied_suggestions,0);
+  assert.equal(core.productionReleaseAudit().invariants.legacy_exclusion_review_overlap,0);
+  assert.equal(core.reconcileLegacyReview(payload).replay,true);
+  assert.equal(core.reconcileLegacyReview({ ...payload,migration_id:"legacy-reconcile-2" }).reason,
+    "migration_closed");
+  assert.equal(core.backfillReviewRevisions({ migration_id:"ordinary-after-reconcile",prod_base:prod,
+    revisions:[{ ...effective,batch_chain:[{ batch_id:"b2",base_sha:prod,
+      commit_sha:"b".repeat(40) }],suggestion_evidence:[{ suggestion_id:"effective",
+      batch_id:"b2",commit_sha:"b".repeat(40) }] }] }).reason,"migration_closed");
+  const incomplete = makeCore(() => 3750);
+  for (const id of ["covered","uncovered"]) {
+    incomplete.suggest({ id,editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+      source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old",new_text:"New",map_version:"v1" },{}, { directApply:true });
+    incomplete.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id='b1' WHERE id=?",id);
+  }
+  incomplete.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    "b1",prod,"b".repeat(40),null,"done",3700,3700);
+  const partial = revision({ id:"partial",source_ref:"data/copy/home.json#lead",prod_base:prod,
+    source_revision:"b".repeat(40),commit_sha:"b".repeat(40),suggestion_ids:["covered"],
+    operations:operations.map((op) => ({ ...op,prod_base:prod,source_revision:"b".repeat(40) })),
+    suggestion_evidence:[{ suggestion_id:"covered",batch_id:"b1",base_sha:prod,
+      commit_sha:"b".repeat(40) }] });
+  assert.equal(incomplete.reconcileLegacyReview({ migration_id:"partial",prod_base:prod,
+    exclusions:[],revisions:[partial] }).reason,"incomplete_legacy_coverage");
+  assert.equal(incomplete._one("SELECT COUNT(*) AS n FROM production_review_revisions").n,0);
+  assert.equal(incomplete._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,0);
+});
+
+test("legacy reconciliation endpoint is bearer-admin-only and preserves exact replay", async () => {
+  const core = makeCore(() => 3760), prod = "a".repeat(40);
+  core.suggest({ id:"effective",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+    source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old",new_text:"New",
+    map_version:"v1" },{}, { directApply:true });
+  core.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id='b1' WHERE id='effective'");
+  core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+    "b1",prod,"b".repeat(40),null,"done",3750,3750);
+  const payload = { migration_id:"legacy-http",prod_base:prod,exclusions:[],revisions:[revision({
+    id:"legacy-http-revision",prod_base:prod,source_revision:"b".repeat(40),commit_sha:"b".repeat(40),
+    suggestion_ids:["effective"],operations:operations.map((op) => ({ ...op,prod_base:prod,
+      source_revision:"b".repeat(40) })),suggestion_evidence:[{
+        suggestion_id:"effective",batch_id:"b1",base_sha:prod,commit_sha:"b".repeat(40) }] })] };
+  const access = request("/edit/v1/publisher/review/reconcile-legacy","POST",payload);
+  assert.equal((await reviewLegacyReconcileEndpoint(access,envFor(core),publisher())).status,403);
+  const bearer = { ...publisher("service:migration"),credential_channel:"bearer",service:"apply",
+    scopes:{ admin:{ granted:true } } };
+  assert.equal((await reviewLegacyReconcileEndpoint(
+    request("/edit/v1/publisher/review/reconcile-legacy","POST",payload),envFor(core),bearer)).status,201);
+  assert.equal((await reviewLegacyReconcileEndpoint(
+    request("/edit/v1/publisher/review/reconcile-legacy","POST",payload),envFor(core),bearer)).status,200);
+  assert.equal((await reviewLegacyReconcileEndpoint(request(
+    "/edit/v1/publisher/review/reconcile-legacy","POST",{ ...payload,prod_base:"c".repeat(40) }),
+    envFor(core),bearer)).status,409);
+  assert.equal((await reviewLegacyReconcileEndpoint(request(
+    "/edit/v1/publisher/review/reconcile-legacy","POST",{ ...payload,migration_id:"legacy-http-2" }),
+    envFor(core),bearer)).status,409);
+  const tooLarge = new Request("https://edit.example.com/edit/v1/publisher/review/reconcile-legacy",{
+    method:"POST",headers:{ "content-type":"application/json","x-edit-request":"1",
+      origin:"https://edit.example.com","content-length":String(1024 * 1024 + 1) },body:"{}" });
+  assert.equal((await reviewLegacyReconcileEndpoint(tooLarge,envFor(core),bearer)).status,413);
+  const oversized = new Request("https://edit.example.com/edit/v1/publisher/review/reconcile-legacy",{
+    method:"POST",headers:{ "content-type":"application/json","x-edit-request":"1",
+      origin:"https://edit.example.com" },body:JSON.stringify({ padding:"é".repeat(600000) }) });
+  assert.equal((await reviewLegacyReconcileEndpoint(oversized,envFor(core),bearer)).status,413);
+});
+
+test("legacy reconciliation binds effective rows to exact completed batches and rejects overlap", () => {
+  const prod = "a".repeat(40), commit = "b".repeat(40);
+  const setup = () => {
+    const core = makeCore(() => 3770);
+    core.suggest({ id:"effective",editor:"slot:john",scope:"edit",origin:"human",kind:"prose",
+      source_ref:"data/copy/home.json#lead",original_text:"Old",original_hash:"old",new_text:"New",
+      map_version:"v1" },{}, { directApply:true });
+    core.sql.exec("UPDATE suggestions SET status='applied',apply_batch_id='b1' WHERE id='effective'");
+    core.sql.exec("INSERT INTO apply_batches (batch_id,base_sha,commit_sha,generator_id,phase,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+      "b1",prod,commit,null,"done",3760,3760);
+    return core;
+  };
+  const migrated = revision({ id:"bound",prod_base:prod,source_revision:commit,commit_sha:commit,
+    suggestion_ids:["effective"],operations:operations.map((op) => ({ ...op,prod_base:prod,
+      source_revision:commit })),suggestion_evidence:[{
+      suggestion_id:"effective",batch_id:"b1",base_sha:prod,commit_sha:commit }] });
+  const mismatched = setup();
+  assert.equal(mismatched.reconcileLegacyReview({ migration_id:"bad-binding",prod_base:prod,
+    exclusions:[],revisions:[{ ...migrated,suggestion_evidence:[{
+      suggestion_id:"effective",batch_id:"b1",base_sha:prod,commit_sha:"c".repeat(40) }] }] }).reason,
+    "legacy_batch_evidence_mismatch");
+  assert.equal(mismatched._one("SELECT COUNT(*) AS n FROM production_review_revisions").n,0);
+  assert.equal(mismatched._one("SELECT COUNT(*) AS n FROM production_review_migrations").n,0);
+
+  const overlap = setup();
+  assert.equal(overlap.recordReviewRevision(migrated).ok,true);
+  assert.equal(overlap.reconcileLegacyReview({ migration_id:"overlap",prod_base:prod,
+    exclusions:[{ suggestion_id:"effective",source_ref:"data/copy/home.json#lead",
+      apply_batch_id:"b1",apply_commit:commit,apply_base:prod,reason:"reverted_legacy_uat",
+      evidence_hash:"d".repeat(64) }],revisions:[migrated] }).reason,"legacy_evidence_mismatch");
+  assert.equal(overlap._one("SELECT COUNT(*) AS n FROM production_legacy_exclusions").n,0);
+  assert.equal(overlap.productionReleaseAudit().invariants.legacy_exclusion_review_overlap,0);
 });
 
 test("legacy backfill binds cumulative same-source edits through the exact batch chain", () => {

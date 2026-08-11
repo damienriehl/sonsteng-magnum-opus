@@ -110,6 +110,36 @@ async function readJson(request) {
   try { return await request.json(); } catch { return null; }
 }
 
+async function readBoundedJson(request, maxBytes) {
+  const declared = request.headers.get("content-length");
+  if (declared !== null) {
+    const value = Number(declared);
+    if (Number.isFinite(value) && value > maxBytes) return { ok:false,reason:"too_large" };
+  }
+  const reader = request.body?.getReader();
+  if (!reader) return { ok:false,reason:"malformed" };
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done,value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        return { ok:false,reason:"too_large" };
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk,offset); offset += chunk.byteLength; }
+    return { ok:true,value:JSON.parse(new TextDecoder("utf-8",{ fatal:true }).decode(bytes)) };
+  } catch {
+    return { ok:false,reason:"malformed" };
+  }
+}
+
 function byteLen(...strs) {
   return new TextEncoder().encode(strs.filter(Boolean).join("")).length;
 }
@@ -870,6 +900,21 @@ export async function reviewBackfillEvidenceEndpoint(request, env, auth) {
   const evidence = await editorStub(env).getLegacyBackfillEvidence(throughBatchId);
   return evidence.ok ? json({ ok:true,evidence }) :
     editError(evidence.reason,evidence.reason === "migration_closed" ? "Migration already recorded." : "Invalid migration frontier.",409);
+}
+
+export async function reviewLegacyReconcileEndpoint(request, env, auth) {
+  if (!csrfOk(request, env)) return editError("csrf_failed", "Bad request.", 403);
+  if (auth?.credential_channel !== "bearer" || !auth?.scopes?.admin?.granted)
+    return editError("forbidden", "Trusted migration service required.", 403);
+  const parsed = await readBoundedJson(request,1024 * 1024);
+  if (!parsed.ok && parsed.reason === "too_large")
+    return editError("validation_error", "Migration payload is too large.", 413);
+  const body = parsed.ok ? parsed.value : null;
+  if (!body) return editError("validation_error", "Malformed JSON body.", 400);
+  const result = await editorStub(env).reconcileLegacyReview({ ...body,
+    actor:auth.editor || "service:migration" });
+  return json(result,result.ok ? (result.replay ? 200 : 201) :
+    ["idempotency_conflict","migration_closed"].includes(result.reason) ? 409 : 400);
 }
 
 export async function reconcileEndpoint(request, env, auth) {

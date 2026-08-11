@@ -507,6 +507,25 @@ evidence consumed by `tools/build_prod_review_backfill.py`. Human Access session
 cannot call it. The generator fails closed on incomplete or ambiguous chains and
 its `--check` mode requires byte-identical deterministic output before submission.
 
+If legacy applied rows include demonstrably reverted UAT edits, the ordinary
+contiguous backfill must not be used because it would resurrect copy that is no
+longer canonical. `tools/build_legacy_review_reconciliation.py` instead verifies
+each exclusion against its exact Git apply commit and either an exact restored
+file snapshot or restored original text. It independently verifies each still-
+effective edit against the exact PROD source value, current canonical value, and
+the target-locator transition introduced by its apply commit. Each effective
+revision carries per-suggestion batch/base/commit evidence; the store binds that
+evidence to its completed apply batch before recording the revision.
+`POST /edit/v1/publisher/review/reconcile-legacy` accepts that
+deterministic payload only from the bearer-admin migration channel and, in one
+transaction, records append-only exclusion evidence plus review revisions for
+still-effective edits. The classification must cover every applied suggestion
+exactly once. The endpoint reads at most 1 MiB of actual request bytes. An exact
+same-ID replay is idempotent; any other migration identity is permanently closed
+after the first receipt. That receipt also closes the earlier contiguous-backfill
+endpoint, and excluded suggestion IDs are rejected there defensively. It creates no decisions or release authority; effective
+operations remain unreviewed until a human Publisher submits a review.
+
 `GET /edit/v1/prod/releases/audit` is a text-free, read-only rollout audit. It
 is available only when `PROD_RELEASE_LEDGER=true` and only to a bearer holding
 `release_service`; Access/Publisher sessions and other bearer scopes receive
@@ -516,7 +535,9 @@ identities, and zero-expected relationship-invariant counts. It returns no
 authored text, decision notes, credentials, or provider output. Any nonzero
 invariant count is a rollout stop. Migration IDs and production bases are
 limited to 256 UTF-8 bytes at both the HTTP and store boundaries; defensive
-audit projection omits and flags any oversized legacy value. The response is
+audit projection omits and flags any oversized legacy value. Any nonzero
+invariant count, including `unreconciled_applied_suggestions`, is a rollout stop.
+The response is
 bounded to the newest 100 migration receipts and 20 active releases and reports
 truncation explicitly. A disabled ledger returns `404`.
 

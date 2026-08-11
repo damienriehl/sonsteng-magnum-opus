@@ -233,6 +233,16 @@ export const SCHEMA_SQL = `
     id TEXT PRIMARY KEY, prod_base TEXT NOT NULL, evidence_digest TEXT NOT NULL,
     revision_count INTEGER NOT NULL, actor TEXT NOT NULL, created_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS production_legacy_exclusions (
+    suggestion_id TEXT PRIMARY KEY,
+    migration_id TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    apply_batch_id TEXT NOT NULL,
+    apply_commit TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    evidence_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 
   -- Single-row apply-daemon liveness beacon (SL6 heartbeat). id is pinned to 1
   -- so recordHeartbeat is an upsert of the ONE latest run. received_at is the
@@ -1392,6 +1402,8 @@ export class EditorStoreCore {
     if (prior) return prior.evidence_digest === digest ?
       { ok:true,migration_id:input.migration_id,inserted:0,replayed:prior.revision_count,replay:true } :
       { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_review_migrations LIMIT 1"))
+      return { ok:false,reason:"migration_closed" };
     try { return this.transactionSync(() => {
       for (const revision of input.revisions) {
         if (revision?.prod_base !== input.prod_base) throw { backfillFailure:"prod_base_mismatch" };
@@ -1425,6 +1437,8 @@ export class EditorStoreCore {
         if (evidenceById.size !== new Set(revision.suggestion_ids).size)
           throw { backfillFailure:"missing_apply_evidence" };
         for (const suggestionId of revision.suggestion_ids) {
+          if (this._one("SELECT suggestion_id FROM production_legacy_exclusions WHERE suggestion_id=?",suggestionId))
+            throw { backfillFailure:"legacy_evidence_mismatch" };
           const item = evidenceById.get(suggestionId);
           if (!item || batches.get(item.batch_id) !== item.commit_sha)
             throw { backfillFailure:"legacy_commit_mismatch" };
@@ -1451,6 +1465,106 @@ export class EditorStoreCore {
       return { ok:true,migration_id:input.migration_id,inserted:input.revisions.length,replayed:0 };
     }); } catch (error) {
       if (error?.backfillFailure) return { ok:false,reason:error.backfillFailure };
+      throw error;
+    }
+  }
+
+  reconcileLegacyReview(input = {}) {
+    if (typeof input.migration_id !== "string" || !input.migration_id ||
+        typeof input.prod_base !== "string" || !/^[0-9a-f]{40}$/.test(input.prod_base) ||
+        new TextEncoder().encode(input.migration_id).byteLength > 256 ||
+        !Array.isArray(input.exclusions) || !Array.isArray(input.revisions) ||
+        input.exclusions.length > 500 || input.revisions.length === 0 || input.revisions.length > 200 ||
+        input.revisions.some((revision) => !Array.isArray(revision?.suggestion_ids) ||
+          revision.suggestion_ids.length > 500 || !Array.isArray(revision?.operations) ||
+          revision.operations.length > 1000)) return { ok:false,reason:"validation_error" };
+    const evidence = { prod_base:input.prod_base,exclusions:input.exclusions,revisions:input.revisions };
+    const digest = this._digest(evidence);
+    const prior = this._one("SELECT evidence_digest,revision_count FROM production_review_migrations WHERE id=?",input.migration_id);
+    if (prior) return prior.evidence_digest === digest ?
+      { ok:true,migration_id:input.migration_id,inserted:0,replayed:prior.revision_count,replay:true } :
+      { ok:false,reason:"idempotency_conflict" };
+    if (this._one("SELECT id FROM production_review_migrations LIMIT 1"))
+      return { ok:false,reason:"migration_closed" };
+    try { return this.transactionSync(() => {
+      const appliedRows = this._all(
+        "SELECT id,source_ref,status,apply_batch_id,created_at FROM suggestions WHERE status=? ORDER BY id",STATUS.APPLIED);
+      const appliedById = new Map(appliedRows.map((row) => [row.id,row]));
+      const reviewedIds = new Set(this._all(
+        "SELECT DISTINCT j.value AS id FROM production_review_revisions r JOIN json_each(r.suggestion_ids_json) j")
+        .map((row) => row.id));
+      const excludedIds = new Set(this._all(
+        "SELECT suggestion_id AS id FROM production_legacy_exclusions").map((row) => row.id));
+      const covered = new Set();
+      for (const exclusion of input.exclusions) {
+        if (!exclusion || typeof exclusion.suggestion_id !== "string" ||
+            !/^[0-9a-f]{40}$/.test(exclusion.apply_commit || "") ||
+            !/^[0-9a-f]{40}$/.test(exclusion.apply_base || "") ||
+            exclusion.reason !== "reverted_legacy_uat" ||
+            !/^[0-9a-f]{64}$/.test(exclusion.evidence_hash || ""))
+          throw { legacyFailure:"validation_error" };
+        const row = appliedById.get(exclusion.suggestion_id);
+        const batch = this._one("SELECT base_sha,commit_sha,phase FROM apply_batches WHERE batch_id=?",
+          exclusion.apply_batch_id);
+        if (!row || row.source_ref !== exclusion.source_ref ||
+            row.apply_batch_id !== exclusion.apply_batch_id || covered.has(exclusion.suggestion_id) ||
+            reviewedIds.has(exclusion.suggestion_id))
+          throw { legacyFailure:"legacy_evidence_mismatch" };
+        if (!batch || batch.phase !== "done" || batch.base_sha !== exclusion.apply_base ||
+            (batch.commit_sha && batch.commit_sha !== exclusion.apply_commit))
+          throw { legacyFailure:"legacy_batch_evidence_mismatch" };
+        if (!batch.commit_sha) this.sql.exec("UPDATE apply_batches SET commit_sha=? WHERE batch_id=? AND commit_sha IS NULL",
+          exclusion.apply_commit,exclusion.apply_batch_id);
+        covered.add(exclusion.suggestion_id);
+      }
+      for (const revision of input.revisions) {
+        if (revision?.prod_base !== input.prod_base || !Array.isArray(revision.suggestion_ids) ||
+            !Array.isArray(revision.suggestion_evidence) ||
+            revision.suggestion_evidence.length !== revision.suggestion_ids.length ||
+            revision.commit_sha !== revision.source_revision)
+          throw { legacyFailure:"prod_base_mismatch" };
+        const evidenceById = new Map();
+        for (const item of revision.suggestion_evidence) {
+          if (!item || typeof item.suggestion_id !== "string" || typeof item.batch_id !== "string" ||
+              !/^[0-9a-f]{40}$/.test(item.base_sha || "") ||
+              !/^[0-9a-f]{40}$/.test(item.commit_sha || "") || evidenceById.has(item.suggestion_id))
+            throw { legacyFailure:"legacy_batch_evidence_mismatch" };
+          evidenceById.set(item.suggestion_id,item);
+        }
+        const ordered = [];
+        for (const id of revision.suggestion_ids) {
+          const row = appliedById.get(id);
+          const item = evidenceById.get(id);
+          const batch = item && this._one(
+            "SELECT base_sha,commit_sha,phase FROM apply_batches WHERE batch_id=?",item.batch_id);
+          if (!row || row.source_ref !== revision.source_ref || covered.has(id) || excludedIds.has(id))
+            throw { legacyFailure:"legacy_evidence_mismatch" };
+          if (!item || row.apply_batch_id !== item.batch_id || !batch || batch.phase !== "done" ||
+              batch.base_sha !== item.base_sha || batch.commit_sha !== item.commit_sha)
+            throw { legacyFailure:"legacy_batch_evidence_mismatch" };
+          ordered.push({ ...item,created_at:Number(row.created_at || 0) });
+          covered.add(id);
+        }
+        ordered.sort((a,b) => a.created_at-b.created_at || a.suggestion_id.localeCompare(b.suggestion_id));
+        if (!ordered.length || ordered.at(-1).commit_sha !== revision.commit_sha)
+          throw { legacyFailure:"legacy_batch_evidence_mismatch" };
+      }
+      if (this._canonical([...covered].sort()) !== this._canonical([...appliedById.keys()]))
+        throw { legacyFailure:"incomplete_legacy_coverage" };
+      for (const revision of input.revisions) {
+        const result = this.recordReviewRevision(revision);
+        if (!result.ok) throw { legacyFailure:result.reason };
+      }
+      for (const exclusion of input.exclusions) this.sql.exec(
+        "INSERT INTO production_legacy_exclusions (suggestion_id,migration_id,source_ref,apply_batch_id,apply_commit,reason,evidence_hash,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        exclusion.suggestion_id,input.migration_id,exclusion.source_ref,exclusion.apply_batch_id,
+        exclusion.apply_commit,exclusion.reason,exclusion.evidence_hash,this.now());
+      this.sql.exec("INSERT INTO production_review_migrations (id,prod_base,evidence_digest,revision_count,actor,created_at) VALUES (?,?,?,?,?,?)",
+        input.migration_id,input.prod_base,digest,input.revisions.length,input.actor || "migration-service",this.now());
+      return { ok:true,migration_id:input.migration_id,inserted:input.revisions.length,
+        excluded:input.exclusions.length,replayed:0 };
+    }); } catch (error) {
+      if (error?.legacyFailure) return { ok:false,reason:error.legacyFailure };
       throw error;
     }
   }
@@ -1970,6 +2084,7 @@ export class EditorStoreCore {
       applied_suggestions:count("SELECT COUNT(*) AS count FROM suggestions WHERE status=?", STATUS.APPLIED),
       canonical_mutations:count("SELECT COUNT(*) AS count FROM canonical_mutations"),
       review_migrations:count("SELECT COUNT(*) AS count FROM production_review_migrations"),
+      legacy_exclusions:count("SELECT COUNT(*) AS count FROM production_legacy_exclusions"),
       review_revisions:count("SELECT COUNT(*) AS count FROM production_review_revisions"),
       review_operations:count("SELECT COUNT(*) AS count FROM production_review_operations"),
       review_submissions:count("SELECT COUNT(*) AS count FROM production_review_submissions"),
@@ -1991,6 +2106,10 @@ export class EditorStoreCore {
         "SELECT COUNT(*) AS count FROM production_published_operations p WHERE NOT EXISTS (SELECT 1 FROM production_releases r WHERE r.id=p.release_id AND r.state='complete')"),
       oversized_migration_fields:count(
         "SELECT COUNT(*) AS count FROM production_review_migrations WHERE length(CAST(id AS BLOB))>256 OR length(CAST(prod_base AS BLOB))>256"),
+      unreconciled_applied_suggestions:count(
+        "WITH covered(id) AS (SELECT suggestion_id FROM production_legacy_exclusions UNION SELECT j.value FROM production_review_revisions r JOIN json_each(r.suggestion_ids_json) j) SELECT COUNT(*) AS count FROM suggestions s LEFT JOIN covered c ON c.id=s.id WHERE s.status=? AND c.id IS NULL",STATUS.APPLIED),
+      legacy_exclusion_review_overlap:count(
+        "SELECT COUNT(*) AS count FROM production_legacy_exclusions e WHERE EXISTS (SELECT 1 FROM production_review_revisions r JOIN json_each(r.suggestion_ids_json) j WHERE j.value=e.suggestion_id)"),
     };
     const migrations = this._all(
       "SELECT CASE WHEN length(CAST(id AS BLOB))<=256 THEN id END AS id,CASE WHEN length(CAST(prod_base AS BLOB))<=256 THEN prod_base END AS prod_base,evidence_digest,revision_count,actor,created_at FROM production_review_migrations ORDER BY created_at DESC,id DESC LIMIT 100").reverse();
