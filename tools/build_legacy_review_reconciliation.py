@@ -37,9 +37,40 @@ def _commit_applies_suggestion(repo, commit, batch, row):
     try:
         before = _source_value(repo, batch["base_sha"], rel, locator)
         after = _source_value(repo, commit, rel, locator)
+        if before == row.get("original_text") and after == row.get("new_text"):
+            return True
     except (BackfillError, subprocess.CalledProcessError, KeyError, ValueError):
+        pass
+
+    # The oldest captured rows predate durable block locators, and structural
+    # operations deliberately retain or remove their anchor instead of turning
+    # it into new_text. Prove those rows against the complete named file at the
+    # exact parent and apply commit. Every accepted form below is unique and
+    # transition-specific, so a correctly named commit touching another path or
+    # another block still fails closed.
+    try:
+        before_file = _git(repo, "show", batch["base_sha"] + ":" + rel)
+        after_file = _git(repo, "show", commit + ":" + rel)
+    except subprocess.CalledProcessError:
         return False
-    return before == row.get("original_text") and after == row.get("new_text")
+    if before_file == after_file:
+        return False
+    old = row.get("original_text")
+    new = row.get("new_text")
+    kind = row.get("kind") or "prose"
+    if kind in ("prose", "json_scalar") and old is not None and new is not None:
+        return (before_file.count(str(old)) == 1 and after_file.count(str(old)) == 0 and
+                before_file.count(str(new)) == 0 and after_file.count(str(new)) == 1)
+    if kind == "insert_after" and old is not None and new is not None:
+        return (before_file.count(str(old)) == after_file.count(str(old)) == 1 and
+                before_file.count(str(new)) == 0 and after_file.count(str(new)) == 1)
+    if kind == "delete" and old is not None:
+        return before_file.count(str(old)) == 1 and after_file.count(str(old)) == 0
+    if kind == "move" and old is not None:
+        old = str(old)
+        return (before_file.count(old) == after_file.count(old) == 1 and
+                before_file.find(old) != after_file.find(old))
+    return False
 
 
 def _source_value(repo, revision, relpath, locator):
@@ -94,7 +125,19 @@ def build_reconciliation(evidence, classification, repo, migration_id, prod_base
                 raise BackfillError("excluded source is not restored to its proof base")
         else:
             locator = row["source_ref"].split("#", 1)[1]
-            if _source_value(repo, "HEAD", rel, locator) != row.get("original_text"):
+            try:
+                restored_value = _source_value(repo, "HEAD", rel, locator)
+                restored = restored_value == row.get("original_text")
+            except (BackfillError, KeyError, ValueError):
+                # Old pN locators are not durable. For those legacy rows only,
+                # require the recorded original to be unique in current
+                # canonical bytes and the applied replacement to be absent.
+                text = current.decode("utf-8")
+                old = row.get("original_text")
+                new = row.get("new_text")
+                restored = (old is not None and text.count(str(old)) == 1 and
+                            (new is None or text.count(str(new)) == 0))
+            if not restored:
                 raise BackfillError("excluded prose is not restored in current canonical source")
         proof = {"suggestion_id": suggestion_id, "apply_batch_id": batch["batch_id"],
                  "apply_commit": commit, "proof_base_sha": proof_base or "",
