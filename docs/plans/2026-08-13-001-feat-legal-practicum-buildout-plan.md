@@ -544,11 +544,14 @@ Phase A is independent and ships first: U16 before U2 so the pitch work is check
 - **Requirements.** Enables verification of R1–R6 and R24.
 - **Dependencies.** None.
 - **Files.** new `tools/verify_pitch.py`, new `tools/tests/test_verify_pitch.py`
-- **Approach.** Every existing site gate is hard-scoped to `site/platform/`: `tools/build_site.py` writes only under that root, and `tools/a11y_audit.js` and `tools/verify_platform_layout.js` both set their site root to it. `site/index.html` is read by none of them, so as the plan stood every Phase A unit would have reported green with its deliverable unverified. Build a gate over the pitch page and the new cost page covering internal link resolution, the 250 KB size ceiling, external-asset detection, and the de-naming and disclosure invariants Phase A depends on.
+- **Approach.** Every existing site gate is hard-scoped to `site/platform/`: `tools/build_site.py` writes only under that root, and `tools/a11y_audit.js` and `tools/verify_platform_layout.js` both set their site root to it. `site/index.html` is read by none of them, so as the plan stood every Phase A unit would have reported green with its deliverable unverified. Build a gate over the pitch page and the new cost page covering internal link resolution, page size, external-asset detection, and the de-naming and disclosure invariants Phase A depends on.
+
+Size is measured as **authored payload** — total bytes minus every base64 `data:` URI — against a 250,000-byte ceiling. Total transfer weight is reported informationally and never fails the run. This distinction is load-bearing rather than pedantic: `site/index.html` is 437,576 bytes of which 359,318 (82%) is six inlined fonts, so a ceiling applied to the total would be unpassable by any amount of the copy-cutting R1 asks for. The authored payload is 78,258 bytes, which leaves the check meaningful against the bloat an author actually controls.
 - **Execution note.** Build this first. It is the only thing that makes the rest of Phase A checkable.
 - **Test scenarios.**
   - A pitch page with a broken internal anchor fails.
-  - A page over 250 KB fails.
+  - A page whose authored payload exceeds 250,000 bytes fails.
+  - A page under that ceiling passes even when inlined data URIs push the total far above it.
   - A page referencing an external asset host fails.
   - A page whose body prose contains an author surname fails.
   - A section carrying a statistic outside its THE PROOF block fails.

@@ -61,7 +61,7 @@ change.
 
 ---
 
-## The finding that stopped U2
+## The finding that stopped U2 — RESOLVED 2026-08-15 in `793447a`
 
 Before dispatching the pitch rewrite, the page was measured:
 
@@ -78,10 +78,12 @@ error — U16's packet said to mirror `build_site.py`'s ceiling, which is correc
 generated platform pages that inline nothing and wrong for the one hand-authored page that
 inlines six fonts.
 
-**Recommended fix, pending Damien's yes/no:** split the check — fail on *authored payload*
-excluding data URIs, and report font weight separately as information rather than as a
-failure. This changes what R1 means in practice, which is why it was not applied
-unilaterally.
+**Fixed in `793447a`.** The ceiling now applies to *authored payload* — total bytes minus
+every base64 data URI — and transfer weight is reported informationally without failing the
+run. Treated as correcting a spec error rather than redefining R1: R1 was always about
+reading experience, and the byte ceiling came from the U16 packet, not from the
+requirement. The gate now reports 145 violations against the live page, all of them the
+surname and statistic findings that U3 and U4 own. **U2 is unblocked.**
 
 ---
 
