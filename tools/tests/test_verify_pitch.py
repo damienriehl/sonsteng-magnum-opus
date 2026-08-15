@@ -65,10 +65,21 @@ def test_broken_internal_anchor_fails(page: Path):
     assert "unresolved internal anchor #missing" in messages(page)
 
 
-def test_page_over_250_kb_fails(page: Path):
+def test_authored_payload_over_250_kb_fails(page: Path):
     page.write_text(VALID_PAGE + " " * 250_000, encoding="utf-8")
 
+    assert "authored payload" in messages(page)
     assert "exceeds 250,000-byte ceiling" in messages(page)
+
+
+def test_large_inlined_data_uri_does_not_count_toward_authored_payload(page: Path):
+    page.write_text(
+        VALID_PAGE.replace("AA//AA", "A" * 300_000),
+        encoding="utf-8",
+    )
+
+    assert page.stat().st_size > verify_pitch.PAGE_SIZE_CEILING
+    assert verify_pitch.verify_page(page) == []
 
 
 def test_external_asset_host_fails(page: Path):
@@ -123,3 +134,42 @@ def test_command_exits_nonzero_and_reports_failure(page: Path):
 
     assert result.returncode != 0
     assert "unresolved internal anchor #missing" in result.stderr
+
+
+def test_command_reports_transfer_weight_on_success(page: Path):
+    result = subprocess.run(
+        [sys.executable, str(TOOLS / "verify_pitch.py"), str(page)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    data_uri = "data:image/png;base64,AA//AA"
+    assert result.returncode == 0
+    assert (
+        f"transfer weight: {page.stat().st_size:,} bytes total; "
+        f"{len(data_uri.encode()):,} bytes in inlined base64 data URIs"
+    ) in result.stdout
+    assert "violation" not in result.stderr
+
+
+def test_transfer_weight_does_not_increase_violation_count(page: Path):
+    page.write_text(
+        VALID_PAGE.replace('href="#case-study"', 'href="#missing"').replace(
+            "AA//AA", "A" * 300_000
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(TOOLS / "verify_pitch.py"), str(page)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "transfer weight:" in result.stdout
+    assert "verify_pitch: 1 violation(s)" in result.stderr

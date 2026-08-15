@@ -30,6 +30,10 @@ _STATISTIC_RE = re.compile(r"(?<!\w)\d")
 _PROOF_RE = re.compile(r"\bTHE\s+PROOF\b", re.IGNORECASE)
 _HOST_RE = re.compile(r"(?i)(?:https?:)?//([^/\s'\"),]+)")
 _CSS_URL_RE = re.compile(r"(?is)(?:url\(\s*(['\"]?)(.*?)\1\s*\)|@import\s+(['\"])(.*?)\3)")
+_BASE64_DATA_URI_RE = re.compile(
+    rb"data:[^,\s\"'<>]*?;base64,[a-z0-9+/]*={0,2}",
+    re.IGNORECASE,
+)
 
 _VOID_TAGS = {
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
@@ -170,6 +174,14 @@ def _parse(path: Path) -> PageParser:
     parser.feed(path.read_text(encoding="utf-8"))
     parser.close()
     return parser
+
+
+def _page_weights(path: Path) -> tuple[int, int]:
+    content = path.read_bytes()
+    inlined_data_uri_bytes = sum(
+        len(match.group(0)) for match in _BASE64_DATA_URI_RE.finditer(content)
+    )
+    return len(content), inlined_data_uri_bytes
 
 
 def _resolved_target(page: Path, href: str) -> tuple[Path | None, str]:
@@ -313,12 +325,14 @@ def verify_page(path: str | Path) -> list[str]:
     page = Path(path)
     errors: list[str] = []
     try:
-        size = page.stat().st_size
+        total_bytes, inlined_data_uri_bytes = _page_weights(page)
     except OSError as exc:
         return [f"cannot read page: {exc}"]
-    if size > PAGE_SIZE_CEILING:
+    authored_payload_bytes = total_bytes - inlined_data_uri_bytes
+    if authored_payload_bytes > PAGE_SIZE_CEILING:
         errors.append(
-            f"page is {size:,} bytes and exceeds 250,000-byte ceiling"
+            f"authored payload is {authored_payload_bytes:,} bytes and exceeds "
+            f"{PAGE_SIZE_CEILING:,}-byte ceiling"
         )
     try:
         parser = _parse(page)
@@ -357,6 +371,15 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = 0
     for page in pages:
+        try:
+            total_bytes, inlined_data_uri_bytes = _page_weights(page)
+        except OSError:
+            pass
+        else:
+            print(
+                f"{page}: transfer weight: {total_bytes:,} bytes total; "
+                f"{inlined_data_uri_bytes:,} bytes in inlined base64 data URIs"
+            )
         errors = verify_page(page)
         if errors:
             failures += len(errors)
