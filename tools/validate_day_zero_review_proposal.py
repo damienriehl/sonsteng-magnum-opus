@@ -20,6 +20,7 @@ PROPOSAL_REL = Path("docs/evidence/2026-08-17-day-zero-review-proposal.json")
 SHEET_REL = Path("docs/decisions/2026-08-17-day-zero-review-decision-sheet.md")
 HOLDOUTS_REL = Path("data/day-zero-holdouts.json")
 AUDIT_REL = Path("data/day-zero-anchor-audit.json")
+APPROVAL_REL = Path("docs/decisions/2026-08-17-day-zero-review-approval.md")
 CONFIDENCES = {"high", "medium", "low"}
 HOLDOUT_DISPOSITIONS = {
     "declared_holdout",
@@ -158,10 +159,12 @@ def _governed_identities(repo: Path):
 def validate_proposal(repo: Path, proposal: dict) -> None:
     holdouts, audit, expected = _governed_identities(repo)
     anchors = {row["matter_slug"]: row["anchor"] for row in audit["matter_anchors"]}
-    if not all(row.get("review_status") == "candidate_pending_human_review" for row in holdouts["entries"]):
-        raise ValueError("governed holdouts no longer retain pending review states")
-    if audit["summary"].get("attention_required") != len(audit["attention_required"]):
-        raise ValueError("governed anchor audit no longer retains its attention-required set")
+    approved = (repo / APPROVAL_REL).is_file()
+    if not approved:
+        if not all(row.get("review_status") == "candidate_pending_human_review" for row in holdouts["entries"]):
+            raise ValueError("governed holdouts no longer retain pending review states")
+        if audit["summary"].get("attention_required") != len(audit["attention_required"]):
+            raise ValueError("governed anchor audit no longer retains its attention-required set")
     actual = Counter()
     keys = set()
     previous = None
@@ -222,23 +225,34 @@ def validate_proposal(repo: Path, proposal: dict) -> None:
             )
             if row.get("proposed_day_zero_offset") != expected_offset:
                 raise ValueError(f"{row['key']}: convertible proposal has wrong offset")
-    if actual != expected:
-        missing = list((expected - actual).elements())[:3]
-        unknown = list((actual - expected).elements())[:3]
-        raise ValueError(f"proposal coverage mismatch; missing={missing}, unknown={unknown}")
     governed = proposal.get("governed_inputs", {})
-    expected_inputs = {
-        str(HOLDOUTS_REL): {
-            "sha256": _sha256(repo / HOLDOUTS_REL),
-            "pending_count": len(holdouts["entries"]),
-        },
-        str(AUDIT_REL): {
-            "sha256": _sha256(repo / AUDIT_REL),
-            "attention_required_count": len(audit["attention_required"]),
-        },
-    }
-    if governed != expected_inputs:
-        raise ValueError("proposal governed-input hashes or counts are stale")
+    if approved:
+        expected_counts = Counter({
+            "holdout": governed.get(str(HOLDOUTS_REL), {}).get("pending_count"),
+            "anchor_attention": governed.get(str(AUDIT_REL), {}).get("attention_required_count"),
+        })
+        if Counter(row["category"] for row in proposal.get("proposals", [])) != expected_counts:
+            raise ValueError("proposal coverage mismatch against its immutable governed-input counts")
+        for metadata in governed.values():
+            if not re.fullmatch(r"[0-9a-f]{64}", str(metadata.get("sha256", ""))):
+                raise ValueError("proposal governed-input digest is invalid")
+    else:
+        if actual != expected:
+            missing = list((expected - actual).elements())[:3]
+            unknown = list((actual - expected).elements())[:3]
+            raise ValueError(f"proposal coverage mismatch; missing={missing}, unknown={unknown}")
+        expected_inputs = {
+            str(HOLDOUTS_REL): {
+                "sha256": _sha256(repo / HOLDOUTS_REL),
+                "pending_count": len(holdouts["entries"]),
+            },
+            str(AUDIT_REL): {
+                "sha256": _sha256(repo / AUDIT_REL),
+                "attention_required_count": len(audit["attention_required"]),
+            },
+        }
+        if governed != expected_inputs:
+            raise ValueError("proposal governed-input hashes or counts are stale")
 
 
 def _table(counter: Counter, heading: str) -> list[str]:
@@ -368,6 +382,16 @@ def main() -> int:
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    if (repo / APPROVAL_REL).is_file():
+        import apply_day_zero_review
+
+        apply_day_zero_review._approval_digest(repo, proposal_path)
+        apply_day_zero_review.validate_applied_review(
+            repo,
+            committed,
+            _load(repo / HOLDOUTS_REL),
+            _load(repo / AUDIT_REL),
+        )
     counts = Counter(row["category"] for row in committed["proposals"])
     print(json.dumps({
         "holdout_proposals": counts["holdout"],

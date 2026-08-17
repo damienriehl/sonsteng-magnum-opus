@@ -82,14 +82,14 @@ def test_validator_rejects_unknown_and_missing_governed_keys():
         module.validate_proposal(REPO, proposal)
 
 
-def test_governed_artifacts_remain_pending_until_human_confirmation():
+def test_governed_artifacts_are_resolved_after_human_confirmation():
     holdouts = json.loads((REPO / "data" / "day-zero-holdouts.json").read_text())
     audit = json.loads((REPO / "data" / "day-zero-anchor-audit.json").read_text())
 
     assert holdouts["entries"]
     assert all(
-        row["review_status"] == "candidate_pending_human_review"
+        row["review_status"] == "declared_absolute_holdout"
         for row in holdouts["entries"]
     )
-    assert audit["attention_required"]
-    assert audit["summary"]["attention_required"] == len(audit["attention_required"])
+    assert audit["attention_required"] == []
+    assert audit["summary"]["attention_required"] == 0
