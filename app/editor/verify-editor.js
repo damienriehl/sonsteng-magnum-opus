@@ -338,6 +338,22 @@ async function run() {
     await page.reload({ waitUntil: 'load' });
     await page.waitForFunction(() => window.SonstengEditor && window.SonstengEditor.ready() >= 4, { timeout: 8000 });
     await installRadiusMock(page);
+    const studentView = await page.evaluate(() => {
+      const link = document.querySelector('a.editor-banner__student');
+      if (!link) return null;
+      link.focus();
+      return {
+        label: link.textContent,
+        href: link.href,
+        focused: document.activeElement === link,
+        outline: getComputedStyle(link).outlineStyle,
+      };
+    });
+    assert('SV1 per-page student view is a keyboard-focusable anchor to the matching public page',
+      studentView && studentView.label === 'View as student' && studentView.focused &&
+      studentView.outline !== 'none' &&
+      studentView.href === 'https://sonsteng-dev.damienriehl.com/platform/matters/m05-dwi-meridian/',
+      JSON.stringify(studentView));
     // C4 (revised 2026-07-27): the explanation used to stand permanently under
     // every formatted block — the same sentence repeated dozens of times down a
     // matter packet. It now travels with the control that can act on it: the

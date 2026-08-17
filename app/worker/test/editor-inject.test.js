@@ -10,7 +10,14 @@
 // setAttribute/remove interface.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AssetLinkRewriter, LinkRewriter, ScriptStripper, SITE_ASSET_UPSTREAM } from "../src/editor-inject.js";
+import {
+  AssetLinkRewriter,
+  buildStudentViewUrl,
+  handleEditPage,
+  LinkRewriter,
+  ScriptStripper,
+  SITE_ASSET_UPSTREAM,
+} from "../src/editor-inject.js";
 import { EDIT_CSP } from "../src/editor-http.js";
 import { readFileSync } from "node:fs";
 
@@ -119,6 +126,63 @@ const UPSTREAM_PAGE = new URL(
   "https://sonsteng-dev.damienriehl.com/platform/matters/m03-tort-meridian/index.html",
 );
 
+test("student view maps the allowlisted page beneath the configured upstream prefix", () => {
+  assert.equal(
+    buildStudentViewUrl(
+      "matters/m03-tort-meridian/index.html",
+      "https://sonsteng-dev.damienriehl.com/platform/",
+    ),
+    "https://sonsteng-dev.damienriehl.com/platform/matters/m03-tort-meridian/",
+  );
+});
+
+test("student view rejects missing, malformed, and prefix-escaping upstream values", () => {
+  assert.equal(buildStudentViewUrl("index.html", ""), null);
+  assert.equal(buildStudentViewUrl("index.html", "not a URL"), null);
+  assert.equal(buildStudentViewUrl("index.html", "ftp://example.org/platform/"), null);
+  assert.equal(buildStudentViewUrl("index.html", "https://editor:secret@example.org/platform/"), null);
+  assert.equal(buildStudentViewUrl("../admin/index.html", "https://example.org/platform/"), null);
+  assert.equal(buildStudentViewUrl("//evil.example/index.html", "https://example.org/platform/"), null);
+  assert.equal(buildStudentViewUrl("index.html", "https://example.org/platform/?token=secret"), null);
+  assert.equal(buildStudentViewUrl("index.html", "https://example.org/platform/#private"), null);
+  assert.equal(buildStudentViewUrl("index.html?editor_token=secret", "https://example.org/platform/"), null);
+});
+
+test("injector emits the student URL only when the configured upstream is safe", async () => {
+  const originalFetch = globalThis.fetch;
+  const OriginalHTMLRewriter = globalThis.HTMLRewriter;
+  globalThis.fetch = async () => new Response("<!doctype html><html><head></head><body></body></html>", {
+    headers: { "content-type": "text/html" },
+  });
+  globalThis.HTMLRewriter = class {
+    constructor() { this.handlers = []; }
+    on(selector, handler) { this.handlers.push([selector, handler]); return this; }
+    transform() {
+      let tail = "";
+      const head = this.handlers.find(([selector]) => selector === "head");
+      head[1].element({ prepend() {}, append(value) { tail += value; } });
+      return new Response(tail, { headers: { "content-type": "text/html" } });
+    }
+  };
+
+  try {
+    const args = { pageKey: "matters/m03-tort-meridian/index.html", blocks: [], pending: [] };
+    const valid = await handleEditPage(
+      { EDIT_UPSTREAM: "https://sonsteng-dev.damienriehl.com/platform/" }, args,
+    );
+    assert.match(await valid.text(),
+      /"student_view_url":"https:\/\/sonsteng-dev\.damienriehl\.com\/platform\/matters\/m03-tort-meridian\/"/);
+
+    const invalid = await handleEditPage(
+      { EDIT_UPSTREAM: "https://example.org/platform/?editor_token=secret" }, args,
+    );
+    assert.doesNotMatch(await invalid.text(), /student_view_url/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.HTMLRewriter = OriginalHTMLRewriter;
+  }
+});
+
 test("LinkRewriter pulls allowlisted pages into /edit space, hash preserved", () => {
   const r = new LinkRewriter(UPSTREAM_PAGE);
 
@@ -200,4 +264,15 @@ test("editor client renders review prose through textContent and stale evidence 
   assert.match(client,/textContent/);
   assert.match(client,/current_proposed_hash/);
   assert.match(client,/stale/);
+});
+
+test("editor rail exposes the injected student URL as an accessible real link", () => {
+  const injector = readFileSync(new URL("../src/editor-inject.js", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../../editor/editor.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../../editor/editor.css", import.meta.url), "utf8");
+
+  assert.match(injector, /student_view_url/);
+  assert.match(client, /MAP_ISLAND\.student_view_url/);
+  assert.match(client, /el\('a', 'editor-banner__student', 'View as student'\)/);
+  assert.match(css, /\.editor-banner__student:focus-visible\s*\{/);
 });

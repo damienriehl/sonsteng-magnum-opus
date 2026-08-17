@@ -30,6 +30,25 @@ export const SITE_ASSET_UPSTREAM = {
 };
 const SITE_ASSET_NAMES = new Set(Object.keys(SITE_ASSET_UPSTREAM));
 
+// Build the public counterpart of an allowlisted editor page. The router passes
+// only a canonical pageKey from resolvePagePath; the same origin+prefix guard as
+// the clean upstream fetch provides defense in depth. Configuration URLs with
+// credentials or query/fragment data are rejected so the public link cannot
+// disclose either when it leaves the authenticated editor.
+export function buildStudentViewUrl(pageKey, editUpstream) {
+  let base;
+  try {
+    base = new URL(editUpstream);
+  } catch {
+    return null;
+  }
+  if (!/^https?:$/.test(base.protocol) || base.username || base.password || base.search || base.hash) {
+    return null;
+  }
+  const url = buildUpstreamUrl(pageKey, base.toString());
+  return url ? url.toString() : null;
+}
+
 // Build a clean upstream subrequest that forwards NOTHING sensitive.
 function cleanSubrequest(url, accept = "text/html") {
   return new Request(url.toString(), {
@@ -185,7 +204,13 @@ class HeadInjector {
 // array of this editor's pending items for THIS page (resolved by the router
 // from the DO). Returns a Response (headers finalized by the router wrap).
 export async function handleEditPage(env, { pageKey, blocks, overrides = [], pending, reviewAnnotations = [], heartbeatAgeS = null, directApply = false }) {
-  const upstream = buildUpstreamUrl(pageKey, env.EDIT_UPSTREAM);
+  const studentViewUrl = buildStudentViewUrl(pageKey, env.EDIT_UPSTREAM);
+  // Reuse the already-validated public URL on normal configurations. Retain the
+  // established fetch behavior for a malformed public-link configuration so
+  // U20 only omits its link; it does not redefine editor-page availability.
+  const upstream = studentViewUrl
+    ? new URL(studentViewUrl)
+    : buildUpstreamUrl(pageKey, env.EDIT_UPSTREAM);
   if (!upstream) return friendly(404, "That page is not available for editing.");
 
   let resp;
@@ -202,7 +227,8 @@ export async function handleEditPage(env, { pageKey, blocks, overrides = [], pen
 
   const base = baseHrefFor(pageKey);
   const mapIsland = escapeJsonIsland({ version: MAP_VERSION, page: pageKey,
-    blocks: pageBlockDescriptors(blocks), overrides });
+    blocks: pageBlockDescriptors(blocks), overrides,
+    ...(studentViewUrl ? { student_view_url: studentViewUrl } : {}) });
   const editsIsland = escapeJsonIsland({
     items: projectPendingItems(pending),
     review_annotations: projectReviewAnnotations(reviewAnnotations),

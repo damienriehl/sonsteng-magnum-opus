@@ -214,6 +214,8 @@
   var EDITS_ISLAND = readJsonIsland('edits-data') || {};
   var MAP = MAP_ISLAND.blocks || [];
   var PAGE_OVERRIDES = MAP_ISLAND.overrides || [];
+  var STUDENT_VIEW_URL = typeof MAP_ISLAND.student_view_url === 'string'
+    ? MAP_ISLAND.student_view_url : '';
   var INITIAL_PENDING = EDITS_ISLAND.items || [];
   var INITIAL_REVIEWS = EDITS_ISLAND.review_annotations || [];
   var PAGE = MAP_ISLAND.page || derivePage();
@@ -2080,6 +2082,16 @@
     bannerMsgEl = el('span', null, 'You’re editing — changes go to Damien for review.');
     msg.appendChild(bannerMsgEl);
     banner.appendChild(msg);
+
+    // Public counterpart of this exact allowlisted page. The Worker builds and
+    // validates the absolute URL; the client only renders it as a real anchor.
+    // It intentionally carries no editor query string or credentials.
+    if (STUDENT_VIEW_URL) {
+      var studentLink = el('a', 'editor-banner__student', 'View as student');
+      studentLink.setAttribute('href', STUDENT_VIEW_URL);
+      studentLink.setAttribute('title', 'Open this page without editing controls');
+      banner.appendChild(studentLink);
+    }
 
     // History link — the editor-gated redline browser (index at /edit/history/).
     // Small chrome addition per the history-browser contract; absolute path so it
