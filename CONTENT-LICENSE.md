@@ -20,6 +20,7 @@ facts, exercises, templates, and other expressive educational content in:
 - `data/curriculum/`
 - `data/jurisdictions/`
 - `data/matters/`
+- `data/midstate/`
 - the authored prose and visual presentation in `site/index.html`
 
 Generated copies of that content under `site/platform/` retain the same content
@@ -32,7 +33,7 @@ materials.
 
 Use this attribution, adapted only as needed for the medium:
 
-> Legal Practicum — John O. Sonsteng · Damien Riehl · with Roger S. Haydock.
+> Legal Practicum — John O. Sonsteng · Damien Riehl · Roger S. Haydock.
 > Licensed under CC BY 4.0. Source:
 > https://github.com/damienriehl/sonsteng-magnum-opus
 
@@ -48,8 +49,6 @@ This CC BY 4.0 grant does **not** apply to:
   `THIRD-PARTY.md` or carrying its own notice;
 - `data/taxonomy/`, `docs/research/`, quoted source material, or any other content
   whose rights belong to someone else;
-- any future `data/midstate/` directory or other separately licensed John O.
-  Sonsteng originals unless the material's own rights marker expressly says so;
 - uncleared recordings, presentations, or contributions by other lawyers; or
 - material marked "used with permission," "all rights reserved," or with any
   license other than CC BY 4.0.

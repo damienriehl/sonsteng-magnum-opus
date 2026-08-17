@@ -101,14 +101,12 @@ def test_hand_authored_current_surfaces_use_settled_identity():
     assert readme.startswith("# Legal Practicum\n")
 
 
-@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will install the new cover byline")
 def test_pitch_uses_new_cover_byline():
     pitch = PITCH.read_text(encoding="utf-8")
     normalized_pitch = pitch.replace("&nbsp;", " ").replace("</b>", "").replace("<b>", "")
     assert COVER_BYLINE in normalized_pitch
 
 
-@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will remove author surnames from pitch body prose")
 def test_pitch_body_prose_does_not_name_authors():
     author_name_violations = [
         violation for violation in verify_pitch.verify_page(PITCH)
@@ -163,14 +161,12 @@ def test_content_license_has_conservative_scope_attribution_and_exclusions():
     assert "indicate if changes were made" in content
 
 
-@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will retire the Midstate licence carve-out")
 def test_content_license_includes_midstate_under_existing_dual_licence():
     content = CONTENT_LICENSE.read_text(encoding="utf-8")
     excluded_section = content.split("## Excluded material", 1)[1]
     assert "data/midstate/" not in excluded_section.lower()
 
 
-@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will install the new content attribution")
 def test_content_license_uses_new_cover_byline():
     content = CONTENT_LICENSE.read_text(encoding="utf-8")
     assert f"Legal Practicum — {COVER_BYLINE}" in content
