@@ -248,6 +248,13 @@ the 2026-08-13 settlement**, not a reading the record already supports — C3's 
 against the seven analytic headings" clause is silent on the scoring dimension and must
 not be cited as corroboration.
 
+**Recording check completed 2026-08-17.** The August 6 and August 12 Otter transcripts are
+now reviewed and recorded in
+`docs/decisions/2026-08-17-seven-point-recording-evidence.md`. They settle that 1-7 is a
+section-level assessment scale, that 4 is competent, and that scores below 6 are redo-eligible.
+They do not enumerate whether “section” means the seven memo headings or the matter-specific
+rubric criteria. Only that dimension mapping remains open.
+
 **A competing reading the amendment must beat.** `data/curriculum/m2.md` calls the memo
 structure *"the Method's fixed seven-point template"* — which fully explains John's phrase
 with no rating scale attached. An equally consistent alternative: the 1–7 is an *overall*
@@ -549,10 +556,10 @@ gate landed in `2584b55`.
 `data/curriculum/`, `data/spine-manifest.json`.
 
 **Approach.**
-1. Put the Planning Contract's finding above to Damien and get one answer: are the seven
-   analytic headings the scored dimensions, with 1–7 as the scale applied to each?
-2. Resolve the band-count mismatch — six bands per the Legal Practicum plan, or seven per
-   John's scale.
+1. Confirm the one remaining mapping: for memo deliverables, are the seven analytic headings
+   the scored dimensions, while the existing matter criteria continue to govern non-memo and
+   exercise-level assessment?
+2. Use the recording-settled 1-7 scale. The old 0-5 six-band draft is superseded.
 3. Decide what happens to `letter_grade_map` for memo assessment: retired, hidden, or kept
    for non-memo exercises only.
 4. Encode the answer once, versioned with a content hash, so nothing downstream infers it.
@@ -1070,22 +1077,14 @@ Q1 was originally one bundled question; a single answer could not have unblocked
 because a partial reply leaves the reader unable to tell which half failed. Split into four,
 each separately answerable:
 
-- **Q1a (blocks U8, U9). Does the 2026-08-13 settlement stand?** That settlement says the
-  seven-point form is the memo template and **not** a rating scale. The alternative is to
-  amend it: John's 1–7 becomes an overlay scored against each of the seven headings.
-  *Recommendation: re-check the 2026-08-06 and 2026-08-12 call recordings before answering
-  — they contain the only evidence that distinguishes the readings, and neither the plan
-  nor the audit has consulted them.*
-- **Q1b (blocks U9). Which scale?** The existing artifact is **0–5** (six bands) and its
-  scorecard schema rejects 6; R7, AE4 and U13 assume **1–7**. This is not a band count, it
-  is a choice between adopting 1–7 and re-banding the 42 descriptors, or keeping 0–5 and
-  amending R7, AE4 and U13. *Recommendation: adopt 1–7, since it is John's own scale and
-  the one the product requirements already encode.*
-- **Q1c (blocks U8). What are the default competence and redo thresholds?** John's recorded
-  rule makes 4 competent *and* "anything under 6 may be redone" — so 4 and 5 are
-  simultaneously competent and redo-eligible, while AE4 and U13 present them as disjoint.
-  Whoever writes the code decides this unless it is answered. *Recommendation: confirm with
-  John rather than inferring.*
+- **Q1a (blocks U8, U9). Which sections receive the recording-confirmed 1-7 score?** The
+  recordings prove section-level scoring but do not name the sections. *Recommendation: for
+  memo deliverables, score the seven analytic headings; retain matter-specific weighted
+  criteria for non-memo and exercise-level assessment.*
+- **Q1b — RESOLVED FROM THE RECORDING.** Use 1-7. The 0-5 draft is superseded.
+- **Q1c — RESOLVED FROM THE RECORDING.** Default competence is 4 and redo is available
+  below 6. Thus 4 and 5 are both competent and redo-eligible. Both thresholds remain
+  configurable with instructor > school > default precedence.
 - **Q1d (deferred, does not block).** What happens to `letter_grade_map` for non-memo
   exercises, and does `/critique` keep emitting a rubric-weighted `total`? Note this is
   **not** implied by John's caution — see the Planning Contract.
