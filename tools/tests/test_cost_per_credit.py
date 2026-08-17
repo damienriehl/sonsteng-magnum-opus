@@ -58,10 +58,17 @@ def test_four_comparator_cost_inputs_start_blank_with_units_and_ranges():
     assert [item["id"] for item in config["comparators"]] == [
         "standard", "seminar", "clinic", "internship"
     ]
+    comparator_ids = {item["id"] for item in config["comparators"]}
     for item in config["comparators"] + config["faculty_inputs"]:
         assert item["unit"] and item["range"]["min"] < item["range"]["max"]
-        assert str(item["range"]["min"]) in html
-        assert str(item["range"]["max"]) in html
+        field_id = f'{item["id"]}-cost' if item["id"] in comparator_ids else item["id"]
+        field = re.search(fr'<input[^>]*id="{re.escape(field_id)}"[^>]*>', html)
+        assert field, field_id
+        tag = field.group(0)
+        assert f'data-min="{item["range"]["min"]}"' in tag
+        assert f'data-max="{item["range"]["max"]}"' in tag
+        assert f'<label for="{field_id}">{item["label"]}</label>' in html
+        assert item["unit"].casefold() in html.casefold()
 
 
 def test_aba_arithmetic_is_rendered_and_reconciles():
@@ -132,3 +139,13 @@ def test_mobile_and_print_css_contracts():
     assert re.search(r"overflow-x:\s*auto", html)
     assert ":focus-visible" in html
     assert re.search(r"break-inside:\s*avoid", html)
+
+
+def test_browser_interaction_gate_is_wired_into_preflight():
+    preflight = (ROOT / "tools/preflight.sh").read_text(encoding="utf-8")
+    verifier = ROOT / "tools/verify_cost_per_credit.js"
+    assert verifier.exists()
+    assert 'run "cost-per-credit interactions"' in preflight
+    assert "node tools/verify_cost_per_credit.js" in preflight
+    assert 'run "cost-per-credit accessibility"' in preflight
+    assert 'node tools/a11y_audit.js "file://$ROOT/site/cost-per-credit.html"' in preflight

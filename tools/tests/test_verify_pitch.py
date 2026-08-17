@@ -18,17 +18,7 @@ sys.path.insert(0, str(TOOLS))
 import verify_pitch  # noqa: E402
 
 
-EXPECTED_PROOF_SUMMARIES = [
-    "THE PROOF · 19,077 attorneys surveyed",
-    "THE PROOF · ~1,438 assessed points",
-    "THE PROOF · 70-point client-development gap",
-    "THE PROOF · diagnosis, method, and open resource",
-    "THE PROOF · 3 layers, 1 open whole",
-    "THE PROOF · 24/7 first-pass critique",
-    "THE PROOF · all 26 skills mapped",
-    "THE PROOF · CC BY 4.0 content + MIT code",
-    "THE PROOF · 8 decision prompts captured in one place",
-]
+EXPECTED_PROOF_SUMMARIES = list(verify_pitch.EXPECTED_PROOF_SUMMARIES)
 
 
 def content_word_count(parser: verify_pitch.PageParser) -> int:
@@ -49,45 +39,9 @@ def content_word_count(parser: verify_pitch.PageParser) -> int:
 
 def proof_contract_errors(path: Path) -> list[str]:
     parser = verify_pitch._parse(path)
-    sections = [element for element in parser.elements if element.tag == "section"]
-    errors: list[str] = []
-    summaries: list[str] = []
-    if len(sections) != 9:
-        errors.append("expected exactly nine major sections")
-    for section in sections:
-        proofs = [
-            child for child in section.children
-            if isinstance(child, verify_pitch.Element)
-            and child.tag == "details"
-            and "proof" in child.attrs.get("class", "").split()
-        ]
-        if len(proofs) != 1:
-            errors.append("each section needs one direct-child proof disclosure")
-            continue
-        proof = proofs[0]
-        if "open" in proof.attrs:
-            errors.append("proof disclosures must be closed by default")
-        summary = next(
-            (child for child in proof.children
-             if isinstance(child, verify_pitch.Element) and child.tag == "summary"),
-            None,
-        )
-        summaries.append(verify_pitch._descendant_text(summary).strip() if summary else "")
-    if summaries != EXPECTED_PROOF_SUMMARIES:
-        errors.append("proof summaries do not match the approved list")
-    if len(set(summaries)) != len(summaries):
-        errors.append("proof summaries must be unique")
-    source = path.read_text(encoding="utf-8")
-    required_fragments = (
-        'id="proofToggle"', 'aria-expanded="false"',
-        "querySelectorAll('details.proof')", "beforeprint", "afterprint",
-        "@media print{details.proof>summary", "details.proof[open]",
-        ".reveal{opacity:1!important;transform:none!important}",
+    return verify_pitch._pitch_contract_errors(
+        parser, path.read_text(encoding="utf-8")
     )
-    for fragment in required_fragments:
-        if fragment not in source:
-            errors.append(f"missing disclosure contract fragment: {fragment}")
-    return errors
 
 
 VALID_PAGE = """<!doctype html>
@@ -283,7 +237,7 @@ def test_missing_disclosure_mutation_is_caught(tmp_path: Path):
     mutated = source.replace('<details class="proof">', '<div class="proof">', 1)
     path = tmp_path / "missing-disclosure.html"
     path.write_text(mutated, encoding="utf-8")
-    assert proof_contract_errors(path)
+    assert any("direct-child THE PROOF" in error for error in verify_pitch.verify_page(path))
 
 
 def test_missing_print_rule_mutation_is_caught(tmp_path: Path):
@@ -295,7 +249,7 @@ def test_missing_print_rule_mutation_is_caught(tmp_path: Path):
     )
     path = tmp_path / "missing-print-rule.html"
     path.write_text(mutated, encoding="utf-8")
-    assert proof_contract_errors(path)
+    assert any("@media print" in error for error in verify_pitch.verify_page(path))
 
 
 def test_pitch_opens_problem_then_midstate_demonstration():
@@ -306,6 +260,12 @@ def test_pitch_opens_problem_then_midstate_demonstration():
         if element.tag == "section"
     ]
     assert section_ids[:2] == ["problem", "practicum"]
+    demonstration = next(
+        element for element in parser.elements
+        if element.tag == "section" and element.attrs.get("id") == "practicum"
+    )
+    text = verify_pitch._descendant_text(demonstration)
+    assert all(term in text for term in ("Midstate", "SPEU", "Pat Rogers"))
 
 
 def test_pitch_has_one_linked_cover_for_every_manifest_matter():
@@ -369,6 +329,21 @@ def test_proposed_length_vocabulary_is_dean_editable_and_enumerated():
         "one_week", "three_week", "full_semester"
     ]
     assert all(option["label"] and option["description"] for option in options)
+
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    covers = [
+        element for element in parser.elements
+        if element.tag == "article"
+        and "matter-cover" in element.attrs.get("class", "").split()
+    ]
+    labels = [option["label"] for option in options]
+    for cover in covers:
+        length = next(
+            element for element in parser.elements
+            if cover in tuple(verify_pitch._ancestors(element.parent))
+            and "matter-length" in element.attrs.get("class", "").split()
+        )
+        assert all(label in verify_pitch._descendant_text(length) for label in labels)
 
 
 def test_matter_covers_have_keyboard_hover_focus_and_390px_contract():

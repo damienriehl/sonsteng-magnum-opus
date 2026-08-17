@@ -66,16 +66,23 @@ def fresh_site():
 
 def test_canonical_identity_records_settled_title():
     assert identity()["title"] == "Legal Practicum"
+    assert identity()["byline"] == COVER_BYLINE
 
 
 def test_fresh_generated_pages_use_canonical_current_identity(fresh_site):
     pages = [page for page in fresh_site.rglob("*.html")
              if "assets" not in page.relative_to(fresh_site).parts]
     assert pages
+    shell_pages = 0
     for page in pages:
         text = page.read_text(encoding="utf-8")
         assert "Legal Practicum" in text, page
         assert "Sonsteng Practicum" not in text, page
+        if 'data-eb-origin="data/copy/home.json#identity.byline"' in text:
+            shell_pages += 1
+            assert COVER_BYLINE in text, page
+            assert "with Roger S. Haydock" not in text, page
+    assert shell_pages
 
 
 def test_page_shell_identity_tracks_the_canonical_source_and_stays_locked(monkeypatch):

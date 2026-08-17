@@ -77,6 +77,8 @@ if [ "$WANT_BROWSER" = "1" ]; then
     run "Publisher authorization client"         node tools/verify_publisher_client.mjs
     run "platform print matrix"                  node tools/verify_platform_layout.js --print
     run "interview + critique matrix"            node tools/verify_chat_critique.js
+    run "cost-per-credit interactions"            node tools/verify_cost_per_credit.js
+    run "cost-per-credit accessibility"           node tools/a11y_audit.js "file://$ROOT/site/cost-per-credit.html"
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
     # a ?t= token — which meant that once the Access door retires those tokens
     # (plan KD1) the gate could never run again and would sit permanently
@@ -100,6 +102,8 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "Publisher client"     "no reachable X display"
     skip "platform print"       "no reachable X display"
     skip "interview + critique" "no reachable X display"
+    skip "cost-per-credit"     "no reachable X display"
+    skip "cost accessibility"  "no reachable X display"
   fi
 else
   skip "editor client"        "--no-browser"
@@ -110,6 +114,8 @@ else
   skip "Publisher client"     "--no-browser"
   skip "platform print"       "--no-browser"
   skip "interview + critique" "--no-browser"
+  skip "cost-per-credit"     "--no-browser"
+  skip "cost accessibility"  "--no-browser"
 fi
 
 # ---- summary ---------------------------------------------------------------

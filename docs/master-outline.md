@@ -121,7 +121,7 @@
 
 ### II.8 The faculty and cost argument (why it's affordable)
 - **Restructure, don't expand.** Gradually convert a share of tenure-track lines to **long-term contract + adjunct** teaching faculty on a **step-and-grade ladder** (Assistant Lecturer → … → Master Teacher), with salaries pegged to an external benchmark (e.g., assistant county-attorney pay).
-- **The cost model (from the Practicum Series doc):** a school paying **40 full-time faculty at $139,026/yr = $5,562,480**. A **50% reduction of tenure-track** frees enough to hire ~**two long-term contract teachers per tenure-track line replaced**, **tripling teaching time at the same or lower cost.**
+- **The cost model (from the Practicum Series doc):** reallocating some tenure-track spending to long-term teaching contracts can expand teaching capacity at the same or lower overall cost.
 - **Illustrative administrative structure:** Dean + Associate Deans; ~**17 tenure-track** faculty (research, educational R&D, material development, advanced lectures) alongside ~**40 full-time long-term contract** faculty delivering Modules 1–3 across Lectures / Faculty Supervised Studies / Intensive Residential Practicum. Dual governance keeps research *and* teaching valued.
 
 ---

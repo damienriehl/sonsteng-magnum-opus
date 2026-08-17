@@ -21,6 +21,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 PAGE_SIZE_CEILING = 250_000
 AUTHOR_SURNAMES = ("Sonsteng", "Riehl", "Haydock")
+EXPECTED_PROOF_SUMMARIES = (
+    "THE PROOF · 19,077 attorneys surveyed",
+    "THE PROOF · ~1,438 assessed points",
+    "THE PROOF · 70-point client-development gap",
+    "THE PROOF · diagnosis, method, and open resource",
+    "THE PROOF · 3 layers, 1 open whole",
+    "THE PROOF · 24/7 first-pass critique",
+    "THE PROOF · all 26 skills mapped",
+    "THE PROOF · CC BY 4.0 content + MIT code",
+    "THE PROOF · 8 decision prompts captured in one place",
+)
+EXPECTED_LENGTH_LABELS = ("One week", "Three weeks", "Full semester")
 
 _AUTHOR_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(name) for name in AUTHOR_SURNAMES) + r")\b",
@@ -320,6 +332,122 @@ def _content_errors(parser: PageParser) -> list[str]:
     return errors
 
 
+def _pitch_contract_errors(parser: PageParser, source: str) -> list[str]:
+    """Verify the structure unique to the main Legal Practicum pitch."""
+    errors: list[str] = []
+    sections = [element for element in parser.elements if element.tag == "section"]
+    summaries: list[str] = []
+    if len(sections) != 9:
+        errors.append("pitch requires exactly nine major sections")
+
+    for section in sections:
+        proofs = [
+            child
+            for child in section.children
+            if isinstance(child, Element)
+            and child.tag == "details"
+            and "proof" in child.attrs.get("class", "").split()
+        ]
+        if len(proofs) != 1:
+            errors.append(
+                f"line {section.line}: pitch section requires one direct-child THE PROOF disclosure"
+            )
+            continue
+        proof = proofs[0]
+        if "open" in proof.attrs:
+            errors.append(f"line {proof.line}: THE PROOF disclosure must be closed by default")
+        summary = next(
+            (
+                child
+                for child in proof.children
+                if isinstance(child, Element) and child.tag == "summary"
+            ),
+            None,
+        )
+        summaries.append(_descendant_text(summary).strip() if summary else "")
+
+    if tuple(summaries) != EXPECTED_PROOF_SUMMARIES:
+        errors.append("pitch THE PROOF summaries do not match the approved list")
+    if len(set(summaries)) != len(summaries):
+        errors.append("pitch THE PROOF summaries must be unique")
+
+    required_fragments = (
+        'id="proofToggle"',
+        'aria-expanded="false"',
+        "querySelectorAll('details.proof')",
+        "beforeprint",
+        "afterprint",
+        "@media print{details.proof>summary",
+        "details.proof[open]",
+        ".reveal{opacity:1!important;transform:none!important}",
+    )
+    for fragment in required_fragments:
+        if fragment not in source:
+            errors.append(f"pitch missing disclosure contract fragment: {fragment}")
+
+    if len(sections) >= 2:
+        first_ids = [section.attrs.get("id") for section in sections[:2]]
+        if first_ids != ["problem", "practicum"]:
+            errors.append("pitch must open with the problem, then the Midstate demonstration")
+        demonstration = _descendant_text(sections[1])
+        for term in ("Midstate", "SPEU", "Pat Rogers"):
+            if term not in demonstration:
+                errors.append(f"pitch demonstration must name {term}")
+
+    covers = [
+        element
+        for element in parser.elements
+        if element.tag == "article"
+        and "matter-cover" in element.attrs.get("class", "").split()
+    ]
+    cover_ids = [cover.attrs.get("data-matter-id") for cover in covers]
+    if len(covers) != 20 or len(set(cover_ids)) != 20:
+        errors.append("pitch requires 20 uniquely identified matter covers")
+    for cover in covers:
+        fields = [
+            element
+            for element in parser.elements
+            if cover in tuple(_ancestors(element.parent))
+            and set(element.attrs.get("class", "").split())
+            & {"matter-shape", "matter-skills", "matter-length", "matter-open"}
+        ]
+        field_classes = [
+            next(
+                name
+                for name in ("matter-shape", "matter-skills", "matter-length", "matter-open")
+                if name in element.attrs.get("class", "").split()
+            )
+            for element in fields
+        ]
+        if field_classes != [
+            "matter-shape", "matter-skills", "matter-length", "matter-open"
+        ]:
+            errors.append(
+                f"line {cover.line}: matter cover fields must be shape, skills, length, then link"
+            )
+            continue
+        length_text = _descendant_text(fields[2])
+        if not all(label in length_text for label in EXPECTED_LENGTH_LABELS):
+            errors.append(f"line {fields[2].line}: matter cover omits a proposed length option")
+
+    text = " ".join(
+        node.value
+        for node in parser.text_nodes
+        if _is_content_text(node, any(element.tag == "main" for element in parser.elements))
+        and not any(
+            ancestor.tag == "article"
+            and "matter-cover" in ancestor.attrs.get("class", "").split()
+            for ancestor in _ancestors(node.parent)
+        )
+    )
+    word_count = len(re.findall(r"\b[\w~$%]+(?:[-'’][\w]+)*\b", text))
+    if not 1_808 <= word_count <= 2_137:
+        errors.append(
+            f"pitch authored prose has {word_count:,} words; expected 1,808–2,137"
+        )
+    return errors
+
+
 def verify_page(path: str | Path) -> list[str]:
     """Return human-readable contract violations for one HTML page."""
     page = Path(path)
@@ -340,9 +468,12 @@ def verify_page(path: str | Path) -> list[str]:
         errors.append(f"cannot parse page as UTF-8 HTML: {exc}")
         return errors
 
+    source = page.read_text(encoding="utf-8")
     errors.extend(_link_errors(page, parser))
     errors.extend(_asset_errors(parser))
     errors.extend(_content_errors(parser))
+    if any(element.attrs.get("id") == "proofToggle" for element in parser.elements):
+        errors.extend(_pitch_contract_errors(parser, source))
     return errors
 
 
