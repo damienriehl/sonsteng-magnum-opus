@@ -10,7 +10,6 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
 from collections import Counter
-import difflib
 
 import json_surgical
 import build_site
@@ -133,13 +132,19 @@ def _record(result: Result, source: str, locator: str, literal: str, anchor: dat
 def _capture_file_proof(result: Result, source: str, before: bytes, after: bytes):
     result.before_files[source] = before
     result.after_files[source] = after
-    reverse_edits = []
-    for tag, after_start, after_end, before_start, before_end in difflib.SequenceMatcher(
-            None, after, before, autojunk=False).get_opcodes():
-        if tag != "equal":
-            reverse_edits.append(day_zero_equivalence.ReverseEdit(
-                after_start, after_end, before[before_start:before_end]
-            ))
+    prefix = 0
+    common_limit = min(len(before), len(after))
+    while prefix < common_limit and before[prefix] == after[prefix]:
+        prefix += 1
+    suffix = 0
+    while (suffix < common_limit - prefix and
+           before[len(before) - suffix - 1] == after[len(after) - suffix - 1]):
+        suffix += 1
+    after_end = len(after) - suffix
+    before_end = len(before) - suffix
+    reverse_edits = [] if before == after else [day_zero_equivalence.ReverseEdit(
+        prefix, after_end, before[prefix:before_end]
+    )]
     result.file_proofs.append(day_zero_equivalence.FileProof(source, tuple(reverse_edits)))
 
 
