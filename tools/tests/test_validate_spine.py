@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -33,6 +34,7 @@ TOOLS = REPO / "tools"
 sys.path.insert(0, str(TOOLS))
 
 import validate_spine as vs  # noqa: E402
+import day_zero  # noqa: E402
 
 SCHEMAS_DIR = REPO / "data" / "schemas"
 EXAMPLES_DIR = SCHEMAS_DIR / "examples"
@@ -496,6 +498,119 @@ def run_validator(root: Path, matter=None, strict=True):
     report = vs.Report()
     vs.Validator(world, schemas, report, strict=strict, online=False).run()
     return report
+
+
+def test_checked_date_count_is_nonzero_for_absolute_and_offset_fixtures(tmp_path):
+    absolute = tmp_path / "absolute"
+    build_base_spine(absolute)
+    absolute_report = run_validator(absolute, matter="m99", strict=True)
+    assert absolute_report.checked_dates > 0
+
+    offset_repo = tmp_path / "offset-repo"
+    offset = offset_repo / "data"
+    shutil.copytree(absolute, offset)
+    facts = offset / "matters" / "m99-noncompete-meridian" / "facts.md"
+    facts.write_text(facts.read_text() +
+                     "\nHearing January 13, 2026. {#b:deadbeef}\n",
+                     encoding="utf-8")
+    converted = day_zero.convert_corpus(offset_repo, write=True)
+    assert converted.converted_dates > 0
+    sidecar = json.loads((offset / "matters" / "m99-noncompete-meridian" /
+                          "date-offsets.json").read_text())
+    assert sidecar["entries"]
+    offset_report = run_validator(offset, matter="m99", strict=True)
+    assert offset_report.checked_dates > 0
+    assert offset_report.offset_dates_checked >= len(sidecar["entries"])
+    assert offset_report.day_zero_offset_enforcement is False
+
+
+def test_mutated_prose_offset_fails_semantic_resolution(tmp_path):
+    data = tmp_path / "repo" / "data"
+    build_base_spine(data)
+    facts = data / "matters" / "m99-noncompete-meridian" / "facts.md"
+    facts.write_text(facts.read_text() +
+                     "\nHearing January 13, 2026. {#b:deadbeef}\n",
+                     encoding="utf-8")
+    day_zero.convert_corpus(tmp_path / "repo", write=True)
+    sidecar_path = data / "matters" / "m99-noncompete-meridian" / "date-offsets.json"
+    sidecar = json.loads(sidecar_path.read_text())
+    assert sidecar["entries"]
+    sidecar["entries"][0]["day_zero_offset"] += 1
+    sidecar_path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+
+    report = run_validator(data, matter="m99", strict=True)
+    assert any(f.check == "F30" and "date-offsets entries.0" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_offset_trust_ledger_uses_resolved_chronology(tmp_path):
+    build_base_spine(tmp_path)
+    md = tmp_path / "matters" / "m99-noncompete-meridian"
+    business = _load(md, "business.json")
+    business["trust_entries"] = [
+        {"id": "m99.tr.001", "date": "2026-01-13", "date_day_zero_offset": 2,
+         "type": "deposit", "amount": 500, "running_balance": 500},
+        {"id": "m99.tr.002", "date": "2026-01-14", "date_day_zero_offset": 1,
+         "type": "disbursement", "amount": 400, "running_balance": 0},
+    ]
+    _save(md, "business.json", business)
+
+    report = run_validator(tmp_path, matter="m99", strict=True)
+    assert any(f.check == "B10" and "goes negative" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_declared_absolute_holdout_remains_accepted(tmp_path):
+    build_base_spine(tmp_path)
+    matter_path = tmp_path / "matters" / "m99-noncompete-meridian" / "matter.json"
+    matter = json.loads(matter_path.read_text())
+    holdout_literal = matter["as_of_date"]
+    (tmp_path / "day-zero-holdouts.json").write_text(json.dumps({
+        "schema_version": "1.0.0",
+        "description": "Declared fixed-fact fixture.",
+        "method": "Test fixture declaration.",
+        "summary": {"count": 1, "by_reason": {"fixed fact": 1}},
+        "entries": [{
+            "source": "matters/m99-noncompete-meridian/matter.json",
+            "locator": "as_of_date",
+            "literal": holdout_literal,
+            "reason": "fixed fact",
+            "review_status": vs.DECLARED_HOLDOUT_STATUS,
+        }],
+    }, indent=2), encoding="utf-8")
+    world = vs.discover(tmp_path, "m99")
+    report = vs.Report()
+    validator = vs.Validator(world, vs.SchemaSet(tmp_path / "schemas"), report,
+                             strict=True, online=False,
+                             enforce_day_zero_offsets=True)
+    validator.run()
+    assert report.day_zero_offset_enforcement is True
+    assert report.checked_dates > 0
+    assert not any(f.check == "F30" and "as_of_date remains absolute" in f.message
+                   for f in report.for_scope("m99"))
+    assert any(f.check == "F30" and "open_date remains absolute" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_json_summary_exposes_date_counts_and_effective_switch(tmp_path):
+    build_base_spine(tmp_path)
+    world = vs.discover(tmp_path, "m99")
+    report = vs.Report()
+    vs.Validator(world, vs.SchemaSet(tmp_path / "schemas"), report,
+                 strict=True, online=False).run()
+    payload = vs.build_json_report(world, report, strict=True)
+    assert payload["totals"]["checked_dates"] == report.checked_dates > 0
+    assert payload["totals"]["offset_dates_checked"] == 0
+    assert payload["day_zero_offset_enforcement"] is False
+
+
+def test_validator_registry_count_matches_docstring_and_help():
+    spec = (REPO / "docs" / "research" / "validator-spec.md").read_text()
+    numbered = [int(match.group(1)) for match in
+                re.finditer(r"(?m)^(\d+)\. ", spec)]
+    assert sorted(set(numbered)) == list(range(1, vs.VALIDATOR_CHECK_COUNT + 1))
+    assert f"the {vs.VALIDATOR_CHECK_COUNT} checks" in vs.__doc__
+    assert f"the {vs.VALIDATOR_CHECK_COUNT} checks" in vs.build_arg_parser().format_help()
 
 
 def matter_error_checks(report, mid="m99"):

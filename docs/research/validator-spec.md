@@ -68,6 +68,15 @@
 
 29. Every file validates against its JSON Schema; `schema_version` matches the manifest; a schema failure short-circuits semantic checks for that file.
 
+## G. Day Zero date integrity — P0
+
+30. Date checks resolve the additive `*_day_zero_offset` integer siblings emitted by
+`tools/day_zero.py` against each matter's absolute `open_date`, while continuing to accept
+absolute dates and declared fixed-fact holdouts. The validator reports how many dates it
+actually checked; trust-ledger chronology uses resolved dates rather than raw date strings.
+Enforcement that every convertible date carries its offset sibling is separately switchable
+and remains disabled until the corpus conversion is complete.
+
 ## Implementation priority
 
 1. F + A1–A2 (symbol table core — catches collisions/dangling refs the moment the fleet starts)
