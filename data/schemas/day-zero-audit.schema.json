@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/day-zero-audit.schema.json",
+  "title": "Day Zero anchor-assignment audit",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "description", "method", "summary", "matter_anchors", "excluded_non_dates", "attention_required", "entries"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "description": { "type": "string" },
+    "method": { "type": "string" },
+    "summary": { "type": "object" },
+    "matter_anchors": { "type": "array", "items": { "type": "object", "required": ["matter_id", "matter_slug", "anchor", "reason"] } },
+    "excluded_non_dates": { "type": "array" },
+    "attention_required": { "type": "array" },
+    "entries": { "type": "array", "items": { "type": "object", "required": ["source", "locator", "literal", "anchor", "day_zero_offset", "anchor_reason"] } }
+  }
+}

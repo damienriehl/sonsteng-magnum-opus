@@ -37,6 +37,11 @@
     "@id": { "type": "string" },
     "@context": { "type": ["string", "object"] },
     "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "day_zero_anchor": {
+      "type": "string",
+      "format": "date",
+      "description": "Optional copied matter.open_date used to resolve prose-offset sidecars; kept outside sections."
+    },
     "role_id": {
       "type": "string",
       "pattern": "^m\\d{2}\\.role\\.[a-z0-9-]+$",

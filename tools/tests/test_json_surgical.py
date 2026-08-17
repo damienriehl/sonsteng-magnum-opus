@@ -94,6 +94,12 @@ class LocateTest(unittest.TestCase):
 # Minimal-diff splice
 # --------------------------------------------------------------------------- #
 class SpliceTest(unittest.TestCase):
+    def test_insert_object_property_preserves_siblings(self):
+        raw = '{\n  "date": "2026-01-02",\n  "packed": [1, 2]\n}\n'
+        out = js.insert_object_properties(raw, [("", "date_day_zero", 1)])
+        self.assertIn('"packed": [1, 2]', out)
+        self.assertEqual(json.loads(out)["date_day_zero"], 1)
+
     def test_noop_is_byte_identical(self):
         raw = '{\n  "a": "hello",\n  "b": "world"\n}\n'
         self.assertEqual(js.splice_scalar(raw, "a", "hello"), raw)

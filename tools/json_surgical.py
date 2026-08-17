@@ -334,3 +334,49 @@ def splice_scalars(raw, edits):
 def splice_scalar(raw, dotted, value):
     """Single-edit convenience wrapper around splice_scalars."""
     return splice_scalars(raw, [(dotted, value)])
+
+
+def insert_object_properties(raw, edits):
+    """Add object properties without reserializing their surrounding JSON.
+
+    ``edits`` contains ``(object_path, key, value)`` triples. Existing keys are
+    accepted only when their value is identical, making repeated converter runs
+    byte-for-byte no-ops. The same parse-and-compare safety gate used by scalar
+    surgery guards the result.
+    """
+    out = raw
+    for object_path, key, value in edits:
+        root = parse(out)
+        node = _navigate(root, object_path) if object_path else root
+        if node.kind != "object":
+            raise SurgicalError("insertion target %r is not an object" % object_path)
+        existing = [child for existing_key, child in node.pairs if existing_key == key]
+        if existing:
+            if len(existing) == 1 and existing[0].value == value and type(existing[0].value) is type(value):
+                continue
+            raise SurgicalError("property %r already exists with a different value" % key)
+        ensure_ascii = detect_ensure_ascii(out)
+        encoded_key = json.dumps(key, ensure_ascii=ensure_ascii)
+        encoded_value = json.dumps(value, ensure_ascii=ensure_ascii, separators=(",", ":"))
+        close = node.end - 1
+        line_start = out.rfind("\n", 0, close) + 1
+        closing_indent = out[line_start:close] if out[line_start:close].strip() == "" else ""
+        child_indent = closing_indent + "  "
+        if node.pairs:
+            insertion = ",\n%s%s: %s" % (child_indent, encoded_key, encoded_value)
+        else:
+            insertion = "\n%s%s: %s\n%s" % (child_indent, encoded_key, encoded_value, closing_indent)
+        out = out[:close] + insertion + out[close:]
+
+    expected = json.loads(raw)
+    for object_path, key, value in edits:
+        target = expected
+        if object_path:
+            for part in object_path.split("."):
+                target = target[int(part)] if isinstance(target, list) else target[part]
+        if key in target and (target[key] != value or type(target[key]) is not type(value)):
+            raise SurgicalError("property %r already exists with a different value" % key)
+        target[key] = value
+    if json.loads(out) != expected:
+        raise SurgicalError("inserted result does not match expected object")
+    return out
