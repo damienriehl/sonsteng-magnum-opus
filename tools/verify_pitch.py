@@ -472,7 +472,11 @@ def verify_page(path: str | Path) -> list[str]:
     errors.extend(_link_errors(page, parser))
     errors.extend(_asset_errors(parser))
     errors.extend(_content_errors(parser))
-    if any(element.attrs.get("id") == "proofToggle" for element in parser.elements):
+    is_pitch = (
+        page.resolve() == (SITE / "index.html").resolve()
+        or "querySelectorAll('details.proof')" in source
+    )
+    if is_pitch:
         errors.extend(_pitch_contract_errors(parser, source))
     return errors
 

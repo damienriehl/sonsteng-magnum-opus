@@ -141,6 +141,7 @@ def test_mobile_and_print_css_contracts():
     assert re.search(r"overflow-x:\s*auto", html)
     assert ":focus-visible" in html
     assert re.search(r"break-inside:\s*avoid", html)
+    assert "details:not([open])>.sheet{display:block!important}" in html
 
 
 def test_browser_interaction_gate_is_wired_into_preflight():

@@ -119,6 +119,17 @@ async function run() {
       requests.join(', '));
     assert('calculator emits no console errors', consoleErrors.length === 0,
       consoleErrors.join('; '));
+
+    await page.$eval('main>details', details => { details.open = false; });
+    await page.emulateMediaType('print');
+    const printState = await page.evaluate(() => ({
+      detailsOpen: document.querySelector('main>details').open,
+      sheetDisplay: getComputedStyle(document.querySelector('main>details>.sheet')).display,
+      sheetHeight: document.querySelector('main>details>.sheet').getBoundingClientRect().height
+    }));
+    assert('collapsed worksheet remains visible in print without mutating state',
+      !printState.detailsOpen && printState.sheetDisplay !== 'none' && printState.sheetHeight > 0,
+      `${printState.sheetDisplay}, ${printState.sheetHeight}px`);
   } finally {
     await browser.close();
   }

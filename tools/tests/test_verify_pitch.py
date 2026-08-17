@@ -252,6 +252,22 @@ def test_missing_print_rule_mutation_is_caught(tmp_path: Path):
     assert any("@media print" in error for error in verify_pitch.verify_page(path))
 
 
+def test_missing_expand_all_control_cannot_disable_pitch_contract(tmp_path: Path):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    mutated = re.sub(
+        r'<div class="proof-toggle-wrap wrap"><button[^>]*id="proofToggle"[^>]*>'
+        r'.*?</button></div>',
+        "",
+        source,
+        count=1,
+    )
+    path = tmp_path / "missing-proof-toggle.html"
+    path.write_text(mutated, encoding="utf-8")
+    errors = verify_pitch.verify_page(path)
+    assert any('id="proofToggle"' in error for error in errors)
+    assert not any("author surname" in error for error in errors)
+
+
 def test_pitch_opens_problem_then_midstate_demonstration():
     parser = verify_pitch._parse(ROOT / "site/index.html")
     section_ids = [
