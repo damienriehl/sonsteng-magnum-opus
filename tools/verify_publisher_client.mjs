@@ -51,8 +51,11 @@ async function run() {
     await reviewPage.click('input[name="decision-op-punct"][value="questioned"]');
     await reviewPage.click("#pub-submit-review");
     await reviewPage.waitForFunction(() => !document.querySelector("#error-summary").hidden);
-    await reviewPage.type('[data-note-for="questioned"]',"Should this be an exclamation point?");
-    await reviewPage.click("#pub-submit-review");
+    const questionedNote = '[data-operation-id="op-punct"] [data-note-for="questioned"]';
+    await reviewPage.waitForSelector(questionedNote, {visible:true});
+    await reviewPage.type(questionedNote,"Should this be an exclamation point?");
+    await reviewPage.focus("#pub-submit-review");
+    await reviewPage.keyboard.press("Enter");
     await reviewPage.waitForFunction(() => window.reviewCalls.some(call=>call.url.endsWith("/submit")));
     const submitted = await reviewPage.evaluate(() => window.reviewCalls.find(call=>call.url.endsWith("/submit")).body);
     if(submitted.sources.length !== 1 || submitted.sources[0].decisions.length !== 2 ||
