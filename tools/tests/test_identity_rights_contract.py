@@ -14,6 +14,7 @@ sys.path.insert(0, str(TOOLS))
 
 from fresh_site_build import build_fresh_site
 import build_site
+import verify_pitch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,7 +23,10 @@ PITCH = ROOT / "site/index.html"
 README = ROOT / "README.md"
 CONTENT_LICENSE = ROOT / "CONTENT-LICENSE.md"
 MIT_LICENSE = ROOT / "LICENSE"
+MASTER_OUTLINE = ROOT / "docs/master-outline.md"
 CC_BY_URL = "https://creativecommons.org/licenses/by/4.0/"
+COPYRIGHT_LINE = "Copyright (c) 2026 Damien Riehl, John O. Sonsteng, Roger S. Haydock"
+COVER_BYLINE = "John O. Sonsteng · Damien Riehl · Roger S. Haydock"
 MIT_BLOCK = """MIT License
 
 Copyright (c) 2026 Damien Riehl, John O. Sonsteng, Roger S. Haydock
@@ -60,12 +64,8 @@ def fresh_site():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def test_canonical_identity_records_settled_title_credit_and_host():
-    assert identity() == {
-        "title": "Legal Practicum",
-        "byline": "John O. Sonsteng · Damien Riehl · with Roger S. Haydock",
-        "host": "Hosted by Damien Riehl",
-    }
+def test_canonical_identity_records_settled_title():
+    assert identity()["title"] == "Legal Practicum"
 
 
 def test_fresh_generated_pages_use_canonical_current_identity(fresh_site):
@@ -76,9 +76,6 @@ def test_fresh_generated_pages_use_canonical_current_identity(fresh_site):
         text = page.read_text(encoding="utf-8")
         assert "Legal Practicum" in text, page
         assert "Sonsteng Practicum" not in text, page
-    home = (fresh_site / "index.html").read_text(encoding="utf-8")
-    assert identity()["byline"] in home
-    assert identity()["host"] in home
 
 
 def test_page_shell_identity_tracks_the_canonical_source_and_stays_locked(monkeypatch):
@@ -100,19 +97,47 @@ def test_hand_authored_current_surfaces_use_settled_identity():
     readme = README.read_text(encoding="utf-8")
     for text in (pitch, readme):
         assert "Legal Practicum" in text
-        assert identity()["byline"] in text.replace("&nbsp;", " ").replace("</b>", "").replace("<b>", "")
-        assert identity()["host"] in text
     assert "The Sonsteng Magnum Opus" not in pitch
     assert readme.startswith("# Legal Practicum\n")
 
 
-def test_historical_mitchell_attribution_and_technical_names_are_preserved():
+@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will install the new cover byline")
+def test_pitch_uses_new_cover_byline():
+    pitch = PITCH.read_text(encoding="utf-8")
+    normalized_pitch = pitch.replace("&nbsp;", " ").replace("</b>", "").replace("<b>", "")
+    assert COVER_BYLINE in normalized_pitch
+
+
+@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will remove author surnames from pitch body prose")
+def test_pitch_body_prose_does_not_name_authors():
+    author_name_violations = [
+        violation for violation in verify_pitch.verify_page(PITCH)
+        if "author surname in body prose" in violation
+    ]
+    assert author_name_violations == []
+
+
+def test_historical_mitchell_attribution_and_technical_paths_are_preserved():
     readme = README.read_text(encoding="utf-8")
     pitch = PITCH.read_text(encoding="utf-8")
     assert "Mitchell Hamline\nC-LAB" in readme
-    assert "run jointly by Mitchell Hamline's C-LAB and IGUL" in pitch
-    assert "sonsteng.damienriehl.com" in readme
+    assert "Mitchell Hamline" in pitch
+    assert "IGUL" in pitch
     assert "site/platform/" in readme
+
+
+def test_center_name_is_publicly_retired_but_outline_provenance_stands():
+    assert "Center for Law and Business" not in PITCH.read_text(encoding="utf-8")
+    assert "Center for Law and Business" not in README.read_text(encoding="utf-8")
+    outline = MASTER_OUTLINE.read_text(encoding="utf-8").replace("&", "and")
+    assert "Center for Law and Business" in outline
+
+
+@pytest.mark.xfail(strict=True, reason="U10 domain cutover will move the public property")
+def test_readme_uses_legal_practicum_domain():
+    readme = README.read_text(encoding="utf-8")
+    assert "legalpracticum.org" in readme
+    assert "sonsteng.damienriehl.com" not in readme
 
 
 def test_content_license_has_conservative_scope_attribution_and_exclusions():
@@ -131,17 +156,29 @@ def test_content_license_has_conservative_scope_attribution_and_exclusions():
         "software",
         "third-party",
         "data/taxonomy/",
-        "data/midstate/",
         "uncleared recordings",
     ):
         assert excluded in excluded_section.lower()
     assert CC_BY_URL in content
-    assert "Legal Practicum — John O. Sonsteng · Damien Riehl · with Roger S. Haydock" in content
     assert "indicate if changes were made" in content
+
+
+@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will retire the Midstate licence carve-out")
+def test_content_license_includes_midstate_under_existing_dual_licence():
+    content = CONTENT_LICENSE.read_text(encoding="utf-8")
+    excluded_section = content.split("## Excluded material", 1)[1]
+    assert "data/midstate/" not in excluded_section.lower()
+
+
+@pytest.mark.xfail(strict=True, reason="U4 de-naming sweep will install the new content attribution")
+def test_content_license_uses_new_cover_byline():
+    content = CONTENT_LICENSE.read_text(encoding="utf-8")
+    assert f"Legal Practicum — {COVER_BYLINE}" in content
 
 
 def test_mit_notice_is_unchanged_and_points_to_layered_scope():
     license_text = MIT_LICENSE.read_text(encoding="utf-8")
+    assert license_text.splitlines()[2] == COPYRIGHT_LINE
     assert license_text.startswith(MIT_BLOCK + "\nScope note")
     assert "CONTENT-LICENSE.md" in license_text
 
