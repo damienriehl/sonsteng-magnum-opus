@@ -93,7 +93,7 @@
     // the terminal message_delta so all budget/replay bookkeeping is identical.
     // Anthropic-only; openai/google BYOK fall back to non-streaming. Default OFF
     // in every env — flip only after the D7 rehearsal says it feels slow.
-    "STREAMING": "false",
+    "STREAMING": "true",
 
     // ---- Turnstile bot-gate (WP6) ------------------------------------------
     // TURNSTILE_ENABLED: "false" disables the GET /v1/session bot-gate
@@ -193,7 +193,7 @@
         "DEMO_RESERVE_USD": "3",
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
-        "STREAMING": "false",
+        "STREAMING": "true",
         "TURNSTILE_ENABLED": "true",
         "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
         "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",

@@ -458,3 +458,22 @@ test("both browser origins are on the DEV allowlist while the tokens live (KTD6)
     assert.ok(list.includes("https://sonsteng-chat.damienriehl.workers.dev"), `${name}: fallback origin`);
   }
 });
+
+test("streaming is enabled consistently on DEV and remains disabled on production (U19)", () => {
+  const cfg = wranglerConfig();
+  const topLevelDev = cfg.vars.STREAMING;
+  const explicitDev = cfg.env.dev.vars.STREAMING;
+
+  assert.equal(topLevelDev, "true", "the default DEV deploy target must enable streaming");
+  assert.equal(explicitDev, "true", "the explicit --env dev target must enable streaming");
+  assert.equal(
+    topLevelDev,
+    explicitDev,
+    "the two DEV deployment targets must not be half-flipped",
+  );
+  assert.equal(
+    cfg.env.production.vars.STREAMING,
+    "false",
+    "production streaming must remain explicitly disabled",
+  );
+});
