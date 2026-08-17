@@ -11,7 +11,9 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import re
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -58,33 +60,35 @@ def _proposal_map(proposal: dict) -> dict[str, dict]:
     return mapped
 
 
-def _resolve_source_line(repo: Path, row: dict) -> str:
+def resolve_raw_occurrence(repo: Path, row: dict) -> tuple[str, int, int]:
+    """Resolve a raw locator to its exact literal occurrence.
+
+    Returns the source line, the zero-based date ordinal on that line, and the
+    one-based exact-literal occurrence across the source.
+    """
     match = LINE_LOCATOR_RE.match(row["locator"])
     if not match:
         raise ValueError(f"unsupported raw locator: {row['key']}")
     lines = (repo / row["source"]).read_text().splitlines()
-    line_number = int(match.group(1))
-    if 1 <= line_number <= len(lines) and row["literal"] in lines[line_number - 1]:
-        return lines[line_number - 1]
-    candidates = [line for line in lines if row["literal"] in line]
-    if not candidates:
+    requested_occurrence = int(match.group(2))
+    candidates = []
+    for line in lines:
+        for date_ordinal, dated in enumerate(DATE_RE.finditer(line)):
+            if dated.group(0) == row["literal"]:
+                candidates.append((line, date_ordinal))
+    if requested_occurrence < 1 or requested_occurrence > len(candidates):
         raise ValueError(f"raw locator no longer resolves: {row['key']}")
-    occurrence = min(int(match.group(2)), len(candidates)) - 1
-    return candidates[occurrence]
+    line, date_ordinal = candidates[requested_occurrence - 1]
+    return line, date_ordinal, requested_occurrence
 
 
 def _durable_locator(repo: Path, row: dict) -> str:
     locator = row["locator"]
     if LINE_LOCATOR_RE.match(locator):
-        line = _resolve_source_line(repo, row)
-        matches = list(DATE_RE.finditer(line))
-        literal_indexes = [index for index, match in enumerate(matches) if match.group(0) == row["literal"]]
-        if not literal_indexes:
-            raise ValueError(f"literal is absent from resolved raw line: {row['key']}")
-        ordinal = literal_indexes[0]
+        line, date_ordinal, occurrence = resolve_raw_occurrence(repo, row)
         normalized = " ".join(DATE_RE.sub("<date>", line).split())
         fingerprint = hashlib.sha256(normalized.encode()).hexdigest()[:16]
-        return f"raw:{fingerprint}:date:{ordinal}"
+        return f"raw:{fingerprint}:occurrence:{occurrence}:date:{date_ordinal}"
     if ":date:" in locator:
         return "json:" + locator
     return locator
@@ -208,7 +212,67 @@ def apply_review(repo: Path, proposal: dict, holdouts: dict, audit: dict) -> tup
     })
     if resolved_audit["summary"]["reconciled_category_total"] != inventory_total:
         raise ValueError("resolved full-date inventory does not reconcile")
+    identities = [
+        (row["source"], str(row["locator"]), row["literal"])
+        for row in resolved_entries
+    ]
+    if len(identities) != len(set(identities)):
+        raise ValueError("resolved conversion identities are not unique")
     return resolved_holdouts, resolved_audit
+
+
+def _stage_bytes(path: Path, payload: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, staged_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    staged = Path(staged_name)
+    try:
+        if path.exists():
+            os.chmod(staged, path.stat().st_mode & 0o777)
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return staged
+    except Exception:
+        if descriptor >= 0:
+            os.close(descriptor)
+        staged.unlink(missing_ok=True)
+        raise
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_governed_pair(
+    first_path: Path, first_text: str, second_path: Path, second_text: str
+) -> None:
+    """Replace a coupled artifact pair, restoring the first on second-file failure."""
+    first_original = first_path.read_bytes()
+    first_staged = _stage_bytes(first_path, first_text.encode())
+    second_staged = _stage_bytes(second_path, second_text.encode())
+    first_rollback = _stage_bytes(first_path, first_original)
+    try:
+        os.replace(first_staged, first_path)
+        try:
+            os.replace(second_staged, second_path)
+        except Exception:
+            os.replace(first_rollback, first_path)
+            _fsync_directory(first_path.parent)
+            raise
+        for parent in {first_path.parent, second_path.parent}:
+            _fsync_directory(parent)
+    finally:
+        first_staged.unlink(missing_ok=True)
+        second_staged.unlink(missing_ok=True)
+        first_rollback.unlink(missing_ok=True)
 
 
 def _approval_digest(repo: Path, proposal_path: Path) -> str:
@@ -282,8 +346,12 @@ def main() -> int:
         resolved_holdouts, resolved_audit = apply_review(
             repo, proposal, pending_holdouts, pending_audit
         )
-        holdout_path.write_text(_render(resolved_holdouts))
-        audit_path.write_text(_render(resolved_audit))
+        _write_governed_pair(
+            holdout_path,
+            _render(resolved_holdouts),
+            audit_path,
+            _render(resolved_audit),
+        )
         state = "applied"
     else:
         validate_applied_review(repo, proposal, holdouts, audit)

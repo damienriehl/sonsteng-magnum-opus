@@ -1344,18 +1344,7 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:112dce43ef376adf:date:0",
-      "literal": "2025-02-12",
-      "anchor": "2025-02-13",
-      "day_zero_offset": -1,
-      "anchor_reason": "matter m03 existing open_date",
-      "source_locator": "line:7:raw-occurrence:1",
-      "review_status": "human_confirmed_convertible",
-      "review_reason": "The source context describes a dated event in m03-tort-meridian. It is relative to that matter's existing 2025-02-13 open_date (offset -1), but conversion must wait until the prose/table location has a durable block or field locator."
-    },
-    {
-      "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:112dce43ef376adf:date:0",
+      "locator": "raw:001d8b424d59f533:occurrence:2:date:0",
       "literal": "2025-02-12",
       "anchor": "2025-02-13",
       "day_zero_offset": -1,
@@ -1366,7 +1355,18 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:3eaf67bf39c34112:date:0",
+      "locator": "raw:112dce43ef376adf:occurrence:1:date:0",
+      "literal": "2025-02-12",
+      "anchor": "2025-02-13",
+      "day_zero_offset": -1,
+      "anchor_reason": "matter m03 existing open_date",
+      "source_locator": "line:7:raw-occurrence:1",
+      "review_status": "human_confirmed_convertible",
+      "review_reason": "The source context describes a dated event in m03-tort-meridian. It is relative to that matter's existing 2025-02-13 open_date (offset -1), but conversion must wait until the prose/table location has a durable block or field locator."
+    },
+    {
+      "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
+      "locator": "raw:3eaf67bf39c34112:occurrence:1:date:0",
       "literal": "2025-02-09",
       "anchor": "2025-02-13",
       "day_zero_offset": -4,
@@ -1377,7 +1377,7 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:53995ec7888b774b:date:0",
+      "locator": "raw:53995ec7888b774b:occurrence:1:date:0",
       "literal": "2025-02-24",
       "anchor": "2025-02-13",
       "day_zero_offset": 11,
@@ -1388,7 +1388,7 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:53995ec7888b774b:date:1",
+      "locator": "raw:53995ec7888b774b:occurrence:1:date:1",
       "literal": "2025-07-18",
       "anchor": "2025-02-13",
       "day_zero_offset": 155,
@@ -1399,7 +1399,7 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:54b6ebb1d0aad859:date:0",
+      "locator": "raw:54b6ebb1d0aad859:occurrence:1:date:0",
       "literal": "2025-04-30",
       "anchor": "2025-02-13",
       "day_zero_offset": 76,
@@ -1410,7 +1410,7 @@
     },
     {
       "source": "data/matters/m03-tort-meridian/case-file/exhibit-medical-summary.md",
-      "locator": "raw:f9627cc3c215d5a8:date:0",
+      "locator": "raw:f9627cc3c215d5a8:occurrence:1:date:0",
       "literal": "2025-07-22",
       "anchor": "2025-02-13",
       "day_zero_offset": 159,
@@ -3962,7 +3962,7 @@
     },
     {
       "source": "data/matters/m09-dissolution-meridian/case-file/marital-home-records.md",
-      "locator": "raw:b6736326c8ea9f39:date:0",
+      "locator": "raw:b6736326c8ea9f39:occurrence:1:date:0",
       "literal": "April 1, 2026",
       "anchor": "2026-02-18",
       "day_zero_offset": 42,
@@ -5125,7 +5125,7 @@
     },
     {
       "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:12975b692d9054db:date:0",
+      "locator": "raw:12975b692d9054db:occurrence:1:date:0",
       "literal": "2025-11-04",
       "anchor": "2026-01-26",
       "day_zero_offset": -83,
@@ -5136,7 +5136,7 @@
     },
     {
       "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:365083828c90100f:date:0",
+      "locator": "raw:365083828c90100f:occurrence:1:date:0",
       "literal": "2025-10-14",
       "anchor": "2026-01-26",
       "day_zero_offset": -104,
@@ -5147,18 +5147,7 @@
     },
     {
       "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:365083828c90100f:date:0",
-      "literal": "2025-10-14",
-      "anchor": "2026-01-26",
-      "day_zero_offset": -104,
-      "anchor_reason": "matter m11 existing open_date",
-      "source_locator": "line:7:raw-occurrence:2",
-      "review_status": "human_confirmed_convertible",
-      "review_reason": "The source context describes a dated event in m11-arbitration-il. It is relative to that matter's existing 2026-01-26 open_date (offset -104), but conversion must wait until the prose/table location has a durable block or field locator."
-    },
-    {
-      "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:68259152a060f625:date:0",
+      "locator": "raw:68259152a060f625:occurrence:1:date:0",
       "literal": "2025-11-05",
       "anchor": "2026-01-26",
       "day_zero_offset": -82,
@@ -5169,7 +5158,18 @@
     },
     {
       "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:aa574abb77deb62d:date:0",
+      "locator": "raw:78f0ce54bf8fc77c:occurrence:2:date:0",
+      "literal": "2025-10-14",
+      "anchor": "2026-01-26",
+      "day_zero_offset": -104,
+      "anchor_reason": "matter m11 existing open_date",
+      "source_locator": "line:7:raw-occurrence:2",
+      "review_status": "human_confirmed_convertible",
+      "review_reason": "The source context describes a dated event in m11-arbitration-il. It is relative to that matter's existing 2026-01-26 open_date (offset -104), but conversion must wait until the prose/table location has a durable block or field locator."
+    },
+    {
+      "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
+      "locator": "raw:aa574abb77deb62d:occurrence:1:date:0",
       "literal": "2025-10-21",
       "anchor": "2026-01-26",
       "day_zero_offset": -97,
@@ -5180,7 +5180,7 @@
     },
     {
       "source": "data/matters/m11-arbitration-il/case-file/timekeeping-records.md",
-      "locator": "raw:b6f9969dbb14a606:date:0",
+      "locator": "raw:b6f9969dbb14a606:occurrence:1:date:0",
       "literal": "2025-11-11",
       "anchor": "2026-01-26",
       "day_zero_offset": -76,
@@ -6626,7 +6626,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:0d01f8e6509ddde9:date:0",
+      "locator": "raw:0d01f8e6509ddde9:occurrence:1:date:0",
       "literal": "2025-02-10",
       "anchor": "2025-03-10",
       "day_zero_offset": -28,
@@ -6637,7 +6637,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:4b017409f610a544:date:0",
+      "locator": "raw:4b017409f610a544:occurrence:1:date:0",
       "literal": "2025-05-02",
       "anchor": "2025-03-10",
       "day_zero_offset": 53,
@@ -6648,7 +6648,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:6ecdab84e2f85eae:date:0",
+      "locator": "raw:6ecdab84e2f85eae:occurrence:1:date:0",
       "literal": "2025-03-14",
       "anchor": "2025-03-10",
       "day_zero_offset": 4,
@@ -6659,7 +6659,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:820563aff0bdbadd:date:0",
+      "locator": "raw:820563aff0bdbadd:occurrence:1:date:0",
       "literal": "2025-05-20",
       "anchor": "2025-03-10",
       "day_zero_offset": 71,
@@ -6670,7 +6670,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:f14a76dd2f7c504d:date:0",
+      "locator": "raw:f14a76dd2f7c504d:occurrence:1:date:0",
       "literal": "2025-04-08",
       "anchor": "2025-03-10",
       "day_zero_offset": 29,
@@ -6681,7 +6681,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/pip-correspondence.md",
-      "locator": "raw:f21e0d6181b8e897:date:0",
+      "locator": "raw:f21e0d6181b8e897:occurrence:1:date:0",
       "literal": "2025-02-24",
       "anchor": "2025-03-10",
       "day_zero_offset": -14,
@@ -6708,7 +6708,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:113804393bc40011:date:0",
+      "locator": "raw:113804393bc40011:occurrence:1:date:0",
       "literal": "2025-01-26",
       "anchor": "2025-03-10",
       "day_zero_offset": -43,
@@ -6719,7 +6719,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:26ac01da1426c490:date:0",
+      "locator": "raw:26ac01da1426c490:occurrence:1:date:0",
       "literal": "2025-02-02",
       "anchor": "2025-03-10",
       "day_zero_offset": -36,
@@ -6730,7 +6730,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:3f7318167c7a7d2a:date:0",
+      "locator": "raw:3f7318167c7a7d2a:occurrence:1:date:0",
       "literal": "2025-01-12",
       "anchor": "2025-03-10",
       "day_zero_offset": -57,
@@ -6741,7 +6741,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:4f43be6b8c5d56a8:date:0",
+      "locator": "raw:4f43be6b8c5d56a8:occurrence:1:date:0",
       "literal": "2024-11-24",
       "anchor": "2025-03-10",
       "day_zero_offset": -106,
@@ -6752,7 +6752,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:5f880864c2d42c4e:date:0",
+      "locator": "raw:5f880864c2d42c4e:occurrence:1:date:0",
       "literal": "2025-01-05",
       "anchor": "2025-03-10",
       "day_zero_offset": -64,
@@ -6763,7 +6763,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:61942f7a222051e7:date:0",
+      "locator": "raw:61942f7a222051e7:occurrence:1:date:0",
       "literal": "2024-12-08",
       "anchor": "2025-03-10",
       "day_zero_offset": -92,
@@ -6774,7 +6774,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:9c5897b230370065:date:0",
+      "locator": "raw:9c5897b230370065:occurrence:1:date:0",
       "literal": "2024-12-22",
       "anchor": "2025-03-10",
       "day_zero_offset": -78,
@@ -6785,7 +6785,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:b6f770aa8078c540:date:0",
+      "locator": "raw:b6f770aa8078c540:occurrence:1:date:0",
       "literal": "2024-12-15",
       "anchor": "2025-03-10",
       "day_zero_offset": -85,
@@ -6796,7 +6796,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:c49527252465b8f5:date:0",
+      "locator": "raw:c49527252465b8f5:occurrence:1:date:0",
       "literal": "2024-12-01",
       "anchor": "2025-03-10",
       "day_zero_offset": -99,
@@ -6807,7 +6807,7 @@
     },
     {
       "source": "data/matters/m13-tort-fl/case-file/rideshare-earnings.md",
-      "locator": "raw:f491bca5ba2cf07a:date:0",
+      "locator": "raw:f491bca5ba2cf07a:occurrence:1:date:0",
       "literal": "2025-01-19",
       "anchor": "2025-03-10",
       "day_zero_offset": -50,
@@ -9153,7 +9153,7 @@
     },
     {
       "source": "data/matters/m18-juvenile-ca/case-file/police-report.md",
-      "locator": "raw:44a0dbe127729af2:date:0",
+      "locator": "raw:44a0dbe127729af2:occurrence:2:date:0",
       "literal": "April 14, 2026",
       "anchor": "2026-04-20",
       "day_zero_offset": -6,
@@ -9164,7 +9164,7 @@
     },
     {
       "source": "data/matters/m18-juvenile-ca/case-file/police-report.md",
-      "locator": "raw:44a0dbe127729af2:date:1",
+      "locator": "raw:44a0dbe127729af2:occurrence:2:date:1",
       "literal": "April 10, 2026",
       "anchor": "2026-04-20",
       "day_zero_offset": -10,

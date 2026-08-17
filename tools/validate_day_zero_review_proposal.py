@@ -14,6 +14,7 @@ TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
 import day_zero  # noqa: E402
+from apply_day_zero_review import resolve_raw_occurrence  # noqa: E402
 
 
 PROPOSAL_REL = Path("docs/evidence/2026-08-17-day-zero-review-proposal.json")
@@ -33,6 +34,17 @@ ANCHOR_DISPOSITIONS = {
     "needs_subject_matter_judgment",
 }
 MARKER_RE = re.compile(r"\{#b:[0-9a-f]{8}\}")
+LINE_LOCATOR_RE = re.compile(r"^line:(\d+):raw-occurrence:(\d+)$")
+APPROVED_RAW_CONTEXT_EXCEPTIONS = frozenset({
+    (
+        "anchor_attention|data/matters/m03-tort-meridian/case-file/"
+        "exhibit-medical-summary.md|line:8:raw-occurrence:2|2025-02-12"
+    ),
+    (
+        "anchor_attention|data/matters/m11-arbitration-il/case-file/"
+        "timekeeping-records.md|line:7:raw-occurrence:2|2025-10-14"
+    ),
+})
 
 
 def _load(path: Path):
@@ -117,20 +129,10 @@ def _context_for(repo: Path, row: dict) -> str:
             raise ValueError(f"{row['source']}#{locator}: JSON scalar no longer resolves")
         return _compact(values[0], literal)
 
-    line_match = re.match(r"^line:(\d+):raw-occurrence:(\d+)$", locator)
+    line_match = LINE_LOCATOR_RE.match(locator)
     if line_match:
-        lines = path.read_text().splitlines()
-        line = int(line_match.group(1))
-        occurrence = int(line_match.group(2))
-        if 1 <= line <= len(lines) and literal in lines[line - 1]:
-            return _compact(lines[line - 1], literal)
-        # Raw-census line numbers can predate later durable-ID formatting. Resolve
-        # the governed literal occurrence explicitly while retaining its locator.
-        candidates = [candidate for candidate in lines if literal in candidate]
-        if not candidates:
-            raise ValueError(f"{row['source']}#{locator}: raw literal no longer resolves")
-        index = occurrence - 1 if occurrence <= len(candidates) else 0
-        return _compact(candidates[index], literal)
+        line, _, _ = resolve_raw_occurrence(repo, row)
+        return _compact(line, literal)
 
     raw = path.read_text()
     if raw.count(literal) != 1:
@@ -212,8 +214,19 @@ def validate_proposal(repo: Path, proposal: dict) -> None:
             raise ValueError(f"{row['key']}: referenced source does not exist")
         if row["literal"] not in row["context_excerpt"]:
             raise ValueError(f"{row['key']}: context does not contain literal")
-        if row["context_excerpt"] != _context_for(repo, row):
-            raise ValueError(f"{row['key']}: stored context is stale or resolves another occurrence")
+        resolved_context = _context_for(repo, row)
+        if row["context_excerpt"] != resolved_context:
+            # The approved proposal is immutable evidence. Its original raw-line
+            # resolver copied the first matching context for two repeated dates.
+            # After approval, require the exact occurrence to remain resolvable,
+            # but do not rewrite the evidence or invalidate its recorded digest.
+            approved_raw_evidence = (
+                approved and row["key"] in APPROVED_RAW_CONTEXT_EXCEPTIONS
+            )
+            if not approved_raw_evidence:
+                raise ValueError(
+                    f"{row['key']}: stored context is stale or resolves another occurrence"
+                )
         if row["proposed_disposition"] in {
             "convertible", "convertible_after_durable_locator_added"
         }:

@@ -74,6 +74,48 @@ def test_duplicate_raw_locator_is_disambiguated_by_literal_and_gets_durable_loca
     assert all(row["source_locator"] == "line:9:raw-occurrence:1" for row in rows)
 
 
+def test_repeated_identical_raw_literals_keep_distinct_durable_identities():
+    module = load_module()
+    proposal, holdouts, audit = load_inputs(module)
+
+    _, resolved_audit = module.apply_review(REPO, proposal, holdouts, audit)
+
+    repeated = [
+        row for row in resolved_audit["entries"]
+        if (
+            row["source"].endswith("exhibit-medical-summary.md")
+            and row["literal"] == "2025-02-12"
+        ) or (
+            row["source"].endswith("timekeeping-records.md")
+            and row["literal"] == "2025-10-14"
+            and row.get("source_locator", "").startswith("line:")
+        )
+    ]
+    assert len(repeated) == 4
+    assert len({(row["source"], row["locator"], row["literal"]) for row in repeated}) == 4
+    identities = [
+        (row["source"], row["locator"], row["literal"])
+        for row in resolved_audit["entries"]
+    ]
+    assert len(identities) == len(set(identities))
+
+
+def test_raw_occurrence_out_of_range_is_rejected():
+    module = load_module()
+    proposal, _, _ = load_inputs(module)
+    row = next(
+        row for row in proposal["proposals"]
+        if row["source"].endswith("exhibit-medical-summary.md")
+        and row["literal"] == "2025-02-12"
+    )
+    row = copy.deepcopy(row)
+    row["locator"] = "line:7:raw-occurrence:999"
+    row["key"] = module.proposal_key(row)
+
+    with pytest.raises(ValueError, match="raw locator no longer resolves"):
+        module._durable_locator(REPO, row)
+
+
 def test_apply_review_rejects_missing_unknown_and_replayed_keys():
     module = load_module()
     proposal, holdouts, audit = load_inputs(module)
@@ -130,3 +172,32 @@ def test_day_zero_dry_run_round_trips_the_approved_governed_files(tmp_path):
 
     assert audit.read_bytes() == (REPO / "data" / "day-zero-anchor-audit.json").read_bytes()
     assert holdouts.read_bytes() == (REPO / "data" / "day-zero-holdouts.json").read_bytes()
+
+
+def test_governed_pair_write_restores_both_originals_when_second_replace_fails(
+    tmp_path, monkeypatch
+):
+    module = load_module()
+    holdouts = tmp_path / "holdouts.json"
+    audit = tmp_path / "audit.json"
+    holdouts.write_text("old holdouts\n")
+    audit.write_text("old audit\n")
+    real_replace = module.os.replace
+    replace_count = 0
+
+    def fail_second_replace(source, target):
+        nonlocal replace_count
+        replace_count += 1
+        if replace_count == 2:
+            raise OSError("injected second replacement failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(module.os, "replace", fail_second_replace)
+
+    with pytest.raises(OSError, match="injected second replacement failure"):
+        module._write_governed_pair(
+            holdouts, "new holdouts\n", audit, "new audit\n"
+        )
+
+    assert holdouts.read_text() == "old holdouts\n"
+    assert audit.read_text() == "old audit\n"

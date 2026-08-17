@@ -14,21 +14,21 @@
   "entries": [
     {
       "source": "data/curriculum/templates/time-sheet.md",
-      "locator": "raw:77636690d08b2382:date:0",
+      "locator": "raw:77636690d08b2382:occurrence:1:date:0",
       "literal": "2025-11-08",
       "reason": "outside_per_matter_anchor_model",
       "review_status": "declared_absolute_holdout"
     },
     {
       "source": "data/curriculum/templates/time-sheet.md",
-      "locator": "raw:950f15b331950b9b:date:0",
+      "locator": "raw:950f15b331950b9b:occurrence:1:date:0",
       "literal": "2025-11-07",
       "reason": "outside_per_matter_anchor_model",
       "review_status": "declared_absolute_holdout"
     },
     {
       "source": "data/curriculum/templates/time-sheet.md",
-      "locator": "raw:dcf20cf86f4b50a5:date:0",
+      "locator": "raw:dcf20cf86f4b50a5:occurrence:1:date:0",
       "literal": "2025-11-05",
       "reason": "outside_per_matter_anchor_model",
       "review_status": "declared_absolute_holdout"
@@ -4438,21 +4438,21 @@
     },
     {
       "source": "data/matters/manifest.json",
-      "locator": "raw:04a976a7620fc902:date:0",
+      "locator": "raw:04a976a7620fc902:occurrence:1:date:0",
       "literal": "2026-06-30",
       "reason": "global_manifest_date_is_fixed_fact",
       "review_status": "declared_absolute_holdout"
     },
     {
       "source": "data/matters/manifest.json",
-      "locator": "raw:571cd88a0d40cf86:date:0",
+      "locator": "raw:571cd88a0d40cf86:occurrence:1:date:0",
       "literal": "2024-01-01",
       "reason": "global_manifest_date_is_fixed_fact",
       "review_status": "declared_absolute_holdout"
     },
     {
       "source": "data/matters/manifest.json",
-      "locator": "raw:571cd88a0d40cf86:date:1",
+      "locator": "raw:571cd88a0d40cf86:occurrence:2:date:1",
       "literal": "2026-06-30",
       "reason": "global_manifest_date_is_fixed_fact",
       "review_status": "declared_absolute_holdout"
