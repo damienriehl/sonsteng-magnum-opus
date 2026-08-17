@@ -5,6 +5,7 @@
     "about/content-license.html",
     "about/third-party.html",
     "firm/index.html",
+    "hours/index.html",
     "index.html",
     "matters/index.html",
     "matters/m01-arbitration-meridian/facts/index.html",
@@ -75,10 +76,10 @@
     "templates/index.html"
   ],
   "fields": {
-    "text": "50a79eeba45110a24a71b9b6a3513c1649c06a66ba620ec83b22bad79acc56db",
-    "headings": "6313872a4b660cbbea6dd564395de617d8f47e062f02f44b59734e9819b7fb3a",
-    "links": "96a682b9834d1b99f3a54b48945bbfebd994c3bc644a86c7402bd5f171f70f7b",
-    "editor_blocks": "d4135cea5b354b2f5e489f26c692074d626057bf80356e95be71140a7ffd54d4",
-    "reading_order": "1f2205a4c933aba2c0050568394c4d2bec3166f726332803c83220b4b6ae88cc"
+    "text": "44a28602b1f9e3a625a010a42f51ac2abb16a2690a65e04f4c332cb0458256e7",
+    "headings": "ac62c9d077e189bd8688310bbf2f3fd66e8d8b411aee4d32752756b01392d743",
+    "links": "630c7ca30bf13e030b36870a258a5201d3f8e1a771ee48ccc8ccbd2f0abdbe5e",
+    "editor_blocks": "f8319739017055c03f71340f108d05677f7b24732ad99925537bd10cb5de1dca",
+    "reading_order": "794691851ffd1e382ea23306d35ea66e32279675ab2f3b3f9d53765ff6acbf17"
   }
 }

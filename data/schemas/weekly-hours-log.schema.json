@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://legalpracticum.example/schemas/weekly-hours-log.schema.json",
+  "title": "Legal Practicum weekly hours log export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "learner_id", "offering_id", "week", "entries", "contribution_log"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "learner_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"},
+    "offering_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"},
+    "week": {
+      "type": "object", "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"}
+      }
+    },
+    "entries": {
+      "type": "array", "maxItems": 500,
+      "items": {"$ref": "#/$defs/entry"}
+    },
+    "contribution_log": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/contribution"}}
+  },
+  "$defs": {
+    "shortText": {"type": "string", "minLength": 1, "maxLength": 500},
+    "hours": {"type": "number", "minimum": 0, "maximum": 168, "multipleOf": 0.1},
+    "contribution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "deliverable_id", "deliverable_title", "contribution_date", "contribution_type", "description"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"},
+        "deliverable_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"},
+        "deliverable_title": {"$ref": "#/$defs/shortText"},
+        "contribution_date": {"type": "string", "format": "date"},
+        "contribution_type": {"$ref": "#/$defs/shortText"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "related_entry_ids": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+      }
+    },
+    "entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "date", "project", "matter", "activity", "worked_hours", "billable_hours", "class_time", "narrative"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$"},
+        "date": {"type": "string", "format": "date"},
+        "project": {"$ref": "#/$defs/shortText"},
+        "matter": {"type": "string", "maxLength": 500},
+        "activity": {"$ref": "#/$defs/shortText"},
+        "worked_hours": {"$ref": "#/$defs/hours"},
+        "billable_hours": {"$ref": "#/$defs/hours"},
+        "class_time": {"type": "boolean"},
+        "narrative": {"type": "string", "maxLength": 4000}
+      }
+    }
+  }
+}

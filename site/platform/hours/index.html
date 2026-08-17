@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>Weekly hours log — Legal Practicum</title>
+<link rel="stylesheet" href="hours.css">
+<script src="hours-core.js" defer></script>
+<script src="hours.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to hours log</a>
+<header><a href="../index.html">LEGAL PRACTICUM</a><span>WEEKLY HOURS</span></header>
+<main id="main">
+  <h1>Weekly hours log</h1>
+  <p class="lede">Record the time you worked and the time you could bill. The gap is part of the lesson.</p>
+  <section id="disclosure" class="notice" aria-labelledby="privacy-title">
+    <h2 id="privacy-title">Choose where this browser keeps your records</h2>
+    <p>Hours records are sensitive educational data. They are never sent to this site or a server. Persistent mode stores them on this device until you clear them; do not use it on a shared device.</p>
+    <button type="button" data-mode="persistent">Use persistent storage</button>
+    <button type="button" data-mode="session">Use session only</button>
+  </section>
+  <section id="editor" hidden>
+    <div class="week-nav">
+      <button type="button" id="previous-week">← Previous week</button>
+      <h2 id="week-heading"></h2>
+      <button type="button" id="next-week">Next week →</button>
+    </div>
+    <div class="identity">
+      <label>Pseudonymous learner ID <input id="learner-id" maxlength="128" autocomplete="off"></label>
+      <label>Offering ID <input id="offering-id" maxlength="128" autocomplete="off"></label>
+    </div>
+    <div id="entries"></div>
+    <button type="button" id="add-entry">Add dated entry</button>
+    <section aria-labelledby="contribution-heading">
+      <h2 id="contribution-heading">Contribution log by deliverable</h2>
+      <p>Briefly record what you contributed to each deliverable. This replaces the former 50-50 attestation.</p>
+      <div id="contributions"></div>
+      <button type="button" id="add-contribution">Add deliverable contribution</button>
+    </section>
+    <dl class="totals"><div><dt>Worked</dt><dd id="total-worked">0.0</dd></div><div><dt>Billable</dt><dd id="total-billable">0.0</dd></div><div><dt>Gap</dt><dd id="total-gap">0.0</dd></div></dl>
+    <div id="validation" role="alert"></div>
+    <div class="actions">
+      <button type="button" id="export-json">Export valid JSON</button>
+      <button type="button" id="export-csv">Export safe CSV</button>
+      <button type="button" id="export-clear">Export and clear</button>
+      <button type="button" id="export-raw" hidden>Export preserved raw data</button>
+      <button type="button" id="clear">Clear records</button>
+    </div>
+    <details><summary>Import JSON</summary>
+      <p>Files are checked before preview. Maximum 1 MB.</p>
+      <input id="import-file" type="file" accept="application/json,.json">
+      <fieldset><legend>Required import action</legend><label><input type="radio" name="import-mode" value="merge"> Merge</label><label><input type="radio" name="import-mode" value="replace"> Replace</label></fieldset>
+      <button type="button" id="preview-import">Validate and preview</button>
+      <div id="import-preview"></div>
+    </details>
+    <p id="storage-status"></p>
+  </section>
+  <div id="announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+</main>
+</body>
+</html>
