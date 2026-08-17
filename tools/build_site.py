@@ -43,6 +43,7 @@ import student_archives
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 APP_CHAT = os.path.join(ROOT, "app", "chat")
+APP_HOURS = os.path.join(ROOT, "app", "hours")
 SITE = os.path.join(ROOT, "site")
 OUT = os.path.join(SITE, "platform")          # generation root
 MATTERS_DIR = os.path.join(DATA, "matters")
@@ -908,18 +909,28 @@ def _table(caption, headers, rows, num_cols=None):
 # --------------------------------------------------------------------------- #
 # Copy chat app
 # --------------------------------------------------------------------------- #
-def copy_chat_app():
-    """Copy the chat app verbatim (rewrite nothing) — every file except test.html."""
+def copy_static_app(source_dir, destination, excluded):
+    """Copy a dependency-free browser app verbatim into generated output."""
     copied = 0
-    for src in sorted(glob.glob(os.path.join(APP_CHAT, "*"))):
+    for src in sorted(glob.glob(os.path.join(source_dir, "*"))):
         name = os.path.basename(src)
-        if name == "test.html" or not os.path.isfile(src):
+        if excluded(name) or not os.path.isfile(src):
             continue
         with open(src, "rb") as fh:
             data = fh.read()
-        write_file(os.path.join("chat", name), data)
+        write_file(os.path.join(destination, name), data)
         copied += 1
     return copied
+
+
+def copy_chat_app():
+    """Copy the chat app verbatim (rewrite nothing) — every file except test.html."""
+    return copy_static_app(APP_CHAT, "chat", lambda name: name == "test.html")
+
+
+def copy_hours_app():
+    """Copy the zero-network, browser-local weekly-hours client verbatim."""
+    return copy_static_app(APP_HOURS, "hours", lambda name: name.startswith("verify-"))
 
 # --------------------------------------------------------------------------- #
 # Shared owned assets: platform.css + platform.js
@@ -1526,6 +1537,12 @@ def build_home(corpus):
       <h3{firm_title_eb}>{firm_title}</h3>
       <p class="matter-card__premise"{firm_description_eb}>{firm_description}</p>
       <span class="arrow-link">Open the ledger</span>
+    </a>
+    <a class="card" href="hours/index.html">
+      <p class="card__meta">LOCAL-FIRST · PRIVATE BY DEFAULT</p>
+      <h3>Weekly hours log</h3>
+      <p class="matter-card__premise">Compare time worked with time you could bill, and record your contribution to each deliverable. Records remain in this browser until you export them.</p>
+      <span class="arrow-link">Record weekly hours</span>
     </a>
     <a class="card" href="templates/index.html">
       <p class="card__meta"{templates_meta_eb}>{templates_meta}</p>
@@ -3974,6 +3991,7 @@ def main(argv):
     clean_output()
     write_platform_assets()
     copy_chat_app()
+    copy_hours_app()
 
     build_home(corpus)
     build_modules(corpus)
