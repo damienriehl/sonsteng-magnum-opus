@@ -1,15 +1,15 @@
 # Legal Practicum
 
-Consolidating **Prof. John O. Sonsteng's** life work on legal-education reform into a
+Consolidating five decades of legal-education reform scholarship into a
 layered whole — a canonical text, a structured practicum curriculum, and an
 AI-assisted delivery platform — that trains the next generation of lawyers through a
 **human-and-AI ("centaur") apprenticeship**.
 
-**John O. Sonsteng · Damien Riehl · with Roger S. Haydock.** Hosted by Damien Riehl;
+**John O. Sonsteng · Damien Riehl · Roger S. Haydock.** Hosted by Damien Riehl;
 open-source and **MIT-licensed**. Extends the open-access
 spirit of the [Open Resource Tool](https://www.openresourcetool.info/) (Mitchell Hamline
-C-LAB × IGUL / Bahçeşehir University) and [Trialbook](https://trialbook.org/)
-(Sonsteng, Haydock & Riehl).
+C-LAB × IGUL / Bahçeşehir University) and the [Trialbook](https://trialbook.org/)
+text and AI platform.
 
 > **Status:** the pitch site AND a working practicum platform v0 — a complete open data
 > spine (20 deep simulated matters, a FOLIO-mapped skills taxonomy, a simulated law
@@ -32,8 +32,8 @@ C-LAB × IGUL / Bahçeşehir University) and [Trialbook](https://trialbook.org/)
 
 ## The idea in one breath
 
-Fifty years of Sonsteng scholarship forms a trilogy — *A Legal Education Renaissance*
-(the diagnosis) → *The Legal Practicum Method* + his live Skills Practicum (the solution)
+The project's source scholarship forms a trilogy — *A Legal Education Renaissance*
+(the diagnosis) → *The Legal Practicum Method* + the live Skills Practicum (the solution)
 → the Open Resource Tool (the commons). AI now makes the proven-but-unscalable 1:1
 apprenticeship scalable: **AI gives unlimited reps + first-pass critique; human faculty
 coach judgment.** Students run 20 matters through a simulated two-lawyer firm — interviewing
@@ -99,11 +99,11 @@ Original educational content in the paths enumerated by
 [CONTENT-LICENSE.md](CONTENT-LICENSE.md) is available under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); software and associated
 code remain under the [MIT License](LICENSE). The content attribution is:
-**Legal Practicum — John O. Sonsteng · Damien Riehl · with Roger S. Haydock**.
+**Legal Practicum — John O. Sonsteng · Damien Riehl · Roger S. Haydock**.
 
 All 20 matters, every party, fact, and document are **original synthetic content**
-(shapes mirror the Sonsteng course; nothing derives from Trialbook/NITA materials).
+(shapes mirror the live Skills Practicum; nothing derives from Trialbook/NITA materials).
 Third-party assets retain their own terms in [THIRD-PARTY.md](THIRD-PARTY.md), and
-taxonomy/research sources, uncleared recordings, and future separately licensed
-Midstate originals are excluded from the CC BY grant. Skills survey provenance:
+taxonomy/research sources and uncleared recordings are excluded from the CC BY grant.
+Skills survey provenance:
 `docs/research/skills-survey.md`.
