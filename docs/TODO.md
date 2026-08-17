@@ -9,6 +9,15 @@ Everything here traces to the John ↔ Damien call of **2026-08-06** unless the
 [`decisions/2026-08-06-john-meeting-outcomes.md`](decisions/2026-08-06-john-meeting-outcomes.md);
 this file is what those decisions oblige us to *do*.
 
+> **Reconciled 2026-08-17** against the codebase by the 21-day plan completion audit
+> ([`plans/2026-08-17-1154-chore-21-day-plan-completion-audit-plan.md`](plans/2026-08-17-1154-chore-21-day-plan-completion-audit-plan.md)).
+> Eight items were finished but still marked open; they are now closed with their
+> evidence. Two more were finished during that audit (T12, T17).
+>
+> **A later record also governs.** `decisions/2026-08-12-john-pitch-docket-outcomes.md`
+> postdates this file and amends T06, T11, T21 and T23. Where the two disagree, the
+> August 12 record wins. Read it before acting on anything below.
+
 ## Format — keep it, the parser depends on it
 
 ```
@@ -46,11 +55,15 @@ this file is what those decisions oblige us to *do*.
       advocates they can be") and the open-source paragraph ("how advocates are
       trained"), plus `README.md:5` and the July 15 brainstorm. Same reasoning
       applies; needs Damien's yes because it is more than the quick edit he asked for.
-- [ ] **T05 — Byline on the site** `@agent` `origin:call-2026-08-06`
+- [x] **T05 — Byline on the site** `@agent` `origin:call-2026-08-06`
       Currently "The work of John O. Sonsteng · with Roger S. Haydock." Should be
       Sonsteng, then Riehl, then Haydock — John: *"it'll be my name and authorship,
       then you, and then if Roger gets involved, his name… it could say 'with Roger.'"*
       Roger has since offered material (T24), so the "with" form is live.
+      **Done** — `README.md:8,102` and `site/index.html:273,658` all read
+      "John O. Sonsteng · Damien Riehl · with Roger S. Haydock". Note the
+      Legal Practicum plan pins a *without-"with"* variant for the new cover
+      byline; that supersession is U4's, not a reopening of T05.
 
 ## Title, home, and rights
 
@@ -58,14 +71,29 @@ this file is what those decisions oblige us to *do*.
       Repo, site, docs, platform. Locked with a noted reservation — John: *"it
       doesn't say enough, but… let's just put legal practicum and stick with it."*
       Revisiting later is explicitly allowed; shipping under it is not blocked.
-- [ ] **T07 — We host it; drop any Mitchell hosting claim** `@agent` `origin:call-2026-08-06`
+      **Partly done; the rest is owned elsewhere — do not re-derive it here.** The
+      name ships in copy and UI. The remaining scope is the identity migration —
+      `legalpracticum.org`, the JSON-LD base still on `sonsteng.damienriehl.com`
+      (262 files), and the repo name — owned by U10 of
+      `plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md` and blocked on
+      Cockpit ask `sonsteng-magnum-opus-2026-08-14-1202-legalpracticum-domain`.
+- [x] **T07 — We host it; drop any Mitchell hosting claim** `@agent` `origin:call-2026-08-06`
       Damien hosts. Mitchell Hamline may adopt it and is welcome to help craft it,
       but gets no hosting byline. John: *"I don't think they're interested… I don't
       want to spend time."*
-- [ ] **T08 — Add the CC-BY 4.0 content license** `@agent` `origin:call-2026-08-06`
+      **Done** — `site/index.html:273,658` and `README.md:8` say "Hosted by
+      Damien Riehl". Mitchell Hamline survives only as co-runner of the separate
+      Open Resource Tool (`site/index.html:384`), which is accurate history, not
+      a hosting claim.
+- [x] **T08 — Add the CC-BY 4.0 content license** `@agent` `origin:call-2026-08-06`
       Beside the existing MIT code license, not replacing it. John's own materials
       go in a separately-licensed directory marked © John O. Sonsteng. Joint work
       is all three authors'. Platform users get attribution-licensed use.
+      **Done** — `CONTENT-LICENSE.md` sits beside MIT and scopes `data/copy/`,
+      `data/curriculum/`, `data/jurisdictions/`, `data/matters/` and the
+      `site/index.html` prose, with the separately-licensed Sonsteng-originals
+      carve-out. Note the 2026-08-12 record (C2) since retired the
+      `data/midstate/` exclusion; U4 of the Legal Practicum plan owns that edit.
 - [ ] **T09 — Record the chain of title** `@john` `origin:call-2026-08-06`
       John bought the Midstate materials **from Anita** — not from Mitchell, which
       he corrected himself mid-sentence. Worth one written line confirming it, since
@@ -78,11 +106,23 @@ this file is what those decisions oblige us to *do*.
 
 - [ ] **T11 — Ingest John's originals** `@agent` `origin:call-2026-08-06`
       Print files plus the video, from the T01 disc, into the separately-licensed
-      directory. Unblocks what `decisions/2026-07-18-midstate-deferred.md` deferred.
-- [ ] **T12 — Enforce the naming rule** `@agent` `origin:call-2026-08-06`
+      directory.
+      **Blocked on Damien**, not on an agent: the disc contents must be digitised
+      or handed off before anything can be ingested. `data/midstate/` does not
+      exist. Blocks T13, T14 and T15 in turn.
+      The old pointer to `decisions/2026-07-18-midstate-deferred.md` is retired —
+      that record self-marked SUPERSEDED on 2026-08-12. Current authority is
+      `decisions/2026-08-12-john-pitch-docket-outcomes.md` (C2): Midstate joins
+      the existing MIT/CC-BY split and needs no separate carve-out.
+- [x] **T12 — Enforce the naming rule** `@agent` `origin:call-2026-08-06`
       **"Midstate and Rogers"** — no "v.", because arbitrations take no versus.
       The court conversion is **"Rogers v. Midstate"**, and the remedy changes from
       reinstatement to **money damages**. Every filename, page title, and packet header.
+      **Done 2026-08-17** in `2584b55`. The fix was written on 2026-08-06
+      (`fix/midstate-naming`) and then never merged — `main` kept shipping
+      "Midstate University v. Pat Rogers & SPEU" for eleven days. Now landed,
+      with `tools/midstate_contract.py` as a fail-closed preflight gate so the
+      legacy caption cannot return.
 - [ ] **T13 — Build the arbitration to full depth** `@agent` `origin:call-2026-08-06`
       First posture. Everything else layers onto the same facts.
 - [ ] **T14 — Capture the settlement layer** `@agent` `origin:call-2026-08-06`
@@ -95,22 +135,33 @@ this file is what those decisions oblige us to *do*.
 
 ## Teaching platform
 
-- [ ] **T16 — AI is the default speaker** `@agent` `origin:call-2026-08-06`
+- [x] **T16 — AI is the default speaker** `@agent` `origin:call-2026-08-06`
       John chose AI outright, for a practical reason: *"it takes so much time to get
       anybody comfortable in front of a camera."* Human speakers are optional and
       deprioritized — not a planned marquee layer.
-- [ ] **T17 — Enforce the locked vocabulary** `@agent` `origin:call-2026-08-06`
+      **Done** — stated in `data/copy/home.json:63` and enforced by
+      `docs/content-style-guide.md:130`.
+- [x] **T17 — Enforce the locked vocabulary** `@agent` `origin:call-2026-08-06`
       "Assessment and feedback," never "grading." "Planning Guide and Checklist" as
       one term — the guide alone went unread, the checklist alone made students think
       every item was mandatory.
-- [ ] **T18 — Catalog: histories free, everything downloadable** `@agent` `origin:call-2026-08-06`
+      **Done 2026-08-17** in `cff323a`. The rule landed on the generated platform
+      on 2026-08-06, but the contract test binds its scan root to the *generated*
+      tree, so the hand-authored `site/index.html` was never scanned and carried
+      ten "grad*" uses the whole time. All ten replaced; the pitch page is now in
+      the contract's scope with a mutation canary beside it.
+- [x] **T18 — Catalog: histories free, everything downloadable** `@agent` `origin:call-2026-08-06`
       Each case shows its procedural and factual history; the full materials are
       downloadable from the public repo. **No paywall** — John: *"I'm ready to give
       it."* "Ordering" means downloading.
-- [ ] **T19 — Keep the catalog uncluttered** `@agent` `origin:call-2026-08-06`
+      **Done** — `6eda4c1`; all 20 matters have student-material archives built by
+      `tools/student_archives.py`, indexed via `site/platform/data/index.json`.
+- [x] **T19 — Keep the catalog uncluttered** `@agent` `origin:call-2026-08-06`
       John's actual worry about listing everything: *"I didn't want to put all that
       into this. It's too cluttered."* Histories in the index, materials behind them.
       The shape has to survive growing toward a thousand items.
+      **Done** — paginated index, composable filters and the synthetic 1,000-matter
+      fixture all ship; `tools/tests/test_catalog_contract.py` holds the shape.
 - [ ] **T20 — Ship the two named syllabi** `@agent` `origin:email-2026-08-05`
       General Practice Practicum and Small Business Practicum — syllabus and
       materials, as the reference implementations.
@@ -120,10 +171,19 @@ this file is what those decisions oblige us to *do*.
 - [ ] **T21 — Weekly hours log** `@agent` `origin:email-2026-08-06`
       Students submit hours spent on projects, including class time, and hours they
       could bill a client. The gap between the two is the lesson.
+      **Specified but never built.** The design is U5 of
+      `plans/2026-08-06-001-feat-august-decision-wave-plan.md`, which lives only on
+      the unmerged `plan/aug6-implementation-wave` branch — so nothing on `main`
+      records the obligation. `app/hours/` and
+      `data/schemas/weekly-hours-log.schema.json` are both absent.
+      Scope narrowed by the 2026-08-12 record (D2): keep the weekly hour report,
+      replace the 50-50 attestation with a per-deliverable contribution log.
 - [ ] **T22 — Competency-based credit proposal** `@agent` `origin:call-2026-08-06`
       A proposal for schools and the ABA. Evidence base: the list of what students
       demonstrably learn *quickly* rather than inefficiently, drawn from T21.
       Meanwhile schools set whatever credits they want.
+      **Specified but never built** — U7 of the same unmerged August-wave plan.
+      `docs/proposals/competency-based-credit.md` does not exist. Depends on T21.
 - [ ] **T23 — Implement the 7-point scale, thresholds configurable** `@agent` `origin:call-2026-08-06`
       John's scale, from the University of Minnesota: 7 points total, 7s rare,
       1 and 2 effectively never given, **3 is failure, 4 is average and therefore
@@ -131,6 +191,16 @@ this file is what those decisions oblige us to *do*.
       Anything under **6** may be redone to reach a 6. Instructors and schools can
       set any thresholds they want, so both numbers are settings, not constants.
       Note John's caution: students read a 4 as terrible because it looks like a C.
+      **Reinterpreted, and now needs a decision before it can be built.** The
+      2026-08-12 record found "seven-point scale" ambiguous; Damien resolved it on
+      2026-08-13 as *the memo template's seven analytic headings*, not a rating
+      scale. How those seven headings relate to the 40 existing point-weighted
+      `rubric.json` files is still open and blocks the assessment panel.
+      Two plans now specify an assessment surface without referencing each other —
+      U6 of the unmerged August-wave plan, and Phase C (U11–U14, U17) of
+      `plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md`. That conflict
+      is decision D10 in
+      `plans/2026-08-17-1154-chore-21-day-plan-completion-audit-plan.md`.
 
 ## Institutional
 
@@ -143,11 +213,14 @@ this file is what those decisions oblige us to *do*.
       what we built; if you want on board, cool; if not, we roll out with Stanford
       and others." John: *"a good way to negotiate without negotiating… up front…
       pleasant rather than confrontational."* Do not front-run this.
-- [ ] **T26 — Alumni are not assessors** `@agent` `origin:call-2026-08-06`
+- [x] **T26 — Alumni are not assessors** `@agent` `origin:call-2026-08-06`
       Reversal of the Aug 5 email idea, and John was blunt: *"they wouldn't be
       giving feedback because you can't trust them. The AI is going to do it."*
       Alumni involvement stays a recommendation to schools for engagement and
       development. Nothing in the platform should route feedback to alumni.
+      **Done** — `app/worker/src/validate.js` fails closed on `alumni_assessor`,
+      reviewer, recipient, notification and feedback-destination fields, proved by
+      a canary in `app/worker/test/platform-language-contract.test.js`.
 - [ ] **T27 — John's editor pass** `@john` `origin:call-2026-08-06`
       John marks up the practicum with the editor's pencils. He said there would
       not be many comments.
