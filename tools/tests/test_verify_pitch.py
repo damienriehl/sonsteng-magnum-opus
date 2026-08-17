@@ -379,3 +379,11 @@ def test_matter_covers_have_keyboard_hover_focus_and_390px_contract():
     assert '@media(max-width:390px)' in source
     assert '.matter-grid{grid-template-columns:1fr}' in source
     assert 'min-width:0' in source
+
+
+def test_preflight_runs_the_pitch_content_contract():
+    preflight = (ROOT / "tools" / "preflight.sh").read_text(encoding="utf-8")
+    gate = 'run "pitch content contract"'
+    assert gate in preflight
+    assert "python3 tools/verify_pitch.py" in preflight
+    assert preflight.index('run "Midstate naming/remedy contract"') < preflight.index(gate)

@@ -50,6 +50,7 @@ run "spine integrity (validate_spine)"      python3 tools/validate_spine.py
 run "site build + link/leak sweeps"         python3 tools/build_site.py --check
 run "public source repository (anonymous)"  curl -fsSIL https://github.com/damienriehl/sonsteng-magnum-opus
 run "Midstate naming/remedy contract"       python3 tools/midstate_contract.py
+run "pitch content contract"                python3 tools/verify_pitch.py
 run "bundle parity"                         python3 tools/check_build_parity.py
 run "python unit tests"                     python3 -m pytest tools/tests/ -q
 run "granular review migration contract"    bash -c 'cd app/worker && node --test test/editor-publisher-review.test.js >/dev/null 2>&1'
