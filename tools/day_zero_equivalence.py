@@ -47,6 +47,9 @@ class DateProof:
     literal: str
     anchor: str
     day_zero_offset: int
+    storage_kind: str
+    storage_path: str
+    storage_locator: str | int
 
 
 @dataclass(frozen=True)
@@ -80,7 +83,14 @@ def _restore(after: bytes, edits: Sequence[ReverseEdit], path: str) -> bytes:
     return restored
 
 
+def _json_get(value, dotted: str):
+    for part in dotted.split("."):
+        value = value[int(part)] if isinstance(value, list) else value[part]
+    return value
+
+
 def file_round_trip(
+    touched_files: Sequence[str],
     before_files: Mapping[str, bytes],
     after_files: Mapping[str, bytes],
     file_proofs: Sequence[FileProof],
@@ -90,7 +100,7 @@ def file_round_trip(
 ) -> RoundTripResult:
     """Prove offsets and bytes for every file in the declared touched set.
 
-    ``before_files`` defines that complete set. A newly-created output is
+    ``touched_files`` defines the authoritative complete set. A newly-created output is
     represented explicitly as ``path: b""`` and its reverse edit must delete
     the complete generated content. There must be exactly one
     file proof and an after snapshot for each path; silently proving only a
@@ -102,7 +112,13 @@ def file_round_trip(
             raise EquivalenceError("%s: duplicate file proof" % item.path)
         proofs_by_path[item.path] = item
 
-    expected = set(before_files)
+    expected = set(touched_files)
+    if len(expected) != len(touched_files):
+        raise EquivalenceError("authoritative touched set contains duplicates")
+    if set(before_files) != expected:
+        raise EquivalenceError("touched-file before snapshots differ: missing=%s extra=%s" %
+                               (sorted(expected - set(before_files)),
+                                sorted(set(before_files) - expected)))
     missing_after = expected - set(after_files)
     extra_after = set(after_files) - expected
     if missing_after or extra_after:
@@ -123,6 +139,7 @@ def file_round_trip(
         if restored != before_files[path]:
             errors.append("%s: byte mismatch after reversing conversion" % path)
 
+    parsed_storage = {}
     for item in date_proofs:
         try:
             literal = _parse_date(item.literal)
@@ -136,6 +153,47 @@ def file_round_trip(
                 (item.path, item.literal, item.day_zero_offset, item.anchor,
                  anchor + timedelta(days=item.day_zero_offset))
             )
+        try:
+            if item.storage_path not in parsed_storage:
+                parsed_storage[item.storage_path] = __import__("json").loads(
+                    after_files[item.storage_path].decode("utf-8")
+                )
+            document = parsed_storage[item.storage_path]
+            if item.storage_kind == "json_sibling":
+                stored_offset = _json_get(document, str(item.storage_locator))
+                stored_literal = _json_get(document, item.locator)
+                if stored_offset != item.day_zero_offset:
+                    errors.append("%s %s: emitted day_zero_offset %r != proof %r" %
+                                  (item.path, item.locator, stored_offset,
+                                   item.day_zero_offset))
+                if stored_literal != item.literal:
+                    errors.append("%s %s: emitted literal %r != proof %r" %
+                                  (item.path, item.locator, stored_literal, item.literal))
+                continue
+            if item.storage_kind != "prose_sidecar":
+                raise ValueError("unknown storage kind %r" % item.storage_kind)
+            stored = document["entries"][int(item.storage_locator)]
+        except (KeyError, IndexError, TypeError, ValueError, UnicodeDecodeError) as exc:
+            errors.append("%s %s: cannot read emitted proof record: %s" %
+                          (item.path, item.locator, exc))
+            continue
+        expected_record = {
+            "source": item.path,
+            "locator": int(item.locator.rsplit(":", 1)[1]),
+            "literal": item.literal,
+            "day_zero_offset": item.day_zero_offset,
+        }
+        if document.get("anchor") != item.anchor:
+            errors.append("%s %s: emitted anchor %r != proof %r" %
+                          (item.path, item.locator, document.get("anchor"), item.anchor))
+        expected_block_id = item.locator.rsplit(":", 1)[0]
+        if stored.get("block_id") != expected_block_id:
+            errors.append("%s %s: emitted block_id %r != proof %r" %
+                          (item.path, item.locator, stored.get("block_id"), expected_block_id))
+        for key, expected_value in expected_record.items():
+            if stored.get(key) != expected_value:
+                errors.append("%s %s: emitted %s %r != proof %r" %
+                              (item.path, item.locator, key, stored.get(key), expected_value))
 
     covered = len(date_proofs)
     converted = covered if converted_date_count is None else converted_date_count

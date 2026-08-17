@@ -142,6 +142,9 @@ SCHEMA_FILES = {
     "debrief_scorecard": "debrief.scorecard.schema.json",
     "critique_scorecard": "critique.scorecard.schema.json",
     "page_copy": "page-copy.schema.json",
+    "date_offsets": "date-offsets.schema.json",
+    "day_zero_audit": "day-zero-audit.schema.json",
+    "day_zero_holdouts": "day-zero-holdouts.schema.json",
 }
 
 # Depth-floor minimums (docs/content-style-guide.md §3).
@@ -361,6 +364,7 @@ class MatterBundle:
         self.exercise: Loaded | None = None
         self.business: Loaded | None = None
         self.other: list[Loaded] = []      # scorecards etc.
+        self.date_offsets: Loaded | None = None
         self.fact_anchors: set[str] = set()
         self.facts_words: int = 0
         self.facts_present: bool = False
@@ -378,6 +382,7 @@ class World:
         self.skills: dict[str, Loaded] = {}
         self.tasks: dict[str, Loaded] = {}
         self.page_copies: list[Loaded] = []
+        self.day_zero_artifacts: list[Loaded] = []
         self.matters: dict[str, MatterBundle] = {}
         self.meridian_reserved: set[str] = set()  # surnames of judges/counties/cities
         self.load_errors: list[tuple[Path, str]] = []
@@ -403,6 +408,20 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             world.load_errors.append((sm_path, err))
         else:
             world.spine_manifest = obj
+
+    # Day Zero review artifacts are spine contracts even though they are not
+    # ordinary id-bearing entities and therefore cannot be classified by id.
+    for fname, etype in (
+        ("day-zero-anchor-audit.json", "day_zero_audit"),
+        ("day-zero-holdouts.json", "day_zero_holdouts"),
+    ):
+        artifact_path = data_dir / fname
+        if artifact_path.exists():
+            obj, err = read_json(artifact_path)
+            if err:
+                world.load_errors.append((artifact_path, err))
+            else:
+                world.day_zero_artifacts.append(Loaded(artifact_path, obj, etype))
 
     # matter registry
     reg_path = data_dir / "matters" / "manifest.json"
@@ -445,6 +464,8 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             fpath = rootp / fname
             if fpath in (sm_path, reg_path, mer_path):
                 continue
+            if fpath.name in {"day-zero-anchor-audit.json", "day-zero-holdouts.json"}:
+                continue  # loaded explicitly above with their non-entity schema types
             if fname in {"folio-crosswalk.json", "editable-fields.json",
                          "taxonomy-identities.json"} or fname.startswith("_"):
                 continue  # --online snapshot / generator scripts, not entity data
@@ -518,6 +539,9 @@ def _fill_bundle(bundle: MatterBundle, directory: Path, world: World):
             obj, err = read_json(fpath)
             if err:
                 world.load_errors.append((fpath, err))
+                continue
+            if fname == "date-offsets.json":
+                bundle.date_offsets = Loaded(fpath, obj, "date_offsets")
                 continue
             etype = classify(obj)
             if etype is None:
@@ -742,8 +766,11 @@ class Validator:
         loaded.extend(self.world.skills.values())
         loaded.extend(self.world.tasks.values())
         loaded.extend(self.world.page_copies)
+        loaded.extend(self.world.day_zero_artifacts)
         for b in self.world.matters.values():
             loaded.extend([x for x in (b.matter, b.rubric, b.exercise, b.business) if x])
+            if b.date_offsets:
+                loaded.append(b.date_offsets)
             loaded.extend(b.personas.values())
             loaded.extend(b.other)
 
@@ -758,7 +785,7 @@ class Validator:
                                     {"file": str(lo.path)})
             # schema_version vs manifest
             want = self._manifest_version(lo.entity_type)
-            got = lo.obj.get("schema_version")
+            got = lo.obj.get("schema_version") if isinstance(lo.obj, dict) else None
             if want is not None and got is not None and got != want:
                 self.report.add(scope, "F29", ERROR,
                                 f"{lo.entity_type} schema_version {got!r} != manifest {want!r}",
@@ -766,6 +793,8 @@ class Validator:
 
     def _scope_of(self, lo: Loaded):
         mid = None
+        if not isinstance(lo.obj, dict):
+            return "GLOBAL"
         if isinstance(lo.obj.get("matter_id"), str):
             mid = lo.obj["matter_id"]
         elif isinstance(lo.obj.get("id"), str):

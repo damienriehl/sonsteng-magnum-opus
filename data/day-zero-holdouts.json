@@ -3,10 +3,10 @@
   "description": "Candidate fixed facts excluded from automatic Day Zero conversion pending human review.",
   "method": "Conservative deterministic classification: bare years, case-citation years, and dates in statutory/effective-date context are held out.",
   "summary": {
-    "count": 674,
+    "count": 645,
     "by_reason": {
-      "bare year is a fixed-fact candidate": 579,
-      "statutory/effective-date context is a fixed fact": 86,
+      "bare year is a fixed-fact candidate": 615,
+      "statutory/effective-date context is a fixed fact": 21,
       "case-citation year is a fixed fact": 9
     }
   },
@@ -23,13 +23,6 @@
       "locator": "b:9cd01e61:year:141",
       "literal": "2024",
       "reason": "bare year is a fixed-fact candidate",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m01-arbitration-meridian/case-file/exh-002-notice-of-discharge.md",
-      "locator": "b:dd865992:0",
-      "literal": "October 15, 2025",
-      "reason": "statutory/effective-date context is a fixed fact",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -1044,14 +1037,14 @@
       "source": "data/matters/m04-realestate-meridian/exercise/answer-key.md",
       "locator": "b:3b75da4c:year:92",
       "literal": "1978",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m04-realestate-meridian/exercise/answer-key.md",
       "locator": "b:3b75da4c:year:327",
       "literal": "2016",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -1252,37 +1245,16 @@
     },
     {
       "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
-      "locator": "b:099d6c02:1",
-      "literal": "January 20, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
-      "locator": "b:099d6c02:2",
-      "literal": "February 10, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
-      "locator": "b:099d6c02:3",
-      "literal": "February 16, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
       "locator": "b:099d6c02:year:56",
       "literal": "2014",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
       "locator": "b:099d6c02:year:286",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -1296,7 +1268,7 @@
       "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
       "locator": "b:099d6c02:year:594",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -1422,21 +1394,21 @@
       "source": "data/matters/m06-noncompete-meridian/facts.md",
       "locator": "b:62a652d4:year:17",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m06-noncompete-meridian/facts.md",
       "locator": "b:62a652d4:year:251",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m06-noncompete-meridian/facts.md",
       "locator": "b:62a652d4:year:284",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -1493,27 +1465,6 @@
       "locator": "b:227701af:year:13",
       "literal": "2025",
       "reason": "bare year is a fixed-fact candidate",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
-      "locator": "b:1bea15ab:0",
-      "literal": "September 10, 2025",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
-      "locator": "b:1bea15ab:1",
-      "literal": "October 15, 2025",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
-      "locator": "b:1bea15ab:2",
-      "literal": "June 30, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -2204,13 +2155,6 @@
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
-      "locator": "b:057e42c6:0",
-      "literal": "October 18, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:ce77382a:year:96",
       "literal": "2024",
       "reason": "bare year is a fixed-fact candidate",
@@ -2255,14 +2199,14 @@
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:1fb9bf46:year:7",
       "literal": "2024",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:1fb9bf46:year:49",
       "literal": "2024",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -2283,21 +2227,21 @@
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:1fb9bf46:year:433",
       "literal": "2015",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:1fb9bf46:year:619",
       "literal": "2015",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:1fb9bf46:year:711",
       "literal": "2015",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -2316,23 +2260,16 @@
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/instructor-notes.md",
-      "locator": "b:e0c49634:0",
-      "literal": "October 4, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m10-probate-meridian/exercise/instructor-notes.md",
       "locator": "b:e0c49634:year:754",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/instructor-notes.md",
       "locator": "b:e0c49634:year:779",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -2742,27 +2679,6 @@
       "review_status": "candidate_pending_human_review"
     },
     {
-      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
-      "locator": "b:bc1fb7db:0",
-      "literal": "June 30, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
-      "locator": "b:bc1fb7db:1",
-      "literal": "September 18, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
-      "locator": "b:bc1fb7db:2",
-      "literal": "October 2, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
       "source": "data/matters/m12-discipline-mn/case-file/affidavit-delacroix.md",
       "locator": "b:0a3a54e7:year:5",
       "literal": "2018",
@@ -2941,7 +2857,7 @@
       "source": "data/matters/m12-discipline-mn/case-file/olpr-charge-letter.md",
       "locator": "b:f588b329:year:403",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -2977,13 +2893,6 @@
       "locator": "b:b8c77242:year:456",
       "literal": "2024",
       "reason": "bare year is a fixed-fact candidate",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m12-discipline-mn/facts.md",
-      "locator": "b:18be7c06:0",
-      "literal": "September 18, 2024",
-      "reason": "statutory/effective-date context is a fixed fact",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3200,7 +3109,7 @@
       "source": "data/matters/m14-realestate-tx/exercise/answer-key.md",
       "locator": "b:309006be:year:219",
       "literal": "1991",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3235,7 +3144,7 @@
       "source": "data/matters/m14-realestate-tx/exercise/instructor-notes.md",
       "locator": "b:825291bc:year:45",
       "literal": "1991",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3303,65 +3212,23 @@
     },
     {
       "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:0",
-      "literal": "January 12, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:1",
-      "literal": "January 30, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:2",
-      "literal": "February 9, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:3",
-      "literal": "February 2, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:4",
-      "literal": "February 13, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
-      "locator": "b:a239a77e:5",
-      "literal": "February 17, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
       "locator": "b:a239a77e:year:46",
       "literal": "2019",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
       "locator": "b:a239a77e:year:352",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
       "locator": "b:a239a77e:year:548",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3375,13 +3242,6 @@
       "source": "data/matters/m16-noncompete-ny/case-file/employment-agreement.md",
       "locator": "b:8461734e:0",
       "literal": "June 3, 2019",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/case-file/it-forensic-review.md",
-      "locator": "b:32e40d6e:0",
-      "literal": "January 27, 2026",
       "reason": "statutory/effective-date context is a fixed fact",
       "review_status": "candidate_pending_human_review"
     },
@@ -3424,7 +3284,7 @@
       "source": "data/matters/m16-noncompete-ny/exercise/answer-key.md",
       "locator": "b:78601b61:year:457",
       "literal": "2008",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3459,7 +3319,7 @@
       "source": "data/matters/m16-noncompete-ny/exercise/instructor-notes.md",
       "locator": "b:b5ea2ef1:year:200",
       "literal": "1836",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3492,27 +3352,6 @@
     },
     {
       "source": "data/matters/m16-noncompete-ny/facts.md",
-      "locator": "b:116952f5:0",
-      "literal": "January 12, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/facts.md",
-      "locator": "b:116952f5:1",
-      "literal": "January 30, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/facts.md",
-      "locator": "b:116952f5:2",
-      "literal": "February 9, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m16-noncompete-ny/facts.md",
       "locator": "b:957d21c0:year:645",
       "literal": "2024",
       "reason": "bare year is a fixed-fact candidate",
@@ -3527,30 +3366,9 @@
     },
     {
       "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
-      "locator": "b:89aa1917:1",
-      "literal": "August 12, 2025",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
-      "locator": "b:89aa1917:2",
-      "literal": "February 10, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
-      "locator": "b:89aa1917:3",
-      "literal": "June 30, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
       "locator": "b:89aa1917:year:1459",
       "literal": "2026",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3571,7 +3389,7 @@
       "source": "data/matters/m17-ucc-ny/case-file/ostervold-production-shipping-records.md",
       "locator": "b:1fab0c2d:year:25",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3624,13 +3442,6 @@
       "review_status": "candidate_pending_human_review"
     },
     {
-      "source": "data/matters/m17-ucc-ny/exercise/answer-key.md",
-      "locator": "b:863c29ef:0",
-      "literal": "May 15, 2025",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
       "source": "data/matters/m17-ucc-ny/facts.md",
       "locator": "b:e1514889:year:397",
       "literal": "2021",
@@ -3674,13 +3485,6 @@
     },
     {
       "source": "data/matters/m18-juvenile-ca/case-file/prior-discipline-referral.md",
-      "locator": "b:ad2521f4:0",
-      "literal": "February 11, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m18-juvenile-ca/case-file/prior-discipline-referral.md",
       "locator": "b:eb66bf66:0",
       "literal": "February 18, 2026",
       "reason": "statutory/effective-date context is a fixed fact",
@@ -3704,7 +3508,7 @@
       "source": "data/matters/m18-juvenile-ca/exercise/answer-key.md",
       "locator": "b:ff7aa67d:year:285",
       "literal": "1984",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -3732,13 +3536,6 @@
       "source": "data/matters/m18-juvenile-ca/facts.md",
       "locator": "b:d4346c9b:0",
       "literal": "May 4, 2026",
-      "reason": "statutory/effective-date context is a fixed fact",
-      "review_status": "candidate_pending_human_review"
-    },
-    {
-      "source": "data/matters/m18-juvenile-ca/facts.md",
-      "locator": "b:d4346c9b:1",
-      "literal": "May 12, 2026",
       "reason": "statutory/effective-date context is a fixed fact",
       "review_status": "candidate_pending_human_review"
     },
@@ -4061,14 +3858,14 @@
       "source": "data/matters/m19-dissolution-ca/exercise/answer-key.md",
       "locator": "b:98bcfe14:year:131",
       "literal": "2026",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m19-dissolution-ca/exercise/answer-key.md",
       "locator": "b:98bcfe14:year:229",
       "literal": "2018",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -4117,7 +3914,7 @@
       "source": "data/matters/m19-dissolution-ca/exercise/answer-key.md",
       "locator": "b:3403560a:year:738",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -4138,35 +3935,35 @@
       "source": "data/matters/m19-dissolution-ca/exercise/instructor-notes.md",
       "locator": "b:cfa7f080:year:106",
       "literal": "2016",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m19-dissolution-ca/exercise/instructor-notes.md",
       "locator": "b:cfa7f080:year:259",
       "literal": "1966",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m19-dissolution-ca/exercise/instructor-notes.md",
       "locator": "b:cfa7f080:year:339",
       "literal": "2016",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m19-dissolution-ca/exercise/instructor-notes.md",
       "locator": "b:cfa7f080:year:357",
       "literal": "2019",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m19-dissolution-ca/exercise/instructor-notes.md",
       "locator": "b:a2425ac2:year:360",
       "literal": "2025",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
@@ -4572,14 +4369,14 @@
       "source": "data/matters/m20-probate-fl/exercise/answer-key.md",
       "locator": "b:fe516e46:year:378",
       "literal": "1971",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {
       "source": "data/matters/m20-probate-fl/exercise/answer-key.md",
       "locator": "b:fe516e46:year:861",
       "literal": "2019",
-      "reason": "statutory/effective-date context is a fixed fact",
+      "reason": "bare year is a fixed-fact candidate",
       "review_status": "candidate_pending_human_review"
     },
     {

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import jsonschema
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
@@ -57,8 +58,13 @@ def test_fixture_conversion_leaves_markdown_and_writes_sidecar(tmp_path):
     result = day_zero.convert_corpus(tmp_path, write=True)
     assert (matter / "facts.md").read_text() == prose
     sidecar = json.loads((matter / "date-offsets.json").read_text())
-    assert sidecar["entries"][0]["block_id"] == "b:deadbeef"
-    assert sidecar["entries"][0]["day_zero_offset"] == -13
+    schema = json.loads((TOOLS.parent / "data" / "schemas" /
+                         "date-offsets.schema.json").read_text())
+    jsonschema.Draft202012Validator(schema).validate(sidecar)
+    assert all("anchor" not in row for row in sidecar["entries"])
+    assert all(isinstance(row["locator"], int) for row in sidecar["entries"])
+    prose_entry = next(row for row in sidecar["entries"] if row.get("block_id") == "b:deadbeef")
+    assert prose_entry["day_zero_offset"] == -13
     assert json.loads((matter / "matter.json").read_text())["as_of_date_day_zero_offset"] == 3
     assert result.converted_dates == result.proof_records
     before = {p: p.read_bytes() for p in matter.iterdir()}
@@ -98,7 +104,7 @@ def test_block_ids_are_not_inventoried_as_years_and_renderer_separates_list_bloc
     result = day_zero.convert_corpus(tmp_path, write=True)
     assert not any(row["literal"] == "2063" for row in result.holdouts)
     entries = json.loads((matter / "date-offsets.json").read_text())["entries"]
-    assert [(row["block_id"], row["day_zero_offset"]) for row in entries] == [
+    assert [(row["block_id"], row["day_zero_offset"]) for row in entries if "block_id" in row] == [
         ("b:2063dafb", 2), ("b:abcdef12", 3)
     ]
 
@@ -147,7 +153,8 @@ def test_converter_output_round_trips_through_u6_and_mutation_fails(tmp_path):
     sidecar_path = "data/matters/m01-fixture/date-offsets.json"
     assert result.before_files[sidecar_path] == b""
     proof = day_zero_equivalence.file_round_trip(
-        result.before_files, result.after_files, result.file_proofs, result.date_proofs,
+        sorted(result.touched_files), result.before_files, result.after_files,
+        result.file_proofs, result.date_proofs,
         converted_date_count=result.converted_dates,
     )
     assert proof.converted_date_count == proof.proof_covered_date_count == 4
@@ -156,6 +163,85 @@ def test_converter_output_round_trips_through_u6_and_mutation_fails(tmp_path):
     mutated[business_path] = mutated[business_path].replace(b'"packed"', b'"PACKED"')
     with pytest.raises(day_zero_equivalence.EquivalenceError, match="business.json.*byte mismatch"):
         day_zero_equivalence.file_round_trip(
-            result.before_files, mutated, result.file_proofs, result.date_proofs,
+            sorted(result.touched_files), result.before_files, mutated,
+            result.file_proofs, result.date_proofs,
             converted_date_count=result.converted_dates,
         )
+
+
+def test_mixed_block_uses_local_clause_context(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    (matter / "matter.json").write_text(
+        '{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    )
+    (matter / "facts.md").write_text(
+        "Statute effective January 1, 2020; hearing occurred January 3, 2026. {#b:deadbeef}\n"
+    )
+    result = day_zero.convert_corpus(tmp_path)
+    assert any(row["literal"] == "January 1, 2020" for row in result.holdouts)
+    assert any(proof.literal == "January 3, 2026" for proof in result.date_proofs)
+
+
+def test_generic_effective_today_in_other_sentence_does_not_hold_out_event(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    (matter / "matter.json").write_text(
+        '{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    )
+    (matter / "facts.md").write_text(
+        "Policy is effective today, but hearing occurred January 3, 2026. {#b:deadbeef}\n"
+    )
+    result = day_zero.convert_corpus(tmp_path)
+    assert any(proof.literal == "January 3, 2026" for proof in result.date_proofs)
+
+
+def test_invalid_calendar_date_requires_attention_instead_of_crashing(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    (matter / "matter.json").write_text(
+        '{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-02-30"}'
+    )
+    result = day_zero.convert_corpus(tmp_path)
+    assert any(row["literal"] == "2026-02-30" and
+               "invalid calendar" in row["reason"] for row in result.unclassified)
+
+
+def test_late_proof_failure_writes_nothing(tmp_path, monkeypatch):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    original = b'{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    (matter / "matter.json").write_bytes(original)
+    (matter / "facts.md").write_text("Hearing January 3, 2026. {#b:deadbeef}\n")
+    def reject(*args, **kwargs):
+        raise day_zero_equivalence.EquivalenceError("late proof conflict")
+    monkeypatch.setattr(day_zero_equivalence, "file_round_trip", reject)
+    with pytest.raises(day_zero_equivalence.EquivalenceError, match="late proof"):
+        day_zero.convert_corpus(tmp_path, write=True)
+    assert (matter / "matter.json").read_bytes() == original
+    assert not (matter / "date-offsets.json").exists()
+
+
+def test_collateral_sibling_mutation_is_rejected():
+    before = '{"date":"2026-01-02","name":"original"}'
+    after = '{"date":"2026-01-02","name":"changed","date_day_zero_offset":1}'
+    with pytest.raises(RuntimeError, match="collateral"):
+        day_zero._validate_intended_json_additions(
+            before, after, [("", "date_day_zero_offset", 1)]
+        )
+
+
+def test_cli_proof_failure_is_nonzero_and_precedes_reports(tmp_path, monkeypatch):
+    audit = tmp_path / "audit.json"
+    holdouts = tmp_path / "holdouts.json"
+    monkeypatch.setattr(day_zero, "convert_corpus", lambda *args, **kwargs: day_zero.Result())
+    def reject(*args, **kwargs):
+        raise day_zero_equivalence.EquivalenceError("corrupted emitted proof")
+    monkeypatch.setattr(day_zero_equivalence, "file_round_trip", reject)
+    monkeypatch.setattr(sys, "argv", ["day_zero.py", "--repo", str(tmp_path),
+                                      "--audit-output", str(audit),
+                                      "--holdouts-output", str(holdouts)])
+    with pytest.raises(day_zero_equivalence.EquivalenceError, match="corrupted"):
+        day_zero.main()
+    assert not audit.exists()
+    assert not holdouts.exists()

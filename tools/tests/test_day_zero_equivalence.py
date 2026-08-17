@@ -21,12 +21,11 @@ def proof(path="data/matters/m01/facts.json", literal="2026-02-16", offset=15):
     addition = b', "hearing_date_day_zero_offset": 15'
     insert = before.index(b"}")
     after = before[:insert] + addition + before[insert:]
-    return (
-        {path: before},
-        {path: after},
-        [dze.FileProof(path, (dze.ReverseEdit(insert, insert + len(addition), b""),))],
-        [dze.DateProof(path, "hearing_date", literal, "2026-02-01", offset)],
-    )
+    touched = [path]
+    return (touched, {path: before}, {path: after},
+            [dze.FileProof(path, (dze.ReverseEdit(insert, insert + len(addition), b""),))],
+            [dze.DateProof(path, "hearing_date", literal, "2026-02-01", offset,
+                           "json_sibling", path, "hearing_date_day_zero_offset")])
 
 
 def test_file_round_trip_passes_and_reports_counts():
@@ -43,15 +42,15 @@ def test_shifted_offset_fails_naming_file_and_date():
 
 
 def test_count_mismatch_fails_and_reports_both_counts():
-    before, after, files, dates = proof()
+    touched, before, after, files, dates = proof()
     with pytest.raises(
         dze.EquivalenceError, match=r"converted-date count 2.*proof-covered-date count 1"
     ):
-        dze.file_round_trip(before, after, files, dates, converted_date_count=2)
+        dze.file_round_trip(touched, before, after, files, dates, converted_date_count=2)
 
 
 def test_whole_touched_set_includes_business_file_outside_editor_map():
-    before, after, files, dates = proof()
+    touched, before, after, files, dates = proof()
     business = "data/matters/m01/business/business.json"
     before[business] = b'{"formed": "February 16, 2026"}\n'
     addition = b', "formed_day_zero_offset": 15'
@@ -60,27 +59,48 @@ def test_whole_touched_set_includes_business_file_outside_editor_map():
     files.append(dze.FileProof(
         business, (dze.ReverseEdit(insert, insert + len(addition), b""),)
     ))
-    dates.append(dze.DateProof(
-        business, "formed", "February 16, 2026", "2026-02-01", 15
-    ))
-    result = dze.file_round_trip(before, after, files, dates)
+    dates.append(dze.DateProof(business, "formed", "February 16, 2026",
+                               "2026-02-01", 15, "json_sibling", business,
+                               "formed_day_zero_offset"))
+    touched.append(business)
+    result = dze.file_round_trip(touched, before, after, files, dates)
     assert result.files_checked == 2
     assert result.proof_covered_date_count == 2
 
 
 def test_missing_touched_file_fails_even_when_all_dates_have_proofs():
-    before, after, files, dates = proof()
+    touched, before, after, files, dates = proof()
     before["data/matters/m01/extra.json"] = b"{}\n"
     after["data/matters/m01/extra.json"] = b"{}\n"
+    touched.append("data/matters/m01/extra.json")
     with pytest.raises(dze.EquivalenceError, match="extra.json.*no file proof"):
-        dze.file_round_trip(before, after, files, dates)
+        dze.file_round_trip(touched, before, after, files, dates)
 
 
 def test_mutation_canary_proves_byte_comparison_can_fail():
-    before, after, files, dates = proof()
+    touched, before, after, files, dates = proof()
     after[files[0].path] = after[files[0].path].replace(b"hearing_date", b"hearing_DATA", 1)
     with pytest.raises(dze.EquivalenceError, match=r"facts\.json.*byte mismatch"):
-        dze.file_round_trip(before, after, files, dates)
+        dze.file_round_trip(touched, before, after, files, dates)
+
+
+def test_emitted_offset_mutation_fails_even_when_proof_is_still_correct():
+    touched, before, after, files, dates = proof()
+    path = dates[0].storage_path
+    after[path] = after[path].replace(b'hearing_date_day_zero_offset": 15',
+                                      b'hearing_date_day_zero_offset": 16')
+    addition = b', "hearing_date_day_zero_offset": 16'
+    insert = before[path].index(b"}")
+    files[0] = dze.FileProof(path, (dze.ReverseEdit(insert, insert + len(addition), b""),))
+    with pytest.raises(dze.EquivalenceError, match="emitted day_zero_offset"):
+        dze.file_round_trip(touched, before, after, files, dates)
+
+
+def test_authoritative_touched_set_must_equal_snapshots_and_proofs():
+    touched, before, after, files, dates = proof()
+    with pytest.raises(dze.EquivalenceError, match="before snapshots differ"):
+        dze.file_round_trip(touched + ["data/matters/m01/undeclared.json"],
+                            before, after, files, dates)
 
 
 def test_existing_identity_checker_rejects_changed_bid_and_text():

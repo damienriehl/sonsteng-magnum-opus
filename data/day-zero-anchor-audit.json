@@ -3,14 +3,14 @@
   "description": "Human-review record of every proposed Day Zero conversion. No corpus source file was rewritten to produce this artifact.",
   "method": "An independent raw census scans matters, curriculum, and jurisdictions. Occurrences are reconciled by deterministic (source, literal, occurrence) counters so duplicates remain distinct; every valid full date is converted, held out, or listed under attention_required. ISO-looking substrings embedded in longer identifiers are listed separately as excluded_non_dates. Each matter uses its existing open_date; offsets are signed calendar-day differences parsed with datetime.strptime. Renderer block spans bind prose dates to durable IDs.",
   "summary": {
-    "converted_dates": 1156,
-    "proof_records": 1156,
+    "converted_dates": 1185,
+    "proof_records": 1185,
     "iso_dates_in_inventory": 634,
     "iso_like_raw_occurrences": 636,
     "long_form_dates_in_inventory": 608,
     "full_date_inventory_total": 1242,
-    "full_date_holdouts": 45,
-    "holdout_candidates": 674,
+    "full_date_holdouts": 16,
+    "holdout_candidates": 645,
     "attention_required": 41,
     "reconciled_category_total": 1242
   },
@@ -794,6 +794,14 @@
     {
       "source": "data/matters/m01-arbitration-meridian/case-file/exh-002-notice-of-discharge.md",
       "locator": "b:5ea66955:0",
+      "literal": "October 15, 2025",
+      "anchor": "2025-11-05",
+      "day_zero_offset": -21,
+      "anchor_reason": "matter m01 existing open_date"
+    },
+    {
+      "source": "data/matters/m01-arbitration-meridian/case-file/exh-002-notice-of-discharge.md",
+      "locator": "b:dd865992:0",
       "literal": "October 15, 2025",
       "anchor": "2025-11-05",
       "day_zero_offset": -21,
@@ -2416,6 +2424,30 @@
       "anchor_reason": "matter m06 existing open_date"
     },
     {
+      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
+      "locator": "b:099d6c02:1",
+      "literal": "January 20, 2026",
+      "anchor": "2026-02-16",
+      "day_zero_offset": -27,
+      "anchor_reason": "matter m06 existing open_date"
+    },
+    {
+      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
+      "locator": "b:099d6c02:2",
+      "literal": "February 10, 2026",
+      "anchor": "2026-02-16",
+      "day_zero_offset": -6,
+      "anchor_reason": "matter m06 existing open_date"
+    },
+    {
+      "source": "data/matters/m06-noncompete-meridian/exercise/exercise.json",
+      "locator": "b:099d6c02:3",
+      "literal": "February 16, 2026",
+      "anchor": "2026-02-16",
+      "day_zero_offset": 0,
+      "anchor_reason": "matter m06 existing open_date"
+    },
+    {
       "source": "data/matters/m06-noncompete-meridian/matter.json",
       "locator": "open_date",
       "literal": "2026-02-16",
@@ -3213,6 +3245,30 @@
       "literal": "April 8, 2026",
       "anchor": "2026-03-16",
       "day_zero_offset": 23,
+      "anchor_reason": "matter m07 existing open_date"
+    },
+    {
+      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
+      "locator": "b:1bea15ab:0",
+      "literal": "September 10, 2025",
+      "anchor": "2026-03-16",
+      "day_zero_offset": -187,
+      "anchor_reason": "matter m07 existing open_date"
+    },
+    {
+      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
+      "locator": "b:1bea15ab:1",
+      "literal": "October 15, 2025",
+      "anchor": "2026-03-16",
+      "day_zero_offset": -152,
+      "anchor_reason": "matter m07 existing open_date"
+    },
+    {
+      "source": "data/matters/m07-ucc-meridian/exercise/answer-key.md",
+      "locator": "b:1bea15ab:2",
+      "literal": "June 30, 2026",
+      "anchor": "2026-03-16",
+      "day_zero_offset": 106,
       "anchor_reason": "matter m07 existing open_date"
     },
     {
@@ -4537,6 +4593,14 @@
     },
     {
       "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
+      "locator": "b:057e42c6:0",
+      "literal": "October 18, 2024",
+      "anchor": "2024-09-16",
+      "day_zero_offset": 32,
+      "anchor_reason": "matter m10 existing open_date"
+    },
+    {
+      "source": "data/matters/m10-probate-meridian/exercise/answer-key.md",
       "locator": "b:78191366:0",
       "literal": "October 4, 2024",
       "anchor": "2024-09-16",
@@ -4597,6 +4661,14 @@
       "literal": "2025-09-15",
       "anchor": "2024-09-16",
       "day_zero_offset": 364,
+      "anchor_reason": "matter m10 existing open_date"
+    },
+    {
+      "source": "data/matters/m10-probate-meridian/exercise/instructor-notes.md",
+      "locator": "b:e0c49634:0",
+      "literal": "October 4, 2024",
+      "anchor": "2024-09-16",
+      "day_zero_offset": 18,
       "anchor_reason": "matter m10 existing open_date"
     },
     {
@@ -5705,6 +5777,30 @@
     },
     {
       "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
+      "locator": "b:bc1fb7db:0",
+      "literal": "June 30, 2024",
+      "anchor": "2025-12-01",
+      "day_zero_offset": -519,
+      "anchor_reason": "matter m12 existing open_date"
+    },
+    {
+      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
+      "locator": "b:bc1fb7db:1",
+      "literal": "September 18, 2024",
+      "anchor": "2025-12-01",
+      "day_zero_offset": -439,
+      "anchor_reason": "matter m12 existing open_date"
+    },
+    {
+      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
+      "locator": "b:bc1fb7db:2",
+      "literal": "October 2, 2024",
+      "anchor": "2025-12-01",
+      "day_zero_offset": -425,
+      "anchor_reason": "matter m12 existing open_date"
+    },
+    {
+      "source": "data/matters/m12-discipline-mn/exercise/exercise.json",
       "locator": "b:5afcfb52:0",
       "literal": "December 10, 2024",
       "anchor": "2025-12-01",
@@ -6205,6 +6301,14 @@
       "literal": "August 13, 2024",
       "anchor": "2025-12-01",
       "day_zero_offset": -475,
+      "anchor_reason": "matter m12 existing open_date"
+    },
+    {
+      "source": "data/matters/m12-discipline-mn/facts.md",
+      "locator": "b:18be7c06:0",
+      "literal": "September 18, 2024",
+      "anchor": "2025-12-01",
+      "day_zero_offset": -439,
       "anchor_reason": "matter m12 existing open_date"
     },
     {
@@ -7712,6 +7816,54 @@
       "anchor_reason": "matter m16 existing open_date"
     },
     {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:0",
+      "literal": "January 12, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -36,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:1",
+      "literal": "January 30, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -18,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:2",
+      "literal": "February 9, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -8,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:3",
+      "literal": "February 2, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -15,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:4",
+      "literal": "February 13, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -4,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/exercise/exercise.json",
+      "locator": "b:a239a77e:5",
+      "literal": "February 17, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": 0,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
       "source": "data/matters/m16-noncompete-ny/matter.json",
       "locator": "open_date",
       "literal": "2026-02-17",
@@ -7800,6 +7952,14 @@
       "anchor_reason": "matter m16 existing open_date"
     },
     {
+      "source": "data/matters/m16-noncompete-ny/case-file/it-forensic-review.md",
+      "locator": "b:32e40d6e:0",
+      "literal": "January 27, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -21,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
       "source": "data/matters/m16-noncompete-ny/case-file/resignation-notice.md",
       "locator": "b:ebef8e44:0",
       "literal": "January 12, 2026",
@@ -7869,6 +8029,30 @@
       "literal": "April 28, 2026",
       "anchor": "2026-02-17",
       "day_zero_offset": 70,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/facts.md",
+      "locator": "b:116952f5:0",
+      "literal": "January 12, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -36,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/facts.md",
+      "locator": "b:116952f5:1",
+      "literal": "January 30, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -18,
+      "anchor_reason": "matter m16 existing open_date"
+    },
+    {
+      "source": "data/matters/m16-noncompete-ny/facts.md",
+      "locator": "b:116952f5:2",
+      "literal": "February 9, 2026",
+      "anchor": "2026-02-17",
+      "day_zero_offset": -8,
       "anchor_reason": "matter m16 existing open_date"
     },
     {
@@ -8216,6 +8400,30 @@
       "anchor_reason": "matter m17 existing open_date"
     },
     {
+      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
+      "locator": "b:89aa1917:1",
+      "literal": "August 12, 2025",
+      "anchor": "2026-03-09",
+      "day_zero_offset": -209,
+      "anchor_reason": "matter m17 existing open_date"
+    },
+    {
+      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
+      "locator": "b:89aa1917:2",
+      "literal": "February 10, 2026",
+      "anchor": "2026-03-09",
+      "day_zero_offset": -27,
+      "anchor_reason": "matter m17 existing open_date"
+    },
+    {
+      "source": "data/matters/m17-ucc-ny/exercise/exercise.json",
+      "locator": "b:89aa1917:3",
+      "literal": "June 30, 2026",
+      "anchor": "2026-03-09",
+      "day_zero_offset": 113,
+      "anchor_reason": "matter m17 existing open_date"
+    },
+    {
       "source": "data/matters/m17-ucc-ny/matter.json",
       "locator": "open_date",
       "literal": "2026-03-09",
@@ -8370,6 +8578,14 @@
     {
       "source": "data/matters/m17-ucc-ny/case-file/supply-agreement-and-pos.md",
       "locator": "b:64bc48f6:0",
+      "literal": "May 15, 2025",
+      "anchor": "2026-03-09",
+      "day_zero_offset": -298,
+      "anchor_reason": "matter m17 existing open_date"
+    },
+    {
+      "source": "data/matters/m17-ucc-ny/exercise/answer-key.md",
+      "locator": "b:863c29ef:0",
       "literal": "May 15, 2025",
       "anchor": "2026-03-09",
       "day_zero_offset": -298,
@@ -8744,6 +8960,14 @@
       "anchor_reason": "matter m18 existing open_date"
     },
     {
+      "source": "data/matters/m18-juvenile-ca/case-file/prior-discipline-referral.md",
+      "locator": "b:ad2521f4:0",
+      "literal": "February 11, 2026",
+      "anchor": "2026-04-20",
+      "day_zero_offset": -68,
+      "anchor_reason": "matter m18 existing open_date"
+    },
+    {
       "source": "data/matters/m18-juvenile-ca/case-file/text-thread-excerpt.md",
       "locator": "b:48e4165f:0",
       "literal": "April 9, 2026",
@@ -8829,6 +9053,14 @@
       "literal": "April 14, 2026",
       "anchor": "2026-04-20",
       "day_zero_offset": -6,
+      "anchor_reason": "matter m18 existing open_date"
+    },
+    {
+      "source": "data/matters/m18-juvenile-ca/facts.md",
+      "locator": "b:d4346c9b:1",
+      "literal": "May 12, 2026",
+      "anchor": "2026-04-20",
+      "day_zero_offset": 22,
       "anchor_reason": "matter m18 existing open_date"
     },
     {

@@ -44,6 +44,52 @@ def test_taxonomy_contract_manifests_are_not_misclassified_as_entities():
     assert len(world.tasks) == 108
 
 
+def test_day_zero_artifacts_are_enforced_by_f29(tmp_path):
+    build_base_spine(tmp_path)
+    malformed = {
+        "schema_version": "1.0.0",
+        "description": "Malformed fixture: required review fields are absent.",
+    }
+    (tmp_path / "day-zero-holdouts.json").write_text(
+        json.dumps(malformed, indent=2), encoding="utf-8"
+    )
+
+    report = run_validator(tmp_path, strict=True)
+    failures = [
+        finding for finding in report.findings
+        if finding.check == "F29"
+        and finding.severity == vs.ERROR
+        and finding.detail.get("file", "").endswith("day-zero-holdouts.json")
+    ]
+    assert failures
+
+
+def test_matter_date_offsets_are_enforced_by_f29(tmp_path):
+    build_base_spine(tmp_path)
+    path = tmp_path / "matters" / "m99-noncompete-meridian" / "date-offsets.json"
+    path.write_text(json.dumps({
+        "schema_version": "1.0.0",
+        "matter_id": "m99",
+        "anchor": "not-a-date",
+        "entries": [{
+            "source": "facts.md",
+            "block_id": "changed-or-invalid",
+            "locator": 0,
+            "literal": "January 1, 2026",
+            "day_zero_offset": 0,
+        }],
+    }, indent=2), encoding="utf-8")
+
+    report = run_validator(tmp_path, matter="m99", strict=True)
+    failures = [
+        finding for finding in report.for_scope("m99")
+        if finding.check == "F29"
+        and finding.severity == vs.ERROR
+        and finding.detail.get("file", "").endswith("date-offsets.json")
+    ]
+    assert failures
+
+
 # ===========================================================================
 # Part 1 — schema-example structural self-test
 # ===========================================================================

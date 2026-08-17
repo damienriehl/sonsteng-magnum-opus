@@ -84,6 +84,23 @@ def classify_candidate(text: str, source: str, locator: str) -> Classification:
     return Classification("convert", "dated matter fact relative to matter open_date")
 
 
+def _local_context(text: str, start: int, end: int) -> str:
+    """Return the candidate's bounded clause/sentence, not its whole block."""
+    boundaries = ("\n", ".", ";", "!", "?", "—")
+    left = max(text.rfind(mark, 0, start) for mark in boundaries) + 1
+    ends = [pos for mark in boundaries
+            if (pos := text.find(mark, end)) >= 0]
+    right = min(ends) + 1 if ends else len(text)
+    context = text[max(left, start - 240):min(right, end + 240)]
+    # A generic status phrase in a preceding comma-clause ("effective today,")
+    # must not turn a later event date into a statutory holdout.
+    relative_start = start - max(left, start - 240)
+    comma = context.rfind(",", 0, relative_start)
+    if comma >= 0 and re.search(r"\beffective\s+today\b", context[:comma], re.I):
+        context = context[comma + 1:]
+    return context
+
+
 def _scalar_strings(value, path="") -> Iterable[tuple[str, str, str]]:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -97,10 +114,18 @@ def _scalar_strings(value, path="") -> Iterable[tuple[str, str, str]]:
             yield from _scalar_strings(child, "%s.%d" % (path, index) if path else str(index))
 
 
-def _record(result: Result, source: str, locator: str, literal: str, anchor: date, reason: str):
-    offset = offset_days(literal, anchor)
+def _record(result: Result, source: str, locator: str, literal: str, anchor: date,
+            reason: str, storage_kind: str, storage_path: str,
+            storage_locator: str | int):
+    try:
+        offset = offset_days(literal, anchor)
+    except ValueError:
+        result.unclassified.append({"source": source, "locator": locator, "literal": literal,
+                                    "reason": "invalid calendar date requires human attention"})
+        return
     result.date_proofs.append(day_zero_equivalence.DateProof(
-        source, locator, literal, anchor.isoformat(), offset
+        source, locator, literal, anchor.isoformat(), offset,
+        storage_kind, storage_path, storage_locator
     ))
     result.audit.append({"source": source, "locator": locator, "literal": literal,
                          "anchor": anchor.isoformat(), "day_zero_offset": offset,
@@ -108,8 +133,6 @@ def _record(result: Result, source: str, locator: str, literal: str, anchor: dat
 
 
 def _capture_file_proof(result: Result, source: str, before: bytes, after: bytes):
-    if before == after:
-        return
     result.before_files[source] = before
     result.after_files[source] = after
     reverse_edits = []
@@ -122,12 +145,27 @@ def _capture_file_proof(result: Result, source: str, before: bytes, after: bytes
     result.file_proofs.append(day_zero_equivalence.FileProof(source, tuple(reverse_edits)))
 
 
+def _validate_intended_json_additions(before: str, after: str, insertions: list[tuple]):
+    """Reject any semantic mutation except the independently declared siblings."""
+    expected = json.loads(before)
+    for parent, key, value in insertions:
+        target = expected
+        if parent:
+            for part in parent.split("."):
+                target = target[int(part)] if isinstance(target, list) else target[part]
+        if key in target and target[key] != value:
+            raise RuntimeError("conflicting existing Day Zero sibling %s.%s" % (parent, key))
+        target[key] = value
+    if json.loads(after) != expected:
+        raise RuntimeError("surgical edit introduced collateral JSON mutation")
+
+
 def _dated_matches(text: str):
     clean = re.sub(r"\{#b:[0-9a-f]{8}\}", "", text)
     return sorted(list(ISO_RE.finditer(clean)) + list(LONG_RE.finditer(clean)), key=lambda match: match.start())
 
 
-def _append_prose_candidates(result, sidecar_entries, text, source, block_id, anchor, reason,
+def _append_prose_candidates(result, sidecar_entries, storage_path, text, source, block_id, anchor, reason,
                              locator_prefix=""):
     occupied = []
     for occurrence, match in enumerate(_dated_matches(text)):
@@ -135,7 +173,11 @@ def _append_prose_candidates(result, sidecar_entries, text, source, block_id, an
         literal = match.group(1)
         locator = "%s:%d" % (block_id, occurrence) if block_id else "%sdate:%d" % (
             locator_prefix + ":" if locator_prefix else "", occurrence)
-        classification = classify_candidate(text, source, locator)
+        citation_window = text[max(0, match.start() - 180):min(len(text), match.end() + 40)]
+        classification = (Classification("holdout", "case-citation year is a fixed fact")
+                          if CITATION_RE.search(citation_window)
+                          else classify_candidate(_local_context(text, match.start(), match.end()),
+                                                  source, locator))
         if classification.kind == "holdout":
             result.holdouts.append({"source": source, "locator": locator, "literal": literal,
                                     "reason": classification.reason})
@@ -143,16 +185,30 @@ def _append_prose_candidates(result, sidecar_entries, text, source, block_id, an
             result.unclassified.append({"source": source, "locator": locator, "literal": literal,
                                         "reason": "prose date has no durable block ID"})
         else:
-            _record(result, source, locator, literal, anchor, reason)
-            sidecar_entries.append({"source": source, "block_id": block_id, "locator": occurrence,
-                                    "literal": literal, "day_zero_offset": offset_days(literal, anchor)})
+            try:
+                parsed_offset = offset_days(literal, anchor)
+            except ValueError:
+                result.unclassified.append({"source": source, "locator": locator,
+                                            "literal": literal,
+                                            "reason": "invalid calendar date requires human attention"})
+                continue
+            storage_index = len(sidecar_entries)
+            sidecar_entries.append({"source": source, "block_id": block_id,
+                                    "locator": occurrence, "literal": literal,
+                                    "day_zero_offset": parsed_offset})
+            _record(result, source, locator, literal, anchor, reason,
+                    "prose_sidecar", storage_path, storage_index)
     marker_stripped = re.sub(r"\{#b:[0-9a-f]{8}\}", "", text)
     for match in YEAR_RE.finditer(marker_stripped):
         if any(start <= match.start() < end for start, end in occupied):
             continue
         literal = match.group(0)
         locator = "%s:year:%d" % (block_id, match.start()) if block_id else "year:%d" % match.start()
-        classification = classify_candidate(text, source, locator)
+        citation_window = text[max(0, match.start() - 180):min(len(text), match.end() + 40)]
+        classification = (Classification("holdout", "case-citation year is a fixed fact")
+                          if CITATION_RE.search(citation_window)
+                          else classify_candidate(_local_context(text, match.start(), match.end()),
+                                                  source, locator))
         result.holdouts.append({"source": source, "locator": locator, "literal": literal,
                                 "reason": classification.reason if classification.kind == "holdout"
                                 else "bare year is a fixed-fact candidate"})
@@ -167,6 +223,7 @@ def _markdown_blocks(text: str):
 def convert_corpus(repo: Path, write: bool = False) -> Result:
     repo = Path(repo)
     result = Result()
+    staged_writes: dict[Path, bytes] = {}
     matters = repo / "data" / "matters"
     for matter_json in sorted(matters.glob("*/matter.json")):
         matter_dir = matter_json.parent
@@ -176,6 +233,8 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
         result.matter_anchors.append({"matter_id": matter.get("id"), "matter_slug": matter_dir.name,
                                       "anchor": anchor.isoformat(), "reason": reason})
         sidecar_entries = []
+        sidecar_target = matter_dir / "date-offsets.json"
+        sidecar_source = str(sidecar_target.relative_to(repo))
         for path in sorted(matter_dir.rglob("*.json")):
             if path.name == "date-offsets.json":
                 continue
@@ -197,48 +256,70 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
                         result.holdouts.append({"source": str(path.relative_to(repo)), "locator": locator,
                                                 "literal": literal, "reason": classification.reason})
                         continue
-                    _record(result, str(path.relative_to(repo)), locator, literal, anchor, reason)
-                    insertions.append((parent, key + "_day_zero_offset", offset_days(literal, anchor)))
+                    try:
+                        parsed_offset = offset_days(literal, anchor)
+                    except ValueError:
+                        result.unclassified.append({"source": str(path.relative_to(repo)),
+                                                    "locator": locator, "literal": literal,
+                                                    "reason": "invalid calendar date requires human attention"})
+                        continue
+                    source = str(path.relative_to(repo))
+                    sibling_locator = "%s.%s" % (parent, key + "_day_zero_offset") \
+                        if parent else key + "_day_zero_offset"
+                    _record(result, source, locator, literal, anchor, reason,
+                            "json_sibling", source, sibling_locator)
+                    insertions.append((parent, key + "_day_zero_offset", parsed_offset))
                 else:
                     source = str(path.relative_to(repo))
                     spans = _markdown_blocks(value)
                     if any(span["bid"] for span in spans):
                         for span in spans:
-                            _append_prose_candidates(result, sidecar_entries, span["raw"], source,
+                            _append_prose_candidates(result, sidecar_entries, sidecar_source,
+                                                     span["raw"], source,
                                                      "b:" + span["bid"] if span["bid"] else None,
                                                      anchor, reason)
                     else:
                         json_locator = "%s.%s" % (parent, key) if parent else key
-                        _append_prose_candidates(result, sidecar_entries, value, source, None, anchor,
+                        _append_prose_candidates(result, sidecar_entries, sidecar_source,
+                                                 value, source, None, anchor,
                                                  reason, locator_prefix=json_locator)
             if insertions:
                 source = str(path.relative_to(repo))
                 result.touched_files.add(source)
                 converted_raw = json_surgical.insert_object_properties(raw, insertions)
+                _validate_intended_json_additions(raw, converted_raw, insertions)
                 _capture_file_proof(result, source, raw.encode(), converted_raw.encode())
-                if write:
-                    path.write_text(converted_raw)
+                staged_writes[path] = converted_raw.encode()
         for md in sorted(matter_dir.rglob("*.md")):
             raw = md.read_text()
             source = str(md.relative_to(repo))
             for span in _markdown_blocks(raw):
-                _append_prose_candidates(result, sidecar_entries, span["raw"], source,
+                _append_prose_candidates(result, sidecar_entries, sidecar_source,
+                                         span["raw"], source,
                                          "b:" + span["bid"] if span["bid"] else None,
                                          anchor, reason)
             if sidecar_entries:
                 result.touched_files.add(str((matter_dir / "date-offsets.json").relative_to(repo)))
         if sidecar_entries:
+            result.touched_files.add(sidecar_source)
             sidecar = {"schema_version": "1.0.0", "matter_id": matter.get("id"),
                        "anchor": anchor.isoformat(), "entries": sidecar_entries}
             text = json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n"
-            target = matter_dir / "date-offsets.json"
+            target = sidecar_target
             source = str(target.relative_to(repo))
             before = target.read_bytes() if target.exists() else b""
             after = text.encode()
             _capture_file_proof(result, source, before, after)
-            if write and before != after:
-                target.write_text(text)
+            staged_writes[target] = after
     _reconcile_full_date_inventory(repo, result)
+    day_zero_equivalence.file_round_trip(
+        sorted(result.touched_files), result.before_files, result.after_files,
+        result.file_proofs, result.date_proofs,
+        converted_date_count=result.converted_dates,
+    )
+    if write:
+        for path, payload in staged_writes.items():
+            path.write_bytes(payload)
     return result
 
 
@@ -250,6 +331,8 @@ def _raw_full_date_inventory(repo: Path):
         if not tree.exists():
             continue
         for path in sorted(p for p in tree.rglob("*") if p.is_file()):
+            if path.name == "date-offsets.json":
+                continue
             try:
                 raw = path.read_text()
             except UnicodeDecodeError:
@@ -317,6 +400,13 @@ def main() -> int:
     parser.add_argument("--holdouts-output", type=Path)
     args = parser.parse_args()
     result = convert_corpus(args.repo, write=args.write)
+    # CLI safety gate: never emit review artifacts or a success summary unless
+    # the complete authoritative touched set independently round-trips.
+    day_zero_equivalence.file_round_trip(
+        sorted(result.touched_files), result.before_files, result.after_files,
+        result.file_proofs, result.date_proofs,
+        converted_date_count=result.converted_dates,
+    )
     if args.audit_output:
         args.audit_output.write_text(json.dumps({"schema_version": "1.0.0",
                                                  "description": "Human-review record of every proposed Day Zero conversion. No corpus source file was rewritten to produce this artifact.",
