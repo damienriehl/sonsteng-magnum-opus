@@ -324,15 +324,18 @@ html.type-lg .eb-note { font-size: .95rem; }
   border-radius: var(--radius, 3px);
   padding: .2em .5em;
 }
-.editor-banner__history {
+.editor-banner__history,
+.editor-banner__student {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--paper, #f4efe4); text-decoration: none;
   border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--radius, 3px);
   padding: .28em .6em; transition: background .15s;
 }
-.editor-banner__history:hover { background: rgba(255, 255, 255, .14); }
-.editor-banner__history:focus-visible { outline: 2px solid var(--paper, #f4efe4); outline-offset: 2px; }
+.editor-banner__history:hover,
+.editor-banner__student:hover { background: rgba(255, 255, 255, .14); }
+.editor-banner__history:focus-visible,
+.editor-banner__student:focus-visible { outline: 2px solid var(--paper, #f4efe4); outline-offset: 2px; }
 /* The toggle re-uses the PAGE's .segmented-toggle class, which theme.css gives a
    cream background. On the dark banner that left the unpressed label as cream on
    cream — 1.06:1, effectively invisible, and the single worst contrast failure in
