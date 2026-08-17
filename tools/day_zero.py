@@ -22,7 +22,6 @@ LONG_RE = re.compile(
     r"\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4})\b"
 )
 YEAR_RE = re.compile(r"(?<![\d-])(?:18|19|20)\d{2}(?![\d-])")
-BLOCK_RE = re.compile(r"\{#(b:[0-9a-f]{8})\}\s*$")
 STATUTORY_RE = re.compile(r"\b(statute|statutory|code|act|effective|enacted)\b", re.I)
 CITATION_RE = re.compile(r"\b\d+\s+(?:U\.S\.|F\.\s?\d|F\.\s?Supp\.|N\.W\.\s?2d|S\.Ct\.)\s+\d+.*\((?:[^)]*\s)?(?:18|19|20)\d{2}\)")
 
@@ -73,8 +72,7 @@ def offset_days(value: str, anchor: date) -> int:
     return (parse_date(value) - anchor).days
 
 
-def classify_candidate(text: str, source: str, locator: str) -> Classification:
-    del source, locator
+def classify_candidate(text: str) -> Classification:
     if CITATION_RE.search(text):
         return Classification("holdout", "case-citation year is a fixed fact")
     if STATUTORY_RE.search(text) and (ISO_RE.search(text) or LONG_RE.search(text) or YEAR_RE.search(text)):
@@ -176,8 +174,7 @@ def _append_prose_candidates(result, sidecar_entries, storage_path, text, source
         citation_window = text[max(0, match.start() - 180):min(len(text), match.end() + 40)]
         classification = (Classification("holdout", "case-citation year is a fixed fact")
                           if CITATION_RE.search(citation_window)
-                          else classify_candidate(_local_context(text, match.start(), match.end()),
-                                                  source, locator))
+                          else classify_candidate(_local_context(text, match.start(), match.end())))
         if classification.kind == "holdout":
             result.holdouts.append({"source": source, "locator": locator, "literal": literal,
                                     "reason": classification.reason})
@@ -207,8 +204,7 @@ def _append_prose_candidates(result, sidecar_entries, storage_path, text, source
         citation_window = text[max(0, match.start() - 180):min(len(text), match.end() + 40)]
         classification = (Classification("holdout", "case-citation year is a fixed fact")
                           if CITATION_RE.search(citation_window)
-                          else classify_candidate(_local_context(text, match.start(), match.end()),
-                                                  source, locator))
+                          else classify_candidate(_local_context(text, match.start(), match.end())))
         result.holdouts.append({"source": source, "locator": locator, "literal": literal,
                                 "reason": classification.reason if classification.kind == "holdout"
                                 else "bare year is a fixed-fact candidate"})
@@ -251,7 +247,7 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
                 if len(matches) == 1 and matches[0].group(1) == value:
                     literal = value
                     locator = "%s.%s" % (parent, key) if parent else key
-                    classification = classify_candidate(value, str(path.relative_to(repo)), locator)
+                    classification = classify_candidate(value)
                     if classification.kind == "holdout":
                         result.holdouts.append({"source": str(path.relative_to(repo)), "locator": locator,
                                                 "literal": literal, "reason": classification.reason})
@@ -400,8 +396,9 @@ def main() -> int:
     parser.add_argument("--holdouts-output", type=Path)
     args = parser.parse_args()
     result = convert_corpus(args.repo, write=args.write)
-    # CLI safety gate: never emit review artifacts or a success summary unless
-    # the complete authoritative touched set independently round-trips.
+    # Keep the command boundary explicitly gated even though convert_corpus
+    # also proves its result before returning. This prevents a future caller
+    # refactor from turning the CLI into a green-without-proof path.
     day_zero_equivalence.file_round_trip(
         sorted(result.touched_files), result.before_files, result.after_files,
         result.file_proofs, result.date_proofs,

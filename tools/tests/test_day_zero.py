@@ -23,13 +23,11 @@ def test_iso_long_form_and_negative_offsets():
 
 
 def test_fixed_fact_candidates_are_held_out():
-    assert day_zero.classify_candidate("2019", "facts.md", "b:abc:0").kind == "holdout"
-    citation = day_zero.classify_candidate(
-        "410 U.S. 113 (1973)", "facts.md", "b:abc:0"
-    )
+    assert day_zero.classify_candidate("2019").kind == "holdout"
+    citation = day_zero.classify_candidate("410 U.S. 113 (1973)")
     assert citation.kind == "holdout"
     statutory = day_zero.classify_candidate(
-        "The statute became effective January 1, 2020.", "facts.md", "b:abc:0"
+        "The statute became effective January 1, 2020."
     )
     assert statutory.kind == "holdout"
 
