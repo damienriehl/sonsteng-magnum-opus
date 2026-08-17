@@ -90,7 +90,9 @@ def file_round_trip(
 ) -> RoundTripResult:
     """Prove offsets and bytes for every file in the declared touched set.
 
-    ``before_files`` defines that complete set.  There must be exactly one
+    ``before_files`` defines that complete set. A newly-created output is
+    represented explicitly as ``path: b""`` and its reverse edit must delete
+    the complete generated content. There must be exactly one
     file proof and an after snapshot for each path; silently proving only a
     converter/editor subset is therefore impossible.
     """

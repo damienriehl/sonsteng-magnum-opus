@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/date-offsets.schema.json",
+  "title": "Matter prose Day Zero offsets",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "matter_id", "anchor", "entries"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "matter_id": { "type": "string", "pattern": "^m\\d{2}$" },
+    "anchor": { "type": "string", "format": "date" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "block_id", "locator", "literal", "day_zero_offset"],
+        "properties": {
+          "source": { "type": "string" },
+          "block_id": { "type": "string", "pattern": "^b:[0-9a-f]{8}$" },
+          "locator": { "type": "integer", "minimum": 0 },
+          "literal": { "type": "string" },
+          "day_zero_offset": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

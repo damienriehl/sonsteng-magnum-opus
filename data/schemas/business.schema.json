@@ -41,6 +41,7 @@
         },
         "matter_summary": { "type": "string" },
         "intake_date": { "type": "string", "format": "date" },
+        "intake_date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
         "referral_source": { "type": "string" }
       }
     },
@@ -59,7 +60,8 @@
           "enum": ["clear", "waivable", "conflict"]
         },
         "notes": { "type": "string" },
-        "checked_date": { "type": "string", "format": "date" }
+        "checked_date": { "type": "string", "format": "date" },
+        "checked_date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." }
       }
     },
     "engagement": {
@@ -77,6 +79,7 @@
         "flat_fee": { "type": "number", "exclusiveMinimum": 0, "description": "Fixed fee (fee_type=flat)." },
         "retainer_amount": { "type": "number", "exclusiveMinimum": 0, "description": "Retainer deposited to trust (fee_type=retainer)." },
         "engagement_date": { "type": "string", "format": "date" },
+        "engagement_date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
         "letter_md": {
           "type": "string",
           "description": "Relative path to the engagement-letter Markdown file."
@@ -110,6 +113,7 @@
         "properties": {
           "id": { "type": "string", "pattern": "^m\\d{2}\\.te\\.\\d{4}$" },
           "date": { "type": "string", "format": "date" },
+          "date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
           "timekeeper_id": { "type": "string", "pattern": "^FIRM-TK-\\d{2}$" },
           "hours": {
             "type": "number",
@@ -130,13 +134,16 @@
         "properties": {
           "id": { "type": "string", "pattern": "^m\\d{2}\\.inv\\.\\d{3}$" },
           "date": { "type": "string", "format": "date" },
+          "date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
           "period": {
             "type": "object",
             "additionalProperties": false,
             "required": ["start", "end"],
             "properties": {
               "start": { "type": "string", "format": "date" },
-              "end": { "type": "string", "format": "date" }
+              "start_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
+              "end": { "type": "string", "format": "date" },
+              "end_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." }
             }
           },
           "fees": { "type": "number", "minimum": 0 },
@@ -160,6 +167,7 @@
         "properties": {
           "id": { "type": "string", "pattern": "^m\\d{2}\\.tr\\.\\d{3}$" },
           "date": { "type": "string", "format": "date" },
+          "date_day_zero_offset": { "type": "integer", "description": "Signed days from matter.open_date." },
           "type": { "type": "string", "enum": ["deposit", "disbursement"] },
           "amount": { "type": "number", "exclusiveMinimum": 0 },
           "related_invoice_id": { "type": "string", "pattern": "^m\\d{2}\\.inv\\.\\d{3}$" },

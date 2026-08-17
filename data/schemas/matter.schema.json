@@ -231,10 +231,18 @@
       "type": "string",
       "format": "date"
     },
+    "open_date_day_zero_offset": {
+      "type": "integer",
+      "description": "Signed days from open_date; always zero for the anchor literal."
+    },
     "as_of_date": {
       "type": "string",
       "format": "date",
       "description": "Simulation 'now'; nothing in the matter may be dated after this."
+    },
+    "as_of_date_day_zero_offset": {
+      "type": "integer",
+      "description": "Signed days from this matter's open_date."
     },
     "custom_facts": {
       "type": "object",
