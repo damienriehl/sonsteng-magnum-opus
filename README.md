@@ -2,7 +2,7 @@
 
 Consolidating **Prof. John O. Sonsteng's** life work on legal-education reform into a
 layered whole — a canonical text, a structured practicum curriculum, and an
-AI-assisted delivery platform — that trains the next generation of advocates through a
+AI-assisted delivery platform — that trains the next generation of lawyers through a
 **human-and-AI ("centaur") apprenticeship**.
 
 **John O. Sonsteng · Damien Riehl · with Roger S. Haydock.** Hosted by Damien Riehl;

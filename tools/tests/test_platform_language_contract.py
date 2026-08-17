@@ -51,6 +51,10 @@ def forbidden_educational_grading(text):
     return re.search(r"\bgrad(?:e|ed|er|ers|es|ing)\b", scrubbed, re.I)
 
 
+def forbidden_advocate_stem(text):
+    return re.search(r"\badvocat\w*", text, re.I)
+
+
 class TestPlatformLanguageContract(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -83,10 +87,19 @@ class TestPlatformLanguageContract(unittest.TestCase):
         # times, from the vocabulary lock on 2026-08-06 until the 2026-08-17 audit.
         pitch = Path(ROOT, "site", "index.html").read_text(encoding="utf-8")
         self.assertIsNone(forbidden_educational_grading(pitch))
+        self.assertIsNone(forbidden_advocate_stem(pitch))
+        self.assertIn(
+            "Training the next generation of lawyers as trusted advisors.",
+            pitch,
+        )
+
+        readme = Path(ROOT, "README.md").read_text(encoding="utf-8")
+        self.assertIsNone(forbidden_advocate_stem(readme))
 
     def test_mutation_canary_detects_forbidden_pitch_language(self):
         pitch = Path(ROOT, "site", "index.html").read_text(encoding="utf-8")
         self.assertIsNotNone(forbidden_educational_grading(pitch + "\nWork is graded."))
+        self.assertIsNotNone(forbidden_advocate_stem(pitch + "\nThey become advocates."))
 
     def test_ai_default_and_scripted_sample_are_both_accurately_labelled(self):
         home = json.loads(Path(ROOT, "data", "copy", "home.json").read_text(encoding="utf-8"))
