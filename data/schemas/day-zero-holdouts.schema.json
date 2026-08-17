@@ -11,6 +11,6 @@
     "description": { "type": "string" },
     "method": { "type": "string" },
     "summary": { "type": "object", "required": ["count", "by_reason"] },
-    "entries": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["source", "locator", "literal", "reason", "review_status"], "properties": { "source": {"type":"string"}, "locator": {"type":"string"}, "literal": {"type":"string"}, "reason": {"type":"string"}, "review_status": {"const":"candidate_pending_human_review"} } } }
+    "entries": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["source", "locator", "literal", "reason", "review_status"], "properties": { "source": {"type":"string"}, "locator": {"type":"string"}, "literal": {"type":"string"}, "reason": {"type":"string"}, "review_status": {"enum":["candidate_pending_human_review", "declared_absolute_holdout"]} } } }
   }
 }

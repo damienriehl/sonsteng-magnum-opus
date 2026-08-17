@@ -2,7 +2,7 @@
 """tools/validate_spine.py — the integrity gate for the Sonsteng data spine.
 
 This is the spine's ONLY automated integrity gate, designed to run at
-20-parallel-author scale. It implements the 29 checks in
+20-parallel-author scale. It implements the 30 checks in
 docs/research/validator-spec.md plus the countable depth floor from
 docs/content-style-guide.md.
 
@@ -34,7 +34,7 @@ import os
 import re
 import sys
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -61,6 +61,12 @@ INFO = "INFO"
 SEVERITY_RANK = {ERROR: 0, WARN: 1, INFO: 2}
 
 CENT = Decimal("0.01")
+VALIDATOR_CHECK_COUNT = 30
+
+# U16a compatibility mode: resolve and validate additive offsets now, but do
+# not require every convertible absolute date to carry one until U16b.
+ENFORCE_DAY_ZERO_OFFSETS = False
+DECLARED_HOLDOUT_STATUS = "declared_absolute_holdout"
 
 SECTION_KEYS = [
     "intro",
@@ -220,6 +226,10 @@ class Report:
         self.findings: list[Finding] = []
         self.matters_seen: set[str] = set()
         self.modules_seen: set[str] = set()
+        self.checked_dates = 0
+        self.offset_dates_checked = 0
+        self.day_zero_offset_enforcement = ENFORCE_DAY_ZERO_OFFSETS
+        self._checked_date_fields: set[tuple[str, str]] = set()
 
     def add(self, scope, check, severity, message, detail=None):
         self.findings.append(Finding(scope, check, severity, message, detail))
@@ -234,6 +244,15 @@ class Report:
 
     def has_errors(self):
         return any(f.severity == ERROR for f in self.findings)
+
+    def record_checked_date(self, source, locator, used_offset):
+        field = (str(source), locator)
+        if field in self._checked_date_fields:
+            return
+        self._checked_date_fields.add(field)
+        self.checked_dates += 1
+        if used_offset:
+            self.offset_dates_checked += 1
 
 
 # ===========================================================================
@@ -262,10 +281,15 @@ def is_tenth(hours) -> bool:
 
 
 def parse_date(s):
-    try:
-        return date.fromisoformat(s)
-    except (ValueError, TypeError):
+    if not isinstance(s, str):
         return None
+    for parser in (date.fromisoformat,
+                   lambda value: datetime.strptime(value, "%B %d, %Y").date()):
+        try:
+            return parser(s)
+        except ValueError:
+            pass
+    return None
 
 
 def word_count(text) -> int:
@@ -702,13 +726,146 @@ def _declare_criteria(criteria, src, st: SymbolTable):
 
 class Validator:
     def __init__(self, world: World, schemas: SchemaSet, report: Report,
-                 strict: bool, online: bool):
+                 strict: bool, online: bool,
+                 enforce_day_zero_offsets: bool = ENFORCE_DAY_ZERO_OFFSETS):
         self.world = world
         self.schemas = schemas
         self.report = report
         self.strict = strict
         self.online = online
+        self.enforce_day_zero_offsets = enforce_day_zero_offsets
+        self.report.day_zero_offset_enforcement = enforce_day_zero_offsets
         self.st: SymbolTable | None = None
+        self.declared_holdouts = self._declared_holdout_keys()
+        self._resolved_dates: dict[tuple[str, str], date | None] = {}
+
+    def _normal_source(self, source):
+        path = Path(source)
+        if path.is_absolute():
+            try:
+                path = path.relative_to(self.world.data_dir)
+            except ValueError:
+                pass
+        value = str(path).replace("\\", "/")
+        if "/data/" in value:
+            value = value.split("/data/", 1)[1]
+        return value.removeprefix("data/")
+
+    def _declared_holdout_keys(self):
+        keys = set()
+        for artifact in self.world.day_zero_artifacts:
+            if artifact.entity_type != "day_zero_holdouts":
+                continue
+            for entry in artifact.obj.get("entries", []):
+                if entry.get("review_status") != DECLARED_HOLDOUT_STATUS:
+                    continue
+                keys.add((self._normal_source(entry.get("source", "")),
+                          entry.get("locator", ""), entry.get("literal")))
+        return keys
+
+    def _is_declared_holdout(self, source, locator, literal):
+        return (self._normal_source(source), locator, literal) in self.declared_holdouts
+
+    def _resolve_date(self, mid, record, key, source, locator, anchor,
+                      convertible=True):
+        """Resolve a converter-emitted offset sibling, or an absolute literal."""
+        field = (str(source), locator)
+        if field in self._resolved_dates:
+            return self._resolved_dates[field]
+        literal = record.get(key)
+        offset_key = key + "_day_zero_offset"
+        offset = record.get(offset_key)
+        if offset is not None:
+            if anchor is None or isinstance(offset, bool) or not isinstance(offset, int):
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} cannot resolve {locator} from {offset_key}={offset!r}.")
+                self._resolved_dates[field] = None
+                return None
+            resolved = anchor + timedelta(days=offset)
+            absolute = parse_date(literal)
+            if absolute is not None and absolute != resolved:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} {locator} literal {literal} disagrees with "
+                                f"{offset_key}={offset} (resolves to {resolved}).")
+            self.report.record_checked_date(source, locator, used_offset=True)
+            self._resolved_dates[field] = resolved
+            return resolved
+
+        absolute = parse_date(literal)
+        if absolute is None:
+            self._resolved_dates[field] = None
+            return None
+        if (self.enforce_day_zero_offsets and convertible and
+                not self._is_declared_holdout(source, locator, literal)):
+            self.report.add(mid, "F30", ERROR,
+                            f"{mid} {locator} remains absolute without {offset_key}.")
+        self.report.record_checked_date(source, locator, used_offset=False)
+        self._resolved_dates[field] = absolute
+        return absolute
+
+    def _walk_structured_dates(self, mid, value, source, anchor, locator=""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_locator = f"{locator}.{key}" if locator else key
+                if (not key.endswith("_day_zero_offset") and
+                        parse_date(child) is not None):
+                    self._resolve_date(mid, value, key, source, child_locator, anchor)
+                elif isinstance(child, (dict, list)):
+                    self._walk_structured_dates(mid, child, source, anchor,
+                                                child_locator)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                child_locator = f"{locator}.{index}" if locator else str(index)
+                self._walk_structured_dates(mid, child, source, anchor, child_locator)
+
+    def _check_day_zero_representation(self, mid, bundle):
+        if not bundle.matter or not bundle.matter.schema_ok:
+            return
+        anchor = parse_date(bundle.matter.obj.get("open_date"))
+        loaded = [x for x in (bundle.matter, bundle.rubric, bundle.exercise,
+                              bundle.business) if x and x.schema_ok]
+        loaded.extend(x for x in bundle.personas.values() if x.schema_ok)
+        loaded.extend(x for x in bundle.other if x.schema_ok)
+        for item in loaded:
+            self._walk_structured_dates(mid, item.obj, item.path, anchor)
+
+        sidecar = bundle.date_offsets
+        if not sidecar or not sidecar.schema_ok:
+            return
+        sidecar_anchor = parse_date(sidecar.obj.get("anchor"))
+        if sidecar_anchor != anchor:
+            self.report.add(mid, "F30", ERROR,
+                            f"{mid} date-offsets anchor {sidecar.obj.get('anchor')!r} "
+                            f"does not match matter open_date {anchor}.")
+            return
+        for index, entry in enumerate(sidecar.obj.get("entries", [])):
+            literal = parse_date(entry.get("literal"))
+            offset = entry.get("day_zero_offset")
+            locator = f"entries.{index}"
+            if literal is None or isinstance(offset, bool) or not isinstance(offset, int):
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} cannot resolve date-offsets {locator}.")
+                continue
+            resolved = sidecar_anchor + timedelta(days=offset)
+            if literal != resolved:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} date-offsets {locator} literal {entry.get('literal')} "
+                                f"disagrees with day_zero_offset={offset} "
+                                f"(resolves to {resolved}).")
+            source_path = self.world.data_dir / self._normal_source(entry.get("source", ""))
+            try:
+                source_text = source_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} date-offsets {locator} source is unreadable: "
+                                f"{entry.get('source')!r}.")
+            else:
+                block_marker = "{#%s}" % entry.get("block_id", "")
+                if entry.get("literal") not in source_text or block_marker not in source_text:
+                    self.report.add(mid, "F30", ERROR,
+                                    f"{mid} date-offsets {locator} no longer matches "
+                                    f"source literal/block {entry.get('source')!r}.")
+            self.report.record_checked_date(sidecar.path, locator, used_offset=True)
 
     # -- severity helper for cross-ref tolerance -------------------------
     def ref_sev(self):
@@ -937,6 +1094,7 @@ class Validator:
         m = self.world.manifest_index.get(mid)
         mo = bundle.matter.obj if bundle.matter else None
 
+        self._check_day_zero_representation(mid, bundle)
         self._check_prefix_bleed(bundle)
         if mo and bundle.matter.schema_ok:
             self._check_a5_manifest(mid, mo, m)
@@ -1039,8 +1197,11 @@ class Validator:
     # B12 date sanity (matter-level)
     def _check_dates_matter(self, mid, bundle):
         mo = bundle.matter.obj
-        as_of = parse_date(mo.get("as_of_date"))
-        open_d = parse_date(mo.get("open_date"))
+        anchor = parse_date(mo.get("open_date"))
+        open_d = self._resolve_date(mid, mo, "open_date", bundle.matter.path,
+                                    "open_date", anchor)
+        as_of = self._resolve_date(mid, mo, "as_of_date", bundle.matter.path,
+                                   "as_of_date", anchor)
         if as_of and open_d and open_d > as_of:
             self.report.add(mid, "B12", ERROR, f"{mid} open_date {open_d} after as_of_date {as_of}.")
 
@@ -1184,10 +1345,14 @@ class Validator:
                     self.report.add(mid, "B7", WARN,
                                     f"{mid} time entry {te.get('id')} rate {rate} unverifiable (firm rate card absent).")
 
-        te_by_id = {te.get("id"): te for te in b.get("time_entries", [])}
+        te_by_id = {
+            te.get("id"): (index, te)
+            for index, te in enumerate(b.get("time_entries", []))
+        }
 
         # B9 invoice arithmetic + hourly fee tie-out
-        for inv in b.get("invoices", []):
+        anchor = parse_date(bundle.matter.obj.get("open_date")) if bundle.matter else None
+        for inv_index, inv in enumerate(b.get("invoices", [])):
             fees = inv.get("fees")
             exp = inv.get("expenses")
             pay = inv.get("payments_received")
@@ -1201,7 +1366,8 @@ class Validator:
             if fee_type == "hourly":
                 line_sum = Decimal(0)
                 for ref in inv.get("line_refs", []):
-                    te = te_by_id.get(ref)
+                    indexed_te = te_by_id.get(ref)
+                    te = indexed_te[1] if indexed_te else None
                     if te and te.get("hours") is not None and te.get("rate") is not None:
                         line_sum += dec(te["hours"]) * dec(te["rate"])
                 if inv.get("line_refs") and fees is not None and abs(line_sum - dec(fees)) > CENT:
@@ -1209,11 +1375,17 @@ class Validator:
                                     f"{mid} invoice {inv.get('id')} fees={fees} != Σ(hours×rate) over "
                                     f"line_refs={line_sum}.")
             # B12 invoice date >= latest billed entry
-            inv_d = parse_date(inv.get("date"))
+            inv_d = self._resolve_date(mid, inv, "date", bundle.business.path,
+                                       f"invoices.{inv_index}.date", anchor)
             latest = None
             for ref in inv.get("line_refs", []):
-                te = te_by_id.get(ref)
-                d = parse_date(te.get("date")) if te else None
+                indexed_te = te_by_id.get(ref)
+                if indexed_te:
+                    te_index, te = indexed_te
+                    d = self._resolve_date(mid, te, "date", bundle.business.path,
+                                           f"time_entries.{te_index}.date", anchor)
+                else:
+                    d = None
                 if d and (latest is None or d > latest):
                     latest = d
             if inv_d and latest and inv_d < latest:
@@ -1236,15 +1408,19 @@ class Validator:
                                 f"{mid} flat fee {ff} not reflected as a fixed fee line on any invoice.")
 
         # B10 trust ledger (date-ordered running balance, never negative)
-        self._check_trust(mid, b)
+        self._check_trust(mid, bundle, b)
 
         # B12 nothing after as_of_date
         as_of = None
         if bundle.matter:
-            as_of = parse_date(bundle.matter.obj.get("as_of_date"))
+            mo = bundle.matter.obj
+            matter_anchor = parse_date(mo.get("open_date"))
+            as_of = self._resolve_date(mid, mo, "as_of_date", bundle.matter.path,
+                                       "as_of_date", matter_anchor)
         if as_of:
-            for te in b.get("time_entries", []):
-                d = parse_date(te.get("date"))
+            for index, te in enumerate(b.get("time_entries", [])):
+                d = self._resolve_date(mid, te, "date", bundle.business.path,
+                                       f"time_entries.{index}.date", anchor)
                 if d and d > as_of:
                     self.report.add(mid, "B12", ERROR,
                                     f"{mid} time entry {te.get('id')} dated {d} after as_of_date {as_of}.")
@@ -1261,11 +1437,17 @@ class Validator:
                     rates.add(dec(rc["rate"]))
         return rates
 
-    def _check_trust(self, mid, b):
+    def _check_trust(self, mid, bundle, b):
         entries = b.get("trust_entries", [])
         if not entries:
             return
-        ordered = sorted(entries, key=lambda t: (t.get("date") or "", t.get("id") or ""))
+        anchor = parse_date(bundle.matter.obj.get("open_date")) if bundle.matter else None
+        resolved = []
+        for index, entry in enumerate(entries):
+            entry_date = self._resolve_date(mid, entry, "date", bundle.business.path,
+                                            f"trust_entries.{index}.date", anchor)
+            resolved.append((entry_date or date.max, entry.get("id") or "", entry))
+        ordered = [entry for _, _, entry in sorted(resolved, key=lambda row: row[:2])]
         running = Decimal(0)
         invoices = {inv.get("id"): inv for inv in b.get("invoices", [])}
         for t in ordered:
@@ -1465,6 +1647,9 @@ def emit_human(world: World, report: Report, strict: bool) -> None:
     print(f"data dir : {world.data_dir}")
     print(f"mode     : {'STRICT (ship gate)' if strict else 'lenient (fleet run)'}"
           f"{'  [jsonschema]' if HAVE_JSONSCHEMA else '  [DEGRADED: structural only]'}")
+    print(f"day zero : checked_dates={report.checked_dates} "
+          f"(offset={report.offset_dates_checked}); "
+          f"offset enforcement={'ON' if report.day_zero_offset_enforcement else 'OFF'}")
     print("=" * 72)
 
     print("\nPER-MATTER")
@@ -1527,7 +1712,10 @@ def build_json_report(world: World, report: Report, strict: bool) -> dict:
         "totals": {
             "errors": sum(1 for f in report.findings if f.severity == ERROR),
             "warnings": sum(1 for f in report.findings if f.severity == WARN),
+            "checked_dates": report.checked_dates,
+            "offset_dates_checked": report.offset_dates_checked,
         },
+        "day_zero_offset_enforcement": report.day_zero_offset_enforcement,
         "result": "FAIL" if report.has_errors() else "PASS",
         "matters": matters,
         "modules": modules,
@@ -1544,7 +1732,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             "Integrity gate for the Sonsteng data spine.\n\n"
-            "Implements the 29 checks in docs/research/validator-spec.md plus the\n"
+            f"Implements the {VALIDATOR_CHECK_COUNT} checks in "
+            "docs/research/validator-spec.md plus the\n"
             "countable depth floor from docs/content-style-guide.md. Runs per-matter\n"
             "in isolation (one broken matter never blocks the other 19), builds a\n"
             "two-pass namespaced symbol table, does all money math in Decimal, and\n"
@@ -1562,6 +1751,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "  --online    FOLIO IRI existence vs data/taxonomy/folio-crosswalk.json\n"
             "              (a local snapshot; never live MCP). IRI *format* is always\n"
             "              checked offline.\n"
+            "  Day Zero additive offsets are resolved and counted; converted-\n"
+            "  representation enforcement remains OFF until U16b.\n"
         ),
         epilog=(
             "Examples:\n"
