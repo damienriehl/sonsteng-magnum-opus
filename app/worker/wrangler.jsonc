@@ -91,8 +91,8 @@
     // JSON response; client shows a typing indicator). "true" proxies the
     // provider's SSE through a TransformStream, capturing usage server-side from
     // the terminal message_delta so all budget/replay bookkeeping is identical.
-    // Anthropic-only; openai/google BYOK fall back to non-streaming. Default OFF
-    // in every env — flip only after the D7 rehearsal says it feels slow.
+    // Anthropic-only; OpenAI/Google BYOK fall back to non-streaming. Enabled on
+    // DEV for U19 validation; production remains explicitly OFF.
     "STREAMING": "true",
 
     // ---- Turnstile bot-gate (WP6) ------------------------------------------
