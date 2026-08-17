@@ -12,7 +12,7 @@ shipped matters remain wholly original, MIT-clean analogs of the Sonsteng course
   `~/Coding Projects/folio-insights-sources/Originals/.../HAYDOCK_TRIALBOOK_1ST_CRSBK.pdf`
   (plus `~/Documents/Trialbook/...`); the Skills-Practicum handbooks/scans live in Damien's
   Google Drive (connector re-auth required).
-- Shape of the work then: restore the six matters faithfully (Midstate Univ. v. Rogers;
+- Shape of the work then: restore the six matters faithfully (Midstate and Rogers;
   Halbrock; Reagan v. Jacobson; Peters/Taylor/Thomas; State v. James; SSHC v. Baines),
   then optionally expand each to full Magnum-Opus depth (8-part packets, tiered personas,
   business layers, validator gates) as a third jurisdiction tier (candidate ids m21–m26),
