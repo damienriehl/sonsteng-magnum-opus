@@ -1,0 +1,28 @@
+{
+  "title": "Cost per credit, on your terms",
+  "purpose": "A dean-facing worksheet for comparing local delivery costs without supplied dollar assumptions.",
+  "standard_310": {
+    "label": "ABA Standard 310(b) minimum work",
+    "arithmetic": "(1 classroom hour + 2 out-of-class hours) × 15 weeks × 5 credits = 225 hours",
+    "total_hours": 225
+  },
+  "comparators": [
+    {"id": "standard", "label": "Standard class", "unit": "USD per credit", "range": {"min": 0, "max": 1000000}},
+    {"id": "seminar", "label": "Seminar", "unit": "USD per credit", "range": {"min": 0, "max": 1000000}},
+    {"id": "clinic", "label": "Clinic", "unit": "USD per credit", "range": {"min": 0, "max": 1000000}},
+    {"id": "internship", "label": "Internship", "unit": "USD per credit", "range": {"min": 0, "max": 1000000}}
+  ],
+  "faculty_inputs": [
+    {"id": "exercise-count", "model": "stipend", "label": "Exercises delivered", "unit": "exercises per course", "range": {"min": 1, "max": 100}},
+    {"id": "stipend-per-exercise", "model": "stipend", "label": "Faculty stipend", "unit": "USD per exercise", "range": {"min": 0, "max": 1000000}},
+    {"id": "stipend-credits", "model": "stipend", "label": "Course credits", "unit": "credits", "range": {"min": 0.25, "max": 30}},
+    {"id": "annual-salary", "model": "load", "label": "Annual faculty compensation", "unit": "USD per year", "range": {"min": 0, "max": 1000000}},
+    {"id": "annual-load-credits", "model": "load", "label": "Annual teaching load", "unit": "credits per year", "range": {"min": 0.25, "max": 60}},
+    {"id": "load-credits", "model": "load", "label": "Practicum credits", "unit": "credits", "range": {"min": 0.25, "max": 30}}
+  ],
+  "validation": {
+    "blank": "Enter a value to calculate.",
+    "nonnumeric": "Enter a number within the stated range.",
+    "range": "Use a value within the stated range. The last valid result remains shown."
+  }
+}
