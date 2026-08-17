@@ -80,3 +80,39 @@ base/candidate SHA, manifest hash, Pages deployment ID digest, Worker version ID
 provenance results, restoration result, and clean-git proof. Mark every skipped live step **NOT RUN**,
 never pass. Any new product choice goes to a new Decision Sheet; implementation defects belong in
 code/tests and are fixed without re-asking Damien.
+
+## Evidence record — 2026-08-17 background pass
+
+This record covers the autonomous, non-credentialed preparation leg only. It does not claim that a
+human Publisher reviewed or authorized a candidate, that production changed, or that the recovery
+drill ran.
+
+| Field | Evidence |
+|---|---|
+| Observed at | `2026-08-17T15:33:29-05:00` |
+| Browser | Chromium `151.0.7922.108` (snap), headless |
+| Editor viewports | Desktop; Large Type / 200%; mobile `390x844` |
+| Publisher harness viewport | Puppeteer default `800x600`; keyboard submission path included |
+| Editor browser matrix | `89/89 PASS` via `EDITOR_HEADLESS=1 HEADLESS=1 node app/editor/verify-editor.js` |
+| Publisher browser contract | `PUBLISHER CLIENT PASS` via `node tools/verify_publisher_client.mjs` |
+| Publisher Worker contracts | `editor-publisher-ui`, `editor-publisher-review`, and `editor-publisher-release`: `3/3 PASS` |
+| Screenshot digest — desktop | `sha256:d6ec99d57e1df04bf359279c6ce16edab174bedc09c8fa6856936eb65056e826` |
+| Screenshot digest — Large Type | `sha256:d6ec99d57e1df04bf359279c6ce16edab174bedc09c8fa6856936eb65056e826` |
+| Screenshot digest — mobile | `sha256:aba7946f10ee772463ba0a57f3e000ac3a0c7e4f2be78e340fc43e743f295033` |
+| Screenshot retention | Disposable local files removed after digest capture; no edited content retained |
+| Clean-git proof | canonical `main` clean at `0a193f6bbbefb4045b4b50551c1c7de7acae78e6` |
+| Access actor | **NOT RUN** — requires Damien's authenticated Publisher session |
+| DEV apply batch IDs | **NOT RUN** — no live edit was made in this background pass |
+| Prepared release ID | **NOT RUN** |
+| Authorized release ID | **NOT RUN** |
+| Base/candidate SHA | **NOT RUN** |
+| Manifest/evidence/membership hashes | **NOT RUN** |
+| Pages deployment ID digest | **NOT RUN** |
+| Worker version ID digest | **NOT RUN** |
+| Live provenance result | **NOT RUN** |
+| Exact-pair restoration result | **NOT RUN** |
+
+The next step is the human leg: Damien reviews the one reconciled backfilled revision, submits the
+decision, and authorizes the resulting immutable candidate. The supervised process-scoped canary
+and exact-pair recovery drill remain required afterward; production stays config-off until both are
+recorded.
