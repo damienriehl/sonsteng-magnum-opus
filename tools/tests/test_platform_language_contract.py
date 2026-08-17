@@ -76,6 +76,18 @@ class TestPlatformLanguageContract(unittest.TestCase):
         self.assertIsNone(forbidden_educational_grading(rendered))
         self.assertIn("Planning Guide and Checklist", rendered)
 
+    def test_hand_authored_pitch_page_uses_locked_vocabulary(self):
+        # The pitch page is hand-authored and lives outside site/platform/, so every
+        # generator-scoped gate misses it. It is also the most public surface we own.
+        # Without this assertion "grading" survives here indefinitely: it did, five
+        # times, from the vocabulary lock on 2026-08-06 until the 2026-08-17 audit.
+        pitch = Path(ROOT, "site", "index.html").read_text(encoding="utf-8")
+        self.assertIsNone(forbidden_educational_grading(pitch))
+
+    def test_mutation_canary_detects_forbidden_pitch_language(self):
+        pitch = Path(ROOT, "site", "index.html").read_text(encoding="utf-8")
+        self.assertIsNotNone(forbidden_educational_grading(pitch + "\nWork is graded."))
+
     def test_ai_default_and_scripted_sample_are_both_accurately_labelled(self):
         home = json.loads(Path(ROOT, "data", "copy", "home.json").read_text(encoding="utf-8"))
         copy = json.dumps(home)
