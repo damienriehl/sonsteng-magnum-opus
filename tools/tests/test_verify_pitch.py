@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,73 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 import verify_pitch  # noqa: E402
+
+
+EXPECTED_PROOF_SUMMARIES = [
+    "THE PROOF · 19,077 attorneys surveyed",
+    "THE PROOF · 70-point client-development gap",
+    "THE PROOF · diagnosis, method, and open resource",
+    "THE PROOF · 3 layers, 1 open whole",
+    "THE PROOF · ~1,438 assessed points",
+    "THE PROOF · 24/7 first-pass critique",
+    "THE PROOF · all 26 skills mapped",
+    "THE PROOF · CC BY 4.0 content + MIT code",
+    "THE PROOF · 8 decision prompts captured in one place",
+]
+
+
+def content_word_count(parser: verify_pitch.PageParser) -> int:
+    """Count all authored content, including text in closed disclosures."""
+    has_main = any(element.tag == "main" for element in parser.elements)
+    text = " ".join(
+        node.value
+        for node in parser.text_nodes
+        if verify_pitch._is_content_text(node, has_main)
+    )
+    return len(re.findall(r"\b[\w~$%]+(?:[-'\u2019][\w]+)*\b", text))
+
+
+def proof_contract_errors(path: Path) -> list[str]:
+    parser = verify_pitch._parse(path)
+    sections = [element for element in parser.elements if element.tag == "section"]
+    errors: list[str] = []
+    summaries: list[str] = []
+    if len(sections) != 9:
+        errors.append("expected exactly nine major sections")
+    for section in sections:
+        proofs = [
+            child for child in section.children
+            if isinstance(child, verify_pitch.Element)
+            and child.tag == "details"
+            and "proof" in child.attrs.get("class", "").split()
+        ]
+        if len(proofs) != 1:
+            errors.append("each section needs one direct-child proof disclosure")
+            continue
+        proof = proofs[0]
+        if "open" in proof.attrs:
+            errors.append("proof disclosures must be closed by default")
+        summary = next(
+            (child for child in proof.children
+             if isinstance(child, verify_pitch.Element) and child.tag == "summary"),
+            None,
+        )
+        summaries.append(verify_pitch._descendant_text(summary).strip() if summary else "")
+    if summaries != EXPECTED_PROOF_SUMMARIES:
+        errors.append("proof summaries do not match the approved list")
+    if len(set(summaries)) != len(summaries):
+        errors.append("proof summaries must be unique")
+    source = path.read_text(encoding="utf-8")
+    required_fragments = (
+        'id="proofToggle"', 'aria-expanded="false"',
+        "querySelectorAll('details.proof')", "beforeprint", "afterprint",
+        "@media print{details.proof>summary", "details.proof[open]",
+        ".reveal{opacity:1!important;transform:none!important}",
+    )
+    for fragment in required_fragments:
+        if fragment not in source:
+            errors.append(f"missing disclosure contract fragment: {fragment}")
+    return errors
 
 
 VALID_PAGE = """<!doctype html>
@@ -173,3 +241,52 @@ def test_transfer_weight_does_not_increase_violation_count(page: Path):
     assert result.returncode != 0
     assert "transfer weight:" in result.stdout
     assert "verify_pitch: 1 violation(s)" in result.stderr
+
+
+def test_pitch_has_nine_closed_unique_direct_child_proofs_with_exact_summaries():
+    assert proof_contract_errors(ROOT / "site/index.html") == []
+
+
+def test_pitch_authored_prose_retains_55_to_65_percent_of_baseline():
+    count = content_word_count(verify_pitch._parse(ROOT / "site/index.html"))
+    assert 1_808 <= count <= 2_137
+
+
+def test_statistics_tables_and_citations_are_inside_their_section_proof():
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    for section in (element for element in parser.elements if element.tag == "section"):
+        proof = next(
+            child for child in section.children
+            if isinstance(child, verify_pitch.Element)
+            and child.tag == "details"
+            and "proof" in child.attrs.get("class", "").split()
+        )
+        for element in parser.elements:
+            if element.tag not in {"table", "cite"} and not (
+                element.tag in {"b", "span", "div"}
+                and re.search(r"(?<!\w)\d", verify_pitch._descendant_text(element))
+            ):
+                continue
+            if section not in tuple(verify_pitch._ancestors(element.parent)):
+                continue
+            assert proof in tuple(verify_pitch._ancestors(element.parent)) or element is proof
+
+
+def test_missing_disclosure_mutation_is_caught(tmp_path: Path):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    mutated = source.replace('<details class="proof">', '<div class="proof">', 1)
+    path = tmp_path / "missing-disclosure.html"
+    path.write_text(mutated, encoding="utf-8")
+    assert proof_contract_errors(path)
+
+
+def test_missing_print_rule_mutation_is_caught(tmp_path: Path):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    mutated = source.replace(
+        "@media print{details.proof>summary",
+        "@media screen{details.proof>summary",
+        1,
+    )
+    path = tmp_path / "missing-print-rule.html"
+    path.write_text(mutated, encoding="utf-8")
+    assert proof_contract_errors(path)
