@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 import sys
-import re
 from pathlib import Path
 
 import pytest
@@ -19,10 +20,10 @@ import verify_pitch  # noqa: E402
 
 EXPECTED_PROOF_SUMMARIES = [
     "THE PROOF · 19,077 attorneys surveyed",
+    "THE PROOF · ~1,438 assessed points",
     "THE PROOF · 70-point client-development gap",
     "THE PROOF · diagnosis, method, and open resource",
     "THE PROOF · 3 layers, 1 open whole",
-    "THE PROOF · ~1,438 assessed points",
     "THE PROOF · 24/7 first-pass critique",
     "THE PROOF · all 26 skills mapped",
     "THE PROOF · CC BY 4.0 content + MIT code",
@@ -31,12 +32,17 @@ EXPECTED_PROOF_SUMMARIES = [
 
 
 def content_word_count(parser: verify_pitch.PageParser) -> int:
-    """Count all authored content, including text in closed disclosures."""
+    """Count pitch prose, including closed disclosures but excluding data cards."""
     has_main = any(element.tag == "main" for element in parser.elements)
     text = " ".join(
         node.value
         for node in parser.text_nodes
         if verify_pitch._is_content_text(node, has_main)
+        and not any(
+            ancestor.tag == "article"
+            and "matter-cover" in ancestor.attrs.get("class", "").split()
+            for ancestor in verify_pitch._ancestors(node.parent)
+        )
     )
     return len(re.findall(r"\b[\w~$%]+(?:[-'\u2019][\w]+)*\b", text))
 
@@ -290,3 +296,86 @@ def test_missing_print_rule_mutation_is_caught(tmp_path: Path):
     path = tmp_path / "missing-print-rule.html"
     path.write_text(mutated, encoding="utf-8")
     assert proof_contract_errors(path)
+
+
+def test_pitch_opens_problem_then_midstate_demonstration():
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    section_ids = [
+        element.attrs.get("id")
+        for element in parser.elements
+        if element.tag == "section"
+    ]
+    assert section_ids[:2] == ["problem", "practicum"]
+
+
+def test_pitch_has_one_linked_cover_for_every_manifest_matter():
+    manifest = json.loads((ROOT / "data/matters/manifest.json").read_text())
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    covers = [
+        element for element in parser.elements
+        if element.tag == "article" and "matter-cover" in element.attrs.get("class", "").split()
+    ]
+    ids = [cover.attrs.get("data-matter-id") for cover in covers]
+    assert len(covers) == 20
+    assert len(set(ids)) == 20
+    assert set(ids) == {matter["id"] for matter in manifest["matters"]}
+    by_id = {matter["id"]: matter for matter in manifest["matters"]}
+    for cover in covers:
+        entry = by_id[cover.attrs["data-matter-id"]]
+        assert entry["caption"] in verify_pitch._descendant_text(cover)
+        links = [
+            child for child in parser.elements
+            if child.tag == "a" and cover in tuple(verify_pitch._ancestors(child.parent))
+        ]
+        assert len(links) == 1
+        assert links[0].attrs["href"] == (
+            f'/platform/matters/{entry["slug"]}/'
+        )
+
+
+def test_every_cover_skill_ref_resolves_against_build_catalogue():
+    manifest = json.loads((ROOT / "data/matters/manifest.json").read_text())
+    catalogue = json.loads((ROOT / "data/taxonomy/skills.json").read_text())
+    known_skills = {skill["id"] for skill in catalogue["skills"]}
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    covers = {
+        element.attrs["data-matter-id"]: element
+        for element in parser.elements
+        if element.tag == "article" and "matter-cover" in element.attrs.get("class", "").split()
+    }
+    for entry in manifest["matters"]:
+        matter = json.loads(
+            (ROOT / "data/matters" / entry["slug"] / "matter.json").read_text()
+        )
+        assert matter["skill_refs"]
+        assert set(matter["skill_refs"]) <= known_skills
+        rendered_refs = {
+            child.attrs["data-skill-ref"]
+            for child in parser.elements
+            if "data-skill-ref" in child.attrs
+            and covers[entry["id"]] in tuple(verify_pitch._ancestors(child.parent))
+        }
+        assert rendered_refs == set(matter["skill_refs"])
+
+
+def test_proposed_length_vocabulary_is_dean_editable_and_enumerated():
+    vocabulary = json.loads(
+        (ROOT / "data/copy/matter-length-options.json").read_text(encoding="utf-8")
+    )
+    assert vocabulary["schema_version"] == "1.0.0"
+    assert vocabulary["type"] == "enumerated_copy_options"
+    options = vocabulary["options"]
+    assert [option["value"] for option in options] == [
+        "one_week", "three_week", "full_semester"
+    ]
+    assert all(option["label"] and option["description"] for option in options)
+
+
+def test_matter_covers_have_keyboard_hover_focus_and_390px_contract():
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    assert '.matter-cover>a{' in source
+    assert '.matter-cover>a:hover' in source
+    assert '.matter-cover>a:focus-visible' in source
+    assert '@media(max-width:390px)' in source
+    assert '.matter-grid{grid-template-columns:1fr}' in source
+    assert 'min-width:0' in source

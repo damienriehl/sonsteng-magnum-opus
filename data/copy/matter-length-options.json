@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "type": "enumerated_copy_options",
+  "name": "matter_length",
+  "status": "proposed",
+  "options": [
+    {
+      "value": "one_week",
+      "label": "One week",
+      "description": "A focused matter for one week of preparation, performance, and feedback."
+    },
+    {
+      "value": "three_week",
+      "label": "Three weeks",
+      "description": "A connected matter sequence developed across three weeks of work and revision."
+    },
+    {
+      "value": "full_semester",
+      "label": "Full semester",
+      "description": "A sustained matter arc that carries skills, deliverables, and assessment through a semester."
+    }
+  ]
+}

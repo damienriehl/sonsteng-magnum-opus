@@ -223,14 +223,19 @@ footer .rule{background:rgba(255,255,255,.14);margin:0 auto 24px;max-width:80px}
 .book .bk{font-family:'Fraunces',serif;font-weight:900;font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--brass)}
 .book h4{font-family:'Fraunces',serif;font-weight:900;font-size:1.1rem;margin:5px 0 4px;line-height:1.1}
 .book p{font-size:.88rem;color:var(--ink-soft)}
-/* case files */
-.cases{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:8px}
-@media(max-width:820px){.cases{grid-template-columns:1fr 1fr}}
-@media(max-width:520px){.cases{grid-template-columns:1fr}}
-.case{background:rgba(255,255,255,.42);border:1px solid var(--line);border-left:4px solid var(--brass);border-radius:4px;padding:16px 18px}
-.case .cty{font-family:'Fraunces',serif;font-weight:600;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--claret)}
-.case h4{font-family:'Fraunces',serif;font-weight:900;font-style:italic;font-size:1.04rem;margin:5px 0 6px;line-height:1.14}
-.case .csk{font-size:.85rem;color:var(--ink-soft)}
+.matter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.matter-cover{min-width:0}
+.matter-cover>a{display:flex;min-width:0;height:100%;flex-direction:column;padding:20px;border:1px solid var(--line);border-top:3px solid var(--claret);background:var(--paper);color:var(--ink);text-decoration:none;box-shadow:0 2px 10px rgba(34,29,25,.06);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.matter-cover>a:hover{border-color:var(--brass);box-shadow:0 8px 22px rgba(34,29,25,.12);transform:translateY(-2px)}
+.matter-cover>a:focus-visible{outline:3px solid var(--brass);outline-offset:4px}
+.matter-cover h4{overflow-wrap:anywhere;margin:8px 0 10px;font-size:1.08rem}
+.matter-num,.matter-shape,.matter-skills,.matter-open{display:block}
+.matter-num{color:var(--claret);font:700 .7rem 'Fraunces',serif;letter-spacing:.13em;text-transform:uppercase}
+.matter-shape{color:var(--ink-soft);font-size:.84rem}
+.matter-skills{margin:14px 0;color:var(--ink-soft);font-size:.72rem;letter-spacing:.04em}
+.matter-open{margin-top:auto;padding-top:12px;color:var(--claret);font:700 .78rem 'Fraunces',serif;text-transform:uppercase;letter-spacing:.08em}
+@media(max-width:720px){.matter-grid{grid-template-columns:1fr}}
+@media(max-width:390px){.matter-grid{grid-template-columns:1fr}.matter-cover>a{padding:16px}.matter-cover h4{font-size:1rem}}
 /* ledger / cost callout */
 .ledger{background:rgba(255,255,255,.4);border:1px solid var(--line);border-left:5px solid var(--brass);border-radius:4px;padding:22px 24px;margin-top:26px}
 .ledger .lh{font-family:'Fraunces',serif;font-weight:600;font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--brass);margin-bottom:12px}
@@ -250,10 +255,10 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
   <div class="brand">Legal Practicum<small>A Legal Education Renaissance</small></div>
   <div class="navlinks">
     <a href="#problem">The Problem</a>
+    <a href="#practicum">The Practicum</a>
     <a href="#skills">The Evidence</a>
     <a href="#work">The Work</a>
     <a href="#opus">The Opus</a>
-    <a href="#practicum">The Practicum</a>
     <a href="#centaur">The Centaur</a>
     <a href="#where">Open</a>
     <a href="#react">React</a>
@@ -298,9 +303,56 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
   <div class="pull"><q>It does not train students to be lawyers.</q><cite>Sonsteng, Ward, Bruce &amp; Petersen · A Legal Education Renaissance (2007)</cite></div>
 </div></details></section>
 
-<!-- II — THE EVIDENCE -->
+<!-- II — PRACTICUM -->
+<section id="practicum" class="band"><div class="wrap reveal">
+  <div class="sec-head"><span class="sec-num">II</span><div><span class="eyebrow">How it teaches</span><h2>A working law firm, not a lecture hall.</h2></div></div>
+  <p class="lead-para">Students perform the work, receive critique, revise, and build visible competence.</p>
+</div><details class="proof"><summary>THE PROOF · ~1,438 assessed points</summary><div class="wrap reveal">
+  <p class="section-sub">Every course runs a three-step cycle</p>
+  <div class="timeline">
+    <div class="tl"><div class="yr">Step 01 · FSS-I</div><h3>Faculty Supervised Study I</h3><p>Independent pre-work — texts, casebooks, prepared materials. Competence is checked with short papers, essays, or an oral exercise before the room convenes.</p><div class="role">Prepare</div></div>
+    <div class="tl"><div class="yr">Step 02 · IRP</div><h3>Intensive Residential Practicum</h3><p>The core: face-to-face, small-group, faculty-guided real-world simulation. The reps that only happen live — argument, negotiation, trial.</p><div class="role">Perform</div></div>
+    <div class="tl"><div class="yr">Step 03 · FSS-II</div><h3>Faculty Supervised Study II</h3><p>A comprehensive applied assessment integrating the prep and the practicum — memos, problem discussion, the redlined re-write against the rubric.</p><div class="role">Integrate</div></div>
+  </div>
+
+  <p class="section-sub">The matters — twenty complete case files</p>
+  <div class="matter-grid">
+    <article class="matter-cover" data-matter-id="m01"><a href="/platform/matters/m01-arbitration-meridian/"><span class="matter-num">M01 · Meridian</span><h4>Halden Regional Transit District v. Marceline Osgard and Meridian Alliance of Public Workers, Local 7 (Arbitration)</h4><span class="matter-shape">Employment arbitration</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-02, SK-LP-07, SK-LP-08, SK-LP-09, SK-LP-14"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-08"></i><i data-skill-ref="SK-LP-09"></i><i data-skill-ref="SK-LP-14"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m02"><a href="/platform/matters/m02-discipline-meridian/"><span class="matter-num">M02 · Meridian</span><h4>In re Petition for Disciplinary Action against Gregor A. Winterhalt, a Meridian Attorney</h4><span class="matter-shape">Attorney discipline</span><span class="matter-skills" aria-label="Skills: SK-LP-16, SK-LP-07, SK-LP-10, SK-LP-08, SK-LP-17, SK-LP-02"><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-08"></i><i data-skill-ref="SK-LP-17"></i><i data-skill-ref="SK-LP-02"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m03"><a href="/platform/matters/m03-tort-meridian/"><span class="matter-num">M03 · Meridian</span><h4>Lorraine Petimeyer v. Douglas Ashcombe</h4><span class="matter-shape">Auto-negligence jury trial</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-02, SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-16"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m04"><a href="/platform/matters/m04-realestate-meridian/"><span class="matter-num">M04 · Meridian</span><h4>In re Purchase of 4400 Kestrel Point, Sable County (Renard–Meskin)</h4><span class="matter-shape">Real-estate purchase negotiation</span><span class="matter-skills" aria-label="Skills: SK-LP-13, SK-LP-17, SK-LP-10, SK-LP-01, SK-LP-07, SK-LP-16"><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-17"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m05"><a href="/platform/matters/m05-dwi-meridian/"><span class="matter-num">M05 · Meridian</span><h4>State of Meridian v. Devon R. Halvard</h4><span class="matter-shape">Criminal DWI</span><span class="matter-skills" aria-label="Skills: SK-LP-07, SK-LP-01, SK-LP-10, SK-LP-13, SK-LP-16"><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i>5 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m06"><a href="/platform/matters/m06-noncompete-meridian/"><span class="matter-num">M06 · Meridian</span><h4>Northlake Surgical Instruments, Inc. v. Adaeze Okwuosa</h4><span class="matter-shape">Non-compete / trade secrets</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m07"><a href="/platform/matters/m07-ucc-meridian/"><span class="matter-num">M07 · Meridian</span><h4>Cloverdyke Dairy Cooperative v. Brandt Refrigeration Systems, LLC</h4><span class="matter-shape">UCC sale-of-goods dispute</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-02, SK-LP-03, SK-LP-07, SK-LP-13, SK-LP-14"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-03"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-14"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m08"><a href="/platform/matters/m08-juvenile-meridian/"><span class="matter-num">M08 · Meridian</span><h4>In re the Welfare of T.M., a Minor</h4><span class="matter-shape">Juvenile delinquency</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-07, SK-LP-10, SK-LP-13, SK-LP-16"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i>5 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m09"><a href="/platform/matters/m09-dissolution-meridian/"><span class="matter-num">M09 · Meridian</span><h4>In re the Marriage of Renata Sitko and Harlan Aldergrove</h4><span class="matter-shape">Marriage dissolution</span><span class="matter-skills" aria-label="Skills: SK-LP-07, SK-LP-10, SK-LP-13, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>5 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m10"><a href="/platform/matters/m10-probate-meridian/"><span class="matter-num">M10 · Meridian</span><h4>In re the Estate of Mabel R. Thornquist</h4><span class="matter-shape">Wills &amp; probate contest</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m11"><a href="/platform/matters/m11-arbitration-il/"><span class="matter-num">M11 · IL</span><h4>Prairie State Logistics, Inc. v. Yusuf Adeyemi (Employment Arbitration)</h4><span class="matter-shape">Employment arbitration</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-07, SK-LP-09, SK-LP-13, SK-LP-14, SK-LP-16"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-09"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m12"><a href="/platform/matters/m12-discipline-mn/"><span class="matter-num">M12 · MN</span><h4>In re Petition for Disciplinary Action against Delphine A. Karsgaard, a Minnesota Attorney</h4><span class="matter-shape">Attorney discipline</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-04, SK-LP-07, SK-LP-08, SK-LP-09, SK-LP-16"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-04"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-08"></i><i data-skill-ref="SK-LP-09"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m13"><a href="/platform/matters/m13-tort-fl/"><span class="matter-num">M13 · FL</span><h4>Sofia Reyes v. Bradley Hutchins</h4><span class="matter-shape">Auto-negligence jury trial</span><span class="matter-skills" aria-label="Skills: SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-13, SK-LP-02, SK-LP-16"><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m14"><a href="/platform/matters/m14-realestate-tx/"><span class="matter-num">M14 · TX</span><h4>In re Purchase of the Cimarron Tract (Whitfield–Nakamura)</h4><span class="matter-shape">Real-estate purchase negotiation</span><span class="matter-skills" aria-label="Skills: SK-LP-13, SK-LP-07, SK-LP-10, SK-LP-17, SK-LP-01, SK-LP-16"><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-17"></i><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m15"><a href="/platform/matters/m15-dwi-mn/"><span class="matter-num">M15 · MN</span><h4>State of Minnesota v. Travis O. Wenzloff</h4><span class="matter-shape">Criminal DWI</span><span class="matter-skills" aria-label="Skills: SK-LP-07, SK-LP-01, SK-LP-04, SK-LP-10, SK-LP-13, SK-LP-16"><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-04"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m16"><a href="/platform/matters/m16-noncompete-ny/"><span class="matter-num">M16 · NY</span><h4>Hudson Valley Biometrics, Inc. v. Priya Iyer</h4><span class="matter-shape">Non-compete / trade secrets</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m17"><a href="/platform/matters/m17-ucc-ny/"><span class="matter-num">M17 · NY</span><h4>Empire Provisions Corp. v. Ostervold Packing Co.</h4><span class="matter-shape">UCC sale-of-goods dispute</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-02, SK-LP-03, SK-LP-07, SK-LP-14, SK-LP-16"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-03"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m18"><a href="/platform/matters/m18-juvenile-ca/"><span class="matter-num">M18 · CA</span><h4>In re J.C., a Minor (Cal. Welf. &amp; Inst. Code § 602)</h4><span class="matter-shape">Juvenile delinquency</span><span class="matter-skills" aria-label="Skills: SK-LP-01, SK-LP-07, SK-LP-10, SK-LP-13, SK-LP-16"><i data-skill-ref="SK-LP-01"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i>5 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m19"><a href="/platform/matters/m19-dissolution-ca/"><span class="matter-num">M19 · CA</span><h4>In re the Marriage of Camille Beaumont and Andre Lassiter</h4><span class="matter-shape">Marriage dissolution</span><span class="matter-skills" aria-label="Skills: SK-LP-07, SK-LP-10, SK-LP-13, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-13"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>5 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+    <article class="matter-cover" data-matter-id="m20"><a href="/platform/matters/m20-probate-fl/"><span class="matter-num">M20 · FL</span><h4>In re the Estate of Harold W. Prewitt</h4><span class="matter-shape">Wills &amp; probate contest</span><span class="matter-skills" aria-label="Skills: SK-LP-02, SK-LP-07, SK-LP-10, SK-LP-14, SK-LP-16, SK-LP-17"><i data-skill-ref="SK-LP-02"></i><i data-skill-ref="SK-LP-07"></i><i data-skill-ref="SK-LP-10"></i><i data-skill-ref="SK-LP-14"></i><i data-skill-ref="SK-LP-16"></i><i data-skill-ref="SK-LP-17"></i>6 mapped skills</span><span class="matter-open">Open matter <span aria-hidden="true">→</span></span></a></article>
+  </div>
+
+  <div class="ledger">
+    <div class="lh">Measured, not impressionistic — the assessment chart</div>
+    <div class="statline" style="margin:6px 0 6px">
+      <div class="stat"><b>~1,438</b><span>points across the assessed record</span></div>
+      <div class="stat"><b>7</b><span>preliminary four-page memos</span></div>
+      <div class="stat"><b>325</b><span>points — the final jury trial alone</span></div>
+    </div>
+    <p class="muted" style="max-width:72ch;margin-top:8px">Eight representation agreements, eight client billing statements fed by weekly time sheets, briefs, pleadings, and thirteen time sheets all carry points. The seam the Centaur plugs into: any piece scored <b>below 6</b> may be re-written within a week against the same rubric — the profession's <em>rubric-and-repeat</em> loop, waiting only for feedback to become instant and infinite.</p>
+  </div>
+</div></details></section>
+
+<!-- III — THE EVIDENCE -->
 <section id="skills"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">II</span><div><span class="eyebrow">The empirical proof · the skills survey</span><h2>The skills that make a lawyer — and the ones school forgets.</h2></div></div>
+  <div class="sec-head"><span class="sec-num">III</span><div><span class="eyebrow">The empirical proof · the skills survey</span><h2>The skills that make a lawyer — and the ones school forgets.</h2></div></div>
   <p class="lead-para muted">The widest gaps are in the practical skills clients and firms depend on every day.</p>
 </div><details class="proof"><summary>THE PROOF · 70-point client-development gap</summary><div class="wrap reveal">
   <p class="lead-para muted" style="max-width:64ch">Sonsteng named the work of a practicing lawyer precisely: <b>17 legal-practice skills</b> and <b>9 law-practice-management skills</b>. For each, the survey asked the same four questions — is it important, were you prepared, could it be learned in school, and where did you actually learn it. Every skill was rated important. Most could be taught in school. Yet law-school curriculum was the leading source of training for only <b>7 of the 17</b> practice skills — and for <b>none</b> of the 9 management skills.</p>
@@ -359,9 +411,9 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
   <div class="pull"><q>All 26 skills matter. School leads on seven.</q><cite>The 2018–19 Minnesota study · one of a longitudinal series (1997–99 · 2013 · 2018–19)</cite></div>
 </div></details></section>
 
-<!-- III — THE WORK -->
+<!-- IV — THE WORK -->
 <section id="work" class="band"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">III</span><div><span class="eyebrow">The life work — already a trilogy</span><h2>Fifty years, three acts, one argument.</h2></div></div>
+  <div class="sec-head"><span class="sec-num">IV</span><div><span class="eyebrow">The life work — already a trilogy</span><h2>Fifty years, three acts, one argument.</h2></div></div>
 </div><details class="proof"><summary>THE PROOF · diagnosis, method, and open resource</summary><div class="wrap reveal">
   <div class="timeline">
     <div class="tl"><div class="yr">c. 2007</div><h3>A Legal Education Renaissance</h3><p>The diagnosis. A practical, client-centered model for 21st-century legal education — the manifesto the profession cited but never fully built.</p><div class="role">The Diagnosis</div></div>
@@ -375,9 +427,9 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
   </div>
 </div></details></section>
 
-<!-- IV — THE OPUS -->
+<!-- V — THE OPUS -->
 <section id="opus"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">IV</span><div><span class="eyebrow">The consolidation</span><h2>What the Magnum Opus <em>is</em>.</h2></div></div>
+  <div class="sec-head"><span class="sec-num">V</span><div><span class="eyebrow">The consolidation</span><h2>What the Magnum Opus <em>is</em>.</h2></div></div>
 </div><details class="proof"><summary>THE PROOF · 3 layers, 1 open whole</summary><div class="wrap reveal">
   <div class="layers">
     <div class="layer"><div class="n">I</div><div><h3>The Book</h3><p>A canonical treatise consolidating Sonsteng's scholarship — including restoration of the crown-jewel articles now surviving only as degraded scans. The intellectual core, made permanent.</p></div></div>
@@ -385,39 +437,6 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
     <div class="layer"><div class="n">III</div><div><h3>The Platform</h3><p>AI-assisted delivery that finally scales the 1:1 apprenticeship — unlimited reps, instant critique, human judgment where it counts. The living opus.</p></div></div>
   </div>
 
-</div></details></section>
-
-<!-- V — PRACTICUM -->
-<section id="practicum" class="band"><div class="wrap reveal">
-  <div class="sec-head"><span class="sec-num">V</span><div><span class="eyebrow">How it teaches</span><h2>A working law firm, not a lecture hall.</h2></div></div>
-  <p class="lead-para">Students perform the work, receive critique, revise, and build visible competence.</p>
-</div><details class="proof"><summary>THE PROOF · ~1,438 assessed points</summary><div class="wrap reveal">
-  <p class="section-sub">Every course runs a three-step cycle</p>
-  <div class="timeline">
-    <div class="tl"><div class="yr">Step 01 · FSS-I</div><h3>Faculty Supervised Study I</h3><p>Independent pre-work — texts, casebooks, prepared materials. Competence is checked with short papers, essays, or an oral exercise before the room convenes.</p><div class="role">Prepare</div></div>
-    <div class="tl"><div class="yr">Step 02 · IRP</div><h3>Intensive Residential Practicum</h3><p>The core: face-to-face, small-group, faculty-guided real-world simulation. The reps that only happen live — argument, negotiation, trial.</p><div class="role">Perform</div></div>
-    <div class="tl"><div class="yr">Step 03 · FSS-II</div><h3>Faculty Supervised Study II</h3><p>A comprehensive applied assessment integrating the prep and the practicum — memos, problem discussion, the redlined re-write against the rubric.</p><div class="role">Integrate</div></div>
-  </div>
-
-  <p class="section-sub">The matters — six complete case files</p>
-  <div class="cases">
-    <div class="case"><div class="cty">Arbitration · Employment</div><h4>Midstate and Rogers</h4><div class="csk">Statement of the case, direct &amp; cross, joint statement, oral advocacy.</div></div>
-    <div class="case"><div class="cty">Professional Responsibility</div><h4>In re Halbrock</h4><div class="csk">Appellate briefs, standard of review, argument before a judge + two OLPR panelists.</div></div>
-    <div class="case"><div class="cty">Tort · the capstone</div><h4>Reagan v. Jacobson</h4><div class="csk">The full litigation arc to a <b>full-day jury trial</b> — pleadings, discovery, motions in limine, verdict.</div></div>
-    <div class="case"><div class="cty">Real Estate · Transactional</div><h4>Peters, Taylor &amp; Thomas</h4><div class="csk">Three-way negotiation with confidential facts, purchase agreement, creative problem-solving.</div></div>
-    <div class="case"><div class="cty">Criminal · DWI</div><h4>State v. James</h4><div class="csk">Plea negotiation → motion hearing → bench trial before the court (5-credit track).</div></div>
-    <div class="case"><div class="cty">Non-Compete · Injunction</div><h4>SSHC v. Baines</h4><div class="csk">Temporary-injunction memoranda, exhibits, oral argument, settlement conference.</div></div>
-  </div>
-
-  <div class="ledger">
-    <div class="lh">Measured, not impressionistic — the assessment chart</div>
-    <div class="statline" style="margin:6px 0 6px">
-      <div class="stat"><b>~1,438</b><span>points across the assessed record</span></div>
-      <div class="stat"><b>7</b><span>preliminary four-page memos</span></div>
-      <div class="stat"><b>325</b><span>points — the final jury trial alone</span></div>
-    </div>
-    <p class="muted" style="max-width:72ch;margin-top:8px">Eight representation agreements, eight client billing statements fed by weekly time sheets, briefs, pleadings, and thirteen time sheets all carry points. The seam the Centaur plugs into: any piece scored <b>below 6</b> may be re-written within a week against the same rubric — the profession's <em>rubric-and-repeat</em> loop, waiting only for feedback to become instant and infinite.</p>
-  </div>
 </div></details></section>
 
 <!-- VI — CENTAUR -->
