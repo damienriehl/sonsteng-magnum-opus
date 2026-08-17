@@ -58,6 +58,15 @@ async function run() {
     ));
 
     await setInput('#exercise-count', '20');
+    const untouchedStipend = await page.evaluate(() => ({
+      stipendInvalid: document.getElementById('stipend-per-exercise').getAttribute('aria-invalid'),
+      creditsInvalid: document.getElementById('stipend-credits').getAttribute('aria-invalid'),
+      stipendError: document.getElementById('stipend-per-exercise-error').textContent,
+      creditsError: document.getElementById('stipend-credits-error').textContent
+    }));
+    assert('editing one field leaves untouched siblings quiet',
+      untouchedStipend.stipendInvalid === null && untouchedStipend.creditsInvalid === null &&
+      untouchedStipend.stipendError === '' && untouchedStipend.creditsError === '');
     await setInput('#stipend-per-exercise', '1500');
     await setInput('#stipend-credits', '5');
     const validStipend = await page.$eval('#stipend-result', output => output.textContent);
@@ -85,6 +94,12 @@ async function run() {
     assert('load switch changes only the practicum panel', switched.stipendHidden &&
       !switched.loadHidden && switched.comparator === '5000' &&
       switched.comparatorResult === '$5,000.00');
+    const untouchedLoad = await page.$$eval('#load-panel input', inputs => inputs.map(input => ({
+      invalid: input.getAttribute('aria-invalid'),
+      error: document.getElementById(input.id + '-error').textContent
+    })));
+    assert('switching models leaves untouched fields quiet',
+      untouchedLoad.every(field => field.invalid === null && field.error === ''));
 
     await setInput('#annual-salary', '120000');
     await setInput('#annual-load-credits', '12');

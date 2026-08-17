@@ -22,6 +22,7 @@
 # ============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
+ROOT="$PWD"
 
 WANT_BROWSER=1
 [ "${1:-}" = "--no-browser" ] && WANT_BROWSER=0

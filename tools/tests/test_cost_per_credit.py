@@ -104,6 +104,8 @@ def test_immediate_recompute_invalid_state_and_last_valid_output_contracts():
     assert "addEventListener('input', handleInput)" in html
     assert "addEventListener('change', handleModelChange)" in html
     assert 'role="status" aria-live="polite"' in html
+    assert "if(announceId)" in html
+    assert "recomputePracticum(model,id)" in html
     assert "if(!checks.every(item=>item.valid))return" in html
     assert "if(!check.valid)return" in html
     result = run_core(

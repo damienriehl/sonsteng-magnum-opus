@@ -99,14 +99,15 @@ if(typeof document!=='undefined'){
   const read=(id)=>{const input=document.getElementById(id);return CostCalculator.validate(input.value,Number(input.dataset.min),Number(input.dataset.max));};
   const showValidation=(id,check)=>{const input=document.getElementById(id);const error=document.getElementById(id+'-error');input.setAttribute('aria-invalid',String(!check.valid));input.setAttribute('aria-describedby',id+'-error');error.textContent=check.valid?'':check.message;};
   const renderMoney=(output,value)=>{output.textContent=money.format(value);output.classList.remove('blank');};
-  function recomputePracticum(model){
-    const ids=modelIds[model],checks=ids.map(read);ids.forEach((id,index)=>showValidation(id,checks[index]));
+  function recomputePracticum(model,announceId){
+    const ids=modelIds[model],checks=ids.map(read);
+    if(announceId){const index=ids.indexOf(announceId);if(index>=0)showValidation(announceId,checks[index]);}
     if(!checks.every(item=>item.valid))return;
     const values=model==='stipend'?{exerciseCount:checks[0].value,stipendPerExercise:checks[1].value,credits:checks[2].value}:{annualSalary:checks[0].value,annualLoadCredits:checks[1].value,credits:checks[2].value};
     const result=CostCalculator.calculatePracticum(model,values);renderMoney(document.getElementById(model+'-result'),result.perCredit);
   }
   function recomputeComparator(id){const check=read(id+'-cost');showValidation(id+'-cost',check);if(!check.valid)return;renderMoney(document.getElementById(id+'-result'),check.value);}
-  function handleInput(event){const id=event.target.id;if(id.endsWith('-cost'))recomputeComparator(id.slice(0,-5));else{const model=document.querySelector('[name="pay-model"]:checked').value;if(modelIds[model].includes(id))recomputePracticum(model);}}
+  function handleInput(event){const id=event.target.id;if(id.endsWith('-cost'))recomputeComparator(id.slice(0,-5));else{const model=document.querySelector('[name="pay-model"]:checked').value;if(modelIds[model].includes(id))recomputePracticum(model,id);}}
   function handleModelChange(event){const model=event.target.value;const activeId=CostCalculator.activePanel(model);for(const id of ['stipend-panel','load-panel'])document.getElementById(id).hidden=id!==activeId;recomputePracticum(model);}
   function initializeCalculator(){document.getElementById('settled-hours').textContent=CostCalculator.creditHours()+' hours';document.querySelectorAll('input:not([type="radio"])').forEach(input=>input.addEventListener('input', handleInput));document.querySelectorAll('[name="pay-model"]').forEach(input=>input.addEventListener('change', handleModelChange));}
   initializeCalculator();
