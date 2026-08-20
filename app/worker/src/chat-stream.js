@@ -25,8 +25,6 @@
 //
 import { getProvider } from "./providers/registry.js";
 
-const STREAMING_PROVIDERS = new Set(["anthropic", "openai", "google"]);
-
 // The flag. Default OFF everywhere (wrangler.jsonc vars: "STREAMING":"false").
 export function streamingEnabled(env) {
   return !!env && env.STREAMING === "true";
@@ -34,7 +32,7 @@ export function streamingEnabled(env) {
 
 // Which providers this module can stream. Router consults this before streaming.
 export function supportsStreaming(provider) {
-  return STREAMING_PROVIDERS.has(provider);
+  return typeof getProvider(provider)?.buildStreamingRequest === "function";
 }
 
 // ---- SSE frame parsing (pure, unit-tested) ----------------------------------
@@ -88,6 +86,7 @@ export function makeChatTransform({ provider = "anthropic", buildDonePayload, on
   let fullText = "";
   const usage = {};
   let sawError = false;
+  const providerAdapter = getProvider(provider);
 
   function emitDelta(text, controller) {
     if (!text) return;
@@ -101,22 +100,6 @@ export function makeChatTransform({ provider = "anthropic", buildDonePayload, on
     const msg = data.error.message || "upstream stream error";
     controller.enqueue(enc.encode(sseFrame("error", { message: msg })));
     return true;
-  }
-
-  function captureOpenAIUsage(raw) {
-    if (!raw) return;
-    const cached = (raw.prompt_tokens_details && raw.prompt_tokens_details.cached_tokens) || 0;
-    if (typeof raw.prompt_tokens === "number") usage.input_tokens = Math.max(0, raw.prompt_tokens - cached);
-    if (typeof raw.completion_tokens === "number") usage.output_tokens = raw.completion_tokens;
-    if (typeof cached === "number") usage.cache_read_input_tokens = cached;
-  }
-
-  function captureGoogleUsage(raw) {
-    if (!raw) return;
-    const cached = raw.cachedContentTokenCount || 0;
-    if (typeof raw.promptTokenCount === "number") usage.input_tokens = Math.max(0, raw.promptTokenCount - cached);
-    if (typeof raw.candidatesTokenCount === "number") usage.output_tokens = raw.candidatesTokenCount;
-    if (typeof cached === "number") usage.cache_read_input_tokens = cached;
   }
 
   function handleFrame(frame, controller) {
@@ -146,17 +129,16 @@ export function makeChatTransform({ provider = "anthropic", buildDonePayload, on
     }
 
     if (provider === "openai") {
-      captureOpenAIUsage(data.usage);
+      if (data.usage) Object.assign(usage, providerAdapter.parseResponse({ usage: data.usage }).usage);
       const choice = (data.choices || [])[0];
       if (choice && choice.delta) emitDelta(choice.delta.content || "", controller);
       return;
     }
 
     if (provider === "google") {
-      const candidate = (data.candidates || [])[0];
-      const parts = candidate && candidate.content ? candidate.content.parts || [] : [];
-      for (const part of parts) emitDelta(part.text || "", controller);
-      captureGoogleUsage(data.usageMetadata);
+      const parsedResponse = providerAdapter.parseResponse(data);
+      emitDelta(parsedResponse.text, controller);
+      if (data.usageMetadata) Object.assign(usage, parsedResponse.usage);
     }
   }
 
@@ -218,26 +200,7 @@ function buildStreamingRequest({ up, system, messages, maxTokens }) {
   };
 
   const provider = getProvider(up.provider);
-  if (!provider) return null;
-  const request = provider.buildRequest(opts);
-
-  if (up.provider === "anthropic") {
-    request.body.stream = true;
-    return request;
-  }
-
-  if (up.provider === "openai") {
-    request.body.stream = true;
-    request.body.stream_options = { include_usage: true };
-    return request;
-  }
-
-  if (up.provider === "google") {
-    request.url = request.url.replace(/:generateContent$/, ":streamGenerateContent?alt=sse");
-    return request;
-  }
-
-  return null;
+  return provider?.buildStreamingRequest?.(opts) || null;
 }
 
 export async function startProviderStream({ up, system, messages, maxTokens }, fetchImpl) {

@@ -49,6 +49,12 @@ export function buildRequest({ system, messages, maxTokens, providerCfg }) {
   };
 }
 
+export function buildStreamingRequest(opts) {
+  const request = buildRequest(opts);
+  request.body.stream = true;
+  return request;
+}
+
 // Pure response parser: normalize to { text, usage } (Anthropic field names are
 // already the canonical shape).
 export function parseResponse(data) {
