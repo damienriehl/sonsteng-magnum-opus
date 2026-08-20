@@ -224,8 +224,16 @@ test("Worker asset server exposes the built review CSS and JavaScript", async ()
   assert.equal(css.status, 200);
   assert.match(js.headers.get("content-type"), /javascript/);
   assert.match(css.headers.get("content-type"), /text\/css/);
-  assert.match(await js.text(), /assessment-override-form/);
-  assert.match(await css.text(), /\.as-review/);
+  const servedJs = await js.text();
+  const servedCss = await css.text();
+  assert.match(servedJs, /assessment-override-form/);
+  assert.match(servedCss, /\.as-review/);
+  assert.equal(servedJs, readFileSync(
+    join(HERE, "..", "..", "editor", "assessment-review.js"), "utf8"
+  ));
+  assert.equal(servedCss, readFileSync(
+    join(HERE, "..", "..", "editor", "assessment-review.css"), "utf8"
+  ));
 });
 
 test("only the deliberate Access reviewer maps to the store review scope", () => {
@@ -357,7 +365,22 @@ test("memo endpoint persists before success and returns the server audit id with
   assert.ok(persist > 0 && success > persist);
   assert.match(handler, /graders: panel\.graders/);
   assert.match(handler, /sessionToken: body\.session_token/);
+  const reserve = handler.indexOf("reserveOneShot(reservationId");
+  const provider = handler.indexOf("completion = await callUpstream");
+  const settle = handler.indexOf("settleOneShot(reservationId");
+  assert.ok(reserve > 0 && provider > reserve && settle > provider);
+  assert.match(handler, /catch \{\s*completion = \{ ok: false, kind: "upstream" \};\s*\}/);
+  assert.doesNotMatch(handler, /checkPool\(/);
   assert.doesNotMatch(handler, /logMeta\([^)]*(submission|deliverable_text|session_token|credential_values)/s);
+});
+
+test("EditorStore schedules and re-arms automatic assessment expiry", () => {
+  const source = readFileSync(join(HERE, "..", "src", "editor-store.js"), "utf8");
+  assert.match(source, /async recordAssessmentAudit\(input\)/);
+  assert.match(source, /await this\._scheduleAssessmentExpiry\(\)/);
+  assert.match(source, /async alarm\(\)/);
+  assert.match(source, /this\.core\.expireAssessmentAudits\(\)/);
+  assert.match(source, /this\.storage\.setAlarm\(expiresAt\)/);
 });
 
 test("editor router wires the protected read, write, page, and same-origin assets", () => {

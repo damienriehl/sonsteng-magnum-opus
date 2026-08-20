@@ -26,8 +26,8 @@ class NodeSql {
   }
 }
 
-function makeCore() {
-  const core = new BudgetCore(new NodeSql());
+function makeCore(now) {
+  const core = new BudgetCore(new NodeSql(), now);
   core.initSchema();
   return core;
 }
@@ -177,4 +177,51 @@ test("checkPool gates hosted one-shots by pool", () => {
   core.charge("public", { input_tokens: 7_000_000 });
   assert.equal(core.checkPool("public", 700, 300).ok, false);
   assert.ok(core.checkPool("demo", 700, 300).ok); // demo pool untouched
+});
+
+test("one-shot reservations atomically bound concurrent provider starts", () => {
+  const core = makeCore();
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 3 };
+  assert.deepEqual(core.reserveOneShot("call-1", opts), { ok: true });
+  assert.equal(spent(core), 3);
+  assert.deepEqual(core.reserveOneShot("call-2", opts), {
+    ok: false,
+    reason: "cap_exceeded",
+  });
+  assert.deepEqual(core.reserveOneShot("call-1", opts), {
+    ok: false,
+    reason: "duplicate",
+  });
+  assert.deepEqual(
+    core.settleOneShot("call-1", { input_tokens: 20_000, output_tokens: 300 }),
+    { ok: true, actualCents: 3 }
+  );
+  assert.equal(spent(core), 3);
+  assert.deepEqual(core.reserveOneShot("call-2", { ...opts, reserveCents: 2 }), { ok: true });
+});
+
+test("failed one-shot calls release their full reserve", () => {
+  const core = makeCore();
+  const opts = { pool: "demo", capPublicCents: 5, capDemoCents: 5, reserveCents: 5 };
+  assert.equal(core.reserveOneShot("failed-call", opts).ok, true);
+  assert.equal(spent(core, "demo"), 5);
+  assert.deepEqual(core.settleOneShot("failed-call", null), { ok: true, actualCents: 0 });
+  assert.equal(spent(core, "demo"), 0);
+  assert.deepEqual(core.settleOneShot("failed-call", null), { ok: true, replay: true });
+});
+
+test("day rollover clears conservative one-shot reservations left by an interrupted call", () => {
+  const clock = { value: new Date("2026-08-20T12:00:00Z") };
+  const core = makeCore(() => clock.value);
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 5 };
+  assert.equal(core.reserveOneShot("interrupted-call", opts).ok, true);
+  assert.equal(spent(core), 5);
+
+  clock.value = new Date("2026-08-21T12:00:00Z");
+  assert.equal(core.reserveOneShot("next-day-call", opts).ok, true);
+  assert.equal(spent(core), 5);
+  assert.equal(
+    core._one("SELECT COUNT(*) AS count FROM one_shot_reservations WHERE id=?", "interrupted-call").count,
+    0
+  );
 });

@@ -15,13 +15,26 @@ import { EditorStoreCore } from "./editor-store-core.js";
 export class EditorStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.storage = ctx.storage;
     this.core = new EditorStoreCore(ctx.storage.sql, undefined,
       ctx.storage.transactionSync.bind(ctx.storage));
     ctx.blockConcurrencyWhile(async () => {
       this.core.initSchema();
       // Crash reconciliation runs before the DO serves any claim: no limbo.
       this.core.reconcile();
+      this.core.expireAssessmentAudits();
+      await this._scheduleAssessmentExpiry();
     });
+  }
+
+  async _scheduleAssessmentExpiry() {
+    const expiresAt = this.core.nextAssessmentAuditExpiry();
+    if (expiresAt !== null) await this.storage.setAlarm(expiresAt);
+  }
+
+  async alarm() {
+    this.core.expireAssessmentAudits();
+    await this._scheduleAssessmentExpiry();
   }
 
   suggest(input, ceilings, opts) { return this.core.suggest(input, ceilings, opts); }
@@ -49,7 +62,11 @@ export class EditorStore extends DurableObject {
   claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
   resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
-  recordAssessmentAudit(input) { return this.core.recordAssessmentAudit(input); }
+  async recordAssessmentAudit(input) {
+    const result = this.core.recordAssessmentAudit(input);
+    if (result.ok) await this._scheduleAssessmentExpiry();
+    return result;
+  }
   readAssessmentAudit(input) { return this.core.readAssessmentAudit(input); }
   recordAssessmentOverride(input) { return this.core.recordAssessmentOverride(input); }
   expireAssessmentAudits() { return this.core.expireAssessmentAudits(); }

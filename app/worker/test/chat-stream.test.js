@@ -262,6 +262,18 @@ test("onSettle fires exactly once, in flush, with the built payload", async () =
   assert.equal(settle.payload.reply, REPLY_TEXT);
 });
 
+test("a settlement failure clears the turn and never emits done", async () => {
+  let failureCalls = 0;
+  const { events, failure } = await runTransform(anthropicSSE(), {
+    onSettleExtra: async () => { throw new Error("settlement unavailable"); },
+    onFailureExtra: async () => { failureCalls += 1; },
+  });
+  assert.equal(events.some((event) => event.event === "done"), false);
+  assert.equal(failureCalls, 1);
+  assert.equal(failure.fullText, REPLY_TEXT);
+  assert.deepEqual(failure.usage, EXPECTED_USAGE);
+});
+
 // ---- chunk-boundary robustness ---------------------------------------------
 for (const chunkSize of [1, 3, 7, 16, 64]) {
   test(`transform is byte-boundary agnostic (chunkSize=${chunkSize})`, async () => {
@@ -484,6 +496,7 @@ for (const [provider, expected] of Object.entries({
           assert.deepEqual(body.stream_options, { include_usage: true });
         }
         if (provider === "google") assert.equal(body.stream, undefined);
+        assert.ok(init.signal instanceof AbortSignal);
         return fake;
       },
     );

@@ -24,6 +24,7 @@
 //       non-streaming turn would store for replay.
 //
 import { getProvider } from "./providers/registry.js";
+import { PROVIDER_TIMEOUT_MS } from "./providers/common.js";
 
 // The flag. Default OFF everywhere (wrangler.jsonc vars: "STREAMING":"false").
 export function streamingEnabled(env) {
@@ -198,11 +199,16 @@ export function makeChatTransform({ provider = "anthropic", buildDonePayload, on
       }
 
       const payload = buildDonePayload(fullText, usage);
-      controller.enqueue(enc.encode(sseFrame("done", payload)));
       // Commit the turn EXACTLY as the non-streaming path does.
       if (onSettle) {
-        try { await onSettle(payload, usage, fullText); } catch { /* never surface to client */ }
+        try {
+          await onSettle(payload, usage, fullText);
+        } catch {
+          if (onFailure) await onFailure(usage, fullText);
+          return;
+        }
       }
+      controller.enqueue(enc.encode(sseFrame("done", payload)));
     },
   });
 }
@@ -261,6 +267,7 @@ export async function startProviderStream({ up, system, messages, maxTokens }, f
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
   } catch {
     return { ok: false, kind: "upstream" };

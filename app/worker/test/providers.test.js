@@ -6,7 +6,7 @@ import * as anthropic from "../src/providers/anthropic.js";
 import * as openai from "../src/providers/openai.js";
 import * as google from "../src/providers/google.js";
 import { getProvider, PROVIDER_NAMES } from "../src/providers/registry.js";
-import { systemToString } from "../src/providers/common.js";
+import { completeWithRetry, PROVIDER_TIMEOUT_MS, systemToString } from "../src/providers/common.js";
 
 const CHAT = {
   system: { prefix: "SEGMENT-A-TEXT", tail: "PERSONA-TAIL" },
@@ -137,4 +137,27 @@ test("systemToString joins prefix+tail exactly like the anthropic block layout",
   assert.equal(systemToString(CHAT.system), "SEGMENT-A-TEXT\n\nPERSONA-TAIL");
   assert.equal(systemToString("plain"), "plain");
   assert.equal(systemToString(null), null);
+});
+
+test("provider completions carry a bounded abort signal", async () => {
+  const originalFetch = globalThis.fetch;
+  let capturedSignal;
+  globalThis.fetch = async (_url, init) => {
+    capturedSignal = init.signal;
+    return new Response(JSON.stringify({ answer: "ok" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const result = await completeWithRetry(
+      () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
+      (data) => ({ text: data.answer, usage: {} })
+    );
+    assert.equal(result.ok, true);
+    assert.ok(capturedSignal instanceof AbortSignal);
+    assert.equal(PROVIDER_TIMEOUT_MS, 60_000);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

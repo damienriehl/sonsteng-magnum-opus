@@ -2463,9 +2463,8 @@ export class EditorStoreCore {
   }
 
   // ---- assessment audit records (U12) ------------------------------------
-  // `scopes` is the server-resolved auth scope record. The literal scope lives
-  // at this seam until U13 wires a human review endpoint; callers cannot obtain
-  // record contents merely by knowing an assessment id.
+  // `scopes` is the server-resolved auth record. Only the Access-authenticated
+  // human review endpoints construct this capability; knowing an id is not enough.
   _hasAssessmentReviewScope(scopes) {
     return scopes?.[ASSESSMENT_REVIEW_SCOPE]?.granted === true;
   }
@@ -2668,6 +2667,11 @@ export class EditorStoreCore {
       });
     }
     return { ok: true, deleted };
+  }
+
+  nextAssessmentAuditExpiry() {
+    const row = this._one("SELECT MIN(expires_at) AS expires_at FROM assessment_audit_records");
+    return Number.isFinite(row?.expires_at) ? row.expires_at : null;
   }
 
   // ---- digest --------------------------------------------------------------

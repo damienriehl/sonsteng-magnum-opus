@@ -438,25 +438,57 @@ async function handleMemoAssessment(request, env, origin) {
 
   const caps = capsFor(env);
   const stub = budgetStub(env);
-  const usesHostedPool = panel.graders.some((grader) => !grader.skipBudget);
-  if (usesHostedPool) {
-    const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
-    if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
-  }
-
   const run = await runFormativeMemoPanel({
     submission,
     instrument: bundle.assessment_instrument,
     thresholdConfig: thresholdResolution.config,
     scorecardTemplate: bundle.memo_scorecard_template,
     graders: panel.graders,
-    complete: ({ grader, prompt, maxTokens, jsonMode }) => callUpstream(grader, {
-      system: null,
-      messages: [{ role: "user", content: prompt }],
-      maxTokens,
-      jsonMode,
-    }),
+    complete: async ({ grader, prompt, maxTokens, jsonMode }) => {
+      if (grader.skipBudget) {
+        return callUpstream(grader, {
+          system: null,
+          messages: [{ role: "user", content: prompt }],
+          maxTokens,
+          jsonMode,
+        });
+      }
+      const reservationId = `memo-call-${crypto.randomUUID()}`;
+      const inputTokens = estTokens(prompt.length);
+      const reserveCents = Math.max(1, Math.ceil(
+        (inputTokens * 100 + maxTokens * 500) / 1_000_000
+      ));
+      const reserved = await stub.reserveOneShot(reservationId, {
+        pool: session.p,
+        capPublicCents: caps.capPublicCents,
+        capDemoCents: caps.capDemoCents,
+        reserveCents,
+      });
+      if (!reserved.ok) {
+        return { ok: false, kind: reserved.reason === "cap_exceeded" ? "cap" : "upstream" };
+      }
+      let completion;
+      try {
+        completion = await callUpstream(grader, {
+          system: null,
+          messages: [{ role: "user", content: prompt }],
+          maxTokens,
+          jsonMode,
+        });
+      } catch {
+        completion = { ok: false, kind: "upstream" };
+      }
+      try {
+        await stub.settleOneShot(reservationId, completion.ok ? completion.usage : null);
+      } catch {
+        return { ok: false, kind: "upstream" };
+      }
+      return completion;
+    },
   });
+  if (!run.ok && run.kind === "upstream" && run.upstreamResult?.kind === "cap") {
+    return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  }
   if (!run.ok && run.kind === "upstream") {
     return upstreamFailureResponse(run.grader, run.upstreamResult, "memo_assessment_upstream_fail");
   }
@@ -490,7 +522,6 @@ async function handleMemoAssessment(request, env, origin) {
     return errorEnvelope("upstream_unavailable", "The memo assessment audit could not be recorded. Please try again.", 503);
   }
 
-  if (usesHostedPool) await stub.charge(session.p, run.usage);
   logMeta({
     ev: "memo_assessment_ok",
     pool: session.p,

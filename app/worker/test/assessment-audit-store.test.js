@@ -205,6 +205,17 @@ test("declared retention expiry deletes the audit and all overrides", () => {
     reason: "not_found",
   });
   assert.equal(core.sql.exec("SELECT * FROM assessment_audit_overrides").toArray().length, 0);
+  assert.equal(core.nextAssessmentAuditExpiry(), null);
+});
+
+test("the earliest retained audit drives the next cleanup alarm", () => {
+  const day = 24 * 60 * 60 * 1000;
+  const clock = { value: Date.UTC(2026, 7, 20) };
+  const core = makeCore(() => clock.value);
+  assert.equal(core.nextAssessmentAuditExpiry(), null);
+  core.recordAssessmentAudit(auditInput({ id: "assessment-later", retention: { days: 5 } }));
+  core.recordAssessmentAudit(auditInput({ id: "assessment-earlier", retention: { days: 2 } }));
+  assert.equal(core.nextAssessmentAuditExpiry(), clock.value + 2 * day);
 });
 
 test("audit writes require explicit bounded retention and matching instrument provenance", () => {

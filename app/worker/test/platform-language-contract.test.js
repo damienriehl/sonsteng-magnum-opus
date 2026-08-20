@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { validateLearnerResultRequest } from "../src/validate.js";
+import { SUMMATIVE_BLOCKERS } from "../src/panel.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -37,8 +38,8 @@ test("the formative memo handler rejects alumni routing before session or provid
   assert.ok(guard < handler.indexOf("resolvePanelUpstreams("));
   assert.match(handler, /assessment_use/);
   assert.match(handler, /summative_eligible !== false/);
-  assert.match(handler, /human_human_calibration/);
-  assert.match(handler, /provider_terms_review/);
+  assert.deepEqual(SUMMATIVE_BLOCKERS, ["human_human_calibration", "provider_terms_review"]);
+  assert.match(handler, /SUMMATIVE_BLOCKERS\.every/);
 });
 
 test("the router exposes only the explicitly formative memo assessment route", () => {

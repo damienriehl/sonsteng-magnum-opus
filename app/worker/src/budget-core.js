@@ -49,6 +49,12 @@ export const SCHEMA_SQL = `
     count INTEGER NOT NULL,
     PRIMARY KEY (iphash, day)
   );
+  CREATE TABLE IF NOT EXISTS one_shot_reservations (
+    id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    pool TEXT NOT NULL,
+    reserve_cents INTEGER NOT NULL
+  );
 `;
 
 export class BudgetCore {
@@ -75,6 +81,7 @@ export class BudgetCore {
       this.sql.exec("INSERT INTO budget (id,day,public_cents,demo_cents) VALUES (1,?,0,0)", today);
     } else if (row.day !== today) {
       this.sql.exec("UPDATE budget SET day=?, public_cents=0, demo_cents=0 WHERE id=1", today);
+      this.sql.exec("DELETE FROM one_shot_reservations WHERE day<>?", today);
     }
   }
 
@@ -265,5 +272,41 @@ export class BudgetCore {
     const spent = pool === "demo" ? b.demo_cents : b.public_cents;
     const cap = pool === "demo" ? capDemoCents : capPublicCents;
     return { ok: spent < cap };
+  }
+
+  reserveOneShot(id, opts) {
+    const today = this._today();
+    this._rollover(today);
+    const { pool, capPublicCents, capDemoCents, reserveCents } = opts;
+    if (typeof id !== "string" || !id || !Number.isInteger(reserveCents) || reserveCents < 1) {
+      return { ok: false, reason: "validation_error" };
+    }
+    if (this._one("SELECT id FROM one_shot_reservations WHERE id=?", id)) {
+      return { ok: false, reason: "duplicate" };
+    }
+    const budget = this._one("SELECT public_cents,demo_cents FROM budget WHERE id=1");
+    const spent = pool === "demo" ? budget.demo_cents : budget.public_cents;
+    const cap = pool === "demo" ? capDemoCents : capPublicCents;
+    if (spent + reserveCents > cap) return { ok: false, reason: "cap_exceeded" };
+    this.sql.exec(
+      "INSERT INTO one_shot_reservations (id,day,pool,reserve_cents) VALUES (?,?,?,?)",
+      id, today, pool, reserveCents
+    );
+    const col = this._poolCol(pool);
+    this.sql.exec(`UPDATE budget SET ${col} = ${col} + ? WHERE id=1`, reserveCents);
+    return { ok: true };
+  }
+
+  settleOneShot(id, usage) {
+    const row = this._one("SELECT * FROM one_shot_reservations WHERE id=?", id);
+    if (!row) return { ok: true, replay: true };
+    const actual = usage ? centsForUsage(usage) : 0;
+    const col = this._poolCol(row.pool);
+    this.sql.exec(
+      `UPDATE budget SET ${col} = MAX(0, ${col} - ? + ?) WHERE id=1`,
+      row.reserve_cents, actual
+    );
+    this.sql.exec("DELETE FROM one_shot_reservations WHERE id=?", id);
+    return { ok: true, actualCents: actual };
   }
 }

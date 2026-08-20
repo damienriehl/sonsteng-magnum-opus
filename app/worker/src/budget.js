@@ -52,4 +52,12 @@ export class BudgetCounter extends DurableObject {
   checkPool(pool, capPublicCents, capDemoCents) {
     return this.core.checkPool(pool, capPublicCents, capDemoCents);
   }
+
+  reserveOneShot(id, opts) {
+    return this.core.reserveOneShot(id, opts);
+  }
+
+  settleOneShot(id, usage) {
+    return this.core.settleOneShot(id, usage);
+  }
 }

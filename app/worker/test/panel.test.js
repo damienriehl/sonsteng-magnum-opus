@@ -198,6 +198,23 @@ test("panel fails closed when resolved threshold provenance is absent", async ()
   assert.equal(run.kind, "validation");
 });
 
+test("failed provider calls stop the panel before any later grader", async () => {
+  let laterCalls = 0;
+  const run = await runFormativeMemoPanel({
+    submission: SUBMISSION,
+    instrument: INSTRUMENT,
+    thresholdConfig: DEFAULT_THRESHOLDS,
+    graders: GRADERS,
+    complete: async () => {
+      laterCalls += 1;
+      return { ok: false, kind: "upstream", status: 503 };
+    },
+  });
+  assert.equal(run.ok, false);
+  assert.equal(run.kind, "upstream");
+  assert.equal(laterCalls, 1);
+});
+
 test("a live key echoed into otherwise valid evidence fails closed", async () => {
   const grader = GRADERS[0];
   const leaked = scorecard([4, 4, 4, 4, 4, 4, 4]);

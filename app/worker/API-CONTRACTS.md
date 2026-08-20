@@ -13,7 +13,21 @@ contract. **Do not deviate without versioning.** Base path: `/v1`.
   `Access-Control-Allow-Origin` echoing the matched allowlisted origin (plus
   `Vary: Origin`). A request from a non-allowlisted origin gets a bare `403`
   with **no** ACAO (the browser blocks it — the allowlist working).
-- **Non-streaming.** Each response is a single JSON body.
+- **Response framing.** Responses are a single JSON body except for
+  `POST /v1/chat` when the deployment-only `STREAMING` flag is enabled. In
+  that case the same v1 client request may receive normalized SSE for any
+  supported provider. The response declares `text/event-stream` and
+  `x-sonsteng-stream: 1`; clients must branch on either header. Streaming is
+  disabled by default and is enabled on DEV only while provider validation is
+  incomplete.
+
+The normalized SSE event contract is provider-independent:
+
+- `delta` carries `{ "text": "..." }`.
+- `done` carries the same successful reply payload as the JSON path, after
+  terminal provider usage and server-side budget settlement complete.
+- `error` carries the ordinary typed error envelope. A transport, terminal
+  frame, or settlement failure emits no `done` and stores no partial replay.
 
 ---
 
@@ -194,6 +208,26 @@ Formative-only panel assessment of the seven memo headings. A request includes
 `session_token`, `deliverable_text`, and either the ordinary `byok` record or a
 `byok_panel` of supported provider records. The server always supplies the
 canonical assessment instrument.
+
+A true multi-provider panel is explicit and closed:
+
+```json
+{
+  "session_token": "<session>",
+  "deliverable_text": "<memo>",
+  "byok_panel": [
+    { "provider": "anthropic", "api_key": "<key>" },
+    { "provider": "openai", "api_key": "<key>" },
+    { "provider": "google", "api_key": "<key>" }
+  ]
+}
+```
+
+- `byok_panel` contains exactly three explicit credentials: one each for
+  Anthropic, OpenAI, and Google. Duplicate providers fail.
+- `byok_panel` and the ordinary single `byok` record are mutually exclusive.
+- Hosted and ordinary single-BYOK requests run exactly one grader and return
+  `reduced_assurance`; one credential is never fanned out into a synthetic panel.
 
 The request MAY include a locally supplied threshold envelope:
 
