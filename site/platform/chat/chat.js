@@ -156,6 +156,12 @@
     }
 
     function settle() {
+      // Error is terminal even if a buggy or older Worker also sent `done`.
+      // Never commit/replay a partial response after the stream declared failure.
+      if (streamErr) {
+        return { ok: false, status: res.status, streamed: true, emitted: emitted,
+                 data: { error: { code: 'upstream_unavailable', message: streamErr } } };
+      }
       if (final) return { ok: true, status: res.status, data: final, streamed: true, emitted: emitted };
       return { ok: false, status: res.status, streamed: true, emitted: emitted,
                data: { error: { code: 'upstream_unavailable', message: streamErr || 'stream ended early' } } };

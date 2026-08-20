@@ -27,7 +27,7 @@ import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaL
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
-import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform } from "./chat-stream.js";
+import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
 export { EditorStore } from "./editor-store.js";
@@ -183,7 +183,9 @@ async function handleChat(request, env, origin) {
 
   const personaId = body.persona_id;
   const matterId = body.matter_id;
-  const turnId = typeof body.turn_id === "string" ? body.turn_id : null;
+  // Keep the internal preflight/finalizer key non-null so failure finalization
+  // remains idempotent even for legacy callers that omit a client turn_id.
+  const turnId = typeof body.turn_id === "string" && body.turn_id ? body.turn_id : crypto.randomUUID();
   const messages = validMessages(body.messages);
   if (!messages) return errorEnvelope("validation_error", "messages failed validation (role/content/size).", 400);
   if (typeof personaId !== "string" || typeof matterId !== "string")
@@ -247,9 +249,26 @@ async function handleChat(request, env, origin) {
   if (streamingEnabled(env) && supportsStreaming(up.provider)) {
     const started = await startProviderStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
     if (!started.ok) {
-      await stub.rollback(session.sid, turnId); // no turn burned, no spend
+      await stub.rollback(session.sid, turnId, personaId); // no turn burned, no spend
       return upstreamFailureResponse(up, started, "chat_upstream_fail");
     }
+    let failurePromise = null;
+    const finalizeStreamFailure = (usage, kind) => {
+      if (!failurePromise) {
+        failurePromise = stub.fail(
+          session.sid,
+          up.skipBudget ? null : usage,
+          turnId,
+          personaId
+        ).then(() => {
+          logMeta({ ev: "chat_stream_fail", kind, mode: up.mode, provider: up.provider, pool: session.p, turn });
+        }).catch((error) => {
+          failurePromise = null;
+          throw error;
+        });
+      }
+      return failurePromise;
+    };
     const transform = makeChatTransform({
       provider: up.provider,
       buildDonePayload: (fullText, usage) => buildPayload(fullText, usage),
@@ -258,8 +277,15 @@ async function handleChat(request, env, origin) {
         await stub.settle(session.sid, up.skipBudget ? null : usage, turnId, payload);
         logMeta({ ev: "chat_ok", stream: true, mode: up.mode, provider: up.provider, pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
       },
+      onFailure: (usage) => finalizeStreamFailure(usage, "provider"),
     });
-    const clientStream = started.upstream.body.pipeThrough(transform);
+    const clientStream = pipeProviderStream({
+      upstreamBody: started.upstream.body,
+      transform,
+      // A transport abort has no trustworthy terminal usage. Refund the reserve
+      // and clear the turn before the normalized stream is allowed to error.
+      onFailure: () => finalizeStreamFailure(null, "transport"),
+    });
     // withCors() (applied by the router) preserves this streaming body + headers.
     return new Response(clientStream, {
       status: 200,
@@ -275,7 +301,7 @@ async function handleChat(request, env, origin) {
   const result = await callUpstream(up, { system, messages, maxTokens: CHAT_MAX_TOKENS });
 
   if (!result.ok) {
-    await stub.rollback(session.sid, turnId); // no turn burned, no spend
+    await stub.rollback(session.sid, turnId, personaId); // no turn burned, no spend
     return upstreamFailureResponse(up, result, "chat_upstream_fail");
   }
 

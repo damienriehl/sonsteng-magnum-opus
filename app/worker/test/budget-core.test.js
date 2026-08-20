@@ -110,16 +110,45 @@ test("rollback: upstream failure burns no turn and refunds the reserve", () => {
   const core = makeCore();
   core.preflight("sid-r", { ...BASE, turnId: "r1", skipBudget: false });
   assert.equal(spent(core), 5);
-  core.rollback("sid-r", "r1");
+  core.rollback("sid-r", "r1", BASE.personaId);
   assert.equal(spent(core), 0);
+  assert.equal(core.committedTurnsForPersona("sid-r", BASE.personaId), 0);
   const pre = core.preflight("sid-r", { ...BASE, turnId: "r2", skipBudget: false });
   assert.equal(pre.turn, 1); // the failed turn was not burned
+});
+
+test("stream failure bills known usage but clears replay and permits same-turn retry", () => {
+  const core = makeCore();
+  core.preflight("sid-f", { ...BASE, turnId: "same", skipBudget: false });
+  assert.equal(spent(core), 5);
+
+  const failed = core.fail(
+    "sid-f",
+    { input_tokens: 20_000, output_tokens: 300 },
+    "same",
+    BASE.personaId
+  );
+  assert.deepEqual(failed, { ok: true, actualCents: 3 });
+  assert.equal(spent(core), 3, "reserve is replaced with known provider usage");
+  assert.equal(core.committedTurnsForPersona("sid-f", BASE.personaId), 0);
+  assert.deepEqual(
+    core.fail("sid-f", { input_tokens: 20_000, output_tokens: 300 }, "same", BASE.personaId),
+    { ok: true },
+    "repeated failure finalization is a no-op"
+  );
+  assert.equal(spent(core), 3);
+
+  const retry = core.preflight("sid-f", { ...BASE, turnId: "same", skipBudget: false });
+  assert.equal(retry.ok, true);
+  assert.equal(retry.replay, undefined, "failed partial output was not stored for replay");
+  assert.equal(retry.turn, 1, "the failed turn was returned before retry");
 });
 
 test("debrief-oracle guard counts committed per-persona turns", () => {
   const core = makeCore();
   for (let i = 1; i <= 6; i++) {
     core.preflight("sid-g", { ...BASE, maxTurns: 20, turnId: "g" + i, skipBudget: true });
+    core.settle("sid-g", null, "g" + i, { reply: "r" + i });
   }
   assert.equal(core.committedTurnsForPersona("sid-g", "m00.per.tester"), 6);
   assert.equal(core.committedTurnsForPersona("sid-g", "m00.per.other"), 0);

@@ -11,7 +11,9 @@
 //               with their own key) the pool spend cap + a worst-case reserve.
 //   settle    — AFTER the reply: replaces the reserve with the ACTUAL cost
 //               (usage=null on BYOK: nothing billed) + stores the replay result.
-//   rollback  — upstream failure: removes reserve, decrements the turn.
+//   fail      — streamed failure: replaces reserve with any known actual cost,
+//               clears replay state, and decrements the turn.
+//   rollback  — pre-response failure: fail with no known usage.
 // BYOK skips MONEY only: turn caps, dedupe, per-persona counts, mint throttle,
 // and the ≥6-turn debrief guard all still apply.
 
@@ -193,23 +195,45 @@ export class BudgetCore {
     return { ok: true, actualCents: actual };
   }
 
-  // Undo the last preflight on upstream failure: remove the reserve, decrement
-  // the turn. No turn burned, no spend recorded.
-  rollback(sid, turnId) {
+  // Finalize a failed in-flight turn. Known usage (for a provider-declared
+  // terminal error) is billed, but no replay result is stored and the turn is
+  // returned to the caller. Unknown usage (transport abort / pre-response
+  // failure) refunds the reserve. Matching last_turn_id makes this idempotent.
+  fail(sid, usage, turnId, personaId) {
     const today = this._today();
     this._rollover(today);
     const sess = this._one("SELECT * FROM sessions WHERE sid=?", sid);
     if (!sess || sess.day !== today || sess.last_turn_id !== turnId) return { ok: true };
+    const actual = usage ? centsForUsage(usage) : 0;
     const pool = sess.last_pool || "public";
-    if (sess.last_reserve > 0) {
+    if (sess.last_reserve !== 0 || actual !== 0) {
       const col = this._poolCol(pool);
-      this.sql.exec(`UPDATE budget SET ${col} = MAX(0, ${col} - ?) WHERE id=1`, sess.last_reserve);
+      this.sql.exec(
+        `UPDATE budget SET ${col} = MAX(0, ${col} - ? + ?) WHERE id=1`,
+        sess.last_reserve,
+        actual
+      );
     }
     this.sql.exec(
-      "UPDATE sessions SET turns = MAX(0, turns - 1), last_reserve=0, last_turn_id=NULL WHERE sid=?",
+      "UPDATE sessions SET turns = MAX(0, turns - 1), last_reserve=0, " +
+        "last_turn_id=NULL, last_pool=NULL, last_result=NULL WHERE sid=?",
       sid
     );
-    return { ok: true };
+    if (personaId) {
+      this.sql.exec(
+        "UPDATE persona_turns SET turns = MAX(0, turns - 1) " +
+          "WHERE sid=? AND persona_id=? AND day=?",
+        sid,
+        personaId,
+        today
+      );
+    }
+    return { ok: true, actualCents: actual };
+  }
+
+  // Undo a preflight when no provider usage is available.
+  rollback(sid, turnId, personaId) {
+    return this.fail(sid, null, turnId, personaId);
   }
 
   // Debrief-oracle guard: committed turns this sid has with this persona today.

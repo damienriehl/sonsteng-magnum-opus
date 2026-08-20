@@ -33,8 +33,12 @@ export class BudgetCounter extends DurableObject {
     return this.core.settle(sid, usage, turnId, result);
   }
 
-  rollback(sid, turnId) {
-    return this.core.rollback(sid, turnId);
+  fail(sid, usage, turnId, personaId) {
+    return this.core.fail(sid, usage, turnId, personaId);
+  }
+
+  rollback(sid, turnId, personaId) {
+    return this.core.rollback(sid, turnId, personaId);
   }
 
   committedTurnsForPersona(sid, personaId) {
