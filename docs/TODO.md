@@ -44,17 +44,22 @@ this file is what those decisions oblige us to *do*.
 
 ## Copy and framing
 
-- [ ] **T03 — Decide the "trusted advisors" line** `@damien` `origin:call-2026-08-06`
+- [x] **T03 — Decide the "trusted advisors" line** `@damien` `origin:call-2026-08-06`
       John's framing, and he thinks it is the important one: *"the lawyer as a
       trusted advisor… that's the only way we're going to make money, is if we're
       trusted advisors rather than the stuff that AI can do."* Candidate:
       "Training the next generation of lawyers as trusted advisors." Damien's call
       was to iterate on it in the editor rather than settle it on the call.
-- [ ] **T04 — Sweep the remaining "advocates"** `@agent` `origin:call-2026-08-06`
+      **Done 2026-08-17** — Damien approved John's exact line and `d57da25`
+      published it on the pitch. The language contract pins the wording.
+- [x] **T04 — Sweep the remaining "advocates"** `@agent` `origin:call-2026-08-06`
       T02 changed the hero only. Still standing: `site/index.html` lede ("the finest
       advocates they can be") and the open-source paragraph ("how advocates are
       trained"), plus `README.md:5` and the July 15 brainstorm. Same reasoning
       applies; needs Damien's yes because it is more than the quick edit he asked for.
+      **Done 2026-08-17** — Damien approved the sweep and `d57da25` removed the
+      public-copy occurrences. `tools/tests/test_platform_language_contract.py`
+      now fails on an advocate stem in the pitch, and `README.md` is clean.
 - [x] **T05 — Byline on the site** `@agent` `origin:call-2026-08-06`
       Currently "The work of John O. Sonsteng · with Roger S. Haydock." Should be
       Sonsteng, then Riehl, then Haydock — John: *"it'll be my name and authorship,
@@ -168,22 +173,24 @@ this file is what those decisions oblige us to *do*.
 
 ## Credit and assessment
 
-- [ ] **T21 — Weekly hours log** `@agent` `origin:email-2026-08-06`
+- [x] **T21 — Weekly hours log** `@agent` `origin:email-2026-08-06`
       Students submit hours spent on projects, including class time, and hours they
       could bill a client. The gap between the two is the lesson.
-      **Specified but never built.** The design is U5 of
-      `plans/2026-08-06-001-feat-august-decision-wave-plan.md`, which lives only on
-      the unmerged `plan/aug6-implementation-wave` branch — so nothing on `main`
-      records the obligation. `app/hours/` and
-      `data/schemas/weekly-hours-log.schema.json` are both absent.
+      **Done 2026-08-17** — `9bb280f`, merged by `2cab8cc`, added `app/hours/`,
+      `data/schemas/weekly-hours-log.schema.json`, local-only persistence, JSON/CSV
+      export and reload, and the per-deliverable contribution log. The no-network
+      contract is covered by `tools/tests/test_weekly_hours_log.py`.
       Scope narrowed by the 2026-08-12 record (D2): keep the weekly hour report,
       replace the 50-50 attestation with a per-deliverable contribution log.
 - [ ] **T22 — Competency-based credit proposal** `@agent` `origin:call-2026-08-06`
       A proposal for schools and the ABA. Evidence base: the list of what students
       demonstrably learn *quickly* rather than inefficiently, drawn from T21.
       Meanwhile schools set whatever credits they want.
-      **Specified but never built** — U7 of the same unmerged August-wave plan.
-      `docs/proposals/competency-based-credit.md` does not exist. Depends on T21.
+      **Partly done 2026-08-17** — `53960c9`, merged by `19bc135`, added
+      `docs/proposals/competency-based-credit.md`, its synthetic example, consent
+      floor and anti-causal-claim checks. Still open: bind the proposal to the final
+      assessment export and add the planned time-to-first-competence, time-to-six,
+      attempts-to-competence and task-level-uncertainty measures after T23 lands.
 - [ ] **T23 — Implement the 7-point scale, thresholds configurable** `@agent` `origin:call-2026-08-06`
       John's scale, from the University of Minnesota: 7 points total, 7s rare,
       1 and 2 effectively never given, **3 is failure, 4 is average and therefore
@@ -194,8 +201,11 @@ this file is what those decisions oblige us to *do*.
       **Reinterpreted, and now needs a decision before it can be built.** The
       2026-08-12 record found "seven-point scale" ambiguous; Damien resolved it on
       2026-08-13 as *the memo template's seven analytic headings*, not a rating
-      scale. How those seven headings relate to the 40 existing point-weighted
-      `rubric.json` files is still open and blocks the assessment panel.
+      scale. Recording review on 2026-08-17 confirmed that 1–7 is a section-level
+      assessment scale, with competence at 4 and redo below 6; the remaining
+      question is which sections receive it. The often-cited "40 rubrics" are
+      **20 authored** `data/matters/*/rubric.json` files plus **20 generated
+      mirrors** under `site/platform/data/matters/`, not 40 authored instruments.
       Two plans now specify an assessment surface without referencing each other —
       U6 of the unmerged August-wave plan, and Phase C (U11–U14, U17) of
       `plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md`. That conflict
