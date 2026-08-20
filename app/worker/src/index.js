@@ -27,7 +27,7 @@ import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaL
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
-import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
+import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
 export { EditorStore } from "./editor-store.js";
@@ -238,19 +238,20 @@ async function handleChat(request, env, origin) {
     },
   });
 
-  // ---- Streaming path (flag ON + Anthropic only) --------------------------
+  // ---- Streaming path (DEV flag ON + supported provider) -----------------
   // Proxy the provider's SSE through a TransformStream: relay text deltas as
-  // they arrive, capture usage server-side from the terminal message_delta, and
-  // settle the DO in flush with the EXACT same {usage, payload} contract the
-  // non-streaming path uses below. openai/google BYOK fall through to
-  // non-streaming (their SSE carries no message_delta usage event).
+  // they arrive, capture terminal usage server-side, and settle the DO in flush
+  // with the EXACT same {usage, payload} contract the
+  // non-streaming path uses below. Each provider's native SSE dialect is
+  // normalized by chat-stream.js before it reaches the browser.
   if (streamingEnabled(env) && supportsStreaming(up.provider)) {
-    const started = await startAnthropicStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
+    const started = await startProviderStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
     if (!started.ok) {
       await stub.rollback(session.sid, turnId); // no turn burned, no spend
       return upstreamFailureResponse(up, started, "chat_upstream_fail");
     }
     const transform = makeChatTransform({
+      provider: up.provider,
       buildDonePayload: (fullText, usage) => buildPayload(fullText, usage),
       onSettle: async (payload, usage) => {
         // usage=null on BYOK: nothing billed to the hosted pools, replay stored.

@@ -1,8 +1,8 @@
-// chat-stream.test.js — WP4 SSE streaming for POST /v1/chat.
+// chat-stream.test.js — provider-neutral SSE streaming for POST /v1/chat.
 //
 // The live streaming path can't be smoke-tested here (BYOK-forever: no live
 // provider key in the repo/CI), so these tests drive the TransformStream with
-// FIXTURE Anthropic SSE and assert the three things the streaming path must
+// fixture provider SSE and assert the three things the streaming path must
 // guarantee vs. the non-streaming path:
 //   1. chunk relay      — every text_delta reaches the client, in order.
 //   2. usage capture     — token usage is merged from message_start (inputs +
@@ -20,9 +20,11 @@ import {
   parseSSEFrame,
   sseFrame,
   makeChatTransform,
+  startProviderStream,
   startAnthropicStream,
 } from "../src/chat-stream.js";
 import * as anthropic from "../src/providers/anthropic.js";
+import { getProvider } from "../src/providers/registry.js";
 import { centsForUsage } from "../src/cost.js";
 
 // ---- shared fixture ---------------------------------------------------------
@@ -63,6 +65,66 @@ function anthropicSSE({ startUsage = START_USAGE, chunks = REPLY_CHUNKS, finalOu
   return frames.join("");
 }
 
+function openaiSSE({ chunks = REPLY_CHUNKS, includeError = false, malformed = false } = {}) {
+  const frames = [];
+  const raw = (obj) => frames.push(`data: ${JSON.stringify(obj)}\n\n`);
+  raw({ id: "chatcmpl-test", choices: [{ index: 0, delta: { role: "assistant", content: "" } }] });
+  for (const text of chunks) raw({ id: "chatcmpl-test", choices: [{ index: 0, delta: { content: text } }] });
+  if (malformed) frames.push("data: {not-json}\n\n");
+  if (includeError) raw({ error: { type: "server_error", message: "Overloaded" } });
+  raw({ id: "chatcmpl-test", choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+  raw({ id: "chatcmpl-test", choices: [], usage: {
+    prompt_tokens: 1012,
+    completion_tokens: FINAL_OUTPUT_TOKENS,
+    prompt_tokens_details: { cached_tokens: 1000 },
+  } });
+  frames.push("data: [DONE]\n\n");
+  return frames.join("");
+}
+
+function googleSSE({ chunks = REPLY_CHUNKS, includeError = false, malformed = false } = {}) {
+  const frames = [];
+  const raw = (obj) => frames.push(`data: ${JSON.stringify(obj)}\n\n`);
+  for (const text of chunks) raw({ candidates: [{ content: { role: "model", parts: [{ text }] } }] });
+  if (malformed) frames.push("data: {not-json}\n\n");
+  if (includeError) raw({ error: { code: 503, status: "UNAVAILABLE", message: "Overloaded" } });
+  raw({ candidates: [{ content: { role: "model", parts: [] }, finishReason: "STOP" }], usageMetadata: {
+    promptTokenCount: 1012,
+    candidatesTokenCount: FINAL_OUTPUT_TOKENS,
+    cachedContentTokenCount: 1000,
+  } });
+  return frames.join("");
+}
+
+const PROVIDER_CASES = {
+  anthropic: {
+    stream: anthropicSSE,
+    nonStream: NONSTREAM_JSON,
+  },
+  openai: {
+    stream: openaiSSE,
+    nonStream: {
+      choices: [{ message: { content: REPLY_TEXT } }],
+      usage: {
+        prompt_tokens: 1012,
+        completion_tokens: FINAL_OUTPUT_TOKENS,
+        prompt_tokens_details: { cached_tokens: 1000 },
+      },
+    },
+  },
+  google: {
+    stream: googleSSE,
+    nonStream: {
+      candidates: [{ content: { parts: [{ text: REPLY_TEXT }] } }],
+      usageMetadata: {
+        promptTokenCount: 1012,
+        candidatesTokenCount: FINAL_OUTPUT_TOKENS,
+        cachedContentTokenCount: 1000,
+      },
+    },
+  },
+};
+
 // Router-equivalent payload builder (mirrors index.js::buildPayload with fixed
 // turn/remaining/state so we can assert the exact done payload).
 function buildDonePayload(fullText, usage) {
@@ -81,7 +143,7 @@ function buildDonePayload(fullText, usage) {
 
 // Feed `sseText` through makeChatTransform in `chunkSize`-byte slices; collect
 // the client-visible SSE and the onSettle arguments.
-async function runTransform(sseText, { chunkSize, onSettleExtra } = {}) {
+async function runTransform(sseText, { provider = "anthropic", chunkSize, onSettleExtra } = {}) {
   const enc = new TextEncoder();
   const bytes = enc.encode(sseText);
   const size = chunkSize || bytes.length;
@@ -90,6 +152,7 @@ async function runTransform(sseText, { chunkSize, onSettleExtra } = {}) {
 
   let settle = null;
   const transform = makeChatTransform({
+    provider,
     buildDonePayload,
     onSettle: async (payload, usage, fullText, sawError) => {
       settle = { payload, usage: { ...usage }, fullText, sawError };
@@ -130,11 +193,12 @@ test("streamingEnabled: ONLY the exact string 'true' opts in (default OFF)", () 
   assert.equal(streamingEnabled(undefined), false);
 });
 
-test("supportsStreaming: anthropic only (openai/google fall back to non-streaming)", () => {
+test("supportsStreaming: every configured BYOK provider streams; unknown providers fall back", () => {
   assert.equal(supportsStreaming("anthropic"), true);
-  assert.equal(supportsStreaming("openai"), false);
-  assert.equal(supportsStreaming("google"), false);
+  assert.equal(supportsStreaming("openai"), true);
+  assert.equal(supportsStreaming("google"), true);
   assert.equal(supportsStreaming("mistral"), false);
+  assert.equal(supportsStreaming(undefined), false);
 });
 
 // ---- SSE frame parser -------------------------------------------------------
@@ -224,6 +288,43 @@ test("PARITY: the cache-read signal (worker-llm-facts §2) survives streaming", 
   assert.equal(done.data.usage.cache_read_input_tokens, 4096);
 });
 
+for (const [provider, fixture] of Object.entries(PROVIDER_CASES)) {
+  test(`${provider}: happy path relays output and settles canonical usage with cost parity`, async () => {
+    const { events, settle } = await runTransform(fixture.stream(), { provider });
+    assert.equal(events.filter((e) => e.event === "delta").map((e) => e.data.text).join(""), REPLY_TEXT);
+    assert.equal(events.filter((e) => e.event === "done").length, 1);
+
+    const nonStream = getProvider(provider).parseResponse(fixture.nonStream);
+    assert.equal(settle.fullText, nonStream.text);
+    assert.deepEqual(settle.usage, nonStream.usage);
+    assert.equal(centsForUsage(settle.usage), centsForUsage(nonStream.usage));
+    assert.equal(settle.payload.reply, nonStream.text);
+    assert.deepEqual(settle.payload.usage, {
+      input_tokens: nonStream.usage.input_tokens || 0,
+      output_tokens: nonStream.usage.output_tokens || 0,
+      cache_read_input_tokens: nonStream.usage.cache_read_input_tokens || 0,
+    });
+  });
+
+  test(`${provider}: provider error reaches the client and settlement completes`, async () => {
+    const { events, settle } = await runTransform(fixture.stream({ includeError: true }), { provider });
+    assert.equal(events.find((e) => e.event === "error").data.message, "Overloaded");
+    assert.equal(events.filter((e) => e.event === "done").length, 1);
+    assert.equal(settle.sawError, true);
+    assert.equal(settle.fullText, REPLY_TEXT);
+  });
+
+  test(`${provider}: malformed frames are ignored and terminal usage still settles`, async () => {
+    const stream = provider === "anthropic"
+      ? fixture.stream() + "data: {not-json}\n\n"
+      : fixture.stream({ malformed: true });
+    const { events, settle } = await runTransform(stream, { provider });
+    assert.equal(events.filter((e) => e.event === "done").length, 1);
+    assert.equal(settle.fullText, REPLY_TEXT);
+    assert.deepEqual(settle.usage, getProvider(provider).parseResponse(fixture.nonStream).usage);
+  });
+}
+
 // ---- mid-stream error -------------------------------------------------------
 test("transform forwards an upstream error frame but still settles captured usage", async () => {
   const { events, settle } = await runTransform(anthropicSSE({ includeError: true }));
@@ -290,4 +391,42 @@ test("startAnthropicStream: 200 but no body -> upstream error", async () => {
     async () => ({ ok: true, status: 200, body: null })
   );
   assert.deepEqual(res, { ok: false, kind: "upstream", status: 200 });
+});
+
+for (const [provider, expected] of Object.entries({
+  anthropic: { url: "https://api.anthropic.com/v1/messages", authHeader: "x-api-key" },
+  openai: { url: "https://api.openai.com/v1/chat/completions", authHeader: "authorization" },
+  google: { url: "https://generativelanguage.googleapis.com/v1beta/models/test-model:streamGenerateContent?alt=sse", authHeader: "x-goog-api-key" },
+})) {
+  test(`startProviderStream: ${provider} builds its streaming request without exposing the key`, async () => {
+    const fake = { ok: true, status: 200, body: new ReadableStream({ start(c) { c.close(); } }) };
+    const result = await startProviderStream(
+      { up: { provider, apiKey: "secret-test-key", model: "test-model" }, system: { prefix: "A", tail: "B" }, messages: [{ role: "user", content: "hi" }], maxTokens: 300 },
+      async (url, init) => {
+        assert.equal(url, expected.url);
+        assert.ok(init.headers[expected.authHeader]);
+        assert.ok(!url.includes("secret-test-key"));
+        const body = JSON.parse(init.body);
+        if (provider === "anthropic") assert.equal(body.stream, true);
+        if (provider === "openai") {
+          assert.equal(body.stream, true);
+          assert.deepEqual(body.stream_options, { include_usage: true });
+        }
+        if (provider === "google") assert.equal(body.stream, undefined);
+        return fake;
+      },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.upstream, fake);
+  });
+}
+
+test("startProviderStream: unknown provider declines without calling fetch", async () => {
+  let called = false;
+  const result = await startProviderStream(
+    { up: { provider: "mistral", apiKey: "secret-test-key", model: "m" }, system: null, messages: [], maxTokens: 300 },
+    async () => { called = true; },
+  );
+  assert.equal(called, false);
+  assert.deepEqual(result, { ok: false, kind: "config" });
 });

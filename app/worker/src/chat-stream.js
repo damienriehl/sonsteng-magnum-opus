@@ -8,13 +8,9 @@
 //
 // THE CONTRACT THIS MODULE PRESERVES (identical to the non-streaming path in
 // index.js::handleChat):
-//   * usage-accounting — Anthropic reports token usage across TWO SSE events:
-//       `message_start` carries input_tokens + cache_read_input_tokens +
-//       cache_creation_input_tokens (+ an initial output_tokens), and the
-//       terminal `message_delta` carries the FINAL cumulative output_tokens.
-//       We merge both into one usage object with the SAME Anthropic field names
-//       the non-streaming parseResponse() returns, so cost.js::centsForUsage
-//       bills byte-identically and the client sees the same usage numbers.
+//   * usage-accounting — each provider's terminal usage is normalized to the
+//       same canonical input/output/cache fields its non-streaming adapter
+//       returns, so bookkeeping and client payloads stay identical.
 //   * caching — cache_read_input_tokens is captured + surfaced (the load-bearing
 //       "cache worked" signal, worker-llm-facts §2), same as non-streaming.
 //   * turn/replay bookkeeping — the router calls stub.settle(sid, usage, turnId,
@@ -27,12 +23,9 @@
 //       server-side (fullText) so the settle payload's `reply` matches what a
 //       non-streaming turn would store for replay.
 //
-// SCOPE: only Anthropic supports streaming here (Haiku is the hosted model and
-// the primary BYOK target). For openai/google BYOK the router falls back to the
-// non-streaming path even when the flag is on — those SSE dialects differ and
-// carry no message_delta usage event; adding them is a clean follow-up.
+import { getProvider } from "./providers/registry.js";
 
-import { buildRequest as buildAnthropicRequest } from "./providers/anthropic.js";
+const STREAMING_PROVIDERS = new Set(["anthropic", "openai", "google"]);
 
 // The flag. Default OFF everywhere (wrangler.jsonc vars: "STREAMING":"false").
 export function streamingEnabled(env) {
@@ -41,7 +34,7 @@ export function streamingEnabled(env) {
 
 // Which providers this module can stream. Router consults this before streaming.
 export function supportsStreaming(provider) {
-  return provider === "anthropic";
+  return STREAMING_PROVIDERS.has(provider);
 }
 
 // ---- SSE frame parsing (pure, unit-tested) ----------------------------------
@@ -75,7 +68,7 @@ export function sseFrame(event, dataObj) {
 }
 
 // ---- The TransformStream ----------------------------------------------------
-// Consumes the provider's raw Anthropic SSE bytes on the writable side; emits a
+// Consumes a provider's native SSE bytes on the writable side; emits a
 // NORMALIZED, provider-agnostic SSE on the readable side so the browser never
 // needs to know which provider produced the tokens:
 //   event: delta   data: {"text":"<incremental chunk>"}
@@ -87,7 +80,7 @@ export function sseFrame(event, dataObj) {
 //   (turn/remaining/state) plus the streamed-in fullText + usage.
 // onSettle(payload, usage, fullText) -> async; the router commits the DO here.
 //   Runs in flush() so it fires exactly once, after the terminal usage is known.
-export function makeChatTransform({ buildDonePayload, onSettle }) {
+export function makeChatTransform({ provider = "anthropic", buildDonePayload, onSettle }) {
   const dec = new TextDecoder();
   const enc = new TextEncoder();
 
@@ -96,36 +89,75 @@ export function makeChatTransform({ buildDonePayload, onSettle }) {
   const usage = {};
   let sawError = false;
 
+  function emitDelta(text, controller) {
+    if (!text) return;
+    fullText += text;
+    controller.enqueue(enc.encode(sseFrame("delta", { text })));
+  }
+
+  function captureError(data, controller) {
+    if (!data || !data.error) return false;
+    sawError = true;
+    const msg = data.error.message || "upstream stream error";
+    controller.enqueue(enc.encode(sseFrame("error", { message: msg })));
+    return true;
+  }
+
+  function captureOpenAIUsage(raw) {
+    if (!raw) return;
+    const cached = (raw.prompt_tokens_details && raw.prompt_tokens_details.cached_tokens) || 0;
+    if (typeof raw.prompt_tokens === "number") usage.input_tokens = Math.max(0, raw.prompt_tokens - cached);
+    if (typeof raw.completion_tokens === "number") usage.output_tokens = raw.completion_tokens;
+    if (typeof cached === "number") usage.cache_read_input_tokens = cached;
+  }
+
+  function captureGoogleUsage(raw) {
+    if (!raw) return;
+    const cached = raw.cachedContentTokenCount || 0;
+    if (typeof raw.promptTokenCount === "number") usage.input_tokens = Math.max(0, raw.promptTokenCount - cached);
+    if (typeof raw.candidatesTokenCount === "number") usage.output_tokens = raw.candidatesTokenCount;
+    if (typeof cached === "number") usage.cache_read_input_tokens = cached;
+  }
+
   function handleFrame(frame, controller) {
     const parsed = parseSSEFrame(frame);
     if (!parsed) return;
     const data = safeJson(parsed.data);
     if (!data) return;
 
-    // Anthropic delivers usage across message_start (inputs) + message_delta
-    // (final output_tokens). Merge into the canonical Anthropic-named object.
-    if (data.type === "message_start" && data.message && data.message.usage) {
-      const u = data.message.usage;
-      if (typeof u.input_tokens === "number") usage.input_tokens = u.input_tokens;
-      if (typeof u.output_tokens === "number") usage.output_tokens = u.output_tokens;
-      if (typeof u.cache_read_input_tokens === "number") usage.cache_read_input_tokens = u.cache_read_input_tokens;
-      if (typeof u.cache_creation_input_tokens === "number") usage.cache_creation_input_tokens = u.cache_creation_input_tokens;
-    } else if (data.type === "content_block_delta" && data.delta && data.delta.type === "text_delta") {
-      const t = data.delta.text || "";
-      if (t) {
-        fullText += t;
-        controller.enqueue(enc.encode(sseFrame("delta", { text: t })));
+    if (captureError(data, controller)) return;
+
+    if (provider === "anthropic") {
+      // Anthropic delivers usage across message_start (inputs) + message_delta
+      // (final output_tokens). Merge into the canonical usage object.
+      if (data.type === "message_start" && data.message && data.message.usage) {
+        const u = data.message.usage;
+        if (typeof u.input_tokens === "number") usage.input_tokens = u.input_tokens;
+        if (typeof u.output_tokens === "number") usage.output_tokens = u.output_tokens;
+        if (typeof u.cache_read_input_tokens === "number") usage.cache_read_input_tokens = u.cache_read_input_tokens;
+        if (typeof u.cache_creation_input_tokens === "number") usage.cache_creation_input_tokens = u.cache_creation_input_tokens;
+      } else if (data.type === "content_block_delta" && data.delta && data.delta.type === "text_delta") {
+        emitDelta(data.delta.text || "", controller);
+      } else if (data.type === "message_delta" && data.usage) {
+        if (typeof data.usage.output_tokens === "number") usage.output_tokens = data.usage.output_tokens;
+        if (typeof data.usage.input_tokens === "number") usage.input_tokens = data.usage.input_tokens;
       }
-    } else if (data.type === "message_delta" && data.usage) {
-      // Terminal usage: final cumulative output_tokens (worker-llm-facts §4).
-      if (typeof data.usage.output_tokens === "number") usage.output_tokens = data.usage.output_tokens;
-      if (typeof data.usage.input_tokens === "number") usage.input_tokens = data.usage.input_tokens;
-    } else if (data.type === "error") {
-      sawError = true;
-      const msg = (data.error && data.error.message) || "upstream stream error";
-      controller.enqueue(enc.encode(sseFrame("error", { message: msg })));
+      return;
     }
-    // content_block_start / _stop / message_stop / ping: no client-visible effect.
+
+    if (provider === "openai") {
+      captureOpenAIUsage(data.usage);
+      const choice = (data.choices || [])[0];
+      if (choice && choice.delta) emitDelta(choice.delta.content || "", controller);
+      return;
+    }
+
+    if (provider === "google") {
+      const candidate = (data.candidates || [])[0];
+      const parts = candidate && candidate.content ? candidate.content.parts || [] : [];
+      for (const part of parts) emitDelta(part.text || "", controller);
+      captureGoogleUsage(data.usageMetadata);
+    }
   }
 
   return new TransformStream({
@@ -177,13 +209,42 @@ export function makeChatTransform({ buildDonePayload, onSettle }) {
 // response cannot be transparently retried once bytes flow. A pre-stream failure
 // is surfaced to the router, which rolls back and returns the same in-character
 // "bad connection" the non-streaming path returns.
-export async function startAnthropicStream({ up, system, messages, maxTokens }, fetchImpl) {
-  const doFetch = fetchImpl || fetch;
-  const { url, headers, body } = buildAnthropicRequest({
-    system, messages, maxTokens,
+function buildStreamingRequest({ up, system, messages, maxTokens }) {
+  const opts = {
+    system,
+    messages,
+    maxTokens,
     providerCfg: { apiKey: up.apiKey, model: up.model },
-  });
-  body.stream = true;
+  };
+
+  const provider = getProvider(up.provider);
+  if (!provider) return null;
+  const request = provider.buildRequest(opts);
+
+  if (up.provider === "anthropic") {
+    request.body.stream = true;
+    return request;
+  }
+
+  if (up.provider === "openai") {
+    request.body.stream = true;
+    request.body.stream_options = { include_usage: true };
+    return request;
+  }
+
+  if (up.provider === "google") {
+    request.url = request.url.replace(/:generateContent$/, ":streamGenerateContent?alt=sse");
+    return request;
+  }
+
+  return null;
+}
+
+export async function startProviderStream({ up, system, messages, maxTokens }, fetchImpl) {
+  const doFetch = fetchImpl || fetch;
+  const request = buildStreamingRequest({ up, system, messages, maxTokens });
+  if (!request) return { ok: false, kind: "config" };
+  const { url, headers, body } = request;
 
   let res;
   try {
@@ -203,4 +264,9 @@ export async function startAnthropicStream({ up, system, messages, maxTokens }, 
   }
   if (!res.body) return { ok: false, kind: "upstream", status: res.status };
   return { ok: true, upstream: res };
+}
+
+// Compatibility export for existing focused tests and any direct callers.
+export function startAnthropicStream({ up, ...rest }, fetchImpl) {
+  return startProviderStream({ up: { ...up, provider: "anthropic" }, ...rest }, fetchImpl);
 }
