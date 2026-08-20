@@ -43,6 +43,19 @@ const UNDER_SCOPED = {
     admin: { granted: false, ver: 0 },
   },
 };
+const DEFAULT_THRESHOLDS = {
+  schema_version: "memo-assessment-threshold-resolution/v1",
+  source: "default",
+  source_id: "memo-seven-heading-1-7",
+  version: "1.1.0",
+  content_hash: "sha256:instrument",
+  competence_score: 4,
+  redo_eligible_below: 6,
+  resolution: "instructor>school>default",
+  locally_supplied: false,
+  authority_status: "canonical_default",
+  verified_institutional_authority: false,
+};
 
 function record() {
   return {
@@ -63,6 +76,7 @@ function record() {
         version: "1.1.0",
         content_hash: "sha256:instrument",
       },
+      threshold_configuration: DEFAULT_THRESHOLDS,
       providers: [
         { grader_id: "grader-1", provider: "openai", model: "gpt-test", mode: "byok" },
       ],
@@ -80,14 +94,7 @@ function record() {
       ],
     },
     provenance: {
-      config: {
-        source: "default",
-        version: "1.1.0",
-        content_hash: "sha256:instrument",
-        competence_score: 4,
-        redo_eligible_below: 6,
-        resolution: "instructor>school>default",
-      },
+      config: DEFAULT_THRESHOLDS,
       instrument: {
         id: "memo-seven-heading-1-7",
         version: "1.1.0",
@@ -147,6 +154,29 @@ test("view renders result, provider/config/instrument provenance, and raw eviden
   assert.match(html, /The governing rule requires notice/);
   assert.match(html, /Adequate rule synthesis/);
   assert.doesNotMatch(html, /letter[_ -]?grade|Grade [A-F]|>A[+-]?</i);
+});
+
+test("locally supplied instructor thresholds are visibly claimed and unverified", async () => {
+  const local = record();
+  const config = {
+    ...local.result.threshold_configuration,
+    source: "instructor",
+    source_id: "instructor:john-local-2026",
+    competence_score: 5,
+    redo_eligible_below: 7,
+    locally_supplied: true,
+    authority_status: "claimed_locally_supplied",
+  };
+  local.result.threshold_configuration = config;
+  local.provenance.config = config;
+  const vm = assessmentViewModel(local);
+  assert.equal(vm.headings[0].competent, false);
+  assert.equal(vm.headings[1].competent, true);
+  const html = await renderAssessmentReviewPage(local, "DR").text();
+  assert.match(html, /Resolved competence begins at score 5/);
+  assert.match(html, /locally supplied, unverified instructor claim/);
+  assert.match(html, /instructor:john-local-2026/);
+  assert.match(html, /institutional authority has not been verified/i);
 });
 
 test("latest attributed human override becomes the effective visible score", () => {
@@ -305,6 +335,7 @@ test("successful memo persistence returns an audit id and isolates live credenti
     sessionToken: "session-live-u13",
     retentionDays: 30,
   });
+  assert.deepEqual(input.provenance.config, result.threshold_configuration);
   assert.deepEqual(input.credential_values.sort(), ["session-live-u13", "sk-live-u13"].sort());
   const persistedShape = { ...input };
   delete persistedShape.credential_values;

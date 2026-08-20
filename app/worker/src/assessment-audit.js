@@ -31,7 +31,6 @@ export function buildAssessmentAuditInput({
   sessionToken,
   retentionDays,
 }) {
-  const thresholds = instrument?.content?.thresholds || {};
   const providers = Array.isArray(result?.providers) ? result.providers : [];
   return {
     id,
@@ -48,15 +47,7 @@ export function buildAssessmentAuditInput({
     },
     result,
     provenance: {
-      config: {
-        source: "default",
-        version: instrument.instrument_version,
-        content_hash: instrument.content_hash,
-        competence_score: thresholds.default_competence_score,
-        redo_eligible_below: thresholds.default_redo_eligible_below,
-        resolution: "instructor>school>default",
-        locally_supplied: false,
-      },
+      config: result?.threshold_configuration,
       instrument: {
         id: instrument.id,
         version: instrument.instrument_version,

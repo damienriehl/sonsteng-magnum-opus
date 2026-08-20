@@ -2530,6 +2530,10 @@ export class EditorStoreCore {
     if (this._canonical(safeProviders) !== this._canonical(safeResult.providers || [])) {
       return { ok: false, reason: "provider_provenance_mismatch" };
     }
+    if (this._canonical(safeConfig) !==
+        this._canonical(safeResult.threshold_configuration || {})) {
+      return { ok: false, reason: "config_provenance_mismatch" };
+    }
     if (this._canonical(safeBlockers) !==
         this._canonical(safeResult.summative_blockers || [])) {
       return { ok: false, reason: "summative_blockers_mismatch" };

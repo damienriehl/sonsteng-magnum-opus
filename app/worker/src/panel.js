@@ -6,6 +6,7 @@
 
 import { buildMemoAdjudicationPrompt, buildMemoScorecardPrompt } from "./prompts.js";
 import { parseModelJson, validateMemoScorecard } from "./validate.js";
+import { validResolvedAssessmentThresholdConfig } from "./assessment-config.js";
 
 const SUMMATIVE_BLOCKERS = ["human_human_calibration", "provider_terms_review"];
 const DEFAULT_SCORECARD_TEMPLATE = "{{ASSESSMENT_INSTRUMENT_JSON}}\n\n{{SUBMISSION}}";
@@ -157,11 +158,13 @@ function containsLiveCredential(result, graders) {
 export async function runFormativeMemoPanel({
   submission,
   instrument,
+  thresholdConfig,
   graders,
   complete,
   scorecardTemplate = DEFAULT_SCORECARD_TEMPLATE,
 }) {
   if (typeof submission !== "string" || !submission || !instrument ||
+      !validResolvedAssessmentThresholdConfig(thresholdConfig, instrument) ||
       !Array.isArray(graders) || graders.length === 0 || typeof complete !== "function") {
     return { ok: false, kind: "validation", errors: ["memo panel input invalid"] };
   }
@@ -218,6 +221,7 @@ export async function runFormativeMemoPanel({
       version: instrument.instrument_version,
       content_hash: instrument.content_hash,
     },
+    threshold_configuration: thresholdConfig,
     providers,
     ...(adjudicator ? { adjudicator } : {}),
     headings: aggregate.headings,

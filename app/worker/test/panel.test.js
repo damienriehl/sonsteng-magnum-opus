@@ -18,6 +18,32 @@ const INSTRUMENT = JSON.parse(readFileSync(
 ));
 const HEADINGS = INSTRUMENT.content.dimensions.map((dimension) => dimension.id);
 const SUBMISSION = HEADINGS.map((heading) => `Evidence for ${heading}.`).join("\n\n");
+const DEFAULT_THRESHOLDS = {
+  schema_version: "memo-assessment-threshold-resolution/v1",
+  source: "default",
+  source_id: INSTRUMENT.id,
+  competence_score: 4,
+  redo_eligible_below: 6,
+  resolution: "instructor>school>default",
+  locally_supplied: false,
+  authority_status: "canonical_default",
+  verified_institutional_authority: false,
+  version: INSTRUMENT.instrument_version,
+  content_hash: INSTRUMENT.content_hash,
+};
+const INSTRUCTOR_THRESHOLDS = {
+  schema_version: "memo-assessment-threshold-resolution/v1",
+  source: "instructor",
+  source_id: "instructor:john-local-2026",
+  competence_score: 5,
+  redo_eligible_below: 7,
+  resolution: "instructor>school>default",
+  locally_supplied: true,
+  authority_status: "claimed_locally_supplied",
+  verified_institutional_authority: false,
+  version: INSTRUMENT.instrument_version,
+  content_hash: INSTRUMENT.content_hash,
+};
 
 function scorecard(scores) {
   return {
@@ -119,6 +145,7 @@ test("orchestrator blinds inputs, adjudicates only contested headings, and strip
   const run = await runFormativeMemoPanel({
     submission: SUBMISSION,
     instrument: INSTRUMENT,
+    thresholdConfig: INSTRUCTOR_THRESHOLDS,
     graders: GRADERS,
     complete,
   });
@@ -130,6 +157,7 @@ test("orchestrator blinds inputs, adjudicates only contested headings, and strip
   assert.equal(run.result.summative_eligible, false);
   assert.deepEqual(run.result.summative_blockers, ["human_human_calibration", "provider_terms_review"]);
   assert.equal(run.result.assurance, "multi_provider_formative");
+  assert.deepEqual(run.result.threshold_configuration, INSTRUCTOR_THRESHOLDS);
   assert.deepEqual(run.result.providers.map((p) => p.provider).sort(), ["anthropic", "google", "openai"]);
 
   const persistable = JSON.stringify(run.result);
@@ -146,6 +174,7 @@ test("a one-key run stays formative and is explicitly reduced assurance", async 
   const run = await runFormativeMemoPanel({
     submission: SUBMISSION,
     instrument: INSTRUMENT,
+    thresholdConfig: DEFAULT_THRESHOLDS,
     graders: [grader],
     complete: async () => ({ ok: true, text: JSON.stringify(scorecard([4, 4, 4, 4, 4, 4, 4])), usage: {} }),
   });
@@ -156,6 +185,19 @@ test("a one-key run stays formative and is explicitly reduced assurance", async 
   assert.equal(run.result.providers.length, 1);
 });
 
+test("panel fails closed when resolved threshold provenance is absent", async () => {
+  const run = await runFormativeMemoPanel({
+    submission: SUBMISSION,
+    instrument: INSTRUMENT,
+    graders: [GRADERS[0]],
+    complete: async () => {
+      assert.fail("provider must not run without resolved threshold provenance");
+    },
+  });
+  assert.equal(run.ok, false);
+  assert.equal(run.kind, "validation");
+});
+
 test("a live key echoed into otherwise valid evidence fails closed", async () => {
   const grader = GRADERS[0];
   const leaked = scorecard([4, 4, 4, 4, 4, 4, 4]);
@@ -163,6 +205,7 @@ test("a live key echoed into otherwise valid evidence fails closed", async () =>
   const run = await runFormativeMemoPanel({
     submission: SUBMISSION,
     instrument: INSTRUMENT,
+    thresholdConfig: DEFAULT_THRESHOLDS,
     graders: [grader],
     complete: async () => ({ ok: true, text: JSON.stringify(leaked), usage: {} }),
   });

@@ -7,6 +7,19 @@ import { makeCore } from "./editor-sql-helper.mjs";
 
 const REVIEW_SCOPES = { "assessment-review": { granted: true, ver: 1 } };
 const SENTINEL = "sk-live-u12-sentinel-never-persist";
+const THRESHOLD_CONFIG = {
+  schema_version: "memo-assessment-threshold-resolution/v1",
+  source: "instructor",
+  source_id: "instructor:john-local-2026",
+  version: "1.1.0",
+  content_hash: "sha256:instrument",
+  competence_score: 5,
+  redo_eligible_below: 7,
+  resolution: "instructor>school>default",
+  locally_supplied: true,
+  authority_status: "claimed_locally_supplied",
+  verified_institutional_authority: false,
+};
 
 function auditInput(overrides = {}) {
   return {
@@ -41,6 +54,7 @@ function auditInput(overrides = {}) {
         version: "1.1.0",
         content_hash: "sha256:instrument",
       },
+      threshold_configuration: THRESHOLD_CONFIG,
       providers: [{ provider: "openai", model: "gpt-test", mode: "byok" }],
       headings: [{
         heading_id: "governing-law",
@@ -50,12 +64,7 @@ function auditInput(overrides = {}) {
       apiKey: SENTINEL,
     },
     provenance: {
-      config: {
-        source: "assessment-config",
-        version: "1.0.0",
-        content_hash: "sha256:config",
-        resolution: "instructor>school>default",
-      },
+      config: THRESHOLD_CONFIG,
       instrument: {
         id: "memo-seven-heading-1-7",
         version: "1.1.0",
@@ -213,6 +222,12 @@ test("audit writes require explicit bounded retention and matching instrument pr
   assert.deepEqual(core.recordAssessmentAudit(mismatch), {
     ok: false,
     reason: "instrument_provenance_mismatch",
+  });
+  const configMismatch = auditInput();
+  configMismatch.provenance.config = { ...THRESHOLD_CONFIG, competence_score: 4 };
+  assert.deepEqual(core.recordAssessmentAudit(configMismatch), {
+    ok: false,
+    reason: "config_provenance_mismatch",
   });
 });
 

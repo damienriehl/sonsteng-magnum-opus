@@ -19,7 +19,7 @@ contract. **Do not deviate without versioning.** Base path: `/v1`.
 
 ## BYOK — bring your own key (provider-agnostic)
 
-`POST /v1/chat`, `/v1/debrief`, and `/v1/critique` MAY include:
+`POST /v1/chat`, `/v1/debrief`, `/v1/critique`, and `/v1/memo-assessment` MAY include:
 
 ```json
 { "byok": { "provider": "anthropic", "api_key": "sk-…", "model": "claude-haiku-4-5" } }
@@ -185,6 +185,70 @@ Rubric-based first-pass critique of a pasted deliverable.
   every criterion **and** subcriterion in the matter's bundled rubric, so the UI
   can render real criterion names instead of "Criterion NN". Ids match the
   scorecard's `criteria[].criterion_id` values.
+
+---
+
+## POST /v1/memo-assessment
+
+Formative-only panel assessment of the seven memo headings. A request includes
+`session_token`, `deliverable_text`, and either the ordinary `byok` record or a
+`byok_panel` of supported provider records. The server always supplies the
+canonical assessment instrument.
+
+The request MAY include a locally supplied threshold envelope:
+
+```json
+{
+  "assessment_config": {
+    "schema_version": "memo-assessment-threshold-config/v1",
+    "school": {
+      "id": "school:midstate-local-2026",
+      "competence_score": 4,
+      "redo_eligible_below": 6
+    },
+    "instructor": {
+      "id": "instructor:john-local-2026",
+      "competence_score": 5,
+      "redo_eligible_below": 7
+    }
+  }
+}
+```
+
+- The envelope and each supplied record are closed to unknown fields.
+- Record IDs are stable local claim IDs. Both thresholds are integers 1–7 and
+  `competence_score` cannot exceed `redo_eligible_below`.
+- Resolution is deterministic: instructor > school > canonical default. A
+  present invalid envelope returns `400 validation_error`; it never falls back.
+- A selected school or instructor record is explicitly labelled locally
+  supplied and unverified. It is not evidence of institutional authorization.
+
+**200:**
+
+```json
+{
+  "assessment": {
+    "threshold_configuration": {
+      "schema_version": "memo-assessment-threshold-resolution/v1",
+      "source": "instructor",
+      "source_id": "instructor:john-local-2026",
+      "competence_score": 5,
+      "redo_eligible_below": 7,
+      "resolution": "instructor>school>default",
+      "locally_supplied": true,
+      "authority_status": "claimed_locally_supplied",
+      "verified_institutional_authority": false,
+      "version": "1.1.0",
+      "content_hash": "sha256:…"
+    }
+  },
+  "assessment_audit_id": "memo-assessment-…"
+}
+```
+
+The complete resolved configuration is returned with the result and persisted
+byte-equivalently in audit provenance. Under canonical defaults, score 4 is
+competent and score 5 remains redo-eligible.
 
 ---
 

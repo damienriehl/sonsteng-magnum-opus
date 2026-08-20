@@ -100,6 +100,15 @@ function renderOverrides(vm) {
 
 export function renderAssessmentReviewPage(record, viewerLabel = "") {
   const vm = assessmentViewModel(record);
+  const config = vm.provenance.config || {};
+  const isLocalConfig = config.locally_supplied === true;
+  const ruleSummary = isLocalConfig
+    ? "<p><strong>Resolved competence begins at score " + Number(vm.competence_score) +
+      ".</strong> Scores below " + Number(vm.redo_eligible_below) +
+      " are redo-eligible. This is a locally supplied, unverified " +
+      escapeHtml(config.source || "threshold") + " claim (" +
+      escapeHtml(config.source_id || "source not identified") + ").</p>"
+    : "<p><strong>Score 4 is competent.</strong> <strong>Score 5 is competent and redo-eligible</strong> under the canonical below-6 rule. Scores stay on the 1–7 section scale and are never translated.</p>";
   const options = vm.headings.map((heading) => "<option value=\"" +
     escapeHtml(heading.heading_id) + "\">" + escapeHtml(heading.label) + "</option>").join("");
   const scores = [1, 2, 3, 4, 5, 6, 7].map((score) =>
@@ -115,12 +124,12 @@ export function renderAssessmentReviewPage(record, viewerLabel = "") {
     (viewerLabel ? " · " + escapeHtml(viewerLabel) : "") + "</p>" +
     "<h1>Assessment signer review</h1><p>Review the derived section scores, their provenance, and the raw evidence before recording any human judgment.</p></header>" +
     "<section class=\"as-rule\" aria-labelledby=\"as-rule-title\"><h2 id=\"as-rule-title\">How to read these scores</h2>" +
-    "<p><strong>Score 4 is competent.</strong> <strong>Score 5 is competent and redo-eligible</strong> under the default below-6 rule. Scores stay on the 1–7 section scale and are never translated.</p></section>" +
+    ruleSummary + "</section>" +
     "<section aria-labelledby=\"as-results-title\"><h2 id=\"as-results-title\">Seven-heading result</h2>" + renderHeadings(vm) + "</section>" +
     "<section class=\"as-provenance\" aria-labelledby=\"as-provenance-title\"><h2 id=\"as-provenance-title\">Provenance</h2>" +
     "<h3>Provider configuration</h3><pre>" + pretty(vm.provenance.providers || []) + "</pre>" +
     "<h3>Resolved threshold configuration</h3><p><strong>Configuration status:</strong> " +
-    (vm.provenance.config?.locally_supplied ? "Locally supplied and unverified." : "Canonical default configuration.") +
+    (isLocalConfig ? "Locally supplied and unverified; institutional authority has not been verified." : "Canonical default configuration.") +
     "</p><pre>" + pretty(vm.provenance.config || {}) + "</pre>" +
     "<h3>Assessment instrument</h3><pre>" + pretty(vm.provenance.instrument || {}) + "</pre></section>" +
     "<section class=\"as-evidence\" aria-labelledby=\"as-evidence-title\"><h2 id=\"as-evidence-title\">Raw evidence</h2><pre>" +

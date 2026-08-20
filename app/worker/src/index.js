@@ -27,6 +27,7 @@ import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaL
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { runFormativeMemoPanel } from "./panel.js";
 import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
+import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
@@ -405,6 +406,18 @@ async function handleMemoAssessment(request, env, origin) {
     return errorEnvelope("validation_error", "Memo assessment is available for formative use only.", 400);
   }
 
+  const thresholdResolution = resolveAssessmentThresholdConfig(
+    body.assessment_config,
+    bundle.assessment_instrument
+  );
+  if (!thresholdResolution.ok) {
+    if (thresholdResolution.kind === "request") {
+      return errorEnvelope("validation_error", thresholdResolution.error, 400);
+    }
+    logMeta({ ev: "memo_assessment_threshold_contract_failed" });
+    return errorEnvelope("validation_error", "The memo assessment threshold contract failed.", 502);
+  }
+
   const session = await verifySession(env.SESSION_SIGNING_KEY, body.session_token);
   if (!session) return errorEnvelope("session_invalid", "Invalid or expired session token.", 401);
 
@@ -434,6 +447,7 @@ async function handleMemoAssessment(request, env, origin) {
   const run = await runFormativeMemoPanel({
     submission,
     instrument: bundle.assessment_instrument,
+    thresholdConfig: thresholdResolution.config,
     scorecardTemplate: bundle.memo_scorecard_template,
     graders: panel.graders,
     complete: ({ grader, prompt, maxTokens, jsonMode }) => callUpstream(grader, {
