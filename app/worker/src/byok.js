@@ -83,3 +83,63 @@ export function resolveUpstream(env, byok) {
     apiKey: env.ANTHROPIC_API_KEY, model: models.anthropic.default, skipBudget: false,
   };
 }
+
+// Resolve the explicitly supplied grader set for a formative memo assessment.
+// One credential always means one grader: the hosted key and the legacy `byok`
+// block must never be fanned out into a pretend panel. A multi-grader run
+// therefore requires one explicit BYOK block for each of the three supported,
+// distinct providers. This keeps the code-computed median integral.
+//
+// The returned graders contain live credentials and are request-lifetime only.
+// Callers must pass only provider/model/mode provenance into result data.
+export function resolvePanelUpstreams(env, { byok, byokPanel } = {}) {
+  if (byok != null && byokPanel != null) {
+    return {
+      ok: false, code: "validation_error", status: 400,
+      message: "Supply either byok or byok_panel, not both.",
+    };
+  }
+
+  if (byokPanel == null) {
+    const grader = resolveUpstream(env, byok);
+    if (!grader.ok) return grader;
+    return { ok: true, graders: [grader], assurance: "reduced_assurance" };
+  }
+
+  if (!Array.isArray(byokPanel) || byokPanel.length !== PROVIDERS.length) {
+    return {
+      ok: false, code: "validation_error", status: 400,
+      message: `byok_panel must contain exactly ${PROVIDERS.length} explicit provider credentials.`,
+    };
+  }
+
+  const graders = [];
+  for (const byokEntry of byokPanel) {
+    if (byokEntry == null) {
+      return {
+        ok: false, code: "validation_error", status: 400,
+        message: "Every byok_panel entry must supply its own provider credential.",
+      };
+    }
+    const grader = resolveUpstream(env, byokEntry);
+    if (!grader.ok) return grader;
+    // Each entry is explicit BYOK input. This also prevents a malformed panel
+    // entry from silently falling through to the hosted key.
+    if (grader.mode !== "byok") {
+      return {
+        ok: false, code: "validation_error", status: 400,
+        message: "Every byok_panel entry must supply its own provider credential.",
+      };
+    }
+    graders.push(grader);
+  }
+
+  const providers = new Set(graders.map((grader) => grader.provider));
+  if (providers.size !== graders.length) {
+    return {
+      ok: false, code: "validation_error", status: 400,
+      message: "byok_panel graders must use distinct providers.",
+    };
+  }
+  return { ok: true, graders, assurance: "multi_provider_formative" };
+}

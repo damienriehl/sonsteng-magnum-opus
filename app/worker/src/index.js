@@ -22,9 +22,10 @@ import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./c
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
 import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
-import { resolveUpstream } from "./byok.js";
+import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
+import { runFormativeMemoPanel } from "./panel.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
@@ -38,6 +39,7 @@ const MAX_MESSAGE_CHARS = 4000;      // per-message input cap
 const MAX_MESSAGES = 60;             // message-array length ceiling
 const MAX_TOTAL_INPUT_CHARS = 24000; // total chat input cap
 const CRITIQUE_MAX_CHARS = 18000;    // /critique deliverable size cap (graceful 413)
+const MEMO_ASSESSMENT_MAX_CHARS = 18000;
 const DEBRIEF_MIN_TURNS = 6;         // debrief-oracle guard
 const WARNING_TURN = 15;             // in-character "checks watch"
 const CHAT_MAX_TOKENS = 300;
@@ -389,6 +391,82 @@ async function handleDebrief(request, env, origin) {
   return json({ scorecard: parsed });
 }
 
+// ---- POST /v1/memo-assessment ---------------------------------------------
+async function handleMemoAssessment(request, env, origin) {
+  const body = await readJson(request);
+  if (!body) return errorEnvelope("validation_error", "Malformed JSON body.", 400);
+  const routing = validateLearnerResultRequest(body);
+  if (!routing.ok) return errorEnvelope("validation_error", routing.error, 400);
+
+  // U11 is deliberately formative-only. No request field can promote the
+  // assessment_use while calibration and provider-terms prerequisites remain.
+  if (body.assessment_use != null && body.assessment_use !== "formative") {
+    return errorEnvelope("validation_error", "Memo assessment is available for formative use only.", 400);
+  }
+
+  const session = await verifySession(env.SESSION_SIGNING_KEY, body.session_token);
+  if (!session) return errorEnvelope("session_invalid", "Invalid or expired session token.", 401);
+
+  const submission = body.deliverable_text;
+  if (typeof submission !== "string" || submission.length === 0) {
+    return errorEnvelope("validation_error", "deliverable_text is required.", 400);
+  }
+  if (submission.length > MEMO_ASSESSMENT_MAX_CHARS) {
+    return errorEnvelope(
+      "validation_error",
+      `Deliverable exceeds the ${MEMO_ASSESSMENT_MAX_CHARS}-character limit.`,
+      413
+    );
+  }
+
+  const panel = resolvePanelUpstreams(env, { byok: body.byok, byokPanel: body.byok_panel });
+  if (!panel.ok) return errorEnvelope(panel.code, panel.message, panel.status);
+
+  const caps = capsFor(env);
+  const stub = budgetStub(env);
+  const usesHostedPool = panel.graders.some((grader) => !grader.skipBudget);
+  if (usesHostedPool) {
+    const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
+    if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  }
+
+  const run = await runFormativeMemoPanel({
+    submission,
+    instrument: bundle.assessment_instrument,
+    scorecardTemplate: bundle.memo_scorecard_template,
+    graders: panel.graders,
+    complete: ({ grader, prompt, maxTokens, jsonMode }) => callUpstream(grader, {
+      system: null,
+      messages: [{ role: "user", content: prompt }],
+      maxTokens,
+      jsonMode,
+    }),
+  });
+  if (!run.ok && run.kind === "upstream") {
+    return upstreamFailureResponse(run.grader, run.upstreamResult, "memo_assessment_upstream_fail");
+  }
+  if (!run.ok) {
+    logMeta({ ev: "memo_assessment_invalid", errors: (run.errors || []).slice(0, 5) });
+    return errorEnvelope("validation_error", "The memo assessment could not be generated. Please try again.", 502);
+  }
+
+  const blockers = new Set(run.result.summative_blockers || []);
+  if (run.result.assessment_use !== "formative" || run.result.summative_eligible !== false ||
+      !blockers.has("human_human_calibration") || !blockers.has("provider_terms_review")) {
+    logMeta({ ev: "memo_assessment_safety_contract_failed" });
+    return errorEnvelope("validation_error", "The memo assessment safety contract failed.", 502);
+  }
+
+  if (usesHostedPool) await stub.charge(session.p, run.usage);
+  logMeta({
+    ev: "memo_assessment_ok",
+    pool: session.p,
+    assurance: run.result.assurance,
+    providers: run.result.providers.map((provider) => provider.provider).join(","),
+  });
+  return json({ assessment: run.result });
+}
+
 // ---- POST /v1/critique ------------------------------------------------------
 async function handleCritique(request, env, origin) {
   const body = await readJson(request);
@@ -486,6 +564,8 @@ export default {
         response = await handleChat(request, env, origin);
       } else if (request.method === "POST" && url.pathname === "/v1/debrief") {
         response = await handleDebrief(request, env, origin);
+      } else if (request.method === "POST" && url.pathname === "/v1/memo-assessment") {
+        response = await handleMemoAssessment(request, env, origin);
       } else if (request.method === "POST" && url.pathname === "/v1/critique") {
         response = await handleCritique(request, env, origin);
       } else {
