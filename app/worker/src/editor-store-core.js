@@ -301,6 +301,38 @@ export const SCHEMA_SQL = `
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_revert_status ON revert_requests(status, created_at);
+
+  -- Reconstructable formative assessment evidence (U12). Payloads are
+  -- canonicalized and credential-sanitized before they cross this SQL seam.
+  -- Retention is mandatory per record; expiry deletes both the record and its
+  -- append-only human override history.
+  CREATE TABLE IF NOT EXISTS assessment_audit_records (
+    id TEXT PRIMARY KEY,
+    schema_version TEXT NOT NULL,
+    assessment_use TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    config_provenance_json TEXT NOT NULL,
+    instrument_provenance_json TEXT NOT NULL,
+    provider_provenance_json TEXT NOT NULL,
+    summative_blockers_json TEXT NOT NULL,
+    record_digest TEXT NOT NULL,
+    retention_days INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_assessment_audit_expiry
+    ON assessment_audit_records(expires_at, id);
+  CREATE TABLE IF NOT EXISTS assessment_audit_overrides (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT NOT NULL,
+    schema_version TEXT NOT NULL,
+    author TEXT NOT NULL,
+    override_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_assessment_override_record
+    ON assessment_audit_overrides(assessment_id, created_at, id);
 `;
 
 // Revert-request lifecycle states.
@@ -318,6 +350,80 @@ const SELECT_COLS =
   "original_text, original_hash, new_text, comment, context, map_version, " +
   "group_id, supersedes, op_arg, status, decision_note, apply_batch_id, lease_expires_at, " +
   "created_at, updated_at";
+
+export const ASSESSMENT_REVIEW_SCOPE = "assessment-review";
+export const ASSESSMENT_AUDIT_SCHEMA_VERSION = "assessment-audit/v1";
+export const ASSESSMENT_OVERRIDE_SCHEMA_VERSION = "assessment-override/v1";
+const ASSESSMENT_RETENTION_MAX_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizedField(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function credentialField(key) {
+  const normalized = normalizedField(key);
+  return normalized === "authorization" || normalized === "proxyauthorization" ||
+    normalized === "auth" || normalized === "authheader" ||
+    normalized.endsWith("authorization") || normalized === "bearer" ||
+    normalized === "byok" || normalized === "credentialvalues" ||
+    normalized === "apikey" || normalized.endsWith("apikey") ||
+    normalized === "key" || normalized.endsWith("accesskey") ||
+    normalized === "token" || normalized.endsWith("token") ||
+    normalized === "credential" || normalized === "credentials" ||
+    normalized.startsWith("credential") || normalized === "secret" ||
+    normalized.endsWith("secret") || normalized === "password" ||
+    normalized.endsWith("password") || normalized === "cookie" ||
+    normalized === "setcookie" || normalized.endsWith("sessioncookie");
+}
+
+function collectCredentialStrings(value, secrets, force = false, seen = new WeakSet()) {
+  if (typeof value === "string") {
+    if (force && value) {
+      secrets.add(value);
+      const scheme = value.match(/^\s*[A-Za-z][A-Za-z0-9_-]*\s+(.+?)\s*$/);
+      if (scheme && scheme[1]) secrets.add(scheme[1]);
+    }
+    return;
+  }
+  if (!value || typeof value !== "object" || seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) collectCredentialStrings(item, secrets, force, seen);
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    // A `byok` object contains useful non-secret provider/model strings. Only
+    // its credential-shaped descendants are collected as live secret values.
+    const sensitive = credentialField(key);
+    collectCredentialStrings(child, secrets,
+      force || (sensitive && normalizedField(key) !== "byok"), seen);
+  }
+}
+
+function sanitizedPayload(value, secrets, seen = new WeakSet()) {
+  if (typeof value === "string") {
+    let safe = value;
+    for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
+      if (secret.length >= 4) safe = safe.split(secret).join("[REDACTED]");
+    }
+    return safe;
+  }
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizedPayload(item, secrets, seen));
+  if (!isRecord(value) || seen.has(value)) return null;
+  seen.add(value);
+  const safe = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (credentialField(key) || child === undefined) continue;
+    safe[key] = sanitizedPayload(child, secrets, seen);
+  }
+  return safe;
+}
 
 export class EditorStoreCore {
   constructor(sql, now = () => Date.now(), transactionSync = null) {
@@ -2354,6 +2460,202 @@ export class EditorStoreCore {
     let total = 0;
     for (const r of rows) { by_status[r.status] = r.n; total += r.n; }
     return { group_id, total, by_status };
+  }
+
+  // ---- assessment audit records (U12) ------------------------------------
+  // `scopes` is the server-resolved auth scope record. The literal scope lives
+  // at this seam until U13 wires a human review endpoint; callers cannot obtain
+  // record contents merely by knowing an assessment id.
+  _hasAssessmentReviewScope(scopes) {
+    return scopes?.[ASSESSMENT_REVIEW_SCOPE]?.granted === true;
+  }
+
+  _validAssessmentId(value) {
+    return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(value);
+  }
+
+  _assessmentSummary(row) {
+    return {
+      ok: true,
+      id: row.id,
+      schema_version: row.schema_version,
+      expires_at: row.expires_at,
+    };
+  }
+
+  recordAssessmentAudit(input = {}) {
+    if (!this._validAssessmentId(input.id) || !isRecord(input.evidence) ||
+        !isRecord(input.result) || !isRecord(input.provenance)) {
+      return { ok: false, reason: "validation_error" };
+    }
+    if (!isRecord(input.retention)) return { ok: false, reason: "retention_required" };
+    const retentionDays = input.retention.days;
+    if (!Number.isInteger(retentionDays) || retentionDays < 1 ||
+        retentionDays > ASSESSMENT_RETENTION_MAX_DAYS) {
+      return { ok: false, reason: "retention_invalid" };
+    }
+    if (!["formative", "summative"].includes(input.assessment_use) ||
+        input.result.assessment_use !== input.assessment_use ||
+        !Array.isArray(input.summative_blockers) ||
+        !Array.isArray(input.result.summative_blockers)) {
+      return { ok: false, reason: "assessment_contract_invalid" };
+    }
+
+    const config = input.provenance.config;
+    const instrument = input.provenance.instrument;
+    const providers = input.provenance.providers;
+    if (!isRecord(config) || typeof config.source !== "string" || !config.source ||
+        typeof config.version !== "string" || !config.version || !isRecord(instrument) ||
+        !Array.isArray(providers)) {
+      return { ok: false, reason: "provenance_required" };
+    }
+    const resultInstrument = input.result.instrument;
+    if (!isRecord(resultInstrument) || instrument.id !== resultInstrument.id ||
+        instrument.version !== resultInstrument.version ||
+        instrument.content_hash !== resultInstrument.content_hash) {
+      return { ok: false, reason: "instrument_provenance_mismatch" };
+    }
+
+    const secrets = new Set();
+    collectCredentialStrings(input, secrets);
+    if ([...secrets].some((secret) => secret.length < 4)) {
+      return { ok: false, reason: "credential_material_invalid" };
+    }
+    const safeEvidence = sanitizedPayload(input.evidence, secrets);
+    const safeResult = sanitizedPayload(input.result, secrets);
+    const safeConfig = sanitizedPayload(config, secrets);
+    const safeInstrument = sanitizedPayload(instrument, secrets);
+    const safeProviders = sanitizedPayload(providers, secrets);
+    const safeBlockers = sanitizedPayload(input.summative_blockers, secrets);
+    if (this._canonical(safeProviders) !== this._canonical(safeResult.providers || [])) {
+      return { ok: false, reason: "provider_provenance_mismatch" };
+    }
+    if (this._canonical(safeBlockers) !==
+        this._canonical(safeResult.summative_blockers || [])) {
+      return { ok: false, reason: "summative_blockers_mismatch" };
+    }
+
+    const evidenceJson = this._canonical(safeEvidence);
+    const resultJson = this._canonical(safeResult);
+    const configJson = this._canonical(safeConfig);
+    const instrumentJson = this._canonical(safeInstrument);
+    const providersJson = this._canonical(safeProviders);
+    const blockersJson = this._canonical(safeBlockers);
+    const digest = this._digest({ assessment_use: input.assessment_use, evidenceJson,
+      resultJson, configJson, instrumentJson, providersJson, blockersJson, retentionDays });
+    let existing = this._one("SELECT * FROM assessment_audit_records WHERE id=?", input.id);
+    if (existing && existing.expires_at <= this.now()) {
+      this._deleteAssessmentAudits([input.id]);
+      existing = null;
+    }
+    if (existing) {
+      if (existing.record_digest !== digest) return { ok: false, reason: "id_conflict" };
+      return { ...this._assessmentSummary(existing), replay: true };
+    }
+
+    const now = this.now();
+    const expiresAt = now + retentionDays * DAY_MS;
+    if (!Number.isSafeInteger(expiresAt)) return { ok: false, reason: "retention_invalid" };
+    this.sql.exec(`INSERT INTO assessment_audit_records
+      (id,schema_version,assessment_use,evidence_json,result_json,config_provenance_json,
+       instrument_provenance_json,provider_provenance_json,summative_blockers_json,
+       record_digest,retention_days,expires_at,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, input.id,ASSESSMENT_AUDIT_SCHEMA_VERSION,
+      input.assessment_use,evidenceJson,resultJson,configJson,instrumentJson,providersJson,
+      blockersJson,digest,retentionDays,expiresAt,now);
+    return { ok: true, id: input.id, schema_version: ASSESSMENT_AUDIT_SCHEMA_VERSION,
+      expires_at: expiresAt };
+  }
+
+  readAssessmentAudit({ id, scopes } = {}) {
+    if (!this._hasAssessmentReviewScope(scopes)) {
+      return { ok: false, reason: "assessment_review_scope_required" };
+    }
+    if (!this._validAssessmentId(id)) return { ok: false, reason: "not_found" };
+    const row = this._one("SELECT * FROM assessment_audit_records WHERE id=?", id);
+    if (!row) return { ok: false, reason: "not_found" };
+    if (row.expires_at <= this.now()) {
+      this._deleteAssessmentAudits([id]);
+      return { ok: false, reason: "not_found" };
+    }
+    const overrides = this._all(`SELECT id,schema_version,author,override_json,created_at
+      FROM assessment_audit_overrides WHERE assessment_id=? ORDER BY created_at,id`,id)
+      .map((item) => ({ id:item.id,schema_version:item.schema_version,author:item.author,
+        created_at:item.created_at,value:JSON.parse(item.override_json) }));
+    return { ok: true, record: {
+      id: row.id,
+      schema_version: row.schema_version,
+      assessment_use: row.assessment_use,
+      evidence: JSON.parse(row.evidence_json),
+      result: JSON.parse(row.result_json),
+      provenance: {
+        config: JSON.parse(row.config_provenance_json),
+        instrument: JSON.parse(row.instrument_provenance_json),
+        providers: JSON.parse(row.provider_provenance_json),
+      },
+      summative_blockers: JSON.parse(row.summative_blockers_json),
+      retention: { days: row.retention_days, expires_at: row.expires_at },
+      created_at: row.created_at,
+      overrides,
+    } };
+  }
+
+  recordAssessmentOverride(input = {}) {
+    if (!this._hasAssessmentReviewScope(input.scopes)) {
+      return { ok: false, reason: "assessment_review_scope_required" };
+    }
+    if (!this._validAssessmentId(input.id) || !this._validAssessmentId(input.assessment_id) ||
+        typeof input.author !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:@._-]{0,127}$/.test(input.author) ||
+        !isRecord(input.override)) {
+      return { ok: false, reason: "validation_error" };
+    }
+    const parent = this._one("SELECT expires_at FROM assessment_audit_records WHERE id=?",
+      input.assessment_id);
+    if (!parent || parent.expires_at <= this.now()) {
+      if (parent) this._deleteAssessmentAudits([input.assessment_id]);
+      return { ok: false, reason: "not_found" };
+    }
+    const secrets = new Set();
+    collectCredentialStrings(input, secrets);
+    if ([...secrets].some((secret) => secret.length < 4)) {
+      return { ok: false, reason: "credential_material_invalid" };
+    }
+    const safeOverride = sanitizedPayload(input.override, secrets);
+    if (!isRecord(safeOverride) || Object.keys(safeOverride).length === 0) {
+      return { ok: false, reason: "validation_error" };
+    }
+    const overrideJson = this._canonical(safeOverride);
+    const existing = this._one("SELECT * FROM assessment_audit_overrides WHERE id=?",input.id);
+    if (existing) {
+      if (existing.assessment_id !== input.assessment_id || existing.author !== input.author ||
+          existing.override_json !== overrideJson) return { ok:false,reason:"id_conflict" };
+      return { ok:true,id:existing.id,assessment_id:existing.assessment_id,
+        author:existing.author,created_at:existing.created_at,replay:true };
+    }
+    const now = this.now();
+    this.sql.exec(`INSERT INTO assessment_audit_overrides
+      (id,assessment_id,schema_version,author,override_json,created_at)
+      VALUES (?,?,?,?,?,?)`,input.id,input.assessment_id,ASSESSMENT_OVERRIDE_SCHEMA_VERSION,
+      input.author,overrideJson,now);
+    return { ok:true,id:input.id,assessment_id:input.assessment_id,author:input.author,
+      created_at:now };
+  }
+
+  _deleteAssessmentAudits(ids) {
+    if (!ids.length) return;
+    this.transactionSync(() => {
+      for (const id of ids) {
+        this.sql.exec("DELETE FROM assessment_audit_overrides WHERE assessment_id=?",id);
+        this.sql.exec("DELETE FROM assessment_audit_records WHERE id=?",id);
+      }
+    });
+  }
+
+  expireAssessmentAudits() {
+    const ids = this._all("SELECT id FROM assessment_audit_records WHERE expires_at<=? ORDER BY id",
+      this.now()).map((row) => row.id);
+    this._deleteAssessmentAudits(ids);
+    return { ok: true, deleted: ids.length };
   }
 
   // ---- digest --------------------------------------------------------------

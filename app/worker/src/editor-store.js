@@ -49,6 +49,10 @@ export class EditorStore extends DurableObject {
   claimScopedRequest(id) { return this.core.claimScopedRequest(id); }
   resolveScopedRequest(id, patch) { return this.core.resolveScopedRequest(id, patch); }
   groupOutcome(groupId) { return this.core.groupOutcome(groupId); }
+  recordAssessmentAudit(input) { return this.core.recordAssessmentAudit(input); }
+  readAssessmentAudit(input) { return this.core.readAssessmentAudit(input); }
+  recordAssessmentOverride(input) { return this.core.recordAssessmentOverride(input); }
+  expireAssessmentAudits() { return this.core.expireAssessmentAudits(); }
   prepareProductionRelease(input) { return this.core.prepareProductionRelease(input); }
   authorizeProductionRelease(input) { return this.core.authorizeProductionRelease(input); }
   getProductionRelease(id) { return this.core.getProductionRelease(id); }
