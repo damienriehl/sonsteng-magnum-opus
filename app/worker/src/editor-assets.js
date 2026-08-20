@@ -375,6 +375,8 @@ export function serveAsset(name) {
     "publisher.js": [PUBLISHER_JS, "text/javascript; charset=utf-8"],
     "history.css": [CLIENT.HISTORY_CSS || HISTORY_CSS, "text/css; charset=utf-8"],
     "history.js": [CLIENT.HISTORY_JS || HISTORY_JS, "text/javascript; charset=utf-8"],
+    "assessment-review.css": [CLIENT.ASSESSMENT_REVIEW_CSS || "", "text/css; charset=utf-8"],
+    "assessment-review.js": [CLIENT.ASSESSMENT_REVIEW_JS || "", "text/javascript; charset=utf-8"],
   };
   const hit = map[name];
   if (!hit) return null;

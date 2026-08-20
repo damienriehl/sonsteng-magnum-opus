@@ -312,6 +312,37 @@ Same-origin `<a href>`s are rewritten into `/edit` space (HTMLRewriter).
 bundle (already carries `data-ebsrc` anchors), same injection + headers as the
 proxy. **Uniform 404 for BOTH a missing doc AND insufficient scope** (no oracle).
 
+## Assessment signer review (Access-authenticated `damienadmin`)
+
+Every successful `POST /v1/memo-assessment` writes a reconstructable audit record
+before returning. The response includes `assessment_audit_id`; persistence keeps
+the submitted evidence, derived 1–7 section result, provider/config/instrument
+provenance, summative blockers, and a declared retention period (30 days by
+default, bounded to 1–365 by the store). Provider keys and the learner session
+token exist only in the write's request-lifetime `credential_values` redaction
+list and never in stored evidence, provenance, results, responses, or logs.
+
+Assessment reads and overrides are deliberately narrower than general editor or
+admin authority. Only the existing human `damienadmin` context, authenticated on
+the Access hostname and currently holding both `admin` and `instructor`, is
+mapped at the endpoint to the store's literal `assessment-review` capability.
+Cookie, bearer, service, admin-token, John, and Roger contexts do not receive
+that capability. Under-scoped and unknown-id probes return the same uniform 404.
+
+- `GET /edit/assessments/<assessment_audit_id>` renders the section results,
+  provider/config/instrument provenance, raw evidence, and attributed override
+  history together. It states at the point of reading that 4 is competent and 5
+  remains redo-eligible under the default below-6 rule. The view never performs
+  a letter translation.
+- `GET /edit/v1/assessment?id=<assessment_audit_id>` returns the same protected
+  audit record as JSON.
+- `POST /edit/v1/assessment-override` is CSRF-guarded and accepts
+  `{id, assessment_id, heading_id, score, note}`. The heading must be one of the
+  canonical seven, score must be an integer 1–7, and the reason is required.
+  `author` is ignored; the endpoint stamps the current server-resolved identity
+  and the store stamps server time. Overrides are append-only and idempotent by
+  `id`.
+
 ## `POST /edit/v1/suggest` (edit OR instructor scope)
 
 CSRF-guarded. Body (whitelisted):

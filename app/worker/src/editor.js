@@ -16,6 +16,9 @@ import { renderInstructorDoc } from "./editor-instructor.js";
 import { renderReviewPage } from "./editor-review.js";
 import { renderHistoryPage, renderHistoryIndex, findDocBySlug } from "./editor-history.js";
 import { renderPublisherPage } from "./editor-publisher.js";
+import {
+  assessmentPageEndpoint, assessmentReadEndpoint, assessmentOverrideEndpoint,
+} from "./assessment-endpoints.js";
 import { serveAsset } from "./editor-assets.js";
 import {
   suggestEndpoint, systemSuggestEndpoint, pendingEndpoint, reviewJsonEndpoint,
@@ -245,6 +248,10 @@ export async function editorFetch(request, env, ctx) {
     return wrap(await revertResolveEndpoint(request, env, auth));
   if (path === "/edit/v1/revert-record" && request.method === "POST")
     return wrap(await revertRecordEndpoint(request, env, auth));
+  if (path === "/edit/v1/assessment" && request.method === "GET")
+    return wrap(await assessmentReadEndpoint(request, env, auth));
+  if (path === "/edit/v1/assessment-override" && request.method === "POST")
+    return wrap(await assessmentOverrideEndpoint(request, env, auth));
 
   // ---- editor-gated redline History browser (edit/instructor scope) ---------
   // Same gate as /edit/v1/pending. Index + per-doc slice from the inlined bundle.
@@ -350,6 +357,12 @@ export async function editorFetch(request, env, ctx) {
     if (request.method !== "GET" || !doc || !auth.scopes.instructor.granted) return wrap(uniform404());
     const all = await editorStub(env).listForEditor(auth.editor, null);
     return wrap(renderInstructorDoc(doc, forDocPrefix(all, doc.source_ref)));
+  }
+
+  // ---- human assessment signer view (Access-authenticated reviewer) --------
+  if (path.startsWith("/edit/assessments/")) {
+    if (request.method !== "GET") return wrap(uniform404());
+    return wrap(await assessmentPageEndpoint(request, env, auth));
   }
 
   // ---- proxy-injector (edit scope) ------------------------------------------

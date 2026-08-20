@@ -26,6 +26,7 @@ import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
 import { runFormativeMemoPanel } from "./panel.js";
+import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
 import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
@@ -457,6 +458,24 @@ async function handleMemoAssessment(request, env, origin) {
     return errorEnvelope("validation_error", "The memo assessment safety contract failed.", 502);
   }
 
+  // Persist before returning the result so every reviewable assessment has a
+  // reconstructable U12 record. Live credentials appear only in the explicit
+  // request-lifetime redaction list consumed (and discarded) by the store.
+  const auditId = `memo-assessment-${crypto.randomUUID()}`;
+  const audit = await persistAssessmentAudit(env, buildAssessmentAuditInput({
+    id: auditId,
+    submission,
+    instrument: bundle.assessment_instrument,
+    result: run.result,
+    graders: panel.graders,
+    sessionToken: body.session_token,
+    retentionDays: env.ASSESSMENT_AUDIT_RETENTION_DAYS,
+  }));
+  if (!audit.ok) {
+    logMeta({ ev: "memo_assessment_audit_fail", reason: audit.reason || "unknown" });
+    return errorEnvelope("upstream_unavailable", "The memo assessment audit could not be recorded. Please try again.", 503);
+  }
+
   if (usesHostedPool) await stub.charge(session.p, run.usage);
   logMeta({
     ev: "memo_assessment_ok",
@@ -464,7 +483,7 @@ async function handleMemoAssessment(request, env, origin) {
     assurance: run.result.assurance,
     providers: run.result.providers.map((provider) => provider.provider).join(","),
   });
-  return json({ assessment: run.result });
+  return json({ assessment: run.result, assessment_audit_id: audit.assessment_audit_id });
 }
 
 // ---- POST /v1/critique ------------------------------------------------------
