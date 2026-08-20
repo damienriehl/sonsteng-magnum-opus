@@ -1,0 +1,114 @@
+{
+  "id": "memo-seven-heading-1-7",
+  "schema_version": "1.0.0",
+  "instrument_version": "1.0.0",
+  "content_hash": "sha256:e654d594d6eadd61ef8b944120e664278a2cd9cc00236cd642155431d15fa8fa",
+  "content": {
+    "title": "Seven-heading memo competency assessment",
+    "dimensions": [
+      {
+        "id": "governing_law",
+        "heading": "Governing law"
+      },
+      {
+        "id": "strengths_and_weaknesses_both_sides",
+        "heading": "Strengths and weaknesses of both sides"
+      },
+      {
+        "id": "issues",
+        "heading": "Issues"
+      },
+      {
+        "id": "suggested_solutions",
+        "heading": "Suggested solutions"
+      },
+      {
+        "id": "theory_and_themes",
+        "heading": "Theory and themes"
+      },
+      {
+        "id": "elements_to_prevail",
+        "heading": "Elements to prevail"
+      },
+      {
+        "id": "liabilities_and_remedies",
+        "heading": "Liabilities and remedies"
+      }
+    ],
+    "scale": {
+      "type": "integer_section_score_1_to_7",
+      "minimum": 1,
+      "maximum": 7,
+      "bands": [
+        {
+          "score": 1,
+          "descriptor": "No meaningful demonstration of the section's required analysis."
+        },
+        {
+          "score": 2,
+          "descriptor": "Only a minimal demonstration; the section remains substantially incomplete."
+        },
+        {
+          "score": 3,
+          "descriptor": "The section does not yet demonstrate competence."
+        },
+        {
+          "score": 4,
+          "descriptor": "Competent: the section provides an average, adequate demonstration of the required analysis."
+        },
+        {
+          "score": 5,
+          "descriptor": "Competent and above average, while still redo-eligible by default."
+        },
+        {
+          "score": 6,
+          "descriptor": "Strong, complete demonstration; the section is not redo-eligible by default."
+        },
+        {
+          "score": 7,
+          "descriptor": "Rare, exceptional demonstration of the section's required analysis."
+        }
+      ]
+    },
+    "thresholds": {
+      "default_competence_score": 4,
+      "default_redo_eligible_below": 6,
+      "configuration_precedence": [
+        "instructor",
+        "school",
+        "default"
+      ]
+    },
+    "layering": {
+      "base_layer": "august_assessment_wave",
+      "later_panel_requirements": "build_on_base"
+    },
+    "assessment_resolution": {
+      "routes": [
+        {
+          "deliverable_types": [
+            "memo"
+          ],
+          "assessment_contract": "memo-seven-heading-1-7"
+        }
+      ],
+      "fallback_contract": "legacy_weighted_rubric"
+    },
+    "legacy_weighted_rubric_relationship": {
+      "applies_to": [
+        "non_memo",
+        "legacy_exercise"
+      ],
+      "preserved_fields": [
+        "criteria",
+        "declared_total",
+        "letter_grade_map"
+      ],
+      "memo_score_effect": "none"
+    },
+    "presentation": {
+      "score_4_label": "competent",
+      "letter_grade_translation": "prohibited"
+    }
+  }
+}

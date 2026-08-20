@@ -16,6 +16,7 @@
     "page_copy": "1.0.0",
     "date_offsets": "1.0.0",
     "day_zero_audit": "1.0.0",
-    "day_zero_holdouts": "1.0.0"
+    "day_zero_holdouts": "1.0.0",
+    "assessment_instrument": "1.0.0"
   }
 }
