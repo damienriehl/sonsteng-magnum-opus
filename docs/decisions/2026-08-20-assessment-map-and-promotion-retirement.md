@@ -43,8 +43,8 @@ authorized.
 
 | Ref | Tip at retirement | Historical contents | Disposition |
 |---|---|---|---|
-| `feat/prod-editor-promotion` | `49492a8e1c1d2bded8ab4b0fdfe0bf3f666fb18b` | Automatic promotion ledger, candidate preparation, risk policy, preview, publication saga, lifecycle UI, config-off operations, rollout policy, hardening, and handoff | Delete local and `origin` refs; retain this final-tip identifier as lineage, without promising permanent object retention |
-| `feat/cockpit-sonsteng-promotion-summary` | `555bf19e5150fcfd75b16355851b6ea1091f2f18` | The common obsolete promotion stack plus atomic attention projection, read-only attention endpoint, race analysis, bounded revision reads, and parked-work handoff | Delete its clean worktree, then local and `origin` refs; retain this final-tip identifier as lineage, without promising permanent object retention |
+| `feat/prod-editor-promotion` | `49492a8e1c1d2bded8ab4b0fdfe0bf3f666fb18b` | Automatic promotion ledger, candidate preparation, risk policy, preview, publication saga, lifecycle UI, config-off operations, rollout policy, hardening, and handoff | Local and `origin` refs deleted 2026-08-20; retain this final-tip identifier as lineage, without promising permanent object retention |
+| `feat/cockpit-sonsteng-promotion-summary` | `555bf19e5150fcfd75b16355851b6ea1091f2f18` | The common obsolete promotion stack plus atomic attention projection, read-only attention endpoint, race analysis, bounded revision reads, and parked-work handoff | Clean worktree removed and local and `origin` refs deleted 2026-08-20; retain this final-tip identifier as lineage, without promising permanent object retention |
 
 The reusable lessons and selective-port rationale already survive on current history in
 `docs/evidence/2026-08-09-editor-publication-baseline.md` and the taxonomy/Publisher plan.

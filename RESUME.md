@@ -5,13 +5,13 @@
 > `main`; completed work was proved from code, tests and Git rather than plan status.
 >
 > **The live frontier:** the pitch, hours log, Day Zero review, Publisher code,
-> nine-part audit and current small fixes are implemented. The 2026-08-20 decision
-> now scores the seven analytic memo headings 1–7 and releases the serial assessment
-> chain. Remaining work is that assessment implementation; the Day Zero corpus
-> migration and enforcement;
+> nine-part audit, seven-heading formative assessment, and competency proposal are
+> implemented locally. The obsolete promotion branches are retired and deleted.
+> Remaining work is the supervised Day Zero corpus migration and enforcement;
 > Publisher review/canary/recovery and its dependent inconsistency-daemon wiring;
-> live three-provider DEV streaming proof; the `legalpracticum.org` cutover; and the
-> explicitly external John/Roger/faculty/provider actions.
+> live three-provider DEV streaming proof; authenticated assessment-page browser UAT;
+> the `legalpracticum.org` cutover; and the explicitly external
+> John/Roger/faculty/provider actions.
 >
 > **Current state lives in** `docs/TODO.md` and the 2026-08-20 plan-completion
 > handoff under `docs/handoffs/`. The 2026-08-17 audit and execution plan remain the

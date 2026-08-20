@@ -182,23 +182,25 @@ this file is what those decisions oblige us to *do*.
       contract is covered by `tools/tests/test_weekly_hours_log.py`.
       Scope narrowed by the 2026-08-12 record (D2): keep the weekly hour report,
       replace the 50-50 attestation with a per-deliverable contribution log.
-- [ ] **T22 — Competency-based credit proposal** `@agent` `origin:call-2026-08-06`
+- [x] **T22 — Competency-based credit proposal** `@agent` `origin:call-2026-08-06`
       A proposal for schools and the ABA. Evidence base: the list of what students
       demonstrably learn *quickly* rather than inefficiently, drawn from T21.
       Meanwhile schools set whatever credits they want.
-      **Partly done 2026-08-17** — `53960c9`, merged by `19bc135`, added
+      **Done locally 2026-08-20** — `53960c9`, merged by `19bc135`, added
       `docs/proposals/competency-based-credit.md`, its synthetic example, consent
-      floor and anti-causal-claim checks. Still open: bind the proposal to the final
-      assessment export and add the planned time-to-first-competence, time-to-six,
-      attempts-to-competence and task-level-uncertainty measures after T23 lands.
-- [ ] **T23 — Implement the 7-point scale, thresholds configurable** `@agent` `origin:call-2026-08-06`
+      floor and anti-causal-claim checks. `dfec204` binds the study projection to
+      protected assessment audits and defines time-to-first-competence, time-to-six,
+      attempts-to-competence, task-level uncertainty, missingness, censoring, and
+      recomputable synthetic evidence. Schools retain credit authority.
+- [x] **T23 — Implement the 7-point scale, thresholds configurable** `@agent` `origin:call-2026-08-06`
       John's scale, from the University of Minnesota: 7 points total, 7s rare,
       1 and 2 effectively never given, **3 is failure, 4 is average and therefore
       competent**. So the credit floor is an average of **4 of 7** — not 3.
       Anything under **6** may be redone to reach a 6. Instructors and schools can
       set any thresholds they want, so both numbers are settings, not constants.
       Note John's caution: students read a 4 as terrible because it looks like a C.
-      **Decision settled 2026-08-20; implementation in progress.** The
+      **Done locally 2026-08-20** — `f43f168` through `2076e68`, simplified by
+      `c0baeef` and hardened by `11fcde2`. The
       2026-08-12 record found "seven-point scale" ambiguous; Damien resolved it on
       2026-08-13 as *the memo template's seven analytic headings*, not a rating
       scale. Recording review on 2026-08-17 confirmed that 1–7 is a section-level
@@ -208,11 +210,11 @@ this file is what those decisions oblige us to *do*.
       often-cited "40 rubrics" are
       **20 authored** `data/matters/*/rubric.json` files plus **20 generated
       mirrors** under `site/platform/data/matters/`, not 40 authored instruments.
-      Two plans now specify an assessment surface without referencing each other —
-      U6 of the unmerged August-wave plan, and Phase C (U11–U14, U17) of
-      `plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md`. That conflict
-      is decision D10 in
-      `plans/2026-08-17-1154-chore-21-day-plan-completion-audit-plan.md`.
+      The runtime is formative-only, requires exact evidence spans and canonical
+      instrument/config provenance, persists a retention-bounded protected audit,
+      and gives the Access-authenticated signer an attributed override workflow.
+      Summative use remains blocked on human-human calibration and provider-terms
+      review; the authenticated 1280/390 browser exercise is still external UAT.
 
 ## Institutional
 
