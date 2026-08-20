@@ -9,6 +9,9 @@ bundle at app/worker/personas/personas.generated.json containing:
                 app/worker/prompts/system-template.md between the BEGIN/END
                 markers, so the Worker imports one build-time-frozen string
                 instead of re-parsing the .md at runtime.
+  - memo_scorecard_template : the verbatim seven-heading evaluator template.
+  - assessment_instrument : the canonical versioned 1-7 heading descriptors the
+                evaluator and validator use as server-owned grading provenance.
   - personas  : per-persona INJECTION fields only (identity, disclosure tiers,
                 knowledge_boundary, rule_4_2, disposition, narrative fields) —
                 the fields prompts.js needs to render Segment B. No @id/@context.
@@ -46,6 +49,9 @@ PROMPTS_DIR = os.path.join(REPO_ROOT, "app", "worker", "prompts")
 SYSTEM_TEMPLATE = os.path.join(PROMPTS_DIR, "system-template.md")
 DEBRIEF_TEMPLATE = os.path.join(PROMPTS_DIR, "debrief-template.md")
 CRITIQUE_TEMPLATE = os.path.join(PROMPTS_DIR, "critique-template.md")
+MEMO_SCORECARD_TEMPLATE = os.path.join(PROMPTS_DIR, "memo-scorecard-template.md")
+ASSESSMENT_INSTRUMENT = os.path.join(
+    DATA_DIR, "curriculum", "assessment-instrument.json")
 FIXTURES_DIR = os.path.join(REPO_ROOT, "app", "worker", "test", "fixtures")
 FIXTURE_PERSONA = os.path.join(FIXTURES_DIR, "persona-m00-client.json")
 FIXTURE_SIDECAR = os.path.join(FIXTURES_DIR, "topic-labels-m00.json")
@@ -229,6 +235,12 @@ def main():
         CRITIQUE_TEMPLATE,
         "<!-- ===== BEGIN CRITIQUE PROMPT ===== -->",
         "<!-- ===== END CRITIQUE PROMPT ===== -->")
+    memo_scorecard_template = read_template(
+        MEMO_SCORECARD_TEMPLATE,
+        "<!-- ===== BEGIN MEMO SCORECARD PROMPT ===== -->",
+        "<!-- ===== END MEMO SCORECARD PROMPT ===== -->")
+    with open(ASSESSMENT_INSTRUMENT, "r", encoding="utf-8") as f:
+        assessment_instrument = json.load(f)
 
     personas = {}
     fact_map = {}
@@ -269,6 +281,8 @@ def main():
         "segment_a": segment_a,
         "debrief_template": debrief_template,
         "critique_template": critique_template,
+        "memo_scorecard_template": memo_scorecard_template,
+        "assessment_instrument": assessment_instrument,
         "personas": personas,
         "fact_map": fact_map,
         "rubrics": collect_rubrics(),

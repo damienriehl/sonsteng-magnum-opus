@@ -147,6 +147,7 @@ SCHEMA_FILES = {
     "firm": "firm.schema.json",
     "debrief_scorecard": "debrief.scorecard.schema.json",
     "critique_scorecard": "critique.scorecard.schema.json",
+    "memo_scorecard": "memo-scorecard.schema.json",
     "page_copy": "page-copy.schema.json",
     "date_offsets": "date-offsets.schema.json",
     "day_zero_audit": "day-zero-audit.schema.json",
