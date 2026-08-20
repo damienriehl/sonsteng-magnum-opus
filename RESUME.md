@@ -5,8 +5,10 @@
 > `main`; completed work was proved from code, tests and Git rather than plan status.
 >
 > **The live frontier:** the pitch, hours log, Day Zero review, Publisher code,
-> nine-part audit and current small fixes are implemented. Remaining work is the
-> one-decision assessment chain; the Day Zero corpus migration and enforcement;
+> nine-part audit and current small fixes are implemented. The 2026-08-20 decision
+> now scores the seven analytic memo headings 1–7 and releases the serial assessment
+> chain. Remaining work is that assessment implementation; the Day Zero corpus
+> migration and enforcement;
 > Publisher review/canary/recovery and its dependent inconsistency-daemon wiring;
 > live three-provider DEV streaming proof; the `legalpracticum.org` cutover; and the
 > explicitly external John/Roger/faculty/provider actions.

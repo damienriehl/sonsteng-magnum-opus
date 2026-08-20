@@ -27,8 +27,8 @@ No plan task is now unaccounted for: each is complete, superseded, represented i
 | `2026-08-04-001-feat-shared-and-computed-text-plan.md` | 8/8 complete | None |
 | `2026-08-04-002-feat-platform-visual-redesign-plan.md` | 5/5 complete | None; current browser recheck passed 28/28 on 2026-08-20 |
 | `2026-08-05-001-feat-prod-editor-promotion-plan.md` | 8/8 superseded | None under the obsolete automatic/confidence contract |
-| `2026-08-05-002-feat-cockpit-sonsteng-promotion-summary-plan.md` | Parked; six units need disposition | Retire, preserve, or re-plan against the current human Publisher ledger |
-| `2026-08-06-001-feat-august-decision-wave-plan.md` | U1-U5 complete; U6 blocked; U7 partial | Set the section-score map, build the correct assessment, then bind the proposal and add the four missing competence measures |
+| `2026-08-05-002-feat-cockpit-sonsteng-promotion-summary-plan.md` | Retired by the 2026-08-20 answer | Branch lineage recorded; obsolete local and remote refs authorized for deletion |
+| `2026-08-06-001-feat-august-decision-wave-plan.md` | U1-U5 complete; U6 released; U7 partial | Score the seven memo headings 1–7, then bind the proposal and add the four missing competence measures |
 | `2026-08-09-001-feat-taxonomy-publisher-batches-plan.md` | U1-U3/U5 complete; U4 superseded | U6 live protected Publisher/PROD journey |
 | `2026-08-10-001-feat-granular-publisher-review-plan.md` | U1-U4/U7 complete; U6 superseded | Authenticated DEV smoke and the human/live portions of U8 |
 | `2026-08-10-002-feat-prose-publisher-production-rollout-plan.md` | Code/runbooks complete | Protected revision review, exact-candidate authorization, supervised canary, recovery, and routine activation |
@@ -42,19 +42,19 @@ This is the de-duplicated execution queue. Later successor units own the work wh
 
 ### Agent-executable after decisions or prerequisites
 
-1. **Assessment U8-U13.** After the section mapping decision, implement the correct seven-point section-level assessment serially. Do not merge `d76c268`; the repository records that implementation as wrong.
+1. **Assessment U8-U13.** Implement the seven-point assessment serially, scoring the seven analytic memo headings while retaining weighted criteria and letter maps only for non-memo and legacy exercises. Do not merge `d76c268`; the repository records that implementation as wrong.
 2. **Proposal tail U7.** Bind the proposal to the final assessment export and add `time-to-first-competence`, `time-to-six`, `attempts-to-competence`, and task-level uncertainty.
 3. **Date-offset enforcement U16b.** Run after the supervised U15 corpus rewrite has produced accepted sidecars.
 4. **Consistency daemon U18.** Run after U17 yields a real published revision against which `editor_consistency` can be wired and verified.
 
 ### Decisions required
 
-The Cockpit ask `sonsteng-magnum-opus-2026-08-20-0908-plan-residual-decisions` contains only the two still-live questions:
+The Cockpit ask `sonsteng-magnum-opus-2026-08-20-0908-plan-residual-decisions` was answered on 2026-08-20:
 
-1. Which memo sections receive 1–7 scores, and how should legacy non-memo weighted criteria behave?
-2. Should the obsolete promotion-summary contract be retired, and should its two local/remote branch refs be deleted after lineage is recorded or preserved?
+1. Score the seven analytic memo headings 1–7; keep weighted criteria, totals, and letter maps only for non-memo and legacy exercises.
+2. Retire the obsolete promotion-summary contract and delete its two local and remote branch refs after recording lineage.
 
-Earlier answers were not re-asked. In particular, the recording already settled the seven-point scale, competence at 4, and redo below 6; only the section map and legacy behavior remain open.
+The durable decision and branch lineage are recorded in `docs/decisions/2026-08-20-assessment-map-and-promotion-retirement.md`.
 
 ### Human or external operations
 

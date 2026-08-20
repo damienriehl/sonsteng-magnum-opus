@@ -198,12 +198,14 @@ this file is what those decisions oblige us to *do*.
       Anything under **6** may be redone to reach a 6. Instructors and schools can
       set any thresholds they want, so both numbers are settings, not constants.
       Note John's caution: students read a 4 as terrible because it looks like a C.
-      **Reinterpreted, and now needs a decision before it can be built.** The
+      **Decision settled 2026-08-20; implementation in progress.** The
       2026-08-12 record found "seven-point scale" ambiguous; Damien resolved it on
       2026-08-13 as *the memo template's seven analytic headings*, not a rating
       scale. Recording review on 2026-08-17 confirmed that 1–7 is a section-level
-      assessment scale, with competence at 4 and redo below 6; the remaining
-      question is which sections receive it. The often-cited "40 rubrics" are
+      assessment scale, with competence at 4 and redo below 6. Damien chose the
+      seven analytic memo headings as the scored dimensions; weighted criteria,
+      totals, and letter maps remain for non-memo and legacy exercises only. The
+      often-cited "40 rubrics" are
       **20 authored** `data/matters/*/rubric.json` files plus **20 generated
       mirrors** under `site/platform/data/matters/`, not 40 authored instruments.
       Two plans now specify an assessment surface without referencing each other —
