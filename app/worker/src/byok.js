@@ -11,7 +11,7 @@
 //    the router passes skipBudget:true to the DO.
 //  * No byok + no hosted ANTHROPIC_API_KEY -> the typed no_hosted_key error.
 
-const PROVIDERS = ["anthropic", "openai", "google"];
+import { PROVIDER_NAMES } from "./providers/registry.js";
 
 function csv(str) {
   return (str || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -48,10 +48,10 @@ export function resolveUpstream(env, byok) {
       return { ok: false, code: "validation_error", message: "byok must be an object.", status: 400 };
     }
     const provider = byok.provider;
-    if (!PROVIDERS.includes(provider)) {
+    if (!PROVIDER_NAMES.includes(provider)) {
       return {
         ok: false, code: "validation_error", status: 400,
-        message: "byok.provider must be one of: " + PROVIDERS.join(", ") + ".",
+        message: "byok.provider must be one of: " + PROVIDER_NAMES.join(", ") + ".",
       };
     }
     if (typeof byok.api_key !== "string" || byok.api_key.trim().length < 8) {
@@ -103,13 +103,13 @@ export function resolvePanelUpstreams(env, { byok, byokPanel } = {}) {
   if (byokPanel == null) {
     const grader = resolveUpstream(env, byok);
     if (!grader.ok) return grader;
-    return { ok: true, graders: [grader], assurance: "reduced_assurance" };
+    return { ok: true, graders: [grader] };
   }
 
-  if (!Array.isArray(byokPanel) || byokPanel.length !== PROVIDERS.length) {
+  if (!Array.isArray(byokPanel) || byokPanel.length !== PROVIDER_NAMES.length) {
     return {
       ok: false, code: "validation_error", status: 400,
-      message: `byok_panel must contain exactly ${PROVIDERS.length} explicit provider credentials.`,
+      message: `byok_panel must contain exactly ${PROVIDER_NAMES.length} explicit provider credentials.`,
     };
   }
 
@@ -141,5 +141,5 @@ export function resolvePanelUpstreams(env, { byok, byokPanel } = {}) {
       message: "byok_panel graders must use distinct providers.",
     };
   }
-  return { ok: true, graders, assurance: "multi_provider_formative" };
+  return { ok: true, graders };
 }

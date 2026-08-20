@@ -83,7 +83,6 @@ test("panel resolution never multiplies one hosted or BYOK key into synthetic gr
   assert.equal(hosted.ok, true);
   assert.equal(hosted.graders.length, 1);
   assert.equal(hosted.graders[0].mode, "hosted");
-  assert.equal(hosted.assurance, "reduced_assurance");
 
   const single = resolvePanelUpstreams(ENV, {
     byok: { provider: "openai", api_key: "single-key-12345" },
@@ -91,7 +90,6 @@ test("panel resolution never multiplies one hosted or BYOK key into synthetic gr
   assert.equal(single.ok, true);
   assert.equal(single.graders.length, 1);
   assert.equal(single.graders[0].provider, "openai");
-  assert.equal(single.assurance, "reduced_assurance");
 });
 
 test("a multi-provider panel requires distinct, valid explicit BYOK providers", () => {
@@ -104,7 +102,6 @@ test("a multi-provider panel requires distinct, valid explicit BYOK providers", 
   });
   assert.equal(panel.ok, true);
   assert.equal(panel.graders.length, 3);
-  assert.equal(panel.assurance, "multi_provider_formative");
 
   const duplicate = resolvePanelUpstreams(ENV, {
     byokPanel: [

@@ -8,7 +8,10 @@ import { buildMemoAdjudicationPrompt, buildMemoScorecardPrompt } from "./prompts
 import { parseModelJson, validateMemoScorecard } from "./validate.js";
 import { validResolvedAssessmentThresholdConfig } from "./assessment-config.js";
 
-const SUMMATIVE_BLOCKERS = ["human_human_calibration", "provider_terms_review"];
+export const SUMMATIVE_BLOCKERS = Object.freeze([
+  "human_human_calibration",
+  "provider_terms_review",
+]);
 const DEFAULT_SCORECARD_TEMPLATE = "{{ASSESSMENT_INSTRUMENT_JSON}}\n\n{{SUBMISSION}}";
 
 function safeProvenance(grader) {
@@ -170,11 +173,17 @@ export async function runFormativeMemoPanel({
   }
 
   const orderedGraders = shuffledGraders(graders, submission, instrument);
+  const scorecardPrompt = buildMemoScorecardPrompt(scorecardTemplate, { instrument, submission });
   const entries = [];
   const usage = {};
   for (const grader of orderedGraders) {
-    const prompt = buildMemoScorecardPrompt(scorecardTemplate, { instrument, submission });
-    const completion = await complete({ grader, kind: "grader", prompt, maxTokens: 2200, jsonMode: true });
+    const completion = await complete({
+      grader,
+      kind: "grader",
+      prompt: scorecardPrompt,
+      maxTokens: 2200,
+      jsonMode: true,
+    });
     if (!completion || !completion.ok) {
       return { ok: false, kind: "upstream", grader, upstreamResult: completion || { kind: "upstream" } };
     }

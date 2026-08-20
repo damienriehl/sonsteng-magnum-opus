@@ -351,9 +351,9 @@ const SELECT_COLS =
   "group_id, supersedes, op_arg, status, decision_note, apply_batch_id, lease_expires_at, " +
   "created_at, updated_at";
 
-export const ASSESSMENT_REVIEW_SCOPE = "assessment-review";
-export const ASSESSMENT_AUDIT_SCHEMA_VERSION = "assessment-audit/v1";
-export const ASSESSMENT_OVERRIDE_SCHEMA_VERSION = "assessment-override/v1";
+const ASSESSMENT_REVIEW_SCOPE = "assessment-review";
+const ASSESSMENT_AUDIT_SCHEMA_VERSION = "assessment-audit/v1";
+const ASSESSMENT_OVERRIDE_SCHEMA_VERSION = "assessment-override/v1";
 const ASSESSMENT_RETENTION_MAX_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -409,7 +409,7 @@ function sanitizedPayload(value, secrets, seen = new WeakSet()) {
   if (typeof value === "string") {
     let safe = value;
     for (const secret of [...secrets].sort((a, b) => b.length - a.length)) {
-      if (secret.length >= 4) safe = safe.split(secret).join("[REDACTED]");
+      if (secret.length >= 4) safe = safe.replaceAll(secret, "[REDACTED]");
     }
     return safe;
   }
@@ -2656,10 +2656,18 @@ export class EditorStoreCore {
   }
 
   expireAssessmentAudits() {
-    const ids = this._all("SELECT id FROM assessment_audit_records WHERE expires_at<=? ORDER BY id",
-      this.now()).map((row) => row.id);
-    this._deleteAssessmentAudits(ids);
-    return { ok: true, deleted: ids.length };
+    const cutoff = this.now();
+    const deleted = Number(this._one(
+      "SELECT COUNT(*) AS n FROM assessment_audit_records WHERE expires_at<=?", cutoff
+    )?.n || 0);
+    if (deleted) {
+      this.transactionSync(() => {
+        this.sql.exec(`DELETE FROM assessment_audit_overrides WHERE assessment_id IN
+          (SELECT id FROM assessment_audit_records WHERE expires_at<=?)`, cutoff);
+        this.sql.exec("DELETE FROM assessment_audit_records WHERE expires_at<=?", cutoff);
+      });
+    }
+    return { ok: true, deleted };
   }
 
   // ---- digest --------------------------------------------------------------

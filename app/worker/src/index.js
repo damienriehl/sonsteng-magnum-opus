@@ -25,7 +25,7 @@ import { getProvider } from "./providers/registry.js";
 import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
-import { runFormativeMemoPanel } from "./panel.js";
+import { runFormativeMemoPanel, SUMMATIVE_BLOCKERS } from "./panel.js";
 import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
 import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
 import { json, errorEnvelope } from "./errors.js";
@@ -467,7 +467,7 @@ async function handleMemoAssessment(request, env, origin) {
 
   const blockers = new Set(run.result.summative_blockers || []);
   if (run.result.assessment_use !== "formative" || run.result.summative_eligible !== false ||
-      !blockers.has("human_human_calibration") || !blockers.has("provider_terms_review")) {
+      !SUMMATIVE_BLOCKERS.every((blocker) => blockers.has(blocker))) {
     logMeta({ ev: "memo_assessment_safety_contract_failed" });
     return errorEnvelope("validation_error", "The memo assessment safety contract failed.", 502);
   }

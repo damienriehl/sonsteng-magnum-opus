@@ -35,16 +35,7 @@ export function buildAssessmentAuditInput({
   return {
     id,
     assessment_use: "formative",
-    evidence: {
-      submission,
-      // These are the raw, validated grader observations that the deterministic
-      // aggregation used. Keeping them beside the submission makes the result
-      // independently readable without retaining provider request envelopes.
-      heading_observations: (result?.headings || []).map((heading) => ({
-        heading_id: heading.heading_id,
-        observations: heading.observations || [],
-      })),
-    },
+    evidence: { submission },
     result,
     provenance: {
       config: result?.threshold_configuration,
@@ -70,5 +61,3 @@ export async function persistAssessmentAudit(env, input) {
     expires_at: result.expires_at,
   };
 }
-
-export { DEFAULT_RETENTION_DAYS };

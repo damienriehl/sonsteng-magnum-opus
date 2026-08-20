@@ -23,11 +23,15 @@ function assessmentOnly(value) {
 }
 
 export function assessmentViewModel(record = {}) {
-  const config = record.provenance?.config || {};
+  const evidence = assessmentOnly(record.evidence || {});
+  const result = assessmentOnly(record.result || {});
+  const provenance = assessmentOnly(record.provenance || {});
+  const overrides = assessmentOnly(record.overrides || []);
+  const config = provenance.config || {};
   const competence = Number.isInteger(config.competence_score) ? config.competence_score : 4;
   const redoBelow = Number.isInteger(config.redo_eligible_below) ? config.redo_eligible_below : 6;
   const latestOverride = new Map();
-  for (const item of record.overrides || []) {
+  for (const item of overrides) {
     const value = item?.value;
     if (value && typeof value.heading_id === "string" &&
         Number.isInteger(value.score) && value.score >= 1 && value.score <= 7) {
@@ -36,17 +40,17 @@ export function assessmentViewModel(record = {}) {
   }
   return {
     ...record,
-    evidence: assessmentOnly(record.evidence || {}),
-    result: assessmentOnly(record.result || {}),
-    provenance: assessmentOnly(record.provenance || {}),
-    overrides: assessmentOnly(record.overrides || []),
+    evidence,
+    result,
+    provenance,
+    overrides,
     competence_score: competence,
     redo_eligible_below: redoBelow,
-    headings: (record.result?.headings || []).map((heading) => {
+    headings: (result.headings || []).map((heading) => {
       const humanOverride = latestOverride.get(heading.heading_id) || null;
       const score = humanOverride?.value?.score ?? heading.score;
       return {
-        ...assessmentOnly(heading),
+        ...heading,
         base_score: heading.score,
         score,
         human_override: humanOverride,
@@ -150,5 +154,3 @@ export function renderAssessmentReviewPage(record, viewerLabel = "") {
     headers: { "content-type": "text/html; charset=utf-8" },
   });
 }
-
-export { assessmentOnly };

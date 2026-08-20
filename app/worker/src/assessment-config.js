@@ -112,5 +112,3 @@ export function resolveAssessmentThresholdConfig(requestConfig, instrument) {
   const source = requestConfig.instructor ? "instructor" : "school";
   return { ok: true, config: resolvedConfig(source, requestConfig[source], instrument) };
 }
-
-export { REQUEST_SCHEMA_VERSION, RESOLUTION_SCHEMA_VERSION };

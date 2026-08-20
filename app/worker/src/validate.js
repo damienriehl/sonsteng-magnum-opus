@@ -13,7 +13,7 @@ const FACT = /^m\d{2}\.fact\.\d{3}$/;
 const RUBRIC = /^m\d{2}\.rub$/;
 const CRITERION = /^m\d{2}\.rub\.c\d{2}(\.s\d{2})*$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
-const MEMO_HEADING_IDS = [
+export const MEMO_HEADING_IDS = Object.freeze([
   "governing_law",
   "strengths_and_weaknesses_both_sides",
   "issues",
@@ -21,8 +21,8 @@ const MEMO_HEADING_IDS = [
   "theory_and_themes",
   "elements_to_prevail",
   "liabilities_and_remedies",
-];
-const MEMO_HEADING_SET = new Set(MEMO_HEADING_IDS);
+]);
+export const MEMO_HEADING_SET = new Set(MEMO_HEADING_IDS);
 const TRIGGERS = new Set([
   "open_ended_invitation", "wellbeing_question", "acknowledged_emotion",
   "no_interruption_streak", "confidentiality_reassurance", "nonjudgmental_response",

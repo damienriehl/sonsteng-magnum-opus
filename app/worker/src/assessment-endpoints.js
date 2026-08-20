@@ -5,19 +5,11 @@ import { json } from "./errors.js";
 import { csrfOk, editError, uniform404 } from "./editor-http.js";
 import { attributionLabel } from "./editor-auth.js";
 import { renderAssessmentReviewPage } from "./assessment-view.js";
+import { MEMO_HEADING_SET } from "./validate.js";
 
 const STORE_REVIEW_SCOPES = Object.freeze({
   "assessment-review": Object.freeze({ granted: true, ver: 1 }),
 });
-const HEADING_IDS = new Set([
-  "governing_law",
-  "strengths_and_weaknesses_both_sides",
-  "issues",
-  "suggested_solutions",
-  "theory_and_themes",
-  "elements_to_prevail",
-  "liabilities_and_remedies",
-]);
 
 function editorStub(env) {
   return env.EDITOR.getByName("global-v1");
@@ -76,7 +68,7 @@ export async function assessmentOverrideEndpoint(request, env, auth) {
   const idOk = typeof body?.id === "string" && /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(body.id);
   const assessmentIdOk = typeof body?.assessment_id === "string" &&
     /^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(body.assessment_id);
-  const headingOk = HEADING_IDS.has(body?.heading_id);
+  const headingOk = MEMO_HEADING_SET.has(body?.heading_id);
   const scoreOk = Number.isInteger(body?.score) && body.score >= 1 && body.score <= 7;
   const note = typeof body?.note === "string" ? body.note.trim() : "";
   if (!idOk || !assessmentIdOk || !headingOk || !scoreOk || !note || note.length > 4000) {
