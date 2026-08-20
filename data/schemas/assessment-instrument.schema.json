@@ -3,14 +3,14 @@
   "$id": "https://sonsteng.damienriehl.com/spine/schemas/assessment-instrument.schema.json",
   "title": "Memo assessment instrument",
   "description": "The single versioned contract that routes memo deliverables to seven heading-level 1-7 competency scores and keeps weighted rubrics for non-memo and legacy exercises.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "schema_version", "instrument_version", "content_hash", "content"],
   "properties": {
     "id": { "const": "memo-seven-heading-1-7" },
-    "schema_version": { "const": "1.0.0" },
-    "instrument_version": { "const": "1.0.0" },
+    "schema_version": { "const": "1.1.0" },
+    "instrument_version": { "const": "1.1.0" },
     "content_hash": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$",
@@ -149,10 +149,25 @@
     "dimension": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "heading"],
+      "required": ["id", "heading", "band_descriptors"],
       "properties": {
         "id": { "type": "string" },
-        "heading": { "type": "string" }
+        "heading": { "type": "string" },
+        "band_descriptors": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "prefixItems": [
+            { "$ref": "#/$defs/heading_band_1" },
+            { "$ref": "#/$defs/heading_band_2" },
+            { "$ref": "#/$defs/heading_band_3" },
+            { "$ref": "#/$defs/heading_band_4" },
+            { "$ref": "#/$defs/heading_band_5" },
+            { "$ref": "#/$defs/heading_band_6" },
+            { "$ref": "#/$defs/heading_band_7" }
+          ],
+          "items": false
+        }
       }
     },
     "governing_law": {
@@ -212,6 +227,25 @@
     "band_4": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 4 } } }] },
     "band_5": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 5 } } }] },
     "band_6": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 6 } } }] },
-    "band_7": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 7 } } }] }
+    "band_7": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 7 } } }] },
+    "heading_band": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "progression_stage", "descriptor"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "progression_stage": {
+          "enum": ["absent", "minimal", "developing", "competent", "accomplished", "strong", "exceptional"]
+        },
+        "descriptor": { "type": "string", "minLength": 1 }
+      }
+    },
+    "heading_band_1": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 1 }, "progression_stage": { "const": "absent" } } }] },
+    "heading_band_2": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 2 }, "progression_stage": { "const": "minimal" } } }] },
+    "heading_band_3": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 3 }, "progression_stage": { "const": "developing" } } }] },
+    "heading_band_4": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 4 }, "progression_stage": { "const": "competent" } } }] },
+    "heading_band_5": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 5 }, "progression_stage": { "const": "accomplished" } } }] },
+    "heading_band_6": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 6 }, "progression_stage": { "const": "strong" } } }] },
+    "heading_band_7": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 7 }, "progression_stage": { "const": "exceptional" } } }] }
   }
 }

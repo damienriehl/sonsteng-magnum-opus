@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -16,6 +17,44 @@ REPO = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = REPO / "data" / "schemas" / "assessment-instrument.schema.json"
 INSTRUMENT_PATH = REPO / "data" / "curriculum" / "assessment-instrument.json"
 MANIFEST_PATH = REPO / "data" / "spine-manifest.json"
+
+PROGRESSION_STAGES = [
+    "absent",
+    "minimal",
+    "developing",
+    "competent",
+    "accomplished",
+    "strong",
+    "exceptional",
+]
+HEADING_FOCUS_TERMS = {
+    "governing_law": ("law", "rule", "authority", "doctrine", "jurisdiction"),
+    "strengths_and_weaknesses_both_sides": (
+        "strength",
+        "weakness",
+        "both sides",
+        "counterargument",
+        "adverse",
+    ),
+    "issues": ("issue", "question", "dispute", "sub-issue"),
+    "suggested_solutions": (
+        "solution",
+        "option",
+        "outcome",
+        "recommendation",
+        "tradeoff",
+    ),
+    "theory_and_themes": ("theory", "theme", "narrative"),
+    "elements_to_prevail": ("element", "burden", "prove"),
+    "liabilities_and_remedies": (
+        "liability",
+        "liabilities",
+        "remedy",
+        "remedies",
+        "relief",
+        "exposure",
+    ),
+}
 
 
 def _load(path: Path) -> dict:
@@ -81,8 +120,38 @@ def test_content_hash_is_current_and_changes_with_a_descriptor() -> None:
     assert instrument["content_hash"] == _content_hash(instrument["content"])
 
     changed = copy.deepcopy(instrument["content"])
-    changed["scale"]["bands"][3]["descriptor"] += " Clarified."
+    changed["dimensions"][0]["band_descriptors"][3]["descriptor"] += " Clarified."
     assert _content_hash(changed) != instrument["content_hash"]
+
+
+def test_every_heading_has_seven_heading_specific_monotonic_descriptors() -> None:
+    dimensions = _load(INSTRUMENT_PATH)["content"]["dimensions"]
+
+    assert len(dimensions) == 7
+    assert {dimension["id"] for dimension in dimensions} == set(HEADING_FOCUS_TERMS)
+    assert sum(len(dimension["band_descriptors"]) for dimension in dimensions) == 49
+    for dimension in dimensions:
+        bands = dimension["band_descriptors"]
+        descriptors = [band["descriptor"] for band in bands]
+        assert [band["score"] for band in bands] == list(range(1, 8))
+        assert [band["progression_stage"] for band in bands] == PROGRESSION_STAGES
+        assert len(set(descriptors)) == 7
+        focus_terms = HEADING_FOCUS_TERMS[dimension["id"]]
+        assert all(
+            any(term in descriptor.casefold() for term in focus_terms)
+            for descriptor in descriptors
+        )
+
+
+def test_heading_descriptors_do_not_translate_scores_to_letter_grades() -> None:
+    dimensions = _load(INSTRUMENT_PATH)["content"]["dimensions"]
+    letter_grade_language = re.compile(
+        r"\b(?:letter[ -]grade|grade|[ABCDF][+-]?[ -]level)\b", re.IGNORECASE
+    )
+
+    for dimension in dimensions:
+        for band in dimension["band_descriptors"]:
+            assert not letter_grade_language.search(band["descriptor"])
 
 
 def test_memo_and_non_memo_contracts_resolve_without_inference() -> None:
@@ -91,7 +160,10 @@ def test_memo_and_non_memo_contracts_resolve_without_inference() -> None:
 
     assert _resolve_contract(instrument, "memo") == instrument["id"]
     assert _resolve_contract(instrument, "client_interview") == "legacy_weighted_rubric"
-    assert content["dimensions"] == [
+    assert [
+        {"id": dimension["id"], "heading": dimension["heading"]}
+        for dimension in content["dimensions"]
+    ] == [
         {"id": "governing_law", "heading": "Governing law"},
         {
             "id": "strengths_and_weaknesses_both_sides",
