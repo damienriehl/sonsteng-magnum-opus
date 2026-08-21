@@ -366,8 +366,12 @@ test("memo endpoint persists before success and returns the server audit id with
   assert.match(handler, /graders: panel\.graders/);
   assert.match(handler, /sessionToken: body\.session_token/);
   const reserve = handler.indexOf("reserveOneShot(reservationId");
+  const requestClaim = handler.indexOf("claimAssessmentRequest(");
+  const panelRun = handler.indexOf("runFormativeMemoPanel({");
   const provider = handler.indexOf("completion = await callUpstream");
   const settle = handler.indexOf("settleOneShot(reservationId");
+  assert.ok(requestClaim > 0 && panelRun > requestClaim, "request cap is claimed before panel work");
+  assert.match(handler, /if \(!assessmentClaim\.ok\)[\s\S]*?"rate_limited"[\s\S]*?429/);
   assert.ok(reserve > 0 && provider > reserve && settle > provider);
   assert.match(handler, /catch \{\s*completion = \{ ok: false, kind: "upstream" \};\s*\}/);
   assert.doesNotMatch(handler, /checkPool\(/);

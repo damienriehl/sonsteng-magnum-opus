@@ -228,6 +228,8 @@ A true multi-provider panel is explicit and closed:
 - `byok_panel` and the ordinary single `byok` record are mutually exclusive.
 - Hosted and ordinary single-BYOK requests run exactly one grader and return
   `reduced_assurance`; one credential is never fanned out into a synthetic panel.
+- Hosted and BYOK requests share an atomic per-session/day request cap. The
+  default is 20; exhaustion returns `429 rate_limited` before provider work.
 
 The request MAY include a locally supplied threshold envelope:
 
@@ -308,7 +310,8 @@ Always JSON, always with CORS headers (for allowlisted origins):
 ## Config (wrangler.jsonc `vars`) + secrets
 
 `vars`: `ALLOWED_ORIGINS`, `PUBLIC_BUDGET_USD` (7), `DEMO_RESERVE_USD` (3),
-`MAX_TURNS` (20), `MAX_SESSIONS_PER_DAY` (200), plus the per-provider model
+`MAX_TURNS` (20), `MAX_SESSIONS_PER_DAY` (200),
+`MAX_ASSESSMENTS_PER_SESSION_DAY` (20), plus the per-provider model
 config `MODEL_DEFAULT_ANTHROPIC` / `MODEL_DEFAULT_OPENAI` /
 `MODEL_DEFAULT_GOOGLE` and allowlists `MODEL_ALLOW_ANTHROPIC` /
 `MODEL_ALLOW_OPENAI` / `MODEL_ALLOW_GOOGLE` (comma-separated; see the BYOK

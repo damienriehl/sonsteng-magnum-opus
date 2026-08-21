@@ -144,6 +144,41 @@ test("stream failure bills known usage but clears replay and permits same-turn r
   assert.equal(retry.turn, 1, "the failed turn was returned before retry");
 });
 
+test("failure fallback leaves an already-settled turn intact", () => {
+  const core = makeCore();
+  core.preflight("sid-settled", { ...BASE, turnId: "settled", skipBudget: false });
+  core.settle(
+    "sid-settled",
+    { input_tokens: 20_000, output_tokens: 300 },
+    "settled",
+    { reply: "durable" }
+  );
+  const settledSpend = spent(core);
+
+  assert.deepEqual(
+    core.fail(
+      "sid-settled",
+      { input_tokens: 40_000, output_tokens: 600 },
+      "settled",
+      BASE.personaId
+    ),
+    { ok: true }
+  );
+  assert.equal(spent(core), settledSpend, "settled usage is not charged again");
+  assert.equal(core.committedTurnsForPersona("sid-settled", BASE.personaId), 1);
+  const session = core._one("SELECT turns,last_result FROM sessions WHERE sid=?", "sid-settled");
+  assert.equal(session.turns, 1);
+  assert.deepEqual(JSON.parse(session.last_result), { reply: "durable" });
+
+  const replay = core.preflight("sid-settled", {
+    ...BASE,
+    turnId: "settled",
+    skipBudget: false,
+  });
+  assert.equal(replay.replay, true);
+  assert.deepEqual(replay.result, { reply: "durable" });
+});
+
 test("debrief-oracle guard counts committed per-persona turns", () => {
   const core = makeCore();
   for (let i = 1; i <= 6; i++) {
@@ -224,4 +259,32 @@ test("day rollover clears conservative one-shot reservations left by an interrup
     core._one("SELECT COUNT(*) AS count FROM one_shot_reservations WHERE id=?", "interrupted-call").count,
     0
   );
+});
+
+test("memo assessment request cap is atomic per session and resets each UTC day", () => {
+  const clock = { value: new Date("2026-08-20T12:00:00Z") };
+  const core = makeCore(() => clock.value);
+
+  assert.deepEqual(core.claimAssessmentRequest("sid-a", 2), {
+    ok: true,
+    count: 1,
+    remaining: 1,
+  });
+  assert.deepEqual(core.claimAssessmentRequest("sid-a", 2), {
+    ok: true,
+    count: 2,
+    remaining: 0,
+  });
+  assert.deepEqual(core.claimAssessmentRequest("sid-a", 2), {
+    ok: false,
+    reason: "rate_limited",
+  });
+  assert.equal(core.claimAssessmentRequest("sid-b", 2).ok, true, "cap is per session");
+
+  clock.value = new Date("2026-08-21T12:00:00Z");
+  assert.deepEqual(core.claimAssessmentRequest("sid-a", 2), {
+    ok: true,
+    count: 1,
+    remaining: 1,
+  });
 });

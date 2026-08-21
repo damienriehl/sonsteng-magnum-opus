@@ -63,11 +63,16 @@ function clientIp(request) {
 }
 
 function capsFor(env) {
+  const maxTurns = parseInt(env.MAX_TURNS, 10) || 20;
   return {
     capPublicCents: (parseInt(env.PUBLIC_BUDGET_USD, 10) || 7) * 100,
     capDemoCents: (parseInt(env.DEMO_RESERVE_USD, 10) || 3) * 100,
-    maxTurns: parseInt(env.MAX_TURNS, 10) || 20,
+    maxTurns,
     maxSessionsPerDay: parseInt(env.MAX_SESSIONS_PER_DAY, 10) || 200,
+    maxAssessmentsPerSessionDay: Math.max(
+      1,
+      parseInt(env.MAX_ASSESSMENTS_PER_SESSION_DAY, 10) || maxTurns
+    ),
   };
 }
 
@@ -438,6 +443,18 @@ async function handleMemoAssessment(request, env, origin) {
 
   const caps = capsFor(env);
   const stub = budgetStub(env);
+  const assessmentClaim = await stub.claimAssessmentRequest(
+    session.sid,
+    caps.maxAssessmentsPerSessionDay
+  );
+  if (!assessmentClaim.ok) {
+    logMeta({ ev: "memo_assessment_rate_limited", reason: assessmentClaim.reason });
+    return errorEnvelope(
+      "rate_limited",
+      "This session has reached the daily memo assessment limit.",
+      429
+    );
+  }
   const run = await runFormativeMemoPanel({
     submission,
     instrument: bundle.assessment_instrument,

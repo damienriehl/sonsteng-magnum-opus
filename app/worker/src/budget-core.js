@@ -55,6 +55,11 @@ export const SCHEMA_SQL = `
     pool TEXT NOT NULL,
     reserve_cents INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS assessment_requests (
+    sid TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL
+  );
 `;
 
 export class BudgetCore {
@@ -211,6 +216,10 @@ export class BudgetCore {
     this._rollover(today);
     const sess = this._one("SELECT * FROM sessions WHERE sid=?", sid);
     if (!sess || sess.day !== today || sess.last_turn_id !== turnId) return { ok: true };
+    // A settlement can commit even if its RPC response is lost. The caller's
+    // failure fallback must not undo that committed turn or bill its usage a
+    // second time; the stored replay result is the durable settlement marker.
+    if (sess.last_result != null) return { ok: true };
     const actual = usage ? centsForUsage(usage) : 0;
     const pool = sess.last_pool || "public";
     if (sess.last_reserve !== 0 || actual !== 0) {
@@ -272,6 +281,29 @@ export class BudgetCore {
     const spent = pool === "demo" ? b.demo_cents : b.public_cents;
     const cap = pool === "demo" ? capDemoCents : capPublicCents;
     return { ok: spent < cap };
+  }
+
+  // Atomic per-session/day gate for memo assessments. This applies to hosted
+  // and BYOK requests alike: BYOK skips only platform spend, not request abuse
+  // controls or the global audit-write footprint.
+  claimAssessmentRequest(sid, maxRequests) {
+    const today = this._today();
+    if (typeof sid !== "string" || !sid || !Number.isInteger(maxRequests) || maxRequests < 1) {
+      return { ok: false, reason: "validation_error" };
+    }
+    const row = this._one("SELECT day,count FROM assessment_requests WHERE sid=?", sid);
+    const count = row && row.day === today ? row.count : 0;
+    if (count >= maxRequests) return { ok: false, reason: "rate_limited" };
+    const next = count + 1;
+    this.sql.exec(
+      "INSERT INTO assessment_requests (sid,day,count) VALUES (?,?,1) " +
+        "ON CONFLICT(sid) DO UPDATE SET day=excluded.day, " +
+        "count=CASE WHEN assessment_requests.day=excluded.day " +
+        "THEN assessment_requests.count+1 ELSE 1 END",
+      sid,
+      today
+    );
+    return { ok: true, count: next, remaining: Math.max(0, maxRequests - next) };
   }
 
   reserveOneShot(id, opts) {

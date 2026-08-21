@@ -53,6 +53,10 @@ export class BudgetCounter extends DurableObject {
     return this.core.checkPool(pool, capPublicCents, capDemoCents);
   }
 
+  claimAssessmentRequest(sid, maxRequests) {
+    return this.core.claimAssessmentRequest(sid, maxRequests);
+  }
+
   reserveOneShot(id, opts) {
     return this.core.reserveOneShot(id, opts);
   }
