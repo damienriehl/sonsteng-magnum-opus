@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import stat
 import sys
 from pathlib import Path
 
@@ -365,6 +366,8 @@ def test_staged_file_replacement_rolls_back_every_path_on_failure(tmp_path, monk
     second = tmp_path / "second.txt"
     first.write_text("first-old")
     second.write_text("second-old")
+    first.chmod(0o640)
+    second.chmod(0o664)
     real_replace = day_zero.os.replace
     calls = 0
 
@@ -380,6 +383,24 @@ def test_staged_file_replacement_rolls_back_every_path_on_failure(tmp_path, monk
         day_zero._write_staged_files({first: b"first-new", second: b"second-new"})
     assert first.read_text() == "first-old"
     assert second.read_text() == "second-old"
+    assert stat.S_IMODE(first.stat().st_mode) == 0o640
+    assert stat.S_IMODE(second.stat().st_mode) == 0o664
+
+
+def test_staged_write_preserves_existing_mode_and_sets_new_sidecar_mode(tmp_path):
+    existing = tmp_path / "matter.json"
+    sidecar = tmp_path / "date-offsets.json"
+    existing.write_text("old")
+    existing.chmod(0o640)
+
+    day_zero._write_staged_files({
+        existing: b"new",
+        sidecar: b'{"entries": []}\n',
+    })
+
+    assert existing.read_text() == "new"
+    assert stat.S_IMODE(existing.stat().st_mode) == 0o640
+    assert stat.S_IMODE(sidecar.stat().st_mode) == day_zero.ORDINARY_FILE_MODE
 
 
 def test_unresolvable_approved_identity_writes_nothing(tmp_path):

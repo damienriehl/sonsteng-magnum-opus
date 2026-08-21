@@ -645,6 +645,20 @@ def test_enforcement_rejects_duplicate_sidecar_identity(tmp_path):
                for f in report.for_scope("m99"))
 
 
+def test_degraded_schema_rejects_negative_sidecar_locator(tmp_path, monkeypatch):
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path)
+    payload = json.loads(sidecar.read_text())
+    payload["entries"][0]["locator"] = -1
+    sidecar.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    monkeypatch.setattr(vs, "HAVE_JSONSCHEMA", False)
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+
+    assert any(f.check == "F30" and "stale literal/block" in f.message
+               for f in report.for_scope("m99"))
+
+
 def test_enforcement_rejects_json_date_moved_to_another_block(tmp_path):
     repo = tmp_path / "repo"
     data = repo / "data"

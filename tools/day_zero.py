@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -318,7 +319,10 @@ def _markdown_blocks(text: str):
     return spans
 
 
-def _stage_payload(path: Path, payload: bytes) -> Path:
+ORDINARY_FILE_MODE = 0o644
+
+
+def _stage_payload(path: Path, payload: bytes, mode: int) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp",
                                         dir=path.parent)
@@ -326,6 +330,7 @@ def _stage_payload(path: Path, payload: bytes) -> Path:
     try:
         with os.fdopen(descriptor, "wb") as handle:
             descriptor = -1
+            os.fchmod(handle.fileno(), mode)
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
@@ -342,13 +347,16 @@ def _write_staged_files(writes: dict[Path, bytes]) -> None:
     originals = {}
     for path in writes:
         try:
-            originals[path] = path.read_bytes()
+            original_stat = path.stat()
+            originals[path] = (path.read_bytes(), stat.S_IMODE(original_stat.st_mode))
         except FileNotFoundError:
             originals[path] = None
     staged = {}
     try:
         for path, payload in writes.items():
-            staged[path] = _stage_payload(path, payload)
+            original = originals[path]
+            mode = original[1] if original is not None else ORDINARY_FILE_MODE
+            staged[path] = _stage_payload(path, payload, mode)
     except Exception:
         for temporary in staged.values():
             temporary.unlink(missing_ok=True)
@@ -364,7 +372,8 @@ def _write_staged_files(writes: dict[Path, bytes]) -> None:
             if original is None:
                 path.unlink(missing_ok=True)
             else:
-                rollback = _stage_payload(path, original)
+                original_payload, original_mode = original
+                rollback = _stage_payload(path, original_payload, original_mode)
                 os.replace(rollback, path)
         raise
     finally:

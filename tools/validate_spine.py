@@ -879,7 +879,7 @@ class Validator:
         occurrence = entry.get("locator")
         if len(spans) == 1:
             dates = list(DAY_ZERO_FULL_DATE_RE.finditer(spans[0]["raw"]))
-            if (isinstance(occurrence, int) and occurrence < len(dates) and
+            if (type(occurrence) is int and 0 <= occurrence < len(dates) and
                     dates[occurrence].group(0) == literal):
                 return True
         self.report.add(mid, "F30", ERROR,

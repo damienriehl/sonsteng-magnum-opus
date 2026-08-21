@@ -157,8 +157,21 @@ def git_archive_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathlib
     if not (repo / ".git").exists():
         raise MigrationError("rehearsal source is not a Git checkout")
     try:
+        resolved_commit = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{candidate_sha}^{{commit}}"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        raise MigrationError("rehearsal candidate is not an exact commit object") from None
+    if resolved_commit != candidate_sha:
+        raise MigrationError("rehearsal candidate is not an exact commit object")
+    try:
         archived = subprocess.run(
-            ["git", "archive", "--format=tar", candidate_sha],
+            ["git", "archive", "--format=tar", resolved_commit],
             cwd=repo,
             check=True,
             capture_output=True,

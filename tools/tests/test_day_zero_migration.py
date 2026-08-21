@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -124,6 +125,46 @@ def request(tmp_path, **changes):
     )
     values.update(changes)
     return migration.MigrationRequest(**values)
+
+
+def git(repo, *args):
+    return subprocess.run(
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+def git_repo(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init")
+    git(repo, "config", "user.name", "Migration Test")
+    git(repo, "config", "user.email", "migration@example.test")
+    (repo / "candidate.txt").write_text("candidate\n", encoding="utf-8")
+    git(repo, "add", "candidate.txt")
+    git(repo, "commit", "-m", "candidate")
+    return repo
+
+
+def test_git_archive_copy_accepts_only_the_exact_commit_object(tmp_path):
+    repo = git_repo(tmp_path)
+    commit_sha = git(repo, "rev-parse", "HEAD")
+
+    with migration.git_archive_copy(repo, commit_sha) as checkout:
+        assert (checkout / "candidate.txt").read_text(encoding="utf-8") == "candidate\n"
+
+
+@pytest.mark.parametrize("object_kind", ["tree", "annotated-tag"])
+def test_git_archive_copy_rejects_non_commit_object_ids(tmp_path, object_kind):
+    repo = git_repo(tmp_path)
+    if object_kind == "tree":
+        candidate_sha = git(repo, "rev-parse", "HEAD^{tree}")
+    else:
+        git(repo, "tag", "-a", "candidate-tag", "-m", "candidate tag")
+        candidate_sha = git(repo, "rev-parse", "candidate-tag")
+
+    with pytest.raises(migration.MigrationError, match="not an exact commit object"):
+        with migration.git_archive_copy(repo, candidate_sha):
+            pytest.fail("non-commit object unexpectedly produced a rehearsal checkout")
 
 
 def test_rehearsal_runs_every_phase_in_an_isolated_copy_without_production_calls(tmp_path):
