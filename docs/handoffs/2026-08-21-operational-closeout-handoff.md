@@ -11,12 +11,16 @@ was synchronized to merged `main`, its ignored generated bundles were refreshed 
 lock, parity passed, and a no-op service tick exited successfully. The merged site and Worker were
 deployed to DEV; production was not deployed or enabled.
 
-Four focused branch commits close the remaining repository defects:
+The branch's focused implementation and review commits close the remaining repository defects:
 
 - `3ad3a8d fix(day-zero): prove every governed conversion`
 - `3939c48 test(stream): add credential-safe live smoke harness (U19)`
 - `2a68ef1 feat(day-zero): add fail-closed migration rehearsal (U15)`
 - `eaabcab fix(release): migrate legacy config-off environments`
+- `2c7a75f docs(handoff): record operational closeout evidence`
+- `bdf5003 fix(day-zero): centralize durable locator resolution`
+- `afb4cf2 fix(review): harden migration and stream verification`
+- `98c26af chore(build): refresh operational closeout artifacts`
 
 ## Evidence
 
@@ -24,8 +28,9 @@ Four focused branch commits close the remaining repository defects:
   zero unclassified dates, and a reconciled inventory of 1,242.
 - Copied-corpus Day Zero write plus strict offset enforcement passed. The real corpus was not
   rewritten.
-- Day Zero focused suite: 54 passed. Adjacent migration/release suite: 162 passed.
-- Worker suite with the new live-stream harness: 534 passed; focused harness behavior: 11 cases.
+- Full Python tools suite after review fixes: 780 passed, 1 expected xfail, and 21,679 subtests.
+- Full Worker suite with the hardened live-stream harness: passed; focused harness behavior: 15
+  cases.
 - Production-environment migration suite and neighbors: 41 passed.
 - Real headless editor matrix: 89/89 passed at desktop, Large Type, and `390x844`.
 - Publisher client harness: passed.
@@ -83,5 +88,6 @@ queued rather than falsely marked complete.
 
 ## Publication state
 
-This handoff is the fifth local commit atop `origin/main`. The branch has not yet been pushed or
-opened as a pull request. Production remains config-off.
+The branch is pushed and open for integration as
+[PR #19](https://github.com/damienriehl/sonsteng-magnum-opus/pull/19). It has not been merged.
+Production remains config-off.
