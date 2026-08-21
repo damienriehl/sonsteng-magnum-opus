@@ -14,6 +14,22 @@ const API_KEY = "live-provider-secret-sentinel";
 const BYPASS = "live-bypass-secret-sentinel";
 
 function sseResponse(frames) {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      for (const value of frames) controller.enqueue(encoder.encode(value));
+      controller.close();
+    },
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "text/event-stream; charset=utf-8",
+      "x-sonsteng-stream": "1",
+    },
+  });
+}
+
+function bufferedSseResponse(frames) {
   return new Response(frames.join(""), {
     status: 200,
     headers: {
@@ -82,6 +98,7 @@ for (const provider of ["anthropic", "openai", "google"]) {
       bypassToken: BYPASS,
       turnId: "fixed-turn-id",
       fetchImpl: worker.fetch,
+      allowTestOrigin: true,
     });
 
     assert.equal(worker.calls.length, 3);
@@ -118,6 +135,7 @@ test("fails cleanly when a normalized error event arrives", async () => {
       apiKey: API_KEY,
       turnId: "fixed-turn-id",
       fetchImpl,
+      allowTestOrigin: true,
     }),
     (error) => error.code === "stream_error" && !error.message.includes(API_KEY),
   );
@@ -138,6 +156,7 @@ test("rejects a response that reflects a live credential without echoing it", as
       apiKey: API_KEY,
       turnId: "fixed-turn-id",
       fetchImpl,
+      allowTestOrigin: true,
     }),
     (error) => error.code === "credential_reflection" && !error.message.includes(API_KEY),
   );
@@ -158,6 +177,7 @@ test("fails cleanly when the stream ends before one done event", async () => {
       apiKey: API_KEY,
       turnId: "fixed-turn-id",
       fetchImpl,
+      allowTestOrigin: true,
     }),
     (error) => error.code === "early_eof" && !error.message.includes(API_KEY),
   );
@@ -189,6 +209,7 @@ test("rejects a stream with more than one done event", async () => {
       apiKey: API_KEY,
       turnId: "fixed-turn-id",
       fetchImpl,
+      allowTestOrigin: true,
     }),
     (error) => error.code === "sse_contract" && !error.message.includes(API_KEY),
   );
@@ -211,9 +232,87 @@ test("requires both normalized streaming response headers", async () => {
       apiKey: API_KEY,
       turnId: "fixed-turn-id",
       fetchImpl,
+      allowTestOrigin: true,
     }),
     (error) => error.code === "stream_headers" && !error.message.includes(API_KEY),
   );
+});
+
+test("rejects a complete SSE transcript buffered into one body read", async () => {
+  let call = 0;
+  const done = {
+    reply: "complete",
+    turn: 1,
+    remaining: 19,
+    state: "active",
+    usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 0 },
+  };
+  const fetchImpl = async () => {
+    call += 1;
+    if (call === 1) return Response.json({ session_token: "session-token" });
+    return bufferedSseResponse([
+      frame("delta", { text: "complete" }),
+      frame("done", done),
+    ]);
+  };
+
+  await assert.rejects(
+    runLiveStreamSmoke({
+      workerUrl: "https://worker.example.test",
+      provider: "anthropic",
+      apiKey: API_KEY,
+      turnId: "fixed-turn-id",
+      fetchImpl,
+      allowTestOrigin: true,
+    }),
+    (error) => error.code === "stream_buffered" && !error.message.includes(API_KEY),
+  );
+});
+
+for (const workerUrl of [
+  "https://sonsteng-chat-production.damienriehl.workers.dev",
+  "https://third-party.example.test",
+  "http://localhost:8787",
+]) {
+  test(`refuses credential-bearing smoke requests to ${workerUrl}`, async () => {
+    let called = false;
+    await assert.rejects(
+      runLiveStreamSmoke({
+        workerUrl,
+        provider: "anthropic",
+        apiKey: API_KEY,
+        bypassToken: BYPASS,
+        fetchImpl: async () => {
+          called = true;
+          return Response.json({ session_token: "unexpected" });
+        },
+      }),
+      (error) => error.code === "config" && !error.message.includes(API_KEY) && !error.message.includes(BYPASS),
+    );
+    assert.equal(called, false);
+  });
+}
+
+test("does not follow redirects from the approved DEV Worker", async () => {
+  let calls = 0;
+  await assert.rejects(
+    runLiveStreamSmoke({
+      workerUrl: "https://sonsteng-chat.damienriehl.workers.dev",
+      provider: "anthropic",
+      apiKey: API_KEY,
+      bypassToken: BYPASS,
+      fetchImpl: async (_url, init) => {
+        calls += 1;
+        assert.equal(init.redirect, "manual");
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://third-party.example.test/collect" },
+        });
+      },
+    }),
+    (error) => error.code === "session_network" && !error.message.includes(API_KEY) && !error.message.includes(BYPASS),
+  );
+  assert.equal(calls, 1);
 });
 
 test("loads credentials from protected environment variables", async () => {

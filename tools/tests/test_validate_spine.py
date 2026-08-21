@@ -633,6 +633,44 @@ def test_enforcement_accepts_complete_prose_sidecar(tmp_path):
                    for f in report.for_scope("m99"))
 
 
+def test_enforcement_rejects_duplicate_sidecar_identity(tmp_path):
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path)
+    payload = json.loads(sidecar.read_text())
+    payload["entries"].append(dict(payload["entries"][0]))
+    sidecar.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "duplicates a prior source identity" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_enforcement_rejects_json_date_moved_to_another_block(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    exercise = data / "matters" / "m99-noncompete-meridian" / "exercise.json"
+    payload = json.loads(exercise.read_text())
+    payload["sections"]["instructions"]["body_md"] = (
+        "Hearing January 13, 2026. {#b:deadbeef}"
+    )
+    payload["sections"]["objectives"]["body_md"] = "No date here. {#b:feedface}"
+    exercise.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    day_zero.convert_corpus(repo, write=True)
+
+    payload = json.loads(exercise.read_text())
+    payload["sections"]["instructions"]["body_md"] = "No date here. {#b:deadbeef}"
+    payload["sections"]["objectives"]["body_md"] = (
+        "Hearing January 13, 2026. {#b:feedface}"
+    )
+    exercise.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "stale literal/block" in f.message
+               for f in report.for_scope("m99"))
+
+
 def test_enforcement_rejects_stale_literal_or_block(tmp_path):
     data, facts, _sidecar = _converted_prose_fixture(tmp_path)
     facts.write_text(facts.read_text().replace("b:deadbeef", "b:feedface"))

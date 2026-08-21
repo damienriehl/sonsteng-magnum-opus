@@ -9,6 +9,7 @@ import { isDeepStrictEqual } from "node:util";
 
 const PROVIDERS = new Set(["anthropic", "openai", "google"]);
 const DEFAULT_ORIGIN = "https://sonsteng-dev.damienriehl.com";
+const DEV_WORKER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev";
 const MATTER_ID = "m00";
 const PERSONA_ID = "m00.per.tester";
 const PROMPT = "In one or two sentences, please tell me what brought you in today.";
@@ -179,32 +180,31 @@ function normalizedUsage(usage) {
   return result;
 }
 
-function validateNormalizedStream(text) {
-  const frames = text
-    .replace(/\r\n/g, "\n")
-    .split(/\n\n/)
-    .filter((candidate) => candidate.trim().length > 0)
-    .map(parseFrame);
+function validateNormalizedFrames(frames) {
   let done = null;
   let doneCount = 0;
   let deltaCount = 0;
   let output = "";
 
-  for (const frame of frames) {
-    if (frame.event === "error") {
+  let firstDeltaRead = null;
+  let doneRead = null;
+  for (const { event, payload, readIndex } of frames) {
+    if (event === "error") {
       fail("stream_error", "The normalized stream reported an upstream error.");
     }
-    if (frame.event === "delta") {
-      if (doneCount > 0 || !frame.payload || !nonempty(frame.payload.text)) {
+    if (event === "delta") {
+      if (doneCount > 0 || !payload || !nonempty(payload.text)) {
         fail("sse_contract", "A delta was empty or arrived after the terminal event.");
       }
-      output += frame.payload.text;
+      output += payload.text;
       deltaCount += 1;
+      if (firstDeltaRead === null) firstDeltaRead = readIndex;
       continue;
     }
-    if (frame.event === "done") {
-      done = frame.payload;
+    if (event === "done") {
+      done = payload;
       doneCount += 1;
+      doneRead = readIndex;
       continue;
     }
     fail("sse_contract", "The stream contained a non-normalized event type.");
@@ -213,6 +213,9 @@ function validateNormalizedStream(text) {
   if (doneCount === 0) fail("early_eof", "The stream ended before its done event.");
   if (doneCount !== 1) fail("sse_contract", "The stream must contain exactly one done event.");
   if (deltaCount < 1) fail("sse_contract", "The stream must contain at least one delta event.");
+  if (doneRead <= firstDeltaRead) {
+    fail("stream_buffered", "The response buffered all deltas and the terminal event into one body read.");
+  }
   if (!done || !nonempty(done.reply) || !nonempty(output)) {
     fail("sse_contract", "The normalized stream returned empty output.");
   }
@@ -227,12 +230,57 @@ function validateNormalizedStream(text) {
   return { done, deltaCount, usage: normalizedUsage(done.usage) };
 }
 
+async function readNormalizedStream(response, secrets) {
+  if (!response.body || typeof response.body.getReader !== "function") {
+    fail("stream_transport", "The Worker response did not expose a readable stream body.");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const rawParts = [];
+  const frames = [];
+  let pending = "";
+  let readIndex = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      readIndex += 1;
+      const text = decoder.decode(value, { stream: true });
+      rawParts.push(text);
+      assertCredentialAbsent(rawParts.join(""), secrets);
+      pending = (pending + text).replace(/\r\n/g, "\n");
+      let boundary;
+      while ((boundary = pending.indexOf("\n\n")) !== -1) {
+        const candidate = pending.slice(0, boundary);
+        pending = pending.slice(boundary + 2);
+        if (candidate.trim()) frames.push({ ...parseFrame(candidate), readIndex });
+      }
+    }
+    const tail = decoder.decode();
+    if (tail) {
+      rawParts.push(tail);
+      pending += tail;
+      assertCredentialAbsent(rawParts.join(""), secrets);
+    }
+  } catch (error) {
+    if (error instanceof SmokeError) throw error;
+    fail("stream_transport", "The Worker response body ended unexpectedly.");
+  }
+  if (pending.trim()) fail("sse_contract", "The stream ended with an incomplete SSE frame.");
+  return validateNormalizedFrames(frames);
+}
+
 async function request(fetchImpl, url, init, code) {
   try {
-    return await fetchImpl(url, {
+    const response = await fetchImpl(url, {
       ...init,
+      redirect: "manual",
       signal: init.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    if (response.status >= 300 && response.status < 400) {
+      fail(code, "The Worker attempted to redirect a credential-bearing request.");
+    }
+    return response;
   } catch (error) {
     if (error instanceof SmokeError) throw error;
     fail(code, "The Worker request failed before a response arrived.");
@@ -247,15 +295,19 @@ async function responseText(response, code) {
   }
 }
 
-function workerBaseUrl(workerUrl) {
+function workerBaseUrl(workerUrl, { allowTestOrigin = false } = {}) {
   let parsed;
   try {
     parsed = new URL(workerUrl);
   } catch {
     fail("config", "WORKER_URL must be an absolute HTTPS URL.");
   }
-  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-    fail("config", "WORKER_URL must use HTTPS (except localhost test servers).");
+  const local = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  if (parsed.protocol !== "https:" && !(allowTestOrigin && local)) {
+    fail("config", "WORKER_URL must use HTTPS (except explicit localhost tests).");
+  }
+  if (parsed.origin !== DEV_WORKER_ORIGIN && !allowTestOrigin) {
+    fail("config", `WORKER_URL must be the approved DEV Worker origin (${DEV_WORKER_ORIGIN}).`);
   }
   if (parsed.username || parsed.password) fail("config", "WORKER_URL must not contain credentials.");
   if (parsed.search || parsed.hash) fail("config", "WORKER_URL must not contain a query or fragment.");
@@ -278,11 +330,12 @@ export async function runLiveStreamSmoke({
   origin = DEFAULT_ORIGIN,
   turnId = `stream-smoke-${randomUUID()}`,
   fetchImpl = fetch,
+  allowTestOrigin = false,
 }) {
   validateProvider(provider);
   if (!nonempty(apiKey)) fail("credentials", "A provider API key is required.");
   if (!nonempty(workerUrl)) fail("config", "WORKER_URL is required.");
-  const base = workerBaseUrl(workerUrl);
+  const base = workerBaseUrl(workerUrl, { allowTestOrigin });
   const secrets = credentialValues(apiKey, bypassToken);
   const headers = { Origin: origin };
 
@@ -317,8 +370,6 @@ export async function runLiveStreamSmoke({
   };
 
   const streamResponse = await request(fetchImpl, chatUrl, chatInit, "chat_network");
-  const streamText = await responseText(streamResponse, "stream_transport");
-  assertCredentialAbsent(streamText, secrets);
   if (streamResponse.status !== 200) fail("chat_http", `Chat failed with HTTP ${streamResponse.status}.`);
   if (!/^text\/event-stream(?:;|$)/i.test(streamResponse.headers.get("content-type") || "")) {
     fail("stream_headers", "Chat did not return text/event-stream.");
@@ -326,7 +377,7 @@ export async function runLiveStreamSmoke({
   if (streamResponse.headers.get("x-sonsteng-stream") !== "1") {
     fail("stream_headers", "Chat did not return x-sonsteng-stream: 1.");
   }
-  const stream = validateNormalizedStream(streamText);
+  const stream = await readNormalizedStream(streamResponse, secrets);
   assertCredentialAbsent(stream.done, secrets);
 
   const replayResponse = await request(fetchImpl, chatUrl, chatInit, "replay_network");

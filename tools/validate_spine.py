@@ -866,16 +866,21 @@ class Validator:
         if source_path.suffix == ".md":
             spans = []
             build_site.markdown(source_text, spans=spans)
-            spans = [span for span in spans if span.get("bid") == block_id]
-            occurrence = entry.get("locator")
-            if len(spans) == 1:
-                dates = list(DAY_ZERO_FULL_DATE_RE.finditer(spans[0]["raw"]))
-                if (isinstance(occurrence, int) and occurrence < len(dates) and
-                        dates[occurrence].group(0) == literal):
-                    return True
         else:
-            marker = "{#b:%s}" % block_id
-            if marker in source_text and literal in source_text:
+            spans = []
+            try:
+                for value in walk_strings(json.loads(source_text)):
+                    child_spans = []
+                    build_site.markdown(value, spans=child_spans)
+                    spans.extend(child_spans)
+            except (TypeError, json.JSONDecodeError):
+                spans = []
+        spans = [span for span in spans if span.get("bid") == block_id]
+        occurrence = entry.get("locator")
+        if len(spans) == 1:
+            dates = list(DAY_ZERO_FULL_DATE_RE.finditer(spans[0]["raw"]))
+            if (isinstance(occurrence, int) and occurrence < len(dates) and
+                    dates[occurrence].group(0) == literal):
                 return True
         self.report.add(mid, "F30", ERROR,
                         f"{mid} date-offsets {locator} has stale literal/block "
@@ -929,6 +934,7 @@ class Validator:
                             f"does not match matter open_date {anchor}.")
             return
         covered = defaultdict(int)
+        seen_sidecar_identities = set()
         for index, entry in enumerate(sidecar.obj.get("entries", [])):
             literal = parse_date(entry.get("literal"))
             offset = entry.get("day_zero_offset")
@@ -943,8 +949,23 @@ class Validator:
                                 f"{mid} date-offsets {locator} literal {entry.get('literal')} "
                                 f"disagrees with day_zero_offset={offset} "
                                 f"(resolves to {resolved}).")
+            source = self._normal_source(entry.get("source", ""))
+            identity = (
+                source,
+                json.dumps(entry.get("durable_locator"), sort_keys=True,
+                           separators=(",", ":")),
+                entry.get("block_id"),
+                entry.get("locator"),
+                entry.get("literal"),
+            )
+            if identity in seen_sidecar_identities:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} date-offsets {locator} duplicates a prior "
+                                "source identity.")
+                continue
+            seen_sidecar_identities.add(identity)
             if self._resolve_sidecar_source(mid, entry, index):
-                covered[(self._normal_source(entry.get("source", "")), entry.get("literal"))] += 1
+                covered[(source, entry.get("literal"))] += 1
             self.report.record_checked_date(sidecar.path, locator, used_offset=True)
         if self.enforce_day_zero_offsets:
             held_out = defaultdict(int)
