@@ -13,13 +13,27 @@ contract. **Do not deviate without versioning.** Base path: `/v1`.
   `Access-Control-Allow-Origin` echoing the matched allowlisted origin (plus
   `Vary: Origin`). A request from a non-allowlisted origin gets a bare `403`
   with **no** ACAO (the browser blocks it — the allowlist working).
-- **Non-streaming.** Each response is a single JSON body.
+- **Response framing.** Responses are a single JSON body except for
+  `POST /v1/chat` when the deployment-only `STREAMING` flag is enabled. In
+  that case the same v1 client request may receive normalized SSE for any
+  supported provider. The response declares `text/event-stream` and
+  `x-sonsteng-stream: 1`; clients must branch on either header. Streaming is
+  disabled by default and is enabled on DEV only while provider validation is
+  incomplete.
+
+The normalized SSE event contract is provider-independent:
+
+- `delta` carries `{ "text": "..." }`.
+- `done` carries the same successful reply payload as the JSON path, after
+  terminal provider usage and server-side budget settlement complete.
+- `error` carries the ordinary typed error envelope. A transport, terminal
+  frame, or settlement failure emits no `done` and stores no partial replay.
 
 ---
 
 ## BYOK — bring your own key (provider-agnostic)
 
-`POST /v1/chat`, `/v1/debrief`, and `/v1/critique` MAY include:
+`POST /v1/chat`, `/v1/debrief`, `/v1/critique`, and `/v1/memo-assessment` MAY include:
 
 ```json
 { "byok": { "provider": "anthropic", "api_key": "sk-…", "model": "claude-haiku-4-5" } }
@@ -188,6 +202,90 @@ Rubric-based first-pass critique of a pasted deliverable.
 
 ---
 
+## POST /v1/memo-assessment
+
+Formative-only panel assessment of the seven memo headings. A request includes
+`session_token`, `deliverable_text`, and either the ordinary `byok` record or a
+`byok_panel` of supported provider records. The server always supplies the
+canonical assessment instrument.
+
+A true multi-provider panel is explicit and closed:
+
+```json
+{
+  "session_token": "<session>",
+  "deliverable_text": "<memo>",
+  "byok_panel": [
+    { "provider": "anthropic", "api_key": "<key>" },
+    { "provider": "openai", "api_key": "<key>" },
+    { "provider": "google", "api_key": "<key>" }
+  ]
+}
+```
+
+- `byok_panel` contains exactly three explicit credentials: one each for
+  Anthropic, OpenAI, and Google. Duplicate providers fail.
+- `byok_panel` and the ordinary single `byok` record are mutually exclusive.
+- Hosted and ordinary single-BYOK requests run exactly one grader and return
+  `reduced_assurance`; one credential is never fanned out into a synthetic panel.
+
+The request MAY include a locally supplied threshold envelope:
+
+```json
+{
+  "assessment_config": {
+    "schema_version": "memo-assessment-threshold-config/v1",
+    "school": {
+      "id": "school:midstate-local-2026",
+      "competence_score": 4,
+      "redo_eligible_below": 6
+    },
+    "instructor": {
+      "id": "instructor:john-local-2026",
+      "competence_score": 5,
+      "redo_eligible_below": 7
+    }
+  }
+}
+```
+
+- The envelope and each supplied record are closed to unknown fields.
+- Record IDs are stable local claim IDs. Both thresholds are integers 1–7 and
+  `competence_score` cannot exceed `redo_eligible_below`.
+- Resolution is deterministic: instructor > school > canonical default. A
+  present invalid envelope returns `400 validation_error`; it never falls back.
+- A selected school or instructor record is explicitly labelled locally
+  supplied and unverified. It is not evidence of institutional authorization.
+
+**200:**
+
+```json
+{
+  "assessment": {
+    "threshold_configuration": {
+      "schema_version": "memo-assessment-threshold-resolution/v1",
+      "source": "instructor",
+      "source_id": "instructor:john-local-2026",
+      "competence_score": 5,
+      "redo_eligible_below": 7,
+      "resolution": "instructor>school>default",
+      "locally_supplied": true,
+      "authority_status": "claimed_locally_supplied",
+      "verified_institutional_authority": false,
+      "version": "1.1.0",
+      "content_hash": "sha256:…"
+    }
+  },
+  "assessment_audit_id": "memo-assessment-…"
+}
+```
+
+The complete resolved configuration is returned with the result and persisted
+byte-equivalently in audit provenance. Under canonical defaults, score 4 is
+competent and score 5 remains redo-eligible.
+
+---
+
 ## Error envelope (every non-200)
 
 Always JSON, always with CORS headers (for allowlisted origins):
@@ -311,6 +409,37 @@ Same-origin `<a href>`s are rewritten into `/edit` space (HTMLRewriter).
 `notes`, `answer-key`, `key`). Serves the pre-rendered HTML from the instructor
 bundle (already carries `data-ebsrc` anchors), same injection + headers as the
 proxy. **Uniform 404 for BOTH a missing doc AND insufficient scope** (no oracle).
+
+## Assessment signer review (Access-authenticated `damienadmin`)
+
+Every successful `POST /v1/memo-assessment` writes a reconstructable audit record
+before returning. The response includes `assessment_audit_id`; persistence keeps
+the submitted evidence, derived 1–7 section result, provider/config/instrument
+provenance, summative blockers, and a declared retention period (30 days by
+default, bounded to 1–365 by the store). Provider keys and the learner session
+token exist only in the write's request-lifetime `credential_values` redaction
+list and never in stored evidence, provenance, results, responses, or logs.
+
+Assessment reads and overrides are deliberately narrower than general editor or
+admin authority. Only the existing human `damienadmin` context, authenticated on
+the Access hostname and currently holding both `admin` and `instructor`, is
+mapped at the endpoint to the store's literal `assessment-review` capability.
+Cookie, bearer, service, admin-token, John, and Roger contexts do not receive
+that capability. Under-scoped and unknown-id probes return the same uniform 404.
+
+- `GET /edit/assessments/<assessment_audit_id>` renders the section results,
+  provider/config/instrument provenance, raw evidence, and attributed override
+  history together. It states at the point of reading that 4 is competent and 5
+  remains redo-eligible under the default below-6 rule. The view never performs
+  a letter translation.
+- `GET /edit/v1/assessment?id=<assessment_audit_id>` returns the same protected
+  audit record as JSON.
+- `POST /edit/v1/assessment-override` is CSRF-guarded and accepts
+  `{id, assessment_id, heading_id, score, note}`. The heading must be one of the
+  canonical seven, score must be an integer 1–7, and the reason is required.
+  `author` is ignored; the endpoint stamps the current server-resolved identity
+  and the store stamps server time. Overrides are append-only and idempotent by
+  `id`.
 
 ## `POST /edit/v1/suggest` (edit OR instructor scope)
 
