@@ -18,6 +18,8 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+export const PROVIDER_TIMEOUT_MS = 60_000;
+
 // buildReq: () => { url, headers, body }   (body = plain object, JSON-encoded here)
 // parseResp: (data) => { text, usage }     (usage normalized to the Anthropic
 //                                           field names: input_tokens,
@@ -30,6 +32,7 @@ export async function completeWithRetry(buildReq, parseResp) {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
   };
 

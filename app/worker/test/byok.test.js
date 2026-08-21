@@ -6,7 +6,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { resolveUpstream, providerModelConfig } from "../src/byok.js";
+import { resolveUpstream, resolvePanelUpstreams, providerModelConfig } from "../src/byok.js";
 
 const ENV = {
   ANTHROPIC_API_KEY: "sk-hosted-key",
@@ -76,6 +76,49 @@ test("model config comes from env vars, with safe fallbacks", () => {
   assert.equal(cfg.google.default, "gemini-2.0-flash");
   const custom = providerModelConfig({ MODEL_ALLOW_GOOGLE: "a,b , c" });
   assert.deepEqual(custom.google.allow, ["a", "b", "c"]);
+});
+
+test("panel resolution never multiplies one hosted or BYOK key into synthetic graders", () => {
+  const hosted = resolvePanelUpstreams(ENV, {});
+  assert.equal(hosted.ok, true);
+  assert.equal(hosted.graders.length, 1);
+  assert.equal(hosted.graders[0].mode, "hosted");
+
+  const single = resolvePanelUpstreams(ENV, {
+    byok: { provider: "openai", api_key: "single-key-12345" },
+  });
+  assert.equal(single.ok, true);
+  assert.equal(single.graders.length, 1);
+  assert.equal(single.graders[0].provider, "openai");
+});
+
+test("a multi-provider panel requires distinct, valid explicit BYOK providers", () => {
+  const panel = resolvePanelUpstreams(ENV, {
+    byokPanel: [
+      { provider: "anthropic", api_key: "anthropic-key-123" },
+      { provider: "openai", api_key: "openai-key-12345" },
+      { provider: "google", api_key: "google-key-12345" },
+    ],
+  });
+  assert.equal(panel.ok, true);
+  assert.equal(panel.graders.length, 3);
+
+  const duplicate = resolvePanelUpstreams(ENV, {
+    byokPanel: [
+      { provider: "openai", api_key: "openai-key-12345" },
+      { provider: "openai", api_key: "another-key-123" },
+      { provider: "google", api_key: "google-key-12345" },
+    ],
+  });
+  assert.equal(duplicate.ok, false);
+  assert.match(duplicate.message, /distinct providers/i);
+
+  assert.equal(resolvePanelUpstreams(ENV, { byok: {}, byokPanel: [] }).ok, false);
+  assert.equal(resolvePanelUpstreams(ENV, { byokPanel: [{ provider: "openai", api_key: "one-key-12345" }] }).ok, false);
+  assert.equal(resolvePanelUpstreams(ENV, { byokPanel: [
+    { provider: "openai", api_key: "one-key-12345" },
+    { provider: "google", api_key: "two-key-12345" },
+  ] }).ok, false);
 });
 
 // ---- Key-never-logged guarantee (source scan) -------------------------------

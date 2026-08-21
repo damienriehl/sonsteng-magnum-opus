@@ -1,0 +1,19 @@
+.as-review{max-width:72rem;margin:0 auto;padding:1.5rem 1.25rem 4rem}
+.as-head{border-bottom:2px solid var(--pp-accent);margin:1rem 0 1.5rem}
+.as-eyebrow{text-transform:uppercase;letter-spacing:.1em;font-size:.78rem;font-weight:700}
+.as-rule,.as-provenance,.as-evidence,.as-override{border:1px solid var(--pp-rule);border-radius:8px;padding:1rem;margin:1rem 0;background:#fff}
+.as-heading{border:1px solid var(--pp-rule);border-radius:8px;margin:1rem 0;background:#fff;overflow:hidden}
+.as-heading>header{display:flex;align-items:center;justify-content:space-between;gap:1rem;background:#f3ecdd;padding:.7rem 1rem}
+.as-heading>header h3,.as-heading>header p{margin:0}.as-heading>p,.as-heading>details,.as-result-meta{margin:1rem}
+.as-score{font-weight:700;font-size:1.15rem;white-space:nowrap}
+.as-result-meta{display:flex;gap:1rem}.as-result-meta div{min-width:6rem}.as-result-meta dt{font-size:.75rem;text-transform:uppercase}.as-result-meta dd{margin:0;font-weight:700}
+.as-heading details ol{padding-left:1.5rem}.as-heading details li+li{border-top:1px solid var(--pp-rule)}
+.as-provider{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;color:#5c5346}
+.as-review pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#faf7f0;border:1px solid var(--pp-rule);border-radius:6px;padding:.75rem;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.as-override form{display:grid;grid-template-columns:minmax(12rem,20rem) minmax(12rem,20rem);gap:.4rem 1rem;align-items:end}
+.as-override label{font-weight:700}.as-override select,.as-override textarea{font:inherit;width:100%;padding:.55rem;border:1px solid #675c4d;border-radius:5px;background:#fff;color:var(--pp-ink)}
+.as-override textarea{grid-column:1/-1;min-height:7rem;resize:vertical}.as-override label[for="assessment-note"]{grid-column:1/-1}
+.as-override button{font:inherit;min-height:44px;padding:.55rem 1rem;border:1px solid var(--pp-accent);border-radius:5px;background:var(--pp-accent);color:#fff;justify-self:start}
+.as-override button:disabled{opacity:.6}.as-review :focus-visible{outline:3px solid var(--pp-focus);outline-offset:3px}
+#assessment-override-status:focus{outline:none}
+@media (max-width:640px){.as-review{padding:1rem .65rem 3rem}.as-heading>header{align-items:flex-start}.as-override form{grid-template-columns:1fr}.as-override textarea,.as-override label[for="assessment-note"]{grid-column:1}.as-override button{width:100%}}

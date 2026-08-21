@@ -33,8 +33,12 @@ export class BudgetCounter extends DurableObject {
     return this.core.settle(sid, usage, turnId, result);
   }
 
-  rollback(sid, turnId) {
-    return this.core.rollback(sid, turnId);
+  fail(sid, usage, turnId, personaId) {
+    return this.core.fail(sid, usage, turnId, personaId);
+  }
+
+  rollback(sid, turnId, personaId) {
+    return this.core.rollback(sid, turnId, personaId);
   }
 
   committedTurnsForPersona(sid, personaId) {
@@ -47,5 +51,17 @@ export class BudgetCounter extends DurableObject {
 
   checkPool(pool, capPublicCents, capDemoCents) {
     return this.core.checkPool(pool, capPublicCents, capDemoCents);
+  }
+
+  claimAssessmentRequest(sid, maxRequests) {
+    return this.core.claimAssessmentRequest(sid, maxRequests);
+  }
+
+  reserveOneShot(id, opts) {
+    return this.core.reserveOneShot(id, opts);
+  }
+
+  settleOneShot(id, usage) {
+    return this.core.settleOneShot(id, usage);
   }
 }

@@ -147,10 +147,12 @@ SCHEMA_FILES = {
     "firm": "firm.schema.json",
     "debrief_scorecard": "debrief.scorecard.schema.json",
     "critique_scorecard": "critique.scorecard.schema.json",
+    "memo_scorecard": "memo-scorecard.schema.json",
     "page_copy": "page-copy.schema.json",
     "date_offsets": "date-offsets.schema.json",
     "day_zero_audit": "day-zero-audit.schema.json",
     "day_zero_holdouts": "day-zero-holdouts.schema.json",
+    "assessment_instrument": "assessment-instrument.schema.json",
 }
 
 # Depth-floor minimums (docs/content-style-guide.md §3).
@@ -407,6 +409,7 @@ class World:
         self.tasks: dict[str, Loaded] = {}
         self.page_copies: list[Loaded] = []
         self.day_zero_artifacts: list[Loaded] = []
+        self.assessment_instruments: list[Loaded] = []
         self.matters: dict[str, MatterBundle] = {}
         self.meridian_reserved: set[str] = set()  # surnames of judges/counties/cities
         self.load_errors: list[tuple[Path, str]] = []
@@ -447,6 +450,19 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             else:
                 world.day_zero_artifacts.append(Loaded(artifact_path, obj, etype))
 
+    # Curriculum assessment instruments are global spine contracts. Their
+    # human-readable ids intentionally do not share a matter entity pattern,
+    # so load them explicitly instead of relying on classify().
+    assessment_path = data_dir / "curriculum" / "assessment-instrument.json"
+    if assessment_path.exists():
+        obj, err = read_json(assessment_path)
+        if err:
+            world.load_errors.append((assessment_path, err))
+        else:
+            world.assessment_instruments.append(
+                Loaded(assessment_path, obj, "assessment_instrument")
+            )
+
     # matter registry
     reg_path = data_dir / "matters" / "manifest.json"
     if reg_path.exists():
@@ -486,7 +502,7 @@ def discover(data_dir: Path, only_matter: str | None) -> World:
             if not fname.endswith(".json"):
                 continue
             fpath = rootp / fname
-            if fpath in (sm_path, reg_path, mer_path):
+            if fpath in (sm_path, reg_path, mer_path, assessment_path):
                 continue
             if fpath.name in {"day-zero-anchor-audit.json", "day-zero-holdouts.json"}:
                 continue  # loaded explicitly above with their non-entity schema types
@@ -924,6 +940,7 @@ class Validator:
         loaded.extend(self.world.tasks.values())
         loaded.extend(self.world.page_copies)
         loaded.extend(self.world.day_zero_artifacts)
+        loaded.extend(self.world.assessment_instruments)
         for b in self.world.matters.values():
             loaded.extend([x for x in (b.matter, b.rubric, b.exercise, b.business) if x])
             if b.date_offsets:

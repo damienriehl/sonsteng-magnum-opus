@@ -33,6 +33,12 @@ export function buildRequest({ system, messages, maxTokens, providerCfg }) {
   };
 }
 
+export function buildStreamingRequest(opts) {
+  const request = buildRequest(opts);
+  request.url = request.url.replace(/:generateContent$/, ":streamGenerateContent?alt=sse");
+  return request;
+}
+
 // Pure response parser: normalize usageMetadata to the canonical field names.
 export function parseResponse(data) {
   const cand = (data.candidates || [])[0] || {};

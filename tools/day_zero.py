@@ -393,6 +393,58 @@ def _reconcile_full_date_inventory(repo: Path, result: Result):
                            % (actual, expected))
 
 
+def governed_reports(repo: Path, result: Result):
+    """Build deterministic review reports, applying a recorded approval when present."""
+    audit = {
+        "schema_version": "1.0.0",
+        "description": "Human-review record of every proposed Day Zero conversion. No corpus source file was rewritten to produce this artifact.",
+        "method": "An independent raw census scans matters, curriculum, and jurisdictions. Occurrences are reconciled by deterministic (source, literal, occurrence) counters so duplicates remain distinct; every valid full date is converted, held out, or listed under attention_required. ISO-looking substrings embedded in longer identifiers are listed separately as excluded_non_dates. Each matter uses its existing open_date; offsets are signed calendar-day differences parsed with datetime.strptime. Renderer block spans bind prose dates to durable IDs.",
+        "summary": {
+            "converted_dates": result.converted_dates,
+            "proof_records": result.proof_records,
+            "iso_dates_in_inventory": result.iso_dates,
+            "iso_like_raw_occurrences": result.iso_like_raw_occurrences,
+            "long_form_dates_in_inventory": result.long_form_dates,
+            "full_date_inventory_total": result.iso_dates + result.long_form_dates,
+            "full_date_holdouts": result.full_date_holdouts,
+            "holdout_candidates": len(result.holdouts),
+            "attention_required": len(result.unclassified),
+            "reconciled_category_total": (
+                result.converted_dates + result.full_date_holdouts + len(result.unclassified)
+            ),
+        },
+        "matter_anchors": result.matter_anchors,
+        "excluded_non_dates": result.excluded_non_dates,
+        "attention_required": result.unclassified,
+        "entries": result.audit,
+    }
+    reason_counts = Counter(row["reason"] for row in result.holdouts)
+    holdouts = {
+        "schema_version": "1.0.0",
+        "description": "Candidate fixed facts excluded from automatic Day Zero conversion pending human review.",
+        "method": "Conservative deterministic classification: bare years, case-citation years, and dates in statutory/effective-date context are held out.",
+        "summary": {
+            "count": len(result.holdouts),
+            "by_reason": dict(reason_counts),
+        },
+        "entries": [
+            dict(row, review_status="candidate_pending_human_review")
+            for row in result.holdouts
+        ],
+    }
+    approval = repo / "docs" / "decisions" / "2026-08-17-day-zero-review-approval.md"
+    if approval.is_file():
+        import apply_day_zero_review
+
+        proposal_path = repo / apply_day_zero_review.PROPOSAL_REL
+        proposal = json.loads(proposal_path.read_text())
+        apply_day_zero_review._approval_digest(repo, proposal_path)
+        holdouts, audit = apply_day_zero_review.apply_review(
+            repo, proposal, holdouts, audit
+        )
+    return holdouts, audit
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
@@ -409,46 +461,25 @@ def main() -> int:
         result.file_proofs, result.date_proofs,
         converted_date_count=result.converted_dates,
     )
+    holdout_report, audit_report = governed_reports(args.repo, result)
     if args.audit_output:
-        args.audit_output.write_text(json.dumps({"schema_version": "1.0.0",
-                                                 "description": "Human-review record of every proposed Day Zero conversion. No corpus source file was rewritten to produce this artifact.",
-                                                 "method": "An independent raw census scans matters, curriculum, and jurisdictions. Occurrences are reconciled by deterministic (source, literal, occurrence) counters so duplicates remain distinct; every valid full date is converted, held out, or listed under attention_required. ISO-looking substrings embedded in longer identifiers are listed separately as excluded_non_dates. Each matter uses its existing open_date; offsets are signed calendar-day differences parsed with datetime.strptime. Renderer block spans bind prose dates to durable IDs.",
-                                                 "summary": {"converted_dates": result.converted_dates,
-                                                             "proof_records": result.proof_records,
-                                                             "iso_dates_in_inventory": result.iso_dates,
-                                                             "iso_like_raw_occurrences": result.iso_like_raw_occurrences,
-                                                             "long_form_dates_in_inventory": result.long_form_dates,
-                                                             "full_date_inventory_total": result.iso_dates + result.long_form_dates,
-                                                             "full_date_holdouts": result.full_date_holdouts,
-                                                             "holdout_candidates": len(result.holdouts),
-                                                             "attention_required": len(result.unclassified),
-                                                             "reconciled_category_total": result.converted_dates + result.full_date_holdouts + len(result.unclassified)},
-                                                 "matter_anchors": result.matter_anchors,
-                                                 "excluded_non_dates": result.excluded_non_dates,
-                                                 "attention_required": result.unclassified,
-                                                 "entries": result.audit}, indent=2) + "\n")
+        args.audit_output.write_text(json.dumps(audit_report, indent=2, ensure_ascii=False) + "\n")
     if args.holdouts_output:
-        reason_counts = {}
-        for row in result.holdouts:
-            reason_counts[row["reason"]] = reason_counts.get(row["reason"], 0) + 1
-        reviewed_holdouts = [dict(row, review_status="candidate_pending_human_review") for row in result.holdouts]
-        args.holdouts_output.write_text(json.dumps({"schema_version": "1.0.0",
-                                                    "description": "Candidate fixed facts excluded from automatic Day Zero conversion pending human review.",
-                                                    "method": "Conservative deterministic classification: bare years, case-citation years, and dates in statutory/effective-date context are held out.",
-                                                    "summary": {"count": len(result.holdouts),
-                                                                "by_reason": reason_counts},
-                                                    "entries": reviewed_holdouts}, indent=2) + "\n")
-    print(json.dumps({"mode": "write" if args.write else "dry-run", "converted_dates": result.converted_dates,
-                      "proof_records": result.proof_records, "holdouts": len(result.holdouts),
-                      "unclassified": len(result.unclassified), "touched_files": len(result.touched_files),
+        args.holdouts_output.write_text(json.dumps(holdout_report, indent=2, ensure_ascii=False) + "\n")
+    print(json.dumps({"mode": "write" if args.write else "dry-run",
+                      "converted_dates": audit_report["summary"]["converted_dates"],
+                      "proof_records": audit_report["summary"]["proof_records"],
+                      "holdouts": holdout_report["summary"]["count"],
+                      "unclassified": audit_report["summary"]["attention_required"],
+                      "touched_files": len(result.touched_files),
                       "iso_dates": result.iso_dates, "long_form_dates": result.long_form_dates,
                       "iso_like_raw_occurrences": result.iso_like_raw_occurrences,
                       "excluded_non_dates": len(result.excluded_non_dates),
-                      "full_date_holdouts": result.full_date_holdouts,
+                      "full_date_holdouts": audit_report["summary"]["full_date_holdouts"],
                       "inventory_total": result.iso_dates + result.long_form_dates,
                       "reconciled_total": result.converted_dates + result.full_date_holdouts + len(result.unclassified)}))
-    if result.unclassified:
-        print(json.dumps({"unclassified_dates": result.unclassified}, indent=2))
+    if audit_report["attention_required"]:
+        print(json.dumps({"unclassified_dates": audit_report["attention_required"]}, indent=2))
     return 0
 
 

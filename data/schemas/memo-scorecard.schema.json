@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/memo-scorecard.schema.json",
+  "title": "Memo heading scorecard",
+  "description": "Evidence-grounded evaluator output for the seven-heading, integer 1-7 memo assessment. No overall score or letter-grade field is accepted.",
+  "version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "instrument_id",
+    "instrument_version",
+    "instrument_content_hash",
+    "headings"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "instrument_id": { "const": "memo-seven-heading-1-7" },
+    "instrument_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "instrument_content_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "headings": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/heading_result" },
+      "allOf": [
+        { "contains": { "properties": { "heading_id": { "const": "governing_law" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "strengths_and_weaknesses_both_sides" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "issues" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "suggested_solutions" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "theory_and_themes" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "elements_to_prevail" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "heading_id": { "const": "liabilities_and_remedies" } }, "required": ["heading_id"] }, "minContains": 1, "maxContains": 1 }
+      ]
+    }
+  },
+  "$defs": {
+    "heading_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading_id", "evidence_spans", "rationale", "score"],
+      "properties": {
+        "heading_id": {
+          "enum": [
+            "governing_law",
+            "strengths_and_weaknesses_both_sides",
+            "issues",
+            "suggested_solutions",
+            "theory_and_themes",
+            "elements_to_prevail",
+            "liabilities_and_remedies"
+          ]
+        },
+        "evidence_spans": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "rationale": { "type": "string", "minLength": 1 },
+        "score": { "enum": [1, 2, 3, 4, 5, 6, 7] }
+      }
+    }
+  }
+}

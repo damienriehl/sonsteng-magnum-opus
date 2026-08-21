@@ -85,14 +85,15 @@
     "DEMO_RESERVE_USD": "3",
     "MAX_TURNS": "20",
     "MAX_SESSIONS_PER_DAY": "200",
+    "MAX_ASSESSMENTS_PER_SESSION_DAY": "20",
 
     // STREAMING: SSE token streaming for POST /v1/chat (docs/research/
     // worker-llm-facts.md §4). "false" = the DEFAULT non-streaming path (one
     // JSON response; client shows a typing indicator). "true" proxies the
-    // provider's SSE through a TransformStream, capturing usage server-side from
-    // the terminal message_delta so all budget/replay bookkeeping is identical.
-    // Anthropic-only; OpenAI/Google BYOK fall back to non-streaming. Enabled on
-    // DEV for U19 validation; production remains explicitly OFF.
+    // provider's SSE through a TransformStream, capturing each provider's
+    // terminal usage so budget/replay bookkeeping stays identical. Supported
+    // for Anthropic, OpenAI, and Google BYOK. Enabled on DEV for U19 validation;
+    // production remains explicitly OFF.
     "STREAMING": "true",
 
     // ---- Turnstile bot-gate (WP6) ------------------------------------------
@@ -193,6 +194,7 @@
         "DEMO_RESERVE_USD": "3",
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
+        "MAX_ASSESSMENTS_PER_SESSION_DAY": "20",
         "STREAMING": "true",
         "TURNSTILE_ENABLED": "true",
         "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
@@ -255,6 +257,7 @@
         "DEMO_RESERVE_USD": "3",
         "MAX_TURNS": "20",
         "MAX_SESSIONS_PER_DAY": "200",
+        "MAX_ASSESSMENTS_PER_SESSION_DAY": "20",
         "STREAMING": "false",
         // Bot-gate ON in PROD too; the widget's domain list already covers
         // sonsteng.damienriehl.com, so no new widget at enable time — but PROD

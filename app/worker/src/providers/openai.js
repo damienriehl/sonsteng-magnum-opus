@@ -25,6 +25,13 @@ export function buildRequest({ system, messages, maxTokens, providerCfg }) {
   };
 }
 
+export function buildStreamingRequest(opts) {
+  const request = buildRequest(opts);
+  request.body.stream = true;
+  request.body.stream_options = { include_usage: true };
+  return request;
+}
+
 // Pure response parser: normalize usage to the canonical field names.
 export function parseResponse(data) {
   const choice = (data.choices || [])[0] || {};

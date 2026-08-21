@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonsteng.damienriehl.com/spine/schemas/assessment-instrument.schema.json",
+  "title": "Memo assessment instrument",
+  "description": "The single versioned contract that routes memo deliverables to seven heading-level 1-7 competency scores and keeps weighted rubrics for non-memo and legacy exercises.",
+  "version": "1.1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "schema_version", "instrument_version", "content_hash", "content"],
+  "properties": {
+    "id": { "const": "memo-seven-heading-1-7" },
+    "schema_version": { "const": "1.1.0" },
+    "instrument_version": { "const": "1.1.0" },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 of content encoded as UTF-8 canonical JSON (sorted keys, compact separators, Unicode preserved)."
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "dimensions",
+        "scale",
+        "thresholds",
+        "layering",
+        "assessment_resolution",
+        "legacy_weighted_rubric_relationship",
+        "presentation"
+      ],
+      "properties": {
+        "title": { "const": "Seven-heading memo competency assessment" },
+        "dimensions": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "prefixItems": [
+            { "$ref": "#/$defs/governing_law" },
+            { "$ref": "#/$defs/strengths_and_weaknesses_both_sides" },
+            { "$ref": "#/$defs/issues" },
+            { "$ref": "#/$defs/suggested_solutions" },
+            { "$ref": "#/$defs/theory_and_themes" },
+            { "$ref": "#/$defs/elements_to_prevail" },
+            { "$ref": "#/$defs/liabilities_and_remedies" }
+          ],
+          "items": false
+        },
+        "scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "minimum", "maximum", "bands"],
+          "properties": {
+            "type": { "const": "integer_section_score_1_to_7" },
+            "minimum": { "const": 1 },
+            "maximum": { "const": 7 },
+            "bands": {
+              "type": "array",
+              "minItems": 7,
+              "maxItems": 7,
+              "prefixItems": [
+                { "$ref": "#/$defs/band_1" },
+                { "$ref": "#/$defs/band_2" },
+                { "$ref": "#/$defs/band_3" },
+                { "$ref": "#/$defs/band_4" },
+                { "$ref": "#/$defs/band_5" },
+                { "$ref": "#/$defs/band_6" },
+                { "$ref": "#/$defs/band_7" }
+              ],
+              "items": false
+            }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "default_competence_score",
+            "default_redo_eligible_below",
+            "configuration_precedence"
+          ],
+          "properties": {
+            "default_competence_score": { "const": 4 },
+            "default_redo_eligible_below": { "const": 6 },
+            "configuration_precedence": {
+              "const": ["instructor", "school", "default"]
+            }
+          }
+        },
+        "layering": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_layer", "later_panel_requirements"],
+          "properties": {
+            "base_layer": { "const": "august_assessment_wave" },
+            "later_panel_requirements": { "const": "build_on_base" }
+          }
+        },
+        "assessment_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["routes", "fallback_contract"],
+          "properties": {
+            "routes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "prefixItems": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["deliverable_types", "assessment_contract"],
+                  "properties": {
+                    "deliverable_types": { "const": ["memo"] },
+                    "assessment_contract": { "const": "memo-seven-heading-1-7" }
+                  }
+                }
+              ],
+              "items": false
+            },
+            "fallback_contract": { "const": "legacy_weighted_rubric" }
+          }
+        },
+        "legacy_weighted_rubric_relationship": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["applies_to", "preserved_fields", "memo_score_effect"],
+          "properties": {
+            "applies_to": { "const": ["non_memo", "legacy_exercise"] },
+            "preserved_fields": {
+              "const": ["criteria", "declared_total", "letter_grade_map"]
+            },
+            "memo_score_effect": { "const": "none" }
+          }
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["score_4_label", "letter_grade_translation"],
+          "properties": {
+            "score_4_label": { "const": "competent" },
+            "letter_grade_translation": { "const": "prohibited" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "heading", "band_descriptors"],
+      "properties": {
+        "id": { "type": "string" },
+        "heading": { "type": "string" },
+        "band_descriptors": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "prefixItems": [
+            { "$ref": "#/$defs/heading_band_1" },
+            { "$ref": "#/$defs/heading_band_2" },
+            { "$ref": "#/$defs/heading_band_3" },
+            { "$ref": "#/$defs/heading_band_4" },
+            { "$ref": "#/$defs/heading_band_5" },
+            { "$ref": "#/$defs/heading_band_6" },
+            { "$ref": "#/$defs/heading_band_7" }
+          ],
+          "items": false
+        }
+      }
+    },
+    "governing_law": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "governing_law" }, "heading": { "const": "Governing law" } } }
+      ]
+    },
+    "strengths_and_weaknesses_both_sides": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "strengths_and_weaknesses_both_sides" }, "heading": { "const": "Strengths and weaknesses of both sides" } } }
+      ]
+    },
+    "issues": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "issues" }, "heading": { "const": "Issues" } } }
+      ]
+    },
+    "suggested_solutions": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "suggested_solutions" }, "heading": { "const": "Suggested solutions" } } }
+      ]
+    },
+    "theory_and_themes": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "theory_and_themes" }, "heading": { "const": "Theory and themes" } } }
+      ]
+    },
+    "elements_to_prevail": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "elements_to_prevail" }, "heading": { "const": "Elements to prevail" } } }
+      ]
+    },
+    "liabilities_and_remedies": {
+      "allOf": [
+        { "$ref": "#/$defs/dimension" },
+        { "properties": { "id": { "const": "liabilities_and_remedies" }, "heading": { "const": "Liabilities and remedies" } } }
+      ]
+    },
+    "band": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "descriptor"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "descriptor": { "type": "string", "minLength": 1 }
+      }
+    },
+    "band_1": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 1 } } }] },
+    "band_2": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 2 } } }] },
+    "band_3": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 3 } } }] },
+    "band_4": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 4 } } }] },
+    "band_5": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 5 } } }] },
+    "band_6": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 6 } } }] },
+    "band_7": { "allOf": [{ "$ref": "#/$defs/band" }, { "properties": { "score": { "const": 7 } } }] },
+    "heading_band": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "progression_stage", "descriptor"],
+      "properties": {
+        "score": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "progression_stage": {
+          "enum": ["absent", "minimal", "developing", "competent", "accomplished", "strong", "exceptional"]
+        },
+        "descriptor": { "type": "string", "minLength": 1 }
+      }
+    },
+    "heading_band_1": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 1 }, "progression_stage": { "const": "absent" } } }] },
+    "heading_band_2": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 2 }, "progression_stage": { "const": "minimal" } } }] },
+    "heading_band_3": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 3 }, "progression_stage": { "const": "developing" } } }] },
+    "heading_band_4": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 4 }, "progression_stage": { "const": "competent" } } }] },
+    "heading_band_5": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 5 }, "progression_stage": { "const": "accomplished" } } }] },
+    "heading_band_6": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 6 }, "progression_stage": { "const": "strong" } } }] },
+    "heading_band_7": { "allOf": [{ "$ref": "#/$defs/heading_band" }, { "properties": { "score": { "const": 7 }, "progression_stage": { "const": "exceptional" } } }] }
+  }
+}

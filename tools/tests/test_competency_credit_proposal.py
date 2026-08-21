@@ -73,31 +73,26 @@ def test_every_synthetic_output_is_explicitly_illustrative() -> None:
 
     assert synthetic_result_headings
     assert all("ILLUSTRATIVE" in line for line in synthetic_result_headings)
-    assert "complete `weekly-hours/v1` CSV export" in text
-    assert "complete `assessment-attempts/v1` CSV export" in text
-    assert "exact-token inner join and reconciliation" in text
-    assert "case-sensitive UTF-8 lexical order selects `b1`" in text
+    assert "current `weekly-hours-log` shape" in text
+    assert "future study projection from current audit fields" in text
+    assert "deliverable/entry join and reconciliation" in text
+    assert "case-sensitive `assessment_audit_id`" in text
     normalized_text = normalized_proposal_text()
     assert (
-        "primary final-score analysis requires exactly one remaining attempt whose "
-        "`is_final_attempt` value is boolean `true`"
+        "every eligible attempt contains all seven unique heading ids and seven integer "
+        "scores"
     ) in normalized_text
     assert (
-        "with zero or more than one such attempt, exclude that token from primary "
-        "final-score and competence analyses"
+        "an attempt missing a heading, containing a duplicate heading, or carrying a "
+        "score outside 1–7 is missing"
     ) in normalized_text
     assert (
-        "break an equal timestamp tie by the lexicographically smallest case-sensitive "
-        "utf-8 `attempt_id`"
+        "break equal `record.created_at` values by the lexicographically smallest "
+        "case-sensitive `assessment_audit_id`"
     ) in normalized_text
-    assert "`2 + 3 = 5`" in text
-    assert "`1 + 2 = 3`" in text
-    assert "`3 / 5 = 0.60`" in text
-    assert "`2 / 4 = 0.50`" in text
-    assert "worked hours total `5 + 4 = 9`" in text
-    assert "billable hours total\n`3 + 2 = 5`" in text
-    assert "final-score points total `4 + 5 = 9`" in text
-    assert "attempt count totals `2 + 2 = 4`" in text
+    assert "`entry-a1`" in text
+    assert "`deliverable-t1`" in text
+    assert "`assessment-a2`" in text
 
 
 def test_proposal_makes_no_causal_claim() -> None:
@@ -105,3 +100,87 @@ def test_proposal_makes_no_causal_claim() -> None:
 
     assert "does not establish causation" in text
     assert "no causal claim" in text
+
+
+def test_future_attempt_projection_binds_to_current_assessment_audit() -> None:
+    text = normalized_proposal_text()
+
+    for required in (
+        "versioned future study projection",
+        "does not claim that the runtime currently exports",
+        "no parallel production schema",
+        "`assessment_audit_id` = `record.id`",
+        "`attempted_at` = `record.created_at`",
+        "`record.result.headings`",
+        "exactly seven unique `heading_id` and integer `score` pairs",
+        "`record.provenance.config`",
+        "`record.provenance.instrument`",
+        "`record.provenance.providers`",
+        "task/deliverable id",
+    ):
+        assert required in text
+
+    assert "legacy audit records without that identifier are missing" in text
+
+
+def test_proposal_defines_all_task_progress_measures_and_missingness() -> None:
+    text = normalized_proposal_text()
+
+    for required in (
+        "time-to-first-competence",
+        "time-to-six",
+        "attempts-to-competence",
+        "task-level uncertainty",
+        "all seven heading scores",
+        "score >= the attempt's resolved competence threshold",
+        "score >= 6",
+        "right-censored",
+        "missing, not zero",
+        "n = k + f",
+        "p-hat = k / n",
+        "wilson 95% interval",
+    ):
+        assert required in text
+
+    assert (
+        "`contribution_log[].deliverable_id` = the assessment task/deliverable id"
+    ) in text
+    assert (
+        "`contribution_log[].related_entry_ids` -> `entries[].id`"
+    ) in text
+    assert "count each linked entry id once per task" in text
+    assert "linked to more than one deliverable" in text
+
+
+def test_synthetic_example_recomputes_progress_measures_and_uncertainty() -> None:
+    text = proposal_text()
+
+    for required in (
+        "Illustrative time-to-first-competence",
+        "Illustrative time-to-six",
+        "Illustrative attempts-to-competence",
+        "Illustrative task-level uncertainty",
+        "`2 + 3 = 5.0`",
+        "`1 + 1 = 2`",
+        "`1 / 2 = 0.50`",
+        "`0.0945`",
+        "`0.9055`",
+    ):
+        assert required in text
+
+
+def test_future_data_checklist_and_school_credit_authority_are_explicit() -> None:
+    text = normalized_proposal_text()
+
+    for required in (
+        "consent",
+        "retention",
+        "missingness",
+        "selection bias",
+        "instructor effects",
+        "provider/model effects",
+        "task difficulty",
+        "causal limits",
+        "schools set credits until evidence supports any different policy",
+    ):
+        assert required in text

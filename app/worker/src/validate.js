@@ -12,6 +12,17 @@ const PERSONA = /^m\d{2}\.per\.[a-z0-9-]+$/;
 const FACT = /^m\d{2}\.fact\.\d{3}$/;
 const RUBRIC = /^m\d{2}\.rub$/;
 const CRITERION = /^m\d{2}\.rub\.c\d{2}(\.s\d{2})*$/;
+const SHA256 = /^sha256:[0-9a-f]{64}$/;
+export const MEMO_HEADING_IDS = Object.freeze([
+  "governing_law",
+  "strengths_and_weaknesses_both_sides",
+  "issues",
+  "suggested_solutions",
+  "theory_and_themes",
+  "elements_to_prevail",
+  "liabilities_and_remedies",
+]);
+export const MEMO_HEADING_SET = new Set(MEMO_HEADING_IDS);
 const TRIGGERS = new Set([
   "open_ended_invitation", "wellbeing_question", "acknowledged_emotion",
   "no_interruption_streak", "confidentiality_reassurance", "nonjudgmental_response",
@@ -107,6 +118,108 @@ export function validateCritiqueScorecard(o) {
   if (!isStr(o.revise_resubmit_note)) e.push("revise_resubmit_note must be a string");
 
   return { ok: e.length === 0, errors: e };
+}
+
+// Validate and canonicalize one grader's seven-heading memo output. This check
+// intentionally needs the ORIGINAL submission: shape validation alone cannot
+// establish that an evidence quote is real. A canonical scorecard is returned
+// only after every heading has a unique id, an integer 1-7 score, and at least
+// one exact (case-, punctuation-, and whitespace-sensitive) submission span.
+// Unknown fields fail closed, so model-authored totals, overall scores, weights,
+// and letter grades never become displayable result data.
+export function validateMemoScorecard(o, submission, instrument) {
+  const e = [];
+  if (!isObj(o)) return { ok: false, errors: ["root must be an object"] };
+  if (!isStr(submission)) return { ok: false, errors: ["submission must be a string"] };
+  if (!isObj(instrument) || instrument.id !== "memo-seven-heading-1-7" ||
+      !SEMVER.test(instrument.instrument_version || "") ||
+      !SHA256.test(instrument.content_hash || ""))
+    return { ok: false, errors: ["canonical instrument invalid"] };
+
+  const rootKeys = new Set([
+    "schema_version", "instrument_id", "instrument_version",
+    "instrument_content_hash", "headings",
+  ]);
+  for (const key of Object.keys(o)) {
+    if (!rootKeys.has(key)) e.push(`${key} is unexpected`);
+  }
+  if (o.schema_version !== "1.0.0") e.push("schema_version must be 1.0.0");
+  if (o.instrument_id !== "memo-seven-heading-1-7")
+    e.push("instrument_id invalid");
+  if (!SEMVER.test(o.instrument_version || "") ||
+      o.instrument_version !== instrument.instrument_version)
+    e.push("instrument_version does not match the canonical instrument");
+  if (!SHA256.test(o.instrument_content_hash || "") ||
+      o.instrument_content_hash !== instrument.content_hash)
+    e.push("instrument_content_hash does not match the canonical instrument");
+
+  const seen = new Set();
+  if (!isArr(o.headings) || o.headings.length !== MEMO_HEADING_IDS.length) {
+    e.push("headings must contain exactly 7 results");
+  } else {
+    o.headings.forEach((heading, i) => {
+      const path = `headings[${i}]`;
+      if (!isObj(heading)) {
+        e.push(`${path} must be an object`);
+        return;
+      }
+      const headingKeys = new Set(["heading_id", "evidence_spans", "rationale", "score"]);
+      for (const key of Object.keys(heading)) {
+        if (!headingKeys.has(key)) e.push(`${path}.${key} is unexpected`);
+      }
+      if (!MEMO_HEADING_SET.has(heading.heading_id)) {
+        e.push(`${path}.heading_id invalid`);
+      } else if (seen.has(heading.heading_id)) {
+        e.push(`${path}.heading_id duplicate: ${heading.heading_id}`);
+      } else {
+        seen.add(heading.heading_id);
+      }
+      if (!isInt(heading.score) || heading.score < 1 || heading.score > 7)
+        e.push(`${path}.score must be an integer 1-7`);
+      if (!isArr(heading.evidence_spans) || heading.evidence_spans.length < 1) {
+        e.push(`${path}.evidence_spans must be a non-empty array`);
+      } else {
+        const evidenceSeen = new Set();
+        heading.evidence_spans.forEach((span, j) => {
+          const evidencePath = `${path}.evidence_spans[${j}]`;
+          if (!isStr(span) || span.length === 0) {
+            e.push(`${evidencePath} must be a non-empty string`);
+          } else {
+            if (evidenceSeen.has(span)) e.push(`${evidencePath} must be unique`);
+            evidenceSeen.add(span);
+            if (!submission.includes(span))
+              e.push(`${evidencePath} must occur verbatim in the submission`);
+          }
+        });
+      }
+      if (!isStr(heading.rationale) || heading.rationale.trim().length === 0)
+        e.push(`${path}.rationale must be a non-empty string`);
+    });
+  }
+
+  for (const headingId of MEMO_HEADING_IDS) {
+    if (!seen.has(headingId)) e.push(`heading missing: ${headingId}`);
+  }
+  if (e.length) return { ok: false, errors: e };
+
+  // Return a fresh canonical object instead of the model-owned object. This is
+  // the only shape downstream code may aggregate or display.
+  return {
+    ok: true,
+    errors: [],
+    scorecard: {
+      schema_version: "1.0.0",
+      instrument_id: instrument.id,
+      instrument_version: instrument.instrument_version,
+      instrument_content_hash: instrument.content_hash,
+      headings: o.headings.map((heading) => ({
+        heading_id: heading.heading_id,
+        evidence_spans: [...heading.evidence_spans],
+        rationale: heading.rationale,
+        score: heading.score,
+      })),
+    },
+  };
 }
 
 // DEBRIEF-ORACLE hard guard (defense-in-depth over the prompt's own rule).

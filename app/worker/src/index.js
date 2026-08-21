@@ -22,12 +22,15 @@ import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./c
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
 import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
-import { resolveUpstream } from "./byok.js";
+import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
+import { runFormativeMemoPanel, SUMMATIVE_BLOCKERS } from "./panel.js";
+import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
+import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
-import { streamingEnabled, supportsStreaming, startAnthropicStream, makeChatTransform } from "./chat-stream.js";
+import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
 export { EditorStore } from "./editor-store.js";
@@ -38,6 +41,7 @@ const MAX_MESSAGE_CHARS = 4000;      // per-message input cap
 const MAX_MESSAGES = 60;             // message-array length ceiling
 const MAX_TOTAL_INPUT_CHARS = 24000; // total chat input cap
 const CRITIQUE_MAX_CHARS = 18000;    // /critique deliverable size cap (graceful 413)
+const MEMO_ASSESSMENT_MAX_CHARS = 18000;
 const DEBRIEF_MIN_TURNS = 6;         // debrief-oracle guard
 const WARNING_TURN = 15;             // in-character "checks watch"
 const CHAT_MAX_TOKENS = 300;
@@ -59,11 +63,16 @@ function clientIp(request) {
 }
 
 function capsFor(env) {
+  const maxTurns = parseInt(env.MAX_TURNS, 10) || 20;
   return {
     capPublicCents: (parseInt(env.PUBLIC_BUDGET_USD, 10) || 7) * 100,
     capDemoCents: (parseInt(env.DEMO_RESERVE_USD, 10) || 3) * 100,
-    maxTurns: parseInt(env.MAX_TURNS, 10) || 20,
+    maxTurns,
     maxSessionsPerDay: parseInt(env.MAX_SESSIONS_PER_DAY, 10) || 200,
+    maxAssessmentsPerSessionDay: Math.max(
+      1,
+      parseInt(env.MAX_ASSESSMENTS_PER_SESSION_DAY, 10) || maxTurns
+    ),
   };
 }
 
@@ -183,7 +192,9 @@ async function handleChat(request, env, origin) {
 
   const personaId = body.persona_id;
   const matterId = body.matter_id;
-  const turnId = typeof body.turn_id === "string" ? body.turn_id : null;
+  // Keep the internal preflight/finalizer key non-null so failure finalization
+  // remains idempotent even for legacy callers that omit a client turn_id.
+  const turnId = typeof body.turn_id === "string" && body.turn_id ? body.turn_id : crypto.randomUUID();
   const messages = validMessages(body.messages);
   if (!messages) return errorEnvelope("validation_error", "messages failed validation (role/content/size).", 400);
   if (typeof personaId !== "string" || typeof matterId !== "string")
@@ -238,27 +249,52 @@ async function handleChat(request, env, origin) {
     },
   });
 
-  // ---- Streaming path (flag ON + Anthropic only) --------------------------
+  // ---- Streaming path (DEV flag ON + supported provider) -----------------
   // Proxy the provider's SSE through a TransformStream: relay text deltas as
-  // they arrive, capture usage server-side from the terminal message_delta, and
-  // settle the DO in flush with the EXACT same {usage, payload} contract the
-  // non-streaming path uses below. openai/google BYOK fall through to
-  // non-streaming (their SSE carries no message_delta usage event).
+  // they arrive, capture terminal usage server-side, and settle the DO in flush
+  // with the EXACT same {usage, payload} contract the
+  // non-streaming path uses below. Each provider's native SSE dialect is
+  // normalized by chat-stream.js before it reaches the browser.
   if (streamingEnabled(env) && supportsStreaming(up.provider)) {
-    const started = await startAnthropicStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
+    const started = await startProviderStream({ up, system, messages, maxTokens: CHAT_MAX_TOKENS });
     if (!started.ok) {
-      await stub.rollback(session.sid, turnId); // no turn burned, no spend
+      await stub.rollback(session.sid, turnId, personaId); // no turn burned, no spend
       return upstreamFailureResponse(up, started, "chat_upstream_fail");
     }
+    let failurePromise = null;
+    const finalizeStreamFailure = (usage, kind) => {
+      if (!failurePromise) {
+        failurePromise = stub.fail(
+          session.sid,
+          up.skipBudget ? null : usage,
+          turnId,
+          personaId
+        ).then(() => {
+          logMeta({ ev: "chat_stream_fail", kind, mode: up.mode, provider: up.provider, pool: session.p, turn });
+        }).catch((error) => {
+          failurePromise = null;
+          throw error;
+        });
+      }
+      return failurePromise;
+    };
     const transform = makeChatTransform({
+      provider: up.provider,
       buildDonePayload: (fullText, usage) => buildPayload(fullText, usage),
       onSettle: async (payload, usage) => {
         // usage=null on BYOK: nothing billed to the hosted pools, replay stored.
         await stub.settle(session.sid, up.skipBudget ? null : usage, turnId, payload);
         logMeta({ ev: "chat_ok", stream: true, mode: up.mode, provider: up.provider, pool: session.p, turn, cache_read: payload.usage.cache_read_input_tokens });
       },
+      onFailure: (usage) => finalizeStreamFailure(usage, "provider"),
     });
-    const clientStream = started.upstream.body.pipeThrough(transform);
+    const clientStream = pipeProviderStream({
+      upstreamBody: started.upstream.body,
+      transform,
+      // A transport abort has no trustworthy terminal usage. Refund the reserve
+      // and clear the turn before the normalized stream is allowed to error.
+      onFailure: () => finalizeStreamFailure(null, "transport"),
+    });
     // withCors() (applied by the router) preserves this streaming body + headers.
     return new Response(clientStream, {
       status: 200,
@@ -274,7 +310,7 @@ async function handleChat(request, env, origin) {
   const result = await callUpstream(up, { system, messages, maxTokens: CHAT_MAX_TOKENS });
 
   if (!result.ok) {
-    await stub.rollback(session.sid, turnId); // no turn burned, no spend
+    await stub.rollback(session.sid, turnId, personaId); // no turn burned, no spend
     return upstreamFailureResponse(up, result, "chat_upstream_fail");
   }
 
@@ -360,6 +396,156 @@ async function handleDebrief(request, env, origin) {
   if (!up.skipBudget) await stub.charge(session.p, result.usage);
   logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });
   return json({ scorecard: parsed });
+}
+
+// ---- POST /v1/memo-assessment ---------------------------------------------
+async function handleMemoAssessment(request, env, origin) {
+  const body = await readJson(request);
+  if (!body) return errorEnvelope("validation_error", "Malformed JSON body.", 400);
+  const routing = validateLearnerResultRequest(body);
+  if (!routing.ok) return errorEnvelope("validation_error", routing.error, 400);
+
+  // U11 is deliberately formative-only. No request field can promote the
+  // assessment_use while calibration and provider-terms prerequisites remain.
+  if (body.assessment_use != null && body.assessment_use !== "formative") {
+    return errorEnvelope("validation_error", "Memo assessment is available for formative use only.", 400);
+  }
+
+  const thresholdResolution = resolveAssessmentThresholdConfig(
+    body.assessment_config,
+    bundle.assessment_instrument
+  );
+  if (!thresholdResolution.ok) {
+    if (thresholdResolution.kind === "request") {
+      return errorEnvelope("validation_error", thresholdResolution.error, 400);
+    }
+    logMeta({ ev: "memo_assessment_threshold_contract_failed" });
+    return errorEnvelope("validation_error", "The memo assessment threshold contract failed.", 502);
+  }
+
+  const session = await verifySession(env.SESSION_SIGNING_KEY, body.session_token);
+  if (!session) return errorEnvelope("session_invalid", "Invalid or expired session token.", 401);
+
+  const submission = body.deliverable_text;
+  if (typeof submission !== "string" || submission.length === 0) {
+    return errorEnvelope("validation_error", "deliverable_text is required.", 400);
+  }
+  if (submission.length > MEMO_ASSESSMENT_MAX_CHARS) {
+    return errorEnvelope(
+      "validation_error",
+      `Deliverable exceeds the ${MEMO_ASSESSMENT_MAX_CHARS}-character limit.`,
+      413
+    );
+  }
+
+  const panel = resolvePanelUpstreams(env, { byok: body.byok, byokPanel: body.byok_panel });
+  if (!panel.ok) return errorEnvelope(panel.code, panel.message, panel.status);
+
+  const caps = capsFor(env);
+  const stub = budgetStub(env);
+  const assessmentClaim = await stub.claimAssessmentRequest(
+    session.sid,
+    caps.maxAssessmentsPerSessionDay
+  );
+  if (!assessmentClaim.ok) {
+    logMeta({ ev: "memo_assessment_rate_limited", reason: assessmentClaim.reason });
+    return errorEnvelope(
+      "rate_limited",
+      "This session has reached the daily memo assessment limit.",
+      429
+    );
+  }
+  const run = await runFormativeMemoPanel({
+    submission,
+    instrument: bundle.assessment_instrument,
+    thresholdConfig: thresholdResolution.config,
+    scorecardTemplate: bundle.memo_scorecard_template,
+    graders: panel.graders,
+    complete: async ({ grader, prompt, maxTokens, jsonMode }) => {
+      if (grader.skipBudget) {
+        return callUpstream(grader, {
+          system: null,
+          messages: [{ role: "user", content: prompt }],
+          maxTokens,
+          jsonMode,
+        });
+      }
+      const reservationId = `memo-call-${crypto.randomUUID()}`;
+      const inputTokens = estTokens(prompt.length);
+      const reserveCents = Math.max(1, Math.ceil(
+        (inputTokens * 100 + maxTokens * 500) / 1_000_000
+      ));
+      const reserved = await stub.reserveOneShot(reservationId, {
+        pool: session.p,
+        capPublicCents: caps.capPublicCents,
+        capDemoCents: caps.capDemoCents,
+        reserveCents,
+      });
+      if (!reserved.ok) {
+        return { ok: false, kind: reserved.reason === "cap_exceeded" ? "cap" : "upstream" };
+      }
+      let completion;
+      try {
+        completion = await callUpstream(grader, {
+          system: null,
+          messages: [{ role: "user", content: prompt }],
+          maxTokens,
+          jsonMode,
+        });
+      } catch {
+        completion = { ok: false, kind: "upstream" };
+      }
+      try {
+        await stub.settleOneShot(reservationId, completion.ok ? completion.usage : null);
+      } catch {
+        return { ok: false, kind: "upstream" };
+      }
+      return completion;
+    },
+  });
+  if (!run.ok && run.kind === "upstream" && run.upstreamResult?.kind === "cap") {
+    return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+  }
+  if (!run.ok && run.kind === "upstream") {
+    return upstreamFailureResponse(run.grader, run.upstreamResult, "memo_assessment_upstream_fail");
+  }
+  if (!run.ok) {
+    logMeta({ ev: "memo_assessment_invalid", errors: (run.errors || []).slice(0, 5) });
+    return errorEnvelope("validation_error", "The memo assessment could not be generated. Please try again.", 502);
+  }
+
+  const blockers = new Set(run.result.summative_blockers || []);
+  if (run.result.assessment_use !== "formative" || run.result.summative_eligible !== false ||
+      !SUMMATIVE_BLOCKERS.every((blocker) => blockers.has(blocker))) {
+    logMeta({ ev: "memo_assessment_safety_contract_failed" });
+    return errorEnvelope("validation_error", "The memo assessment safety contract failed.", 502);
+  }
+
+  // Persist before returning the result so every reviewable assessment has a
+  // reconstructable U12 record. Live credentials appear only in the explicit
+  // request-lifetime redaction list consumed (and discarded) by the store.
+  const auditId = `memo-assessment-${crypto.randomUUID()}`;
+  const audit = await persistAssessmentAudit(env, buildAssessmentAuditInput({
+    id: auditId,
+    submission,
+    instrument: bundle.assessment_instrument,
+    result: run.result,
+    graders: panel.graders,
+    sessionToken: body.session_token,
+    retentionDays: env.ASSESSMENT_AUDIT_RETENTION_DAYS,
+  }));
+  if (!audit.ok) {
+    logMeta({ ev: "memo_assessment_audit_fail", reason: audit.reason || "unknown" });
+    return errorEnvelope("upstream_unavailable", "The memo assessment audit could not be recorded. Please try again.", 503);
+  }
+
+  logMeta({
+    ev: "memo_assessment_ok",
+    pool: session.p,
+    assurance: run.result.assurance,
+    providers: run.result.providers.map((provider) => provider.provider).join(","),
+  });
+  return json({ assessment: run.result, assessment_audit_id: audit.assessment_audit_id });
 }
 
 // ---- POST /v1/critique ------------------------------------------------------
@@ -459,6 +645,8 @@ export default {
         response = await handleChat(request, env, origin);
       } else if (request.method === "POST" && url.pathname === "/v1/debrief") {
         response = await handleDebrief(request, env, origin);
+      } else if (request.method === "POST" && url.pathname === "/v1/memo-assessment") {
+        response = await handleMemoAssessment(request, env, origin);
       } else if (request.method === "POST" && url.pathname === "/v1/critique") {
         response = await handleCritique(request, env, origin);
       } else {

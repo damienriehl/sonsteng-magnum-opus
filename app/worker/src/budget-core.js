@@ -11,7 +11,9 @@
 //               with their own key) the pool spend cap + a worst-case reserve.
 //   settle    — AFTER the reply: replaces the reserve with the ACTUAL cost
 //               (usage=null on BYOK: nothing billed) + stores the replay result.
-//   rollback  — upstream failure: removes reserve, decrements the turn.
+//   fail      — streamed failure: replaces reserve with any known actual cost,
+//               clears replay state, and decrements the turn.
+//   rollback  — pre-response failure: fail with no known usage.
 // BYOK skips MONEY only: turn caps, dedupe, per-persona counts, mint throttle,
 // and the ≥6-turn debrief guard all still apply.
 
@@ -47,6 +49,17 @@ export const SCHEMA_SQL = `
     count INTEGER NOT NULL,
     PRIMARY KEY (iphash, day)
   );
+  CREATE TABLE IF NOT EXISTS one_shot_reservations (
+    id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    pool TEXT NOT NULL,
+    reserve_cents INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS assessment_requests (
+    sid TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    count INTEGER NOT NULL
+  );
 `;
 
 export class BudgetCore {
@@ -73,6 +86,7 @@ export class BudgetCore {
       this.sql.exec("INSERT INTO budget (id,day,public_cents,demo_cents) VALUES (1,?,0,0)", today);
     } else if (row.day !== today) {
       this.sql.exec("UPDATE budget SET day=?, public_cents=0, demo_cents=0 WHERE id=1", today);
+      this.sql.exec("DELETE FROM one_shot_reservations WHERE day<>?", today);
     }
   }
 
@@ -193,23 +207,49 @@ export class BudgetCore {
     return { ok: true, actualCents: actual };
   }
 
-  // Undo the last preflight on upstream failure: remove the reserve, decrement
-  // the turn. No turn burned, no spend recorded.
-  rollback(sid, turnId) {
+  // Finalize a failed in-flight turn. Known usage (for a provider-declared
+  // terminal error) is billed, but no replay result is stored and the turn is
+  // returned to the caller. Unknown usage (transport abort / pre-response
+  // failure) refunds the reserve. Matching last_turn_id makes this idempotent.
+  fail(sid, usage, turnId, personaId) {
     const today = this._today();
     this._rollover(today);
     const sess = this._one("SELECT * FROM sessions WHERE sid=?", sid);
     if (!sess || sess.day !== today || sess.last_turn_id !== turnId) return { ok: true };
+    // A settlement can commit even if its RPC response is lost. The caller's
+    // failure fallback must not undo that committed turn or bill its usage a
+    // second time; the stored replay result is the durable settlement marker.
+    if (sess.last_result != null) return { ok: true };
+    const actual = usage ? centsForUsage(usage) : 0;
     const pool = sess.last_pool || "public";
-    if (sess.last_reserve > 0) {
+    if (sess.last_reserve !== 0 || actual !== 0) {
       const col = this._poolCol(pool);
-      this.sql.exec(`UPDATE budget SET ${col} = MAX(0, ${col} - ?) WHERE id=1`, sess.last_reserve);
+      this.sql.exec(
+        `UPDATE budget SET ${col} = MAX(0, ${col} - ? + ?) WHERE id=1`,
+        sess.last_reserve,
+        actual
+      );
     }
     this.sql.exec(
-      "UPDATE sessions SET turns = MAX(0, turns - 1), last_reserve=0, last_turn_id=NULL WHERE sid=?",
+      "UPDATE sessions SET turns = MAX(0, turns - 1), last_reserve=0, " +
+        "last_turn_id=NULL, last_pool=NULL, last_result=NULL WHERE sid=?",
       sid
     );
-    return { ok: true };
+    if (personaId) {
+      this.sql.exec(
+        "UPDATE persona_turns SET turns = MAX(0, turns - 1) " +
+          "WHERE sid=? AND persona_id=? AND day=?",
+        sid,
+        personaId,
+        today
+      );
+    }
+    return { ok: true, actualCents: actual };
+  }
+
+  // Undo a preflight when no provider usage is available.
+  rollback(sid, turnId, personaId) {
+    return this.fail(sid, null, turnId, personaId);
   }
 
   // Debrief-oracle guard: committed turns this sid has with this persona today.
@@ -241,5 +281,64 @@ export class BudgetCore {
     const spent = pool === "demo" ? b.demo_cents : b.public_cents;
     const cap = pool === "demo" ? capDemoCents : capPublicCents;
     return { ok: spent < cap };
+  }
+
+  // Atomic per-session/day gate for memo assessments. This applies to hosted
+  // and BYOK requests alike: BYOK skips only platform spend, not request abuse
+  // controls or the global audit-write footprint.
+  claimAssessmentRequest(sid, maxRequests) {
+    const today = this._today();
+    if (typeof sid !== "string" || !sid || !Number.isInteger(maxRequests) || maxRequests < 1) {
+      return { ok: false, reason: "validation_error" };
+    }
+    const row = this._one("SELECT day,count FROM assessment_requests WHERE sid=?", sid);
+    const count = row && row.day === today ? row.count : 0;
+    if (count >= maxRequests) return { ok: false, reason: "rate_limited" };
+    const next = count + 1;
+    this.sql.exec(
+      "INSERT INTO assessment_requests (sid,day,count) VALUES (?,?,1) " +
+        "ON CONFLICT(sid) DO UPDATE SET day=excluded.day, " +
+        "count=CASE WHEN assessment_requests.day=excluded.day " +
+        "THEN assessment_requests.count+1 ELSE 1 END",
+      sid,
+      today
+    );
+    return { ok: true, count: next, remaining: Math.max(0, maxRequests - next) };
+  }
+
+  reserveOneShot(id, opts) {
+    const today = this._today();
+    this._rollover(today);
+    const { pool, capPublicCents, capDemoCents, reserveCents } = opts;
+    if (typeof id !== "string" || !id || !Number.isInteger(reserveCents) || reserveCents < 1) {
+      return { ok: false, reason: "validation_error" };
+    }
+    if (this._one("SELECT id FROM one_shot_reservations WHERE id=?", id)) {
+      return { ok: false, reason: "duplicate" };
+    }
+    const budget = this._one("SELECT public_cents,demo_cents FROM budget WHERE id=1");
+    const spent = pool === "demo" ? budget.demo_cents : budget.public_cents;
+    const cap = pool === "demo" ? capDemoCents : capPublicCents;
+    if (spent + reserveCents > cap) return { ok: false, reason: "cap_exceeded" };
+    this.sql.exec(
+      "INSERT INTO one_shot_reservations (id,day,pool,reserve_cents) VALUES (?,?,?,?)",
+      id, today, pool, reserveCents
+    );
+    const col = this._poolCol(pool);
+    this.sql.exec(`UPDATE budget SET ${col} = ${col} + ? WHERE id=1`, reserveCents);
+    return { ok: true };
+  }
+
+  settleOneShot(id, usage) {
+    const row = this._one("SELECT * FROM one_shot_reservations WHERE id=?", id);
+    if (!row) return { ok: true, replay: true };
+    const actual = usage ? centsForUsage(usage) : 0;
+    const col = this._poolCol(row.pool);
+    this.sql.exec(
+      `UPDATE budget SET ${col} = MAX(0, ${col} - ? + ?) WHERE id=1`,
+      row.reserve_cents, actual
+    );
+    this.sql.exec("DELETE FROM one_shot_reservations WHERE id=?", id);
+    return { ok: true, actualCents: actual };
   }
 }

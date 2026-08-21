@@ -1,25 +1,23 @@
-> **STATE BELOW IS 20 DAYS STALE — read this banner first (2026-08-17).**
+> **CURRENT STATE — read this banner first (2026-08-20).**
 >
-> The 2026-07-27 line that follows is kept as history, not as current state. Three of
-> its claims are now false and have misled at least one session:
+> The 2026-07-27 line below is history, not current state. The 21-day audit was
+> revalidated on 2026-08-20 against eleven logical ce-plan artifacts and latest local
+> `main`; completed work was proved from code, tests and Git rather than plan status.
 >
-> - *"ACCESS DOOR BUILT (branch plan/access-door-revisions, not merged)"* — it merged
->   to `main` on 2026-07-27 in `cf0433f`. All seven units are done.
-> - *"EDIT_ACCESS_AUD is deliberately EMPTY"* — it carries real values; the Access
->   application and PIN policy were created the same day in `7b84be4`. What is still
->   outstanding is one human PIN sign-in, not the wiring.
-> - *"NOT DONE (credentialed, Damien only): the deploy that provisions DNS, and
->   creating the Access application"* — both done.
+> **The live frontier:** the pitch, hours log, Day Zero review, Publisher code,
+> nine-part audit, seven-heading formative assessment, and competency proposal are
+> implemented locally. The obsolete promotion branches are retired and deleted.
+> Remaining work is the supervised Day Zero corpus migration and enforcement;
+> Publisher review/canary/recovery and its dependent inconsistency-daemon wiring;
+> live three-provider DEV streaming proof; authenticated assessment-page browser UAT;
+> the `legalpracticum.org` cutover; and the explicitly external
+> John/Roger/faculty/provider actions.
 >
-> **Current state lives in two places, both maintained:**
-> `docs/plans/2026-08-17-1154-chore-21-day-plan-completion-audit-plan.md` (what is
-> finished across all twelve plans in the last 21 days, and the three queues of what
-> is not) and `docs/TODO.md` (the tracked task list, reconciled 2026-08-17).
->
-> The live frontier as of 2026-08-17: the Legal Practicum buildout plan is 2 of 17
-> units done, `legalpracticum.org` is registered at Namecheap but is not yet a
-> Cloudflare zone, and `SONSTENG_PROD_RELEASE_ENABLED` is correctly `false` because
-> no release candidate has ever been authorized.
+> **Current state lives in** `docs/TODO.md` and the 2026-08-20 plan-completion
+> handoff under `docs/handoffs/`. The 2026-08-17 audit and execution plan remain the
+> intent/evidence history, but their progress prose is no longer current. Production
+> remains config-off because no candidate has been reviewed, authorized and proven
+> through the first canary and exact-pair recovery drill.
 
 STATE (superseded 2026-08-17, kept as history) — 2026-07-27 (Mon): reviewer platform verified ready and heavily revised from Damien's live review. WALKTHROUGH MOVED to week of Aug 3. Editor: /edit nav reachability fixed (7 pages were 404s incl. the Matter Library landing page), 1,739 of 3,474 blocks were wrongly comment-only and are now editable, affordances rebuilt as an overlay icon rail with the edit view reserving its own margin, declined edits no longer tattoo a paragraph, Save/Cancel replaced by Done/Undo to match auto-save, friendly locked-out page. A11Y: new tools/a11y_audit.js found 484 failures -> 0 (token-level fixes; the STANDARD/LARGE TYPE toggle was 1.06:1). Skill/task codes replaced by names. Damien has his own DR editor token. DISK EMERGENCY OVER — dev-twin relocated containerd, root 99% -> 12%; the 50->100GB volume resize Damien authorised is what made that possible; alarm now watches / and /mnt/docker-data. ACCESS DOOR BUILT (branch plan/access-door-revisions, not merged): edit.sonsteng.damienriehl.com is wired end to end in code — RS256 assertion verification with the algorithm pinned at import (access-jwt.js), a third identity source in resolveAuth gated on the request host, the Access-only `damienadmin` slot that finally carries admin scope AND DR attribution together, a tokenless dashboard at /edit/admin, and the bare host 302ing into a scope-aware landing. EDIT_ORIGIN is now a comma-separated LIST — this was the P0: csrfOk pins Origin to it, so swapping it to the new hostname would have left every existing ?t= bookmark loading pages while every save returned 403, silently, and the suite would have stayed green. NOT DONE (credentialed, Damien only): the deploy that provisions DNS, and creating the Access application. EDIT_ACCESS_AUD is deliberately EMPTY so the Access door fails closed and only ?t= works until he fills it — nothing is half-live. Runbook (incl. the revocation ORDER: pull EDIT_ACCESS_EMAILS first, the policy edit alone leaves a 30-day session alive) appended to docs/prod-enable.md. OPEN: image-retention permission (sonsteng-2026-07-27-image-retention), phone-width rail assertion unresolved, a11y audit not yet wired to a gate. Gates on the branch: 8/8 preflight PASS — worker 306, pytest 193, editor client 43/43 headful, a11y 0 FAIL, validate PASS, parity PASS; rail placement still SKIP (needs TARGET_URL with ?t=). R7 verified empirically: the Access host appears 0× in `wrangler deploy --env production --dry-run`, 2× in the DEV dry-run.)
 
