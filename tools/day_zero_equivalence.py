@@ -186,10 +186,22 @@ def file_round_trip(
         if document.get("anchor") != item.anchor:
             errors.append("%s %s: emitted anchor %r != proof %r" %
                           (item.path, item.locator, document.get("anchor"), item.anchor))
-        expected_block_id = item.locator.rsplit(":", 1)[0]
-        if stored.get("block_id") != expected_block_id:
-            errors.append("%s %s: emitted block_id %r != proof %r" %
-                          (item.path, item.locator, stored.get("block_id"), expected_block_id))
+        stored_block_id = stored.get("block_id")
+        stored_durable_locator = stored.get("durable_locator")
+        if bool(stored_block_id) == bool(stored_durable_locator):
+            errors.append("%s %s: emitted proof must contain exactly one of "
+                          "block_id or durable_locator" % (item.path, item.locator))
+        elif stored_durable_locator:
+            if stored_durable_locator != item.locator:
+                errors.append("%s %s: emitted durable_locator %r != proof %r" %
+                              (item.path, item.locator, stored_durable_locator,
+                               item.locator))
+        else:
+            expected_block_id = item.locator.rsplit(":", 1)[0]
+            if stored_block_id != expected_block_id:
+                errors.append("%s %s: emitted block_id %r != proof %r" %
+                              (item.path, item.locator, stored_block_id,
+                               expected_block_id))
         for key, expected_value in expected_record.items():
             if stored.get(key) != expected_value:
                 errors.append("%s %s: emitted %s %r != proof %r" %

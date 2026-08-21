@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 
 import pytest
@@ -120,3 +121,36 @@ def test_existing_identity_checker_rejects_changed_bid_and_text():
     assert dze.block_identity_check(before, changed_bid)
     assert sb.equivalence_check(before, changed_text)
     assert dze.block_identity_check(before, changed_text)
+
+
+def _durable_sidecar_proof(identity_fields):
+    sidecar = "data/matters/m01/date-offsets.json"
+    durable = "raw:0123456789abcdef:occurrence:1:date:0"
+    entry = {
+        "source": "data/matters/m01/facts.md", "locator": 0,
+        "literal": "2026-02-16", "day_zero_offset": 15,
+        **identity_fields,
+    }
+    payload = json.dumps({
+        "anchor": "2026-02-01", "entries": [entry],
+    }).encode()
+    return ([sidecar], {sidecar: b""}, {sidecar: payload},
+            [dze.FileProof(sidecar, (dze.ReverseEdit(0, len(payload), b""),))],
+            [dze.DateProof(entry["source"], durable, entry["literal"],
+                           "2026-02-01", 15, "prose_sidecar", sidecar, 0)])
+
+
+def test_durable_locator_proof_passes_without_pretending_to_be_a_block_id():
+    durable = "raw:0123456789abcdef:occurrence:1:date:0"
+    result = dze.file_round_trip(*_durable_sidecar_proof({"durable_locator": durable}))
+    assert result.proof_covered_date_count == 1
+
+
+@pytest.mark.parametrize("identity", [
+    {},
+    {"block_id": "b:deadbeef",
+     "durable_locator": "raw:0123456789abcdef:occurrence:1:date:0"},
+])
+def test_prose_sidecar_requires_exactly_one_identity_contract(identity):
+    with pytest.raises(dze.EquivalenceError, match="exactly one"):
+        dze.file_round_trip(*_durable_sidecar_proof(identity))

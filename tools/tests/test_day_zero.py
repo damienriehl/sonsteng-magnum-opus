@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 
@@ -13,6 +14,49 @@ sys.path.insert(0, str(TOOLS))
 import day_zero  # noqa: E402
 import json_surgical  # noqa: E402
 import day_zero_equivalence  # noqa: E402
+import apply_day_zero_review  # noqa: E402
+
+
+def _approve_fixture_review(repo: Path, initial: day_zero.Result):
+    holdouts, audit = day_zero.governed_reports(repo, initial)
+    proposals = []
+    for category, rows in (("holdout", holdouts["entries"]),
+                           ("anchor_attention", audit["attention_required"])):
+        for row in rows:
+            matter = row["source"].split("/")[2]
+            disposition = ("convertible" if category == "holdout"
+                           else "convertible_after_durable_locator_added")
+            proposal = {
+                "category": category,
+                "source": row["source"],
+                "locator": row["locator"],
+                "literal": row["literal"],
+                "matter": matter,
+                "proposed_disposition": disposition,
+                "reason_code": "fixture-approved-conversion",
+                "rationale": "Fixture review approved this matter-relative date.",
+                "matter_anchor": "2026-01-01",
+                "proposed_day_zero_offset": day_zero.offset_days(
+                    row["literal"], day_zero.parse_date("2026-01-01")
+                ),
+            }
+            proposal["key"] = apply_day_zero_review.proposal_key(proposal)
+            proposals.append(proposal)
+    proposal = {"proposals": proposals}
+    proposal_path = repo / apply_day_zero_review.PROPOSAL_REL
+    proposal_path.parent.mkdir(parents=True)
+    proposal_path.write_text(json.dumps(proposal, indent=2) + "\n")
+    approval_path = repo / apply_day_zero_review.APPROVAL_REL
+    approval_path.parent.mkdir(parents=True)
+    digest = hashlib.sha256(proposal_path.read_bytes()).hexdigest()
+    approval_path.write_text(f"Approved proposal SHA-256: `{digest}`\n")
+    resolved_holdouts, resolved_audit = apply_day_zero_review.apply_review(
+        repo, proposal, holdouts, audit
+    )
+    holdouts_path = repo / apply_day_zero_review.HOLDOUTS_REL
+    audit_path = repo / apply_day_zero_review.AUDIT_REL
+    holdouts_path.write_text(json.dumps(resolved_holdouts, indent=2) + "\n")
+    audit_path.write_text(json.dumps(resolved_audit, indent=2) + "\n")
 
 
 def test_iso_long_form_and_negative_offsets():
@@ -240,6 +284,120 @@ def test_cli_proof_failure_is_nonzero_and_precedes_reports(tmp_path, monkeypatch
                                       "--audit-output", str(audit),
                                       "--holdouts-output", str(holdouts)])
     with pytest.raises(day_zero_equivalence.EquivalenceError, match="corrupted"):
+        day_zero.main()
+    assert not audit.exists()
+    assert not holdouts.exists()
+
+
+def test_approved_proposal_is_materialized_with_stable_durable_locators(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    (matter / "matter.json").write_text(
+        '{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02",'
+        '"summary":"Conference January 5, 2026."}'
+    )
+    original_block = "b:deadbeef"
+    (matter / "facts.md").write_text(
+        "# Ledger {#b:deadbeef}\n\n"
+        "| Date | Event |\n|---|---|\n"
+        "| January 3, 2026 | first |\n"
+        "| January 3, 2026 | second |\n\n"
+        "Contract effective January 4, 2026. {#b:cafebabe}\n"
+    )
+    initial = day_zero.convert_corpus(tmp_path)
+    assert len(initial.unclassified) == 3
+    assert any(row["literal"] == "January 4, 2026" for row in initial.holdouts)
+    _approve_fixture_review(tmp_path, initial)
+
+    # Physical line drift after approval must not invalidate durable content identity.
+    facts = matter / "facts.md"
+    facts.write_text("\n" + facts.read_text())
+    result = day_zero.convert_corpus(tmp_path, write=True)
+
+    assert result.unclassified == []
+    assert result.staged_date_writes == result.proof_records == result.converted_dates
+    approved = [row for row in json.loads((matter / "date-offsets.json").read_text())["entries"]
+                if row.get("durable_locator")]
+    assert len(approved) == 3
+    assert len({row["durable_locator"] for row in approved}) == 3
+    assert all("block_id" not in row for row in approved)
+    assert sorted(row["literal"] for row in approved) == [
+        "January 3, 2026", "January 3, 2026", "January 5, 2026"
+    ]
+    assert original_block in facts.read_text()
+    assert any(proof.literal == "January 4, 2026" for proof in result.date_proofs)
+
+
+def test_real_approved_proposal_projects_exact_materialization_without_writes():
+    repo = TOOLS.parent
+    before = (repo / "data" / "matters" / "m01-arbitration-meridian" /
+              "matter.json").read_bytes()
+    result = day_zero.convert_corpus(repo, write=False)
+    assert result.staged_date_writes == result.proof_records == result.converted_dates == 1236
+    assert result.governed_conversion_target == 1236
+    assert result.unclassified == []
+    assert result.iso_dates + result.long_form_dates == 1242
+    assert result.full_date_holdouts == 6
+    assert (repo / "data" / "matters" / "m01-arbitration-meridian" /
+            "matter.json").read_bytes() == before
+
+
+def test_staged_file_replacement_rolls_back_every_path_on_failure(tmp_path, monkeypatch):
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("first-old")
+    second.write_text("second-old")
+    real_replace = day_zero.os.replace
+    calls = 0
+
+    def fail_second(source, target):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("simulated replacement failure")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(day_zero.os, "replace", fail_second)
+    with pytest.raises(OSError, match="simulated"):
+        day_zero._write_staged_files({first: b"first-new", second: b"second-new"})
+    assert first.read_text() == "first-old"
+    assert second.read_text() == "second-old"
+
+
+def test_unresolvable_approved_identity_writes_nothing(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    original = '{"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    (matter / "matter.json").write_text(original)
+    facts = matter / "facts.md"
+    facts.write_text("Unmarked hearing January 3, 2026.\n")
+    _approve_fixture_review(tmp_path, day_zero.convert_corpus(tmp_path))
+    facts.write_text("The approved date was removed.\n")
+
+    with pytest.raises(RuntimeError, match="approved Day Zero identity no longer resolves"):
+        day_zero.convert_corpus(tmp_path, write=True)
+    assert (matter / "matter.json").read_text() == original
+    assert not (matter / "date-offsets.json").exists()
+
+
+def test_governed_cli_count_mismatch_fails_before_outputs(tmp_path, monkeypatch):
+    audit = tmp_path / "audit.json"
+    holdouts = tmp_path / "holdouts.json"
+    result = day_zero.Result()
+    result.staged_date_writes = 1235
+    result.date_proofs = [object()] * 1235
+    monkeypatch.setattr(day_zero, "convert_corpus", lambda *args, **kwargs: result)
+    monkeypatch.setattr(day_zero_equivalence, "file_round_trip", lambda *args, **kwargs: None)
+    monkeypatch.setattr(day_zero, "governed_reports", lambda *args, **kwargs: (
+        {"summary": {"count": 635}},
+        {"summary": {"converted_dates": 1236, "attention_required": 0,
+                     "full_date_holdouts": 635}},
+    ))
+    monkeypatch.setattr(day_zero, "_approved_conversion_target", lambda repo: 1236)
+    monkeypatch.setattr(sys, "argv", ["day_zero.py", "--repo", str(tmp_path),
+                                      "--audit-output", str(audit),
+                                      "--holdouts-output", str(holdouts)])
+    with pytest.raises(RuntimeError, match="staged=1235.*governed=1236"):
         day_zero.main()
     assert not audit.exists()
     assert not holdouts.exists()

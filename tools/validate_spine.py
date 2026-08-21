@@ -29,6 +29,7 @@ Run `python3 tools/validate_spine.py --help` for usage.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -37,6 +38,8 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+
+import build_site
 
 # ---------------------------------------------------------------------------
 # jsonschema is used when importable; otherwise we degrade to structural checks
@@ -67,6 +70,15 @@ VALIDATOR_CHECK_COUNT = 30
 # not require every convertible absolute date to carry one until U16b.
 ENFORCE_DAY_ZERO_OFFSETS = False
 DECLARED_HOLDOUT_STATUS = "declared_absolute_holdout"
+DAY_ZERO_FULL_DATE_RE = re.compile(
+    r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)|"
+    r"\b(?:January|February|March|April|May|June|July|August|September|October|"
+    r"November|December)\s+\d{1,2},\s+\d{4}\b"
+)
+DAY_ZERO_RAW_LOCATOR_RE = re.compile(
+    r"^raw:([0-9a-f]{16}):occurrence:([1-9][0-9]*):date:([0-9]+)$"
+)
+DAY_ZERO_JSON_LOCATOR_RE = re.compile(r"^json:(.+):date:([0-9]+)$")
 
 SECTION_KEYS = [
     "intro",
@@ -834,6 +846,109 @@ class Validator:
                 child_locator = f"{locator}.{index}" if locator else str(index)
                 self._walk_structured_dates(mid, child, source, anchor, child_locator)
 
+    @staticmethod
+    def _json_value_at(obj, dotted):
+        current = obj
+        for part in dotted.split(".") if dotted else []:
+            current = current[int(part)] if isinstance(current, list) else current[part]
+        return current
+
+    def _resolve_sidecar_source(self, mid, entry, index):
+        source = self._normal_source(entry.get("source", ""))
+        source_path = self.world.data_dir / source
+        durable = entry.get("durable_locator")
+        literal = entry.get("literal")
+        locator = f"entries.{index}"
+        try:
+            source_text = source_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            self.report.add(mid, "F30", ERROR,
+                            f"{mid} date-offsets {locator} source is unreadable: "
+                            f"{entry.get('source')!r}.")
+            return False
+
+        if durable:
+            json_match = DAY_ZERO_JSON_LOCATOR_RE.fullmatch(durable)
+            raw_match = DAY_ZERO_RAW_LOCATOR_RE.fullmatch(durable)
+            try:
+                if json_match:
+                    value = self._json_value_at(json.loads(source_text), json_match.group(1))
+                    dates = list(DAY_ZERO_FULL_DATE_RE.finditer(value))
+                    ordinal = int(json_match.group(2))
+                    resolved = dates[ordinal].group(0)
+                elif raw_match:
+                    requested = int(raw_match.group(2))
+                    date_ordinal = int(raw_match.group(3))
+                    candidates = []
+                    for line in source_text.splitlines():
+                        dates = list(DAY_ZERO_FULL_DATE_RE.finditer(line))
+                        if not any(item.group(0) == literal for item in dates):
+                            continue
+                        normalized = " ".join(DAY_ZERO_FULL_DATE_RE.sub("<date>", line).split())
+                        candidates.append((hashlib.sha256(normalized.encode()).hexdigest()[:16], dates))
+                    fingerprint, dates = candidates[requested - 1]
+                    if fingerprint != raw_match.group(1):
+                        raise IndexError
+                    resolved = dates[date_ordinal].group(0)
+                else:
+                    raise IndexError
+            except (IndexError, KeyError, TypeError, json.JSONDecodeError):
+                resolved = None
+            if resolved != literal:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} date-offsets {locator} has stale literal/block "
+                                f"identity for {entry.get('source')!r}.")
+                return False
+            return True
+
+        block_id = str(entry.get("block_id", "")).removeprefix("b:")
+        if source_path.suffix == ".md":
+            spans = []
+            build_site.markdown(source_text, spans=spans)
+            spans = [span for span in spans if span.get("bid") == block_id]
+            occurrence = entry.get("locator")
+            if len(spans) == 1:
+                dates = list(DAY_ZERO_FULL_DATE_RE.finditer(spans[0]["raw"]))
+                if (isinstance(occurrence, int) and occurrence < len(dates) and
+                        dates[occurrence].group(0) == literal):
+                    return True
+        else:
+            marker = "{#b:%s}" % block_id
+            if marker in source_text and literal in source_text:
+                return True
+        self.report.add(mid, "F30", ERROR,
+                        f"{mid} date-offsets {locator} has stale literal/block "
+                        f"identity for {entry.get('source')!r}.")
+        return False
+
+    def _embedded_prose_inventory(self, bundle):
+        inventory = defaultdict(int)
+        root = bundle.dir
+        for path in sorted(root.rglob("*.md")):
+            source = self._normal_source(path)
+            for match in DAY_ZERO_FULL_DATE_RE.finditer(path.read_text(encoding="utf-8")):
+                inventory[(source, match.group(0))] += 1
+
+        def walk(value, source):
+            if isinstance(value, dict):
+                for child in value.values():
+                    walk(child, source)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child, source)
+            elif isinstance(value, str) and parse_date(value) is None:
+                for match in DAY_ZERO_FULL_DATE_RE.finditer(value):
+                    inventory[(source, match.group(0))] += 1
+
+        for path in sorted(root.rglob("*.json")):
+            if path.name == "date-offsets.json":
+                continue
+            try:
+                walk(json.loads(path.read_text(encoding="utf-8")), self._normal_source(path))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+        return inventory
+
     def _check_day_zero_representation(self, mid, bundle):
         if not bundle.matter or not bundle.matter.schema_ok:
             return
@@ -846,7 +961,11 @@ class Validator:
             self._walk_structured_dates(mid, item.obj, item.path, anchor)
 
         sidecar = bundle.date_offsets
+        prose_inventory = self._embedded_prose_inventory(bundle)
         if not sidecar or not sidecar.schema_ok:
+            if self.enforce_day_zero_offsets and prose_inventory:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} has convertible prose dates but is missing date-offsets.json.")
             return
         sidecar_anchor = parse_date(sidecar.obj.get("anchor"))
         if sidecar_anchor != anchor:
@@ -854,6 +973,7 @@ class Validator:
                             f"{mid} date-offsets anchor {sidecar.obj.get('anchor')!r} "
                             f"does not match matter open_date {anchor}.")
             return
+        covered = defaultdict(int)
         for index, entry in enumerate(sidecar.obj.get("entries", [])):
             literal = parse_date(entry.get("literal"))
             offset = entry.get("day_zero_offset")
@@ -868,20 +988,19 @@ class Validator:
                                 f"{mid} date-offsets {locator} literal {entry.get('literal')} "
                                 f"disagrees with day_zero_offset={offset} "
                                 f"(resolves to {resolved}).")
-            source_path = self.world.data_dir / self._normal_source(entry.get("source", ""))
-            try:
-                source_text = source_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError):
-                self.report.add(mid, "F30", ERROR,
-                                f"{mid} date-offsets {locator} source is unreadable: "
-                                f"{entry.get('source')!r}.")
-            else:
-                block_marker = "{#%s}" % entry.get("block_id", "")
-                if entry.get("literal") not in source_text or block_marker not in source_text:
-                    self.report.add(mid, "F30", ERROR,
-                                    f"{mid} date-offsets {locator} no longer matches "
-                                    f"source literal/block {entry.get('source')!r}.")
+            if self._resolve_sidecar_source(mid, entry, index):
+                covered[(self._normal_source(entry.get("source", "")), entry.get("literal"))] += 1
             self.report.record_checked_date(sidecar.path, locator, used_offset=True)
+        if self.enforce_day_zero_offsets:
+            held_out = defaultdict(int)
+            for source, _locator, literal in self.declared_holdouts:
+                held_out[(source, literal)] += 1
+            for (source, literal), count in sorted(prose_inventory.items()):
+                missing = count - covered[(source, literal)] - held_out[(source, literal)]
+                if missing > 0:
+                    self.report.add(mid, "F30", ERROR,
+                                    f"{mid} {source} literal {literal!r} has no "
+                                    f"date-offsets entry ({missing} occurrence(s)).")
 
     # -- severity helper for cross-ref tolerance -------------------------
     def ref_sev(self):
@@ -1769,7 +1888,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "              (a local snapshot; never live MCP). IRI *format* is always\n"
             "              checked offline.\n"
             "  Day Zero additive offsets are resolved and counted; converted-\n"
-            "  representation enforcement remains OFF until U16b.\n"
+            "  representation enforcement is opt-in with --enforce-day-zero-offsets.\n"
         ),
         epilog=(
             "Examples:\n"
@@ -1787,6 +1906,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Ship-gate mode: unresolved cross-ref targets become ERRORs.")
     p.add_argument("--online", action="store_true",
                    help="Check FOLIO IRI existence against the local crosswalk snapshot.")
+    p.add_argument("--enforce-day-zero-offsets", action="store_true",
+                   help="Reject missing/stale prose sidecars and convertible absolute dates.")
     p.add_argument("--json", metavar="PATH", default=None,
                    help="Write a machine-readable JSON report to PATH.")
     p.add_argument("--quiet", action="store_true",
@@ -1816,7 +1937,8 @@ def main(argv=None) -> int:
     schemas = SchemaSet(schemas_dir)
     report = Report()
 
-    Validator(world, schemas, report, strict=args.strict, online=args.online).run()
+    Validator(world, schemas, report, strict=args.strict, online=args.online,
+              enforce_day_zero_offsets=args.enforce_day_zero_offsets).run()
 
     if not args.quiet:
         emit_human(world, report, args.strict)

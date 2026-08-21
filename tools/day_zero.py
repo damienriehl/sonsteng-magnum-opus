@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -47,6 +50,8 @@ class Result:
     after_files: dict[str, bytes] = field(default_factory=dict)
     file_proofs: list[day_zero_equivalence.FileProof] = field(default_factory=list)
     date_proofs: list[day_zero_equivalence.DateProof] = field(default_factory=list)
+    staged_date_writes: int = 0
+    governed_conversion_target: int | None = None
 
     @property
     def converted_dates(self):
@@ -69,6 +74,14 @@ def parse_date(value: str) -> date:
 
 def offset_days(value: str, anchor: date) -> int:
     return (parse_date(value) - anchor).days
+
+
+def _is_full_date(value: str) -> bool:
+    try:
+        parse_date(value)
+        return True
+    except ValueError:
+        return False
 
 
 def classify_candidate(text: str) -> Classification:
@@ -169,7 +182,8 @@ def _dated_matches(text: str):
 
 
 def _append_prose_candidates(result, sidecar_entries, storage_path, text, source, block_id, anchor, reason,
-                             locator_prefix=""):
+                             locator_prefix="", approved_conversions=None):
+    approved_conversions = approved_conversions or {}
     occupied = []
     for occurrence, match in enumerate(_dated_matches(text)):
         occupied.append((match.start(), match.end()))
@@ -177,7 +191,10 @@ def _append_prose_candidates(result, sidecar_entries, storage_path, text, source
         locator = "%s:%d" % (block_id, occurrence) if block_id else "%sdate:%d" % (
             locator_prefix + ":" if locator_prefix else "", occurrence)
         citation_window = text[max(0, match.start() - 180):min(len(text), match.end() + 40)]
-        classification = (Classification("holdout", "case-citation year is a fixed fact")
+        approved = approved_conversions.get((source, locator, literal))
+        classification = (Classification("convert", "human-approved matter-relative date")
+                          if approved else
+                          Classification("holdout", "case-citation year is a fixed fact")
                           if CITATION_RE.search(citation_window)
                           else classify_candidate(_local_context(text, match.start(), match.end())))
         if classification.kind == "holdout":
@@ -198,6 +215,7 @@ def _append_prose_candidates(result, sidecar_entries, storage_path, text, source
             sidecar_entries.append({"source": source, "block_id": block_id,
                                     "locator": occurrence, "literal": literal,
                                     "day_zero_offset": parsed_offset})
+            result.staged_date_writes += 1
             _record(result, source, locator, literal, anchor, reason,
                     "prose_sidecar", storage_path, storage_index)
     marker_stripped = re.sub(r"\{#b:[0-9a-f]{8}\}", "", text)
@@ -215,15 +233,183 @@ def _append_prose_candidates(result, sidecar_entries, storage_path, text, source
                                 else "bare year is a fixed-fact candidate"})
 
 
+def _json_value_at(obj, dotted: str):
+    current = obj
+    for part in dotted.split(".") if dotted else []:
+        current = current[int(part)] if isinstance(current, list) else current[part]
+    return current
+
+
+def _resolve_approved_storage(repo: Path, row: dict) -> int:
+    """Resolve one governed durable locator to its date ordinal."""
+    durable = row["durable_locator"]
+    source_path = repo / row["source"]
+    if durable.startswith("json:"):
+        match = re.fullmatch(r"json:(.+):date:(\d+)", durable)
+        if not match:
+            raise RuntimeError(f"unsupported approved durable locator: {row['key']}")
+        value = _json_value_at(json.loads(source_path.read_text()), match.group(1))
+        dates = _dated_matches(value) if isinstance(value, str) else []
+        ordinal = int(match.group(2))
+        if ordinal >= len(dates) or dates[ordinal].group(1) != row["literal"]:
+            raise RuntimeError(f"approved Day Zero identity no longer resolves: {row['key']}")
+        return ordinal
+
+    match = re.fullmatch(r"raw:([0-9a-f]{16}):occurrence:(\d+):date:(\d+)", durable)
+    if not match:
+        raise RuntimeError(f"approved Day Zero identity no longer resolves: {row['key']}")
+    fingerprint, requested, date_ordinal = match.group(1), int(match.group(2)), int(match.group(3))
+    candidates = []
+    for line in source_path.read_text().splitlines():
+        dates = _dated_matches(line)
+        if not any(d.group(1) == row["literal"] for d in dates):
+            continue
+        normalized = " ".join(re.sub(
+            r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)|"
+            r"\b(?:January|February|March|April|May|June|July|August|September|October|"
+            r"November|December)\s+\d{1,2},\s+\d{4}\b",
+            "<date>", line
+        ).split())
+        candidates.append((hashlib.sha256(normalized.encode()).hexdigest()[:16], dates))
+    if requested < 1 or requested > len(candidates):
+        raise RuntimeError(f"approved Day Zero identity no longer resolves: {row['key']}")
+    observed_fingerprint, dates = candidates[requested - 1]
+    if (observed_fingerprint != fingerprint or date_ordinal >= len(dates) or
+            dates[date_ordinal].group(1) != row["literal"]):
+        raise RuntimeError(f"approved Day Zero identity no longer resolves: {row['key']}")
+    return date_ordinal
+
+
+def _approved_materialization(repo: Path) -> tuple[list[dict], list[dict], int | None]:
+    """Load and verify the approved proposal plus its governed resolution."""
+    import apply_day_zero_review
+
+    approval = repo / apply_day_zero_review.APPROVAL_REL
+    if not approval.is_file():
+        return [], [], None
+    proposal_path = repo / apply_day_zero_review.PROPOSAL_REL
+    apply_day_zero_review._approval_digest(repo, proposal_path)
+    proposal = json.loads(proposal_path.read_text())
+    holdouts = json.loads((repo / apply_day_zero_review.HOLDOUTS_REL).read_text())
+    audit = json.loads((repo / apply_day_zero_review.AUDIT_REL).read_text())
+    try:
+        apply_day_zero_review.validate_applied_review(repo, proposal, holdouts, audit)
+    except (OSError, KeyError, ValueError) as exc:
+        raise RuntimeError(f"approved Day Zero identity no longer resolves: {exc}") from exc
+    governed = {
+        (row["source"], row.get("source_locator", row["locator"]), row["literal"]): row
+        for row in audit.get("entries", [])
+        if row.get("review_status") == "human_confirmed_convertible"
+    }
+    rows = []
+    declared_holdouts = []
+    for row in proposal.get("proposals", []):
+        disposition = row.get("proposed_disposition")
+        if disposition in {"declared_holdout", "declared_out_of_anchor_holdout"}:
+            declared_holdouts.append(row)
+            continue
+        if disposition not in {"convertible", "convertible_after_durable_locator_added"}:
+            continue
+        identity = (row["source"], row["locator"], row["literal"])
+        approved = governed.get(identity)
+        if not approved:
+            raise RuntimeError(f"approved conversion lacks governed identity: {row['key']}")
+        rows.append(dict(row, durable_locator=approved["locator"]))
+    return rows, declared_holdouts, audit["summary"]["converted_dates"]
+
+
+def _materialize_approved_rows(repo, rows, sidecar_entries, sidecar_source,
+                               result, anchor, reason):
+    existing = {(proof.path, proof.locator, proof.literal) for proof in result.date_proofs}
+    for row in rows:
+        identity = (row["source"], row["locator"], row["literal"])
+        if identity in existing:
+            continue
+        if row["durable_locator"].startswith("b:"):
+            raise RuntimeError(f"approved Day Zero identity no longer resolves: {row['key']}")
+        occurrence = _resolve_approved_storage(repo, row)
+        storage_index = len(sidecar_entries)
+        sidecar_entries.append({
+            "source": row["source"],
+            "locator": occurrence, "literal": row["literal"],
+            "day_zero_offset": row["proposed_day_zero_offset"],
+            "durable_locator": row["durable_locator"],
+        })
+        result.staged_date_writes += 1
+        _record(result, row["source"], row["durable_locator"], row["literal"],
+                anchor, reason, "prose_sidecar", sidecar_source, storage_index)
+        existing.add(identity)
+    approved_identities = {(row["source"], row["locator"], row["literal"]) for row in rows}
+    result.unclassified[:] = [
+        item for item in result.unclassified
+        if (item["source"], item["locator"], item["literal"]) not in approved_identities
+    ]
+
+
 def _markdown_blocks(text: str):
     spans = []
     build_site.markdown(text, spans=spans)
     return spans
 
 
+def _stage_payload(path: Path, payload: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp",
+                                        dir=path.parent)
+    staged = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return staged
+    except Exception:
+        if descriptor >= 0:
+            os.close(descriptor)
+        staged.unlink(missing_ok=True)
+        raise
+
+
+def _write_staged_files(writes: dict[Path, bytes]) -> None:
+    """Replace the proved write set, rolling every path back on any failure."""
+    originals = {path: path.read_bytes() if path.exists() else None for path in writes}
+    staged = {}
+    try:
+        for path, payload in writes.items():
+            staged[path] = _stage_payload(path, payload)
+    except Exception:
+        for temporary in staged.values():
+            temporary.unlink(missing_ok=True)
+        raise
+    replaced = []
+    try:
+        for path in sorted(staged, key=lambda item: str(item)):
+            os.replace(staged[path], path)
+            replaced.append(path)
+    except Exception:
+        for path in reversed(replaced):
+            original = originals[path]
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                rollback = _stage_payload(path, original)
+                os.replace(rollback, path)
+        raise
+    finally:
+        for temporary in staged.values():
+            temporary.unlink(missing_ok=True)
+
+
 def convert_corpus(repo: Path, write: bool = False) -> Result:
     repo = Path(repo)
     result = Result()
+    approved_rows, declared_rows, governed_target = _approved_materialization(repo)
+    result.governed_conversion_target = governed_target
+    approved_by_identity = {
+        (row["source"], row["locator"], row["literal"]): row
+        for row in approved_rows
+    }
     staged_writes: dict[Path, bytes] = {}
     matters = repo / "data" / "matters"
     for matter_json in sorted(matters.glob("*/matter.json")):
@@ -270,6 +456,7 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
                     _record(result, source, locator, literal, anchor, reason,
                             "json_sibling", source, sibling_locator)
                     insertions.append((parent, key + "_day_zero_offset", parsed_offset))
+                    result.staged_date_writes += 1
                 else:
                     source = str(path.relative_to(repo))
                     spans = _markdown_blocks(value)
@@ -278,12 +465,14 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
                             _append_prose_candidates(result, sidecar_entries, sidecar_source,
                                                      span["raw"], source,
                                                      "b:" + span["bid"] if span["bid"] else None,
-                                                     anchor, reason)
+                                                     anchor, reason,
+                                                     approved_conversions=approved_by_identity)
                     else:
                         json_locator = "%s.%s" % (parent, key) if parent else key
                         _append_prose_candidates(result, sidecar_entries, sidecar_source,
                                                  value, source, None, anchor,
-                                                 reason, locator_prefix=json_locator)
+                                                 reason, locator_prefix=json_locator,
+                                                 approved_conversions=approved_by_identity)
             if insertions:
                 source = str(path.relative_to(repo))
                 result.touched_files.add(source)
@@ -298,9 +487,15 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
                 _append_prose_candidates(result, sidecar_entries, sidecar_source,
                                          span["raw"], source,
                                          "b:" + span["bid"] if span["bid"] else None,
-                                         anchor, reason)
+                                         anchor, reason,
+                                         approved_conversions=approved_by_identity)
             if sidecar_entries:
                 result.touched_files.add(str((matter_dir / "date-offsets.json").relative_to(repo)))
+        matter_approved = [row for row in approved_rows
+                           if row["source"].startswith(
+                               str(matter_dir.relative_to(repo)).rstrip("/") + "/")]
+        _materialize_approved_rows(repo, matter_approved, sidecar_entries,
+                                   sidecar_source, result, anchor, reason)
         if sidecar_entries:
             result.touched_files.add(sidecar_source)
             sidecar = {"schema_version": "1.0.0", "matter_id": matter.get("id"),
@@ -313,14 +508,35 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
             _capture_file_proof(result, source, before, after)
             staged_writes[target] = after
     _reconcile_full_date_inventory(repo, result)
+    if declared_rows:
+        declared = {(row["source"], row["locator"], row["literal"]): row
+                    for row in declared_rows}
+        remaining = []
+        for item in result.unclassified:
+            row = declared.get((item["source"], item["locator"], item["literal"]))
+            if row:
+                result.holdouts.append({
+                    "source": item["source"], "locator": item["locator"],
+                    "literal": item["literal"], "reason": row["reason_code"],
+                })
+            else:
+                remaining.append(item)
+        result.unclassified = remaining
+        result.full_date_holdouts = sum(
+            1 for row in result.holdouts
+            if _is_full_date(row.get("literal", ""))
+        )
     day_zero_equivalence.file_round_trip(
         sorted(result.touched_files), result.before_files, result.after_files,
         result.file_proofs, result.date_proofs,
         converted_date_count=result.converted_dates,
     )
+    _assert_governed_materialization(
+        result, {"summary": {"converted_dates": governed_target}},
+        governed_target,
+    )
     if write:
-        for path, payload in staged_writes.items():
-            path.write_bytes(payload)
+        _write_staged_files(staged_writes)
     return result
 
 
@@ -437,21 +653,42 @@ def governed_reports(repo: Path, result: Result):
         import apply_day_zero_review
 
         proposal_path = repo / apply_day_zero_review.PROPOSAL_REL
-        proposal = json.loads(proposal_path.read_text())
         apply_day_zero_review._approval_digest(repo, proposal_path)
-        holdouts, audit = apply_day_zero_review.apply_review(
-            repo, proposal, holdouts, audit
-        )
+        proposal = json.loads(proposal_path.read_text())
+        holdouts = json.loads((repo / apply_day_zero_review.HOLDOUTS_REL).read_text())
+        audit = json.loads((repo / apply_day_zero_review.AUDIT_REL).read_text())
+        apply_day_zero_review.validate_applied_review(repo, proposal, holdouts, audit)
     return holdouts, audit
 
 
-def main() -> int:
+def _approved_conversion_target(repo: Path) -> int | None:
+    _, _, target = _approved_materialization(Path(repo))
+    return target
+
+
+def _assert_governed_materialization(result: Result, audit_report: dict,
+                                     target: int | None) -> None:
+    if target is None:
+        return
+    staged = result.staged_date_writes
+    proofs = result.proof_records
+    governed = audit_report.get("summary", {}).get("converted_dates")
+    unclassified = len(result.unclassified)
+    if not (staged == proofs == governed == target and unclassified == 0):
+        raise RuntimeError(
+            "approved Day Zero materialization mismatch: "
+            f"staged={staged}, proofs={proofs}, governed={governed}, "
+            f"target={target}, unclassified={unclassified}"
+        )
+
+
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--write", action="store_true", help="write corpus offsets (U8 only)")
     parser.add_argument("--audit-output", type=Path)
     parser.add_argument("--holdouts-output", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     result = convert_corpus(args.repo, write=args.write)
     # Keep the command boundary explicitly gated even though convert_corpus
     # also proves its result before returning. This prevents a future caller
@@ -462,6 +699,9 @@ def main() -> int:
         converted_date_count=result.converted_dates,
     )
     holdout_report, audit_report = governed_reports(args.repo, result)
+    _assert_governed_materialization(
+        result, audit_report, _approved_conversion_target(args.repo)
+    )
     if args.audit_output:
         args.audit_output.write_text(json.dumps(audit_report, indent=2, ensure_ascii=False) + "\n")
     if args.holdouts_output:
