@@ -256,3 +256,7 @@ recovery inspection.
 
 The live acceptance matrix is in `docs/uat/editor-publisher-matrix.md`. Live deployment and secret
 handling are intentionally not part of repository-only testing.
+
+The one-off U15 corpus rewrite is rehearsed by `tools/day_zero_migration.py` under the separate
+fail-closed procedure in `docs/day-zero-migration-operations.md`. That command does not add a direct
+production writer or replace this Publisher-ledger lane.
