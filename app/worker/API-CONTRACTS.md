@@ -35,8 +35,12 @@ The normalized SSE event contract is provider-independent:
 text or credentials. Run it separately for `anthropic`, `openai`, and `google`.
 For each provider it requires normalized SSE (`x-sonsteng-stream: 1`), one or
 more `delta` events, exactly one `done`, canonical token usage, nonempty output,
-and a structurally identical settled JSON replay from the same `turn_id`. Provider
-errors, early EOF, malformed frames, or credential reflection fail closed.
+and a structurally identical settled JSON replay from the same `turn_id`. It
+also requires a delta to arrive in an earlier body read than `done`, so a fully
+buffered SSE transcript does not count as live streaming. Provider errors,
+early EOF, malformed frames, redirects, or credential reflection fail closed.
+The command-line harness accepts only the approved DEV Worker origin shown
+below; non-DEV and localhost origins are available only to the unit-test API.
 
 Load a protected environment file (mode 0600) before invoking the harness:
 
