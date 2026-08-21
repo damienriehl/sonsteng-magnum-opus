@@ -29,7 +29,6 @@ Run `python3 tools/validate_spine.py --help` for usage.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -40,6 +39,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import build_site
+import day_zero_locator
 
 # ---------------------------------------------------------------------------
 # jsonschema is used when importable; otherwise we degrade to structural checks
@@ -70,15 +70,7 @@ VALIDATOR_CHECK_COUNT = 30
 # not require every convertible absolute date to carry one until U16b.
 ENFORCE_DAY_ZERO_OFFSETS = False
 DECLARED_HOLDOUT_STATUS = "declared_absolute_holdout"
-DAY_ZERO_FULL_DATE_RE = re.compile(
-    r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)|"
-    r"\b(?:January|February|March|April|May|June|July|August|September|October|"
-    r"November|December)\s+\d{1,2},\s+\d{4}\b"
-)
-DAY_ZERO_RAW_LOCATOR_RE = re.compile(
-    r"^raw:([0-9a-f]{16}):occurrence:([1-9][0-9]*):date:([0-9]+)$"
-)
-DAY_ZERO_JSON_LOCATOR_RE = re.compile(r"^json:(.+):date:([0-9]+)$")
+DAY_ZERO_FULL_DATE_RE = day_zero_locator.DATE_RE
 
 SECTION_KEYS = [
     "intro",
@@ -846,13 +838,6 @@ class Validator:
                 child_locator = f"{locator}.{index}" if locator else str(index)
                 self._walk_structured_dates(mid, child, source, anchor, child_locator)
 
-    @staticmethod
-    def _json_value_at(obj, dotted):
-        current = obj
-        for part in dotted.split(".") if dotted else []:
-            current = current[int(part)] if isinstance(current, list) else current[part]
-        return current
-
     def _resolve_sidecar_source(self, mid, entry, index):
         source = self._normal_source(entry.get("source", ""))
         source_path = self.world.data_dir / source
@@ -868,33 +853,9 @@ class Validator:
             return False
 
         if durable:
-            json_match = DAY_ZERO_JSON_LOCATOR_RE.fullmatch(durable)
-            raw_match = DAY_ZERO_RAW_LOCATOR_RE.fullmatch(durable)
             try:
-                if json_match:
-                    value = self._json_value_at(json.loads(source_text), json_match.group(1))
-                    dates = list(DAY_ZERO_FULL_DATE_RE.finditer(value))
-                    ordinal = int(json_match.group(2))
-                    resolved = dates[ordinal].group(0)
-                elif raw_match:
-                    requested = int(raw_match.group(2))
-                    date_ordinal = int(raw_match.group(3))
-                    candidates = []
-                    for line in source_text.splitlines():
-                        dates = list(DAY_ZERO_FULL_DATE_RE.finditer(line))
-                        if not any(item.group(0) == literal for item in dates):
-                            continue
-                        normalized = " ".join(DAY_ZERO_FULL_DATE_RE.sub("<date>", line).split())
-                        candidates.append((hashlib.sha256(normalized.encode()).hexdigest()[:16], dates))
-                    fingerprint, dates = candidates[requested - 1]
-                    if fingerprint != raw_match.group(1):
-                        raise IndexError
-                    resolved = dates[date_ordinal].group(0)
-                else:
-                    raise IndexError
-            except (IndexError, KeyError, TypeError, json.JSONDecodeError):
-                resolved = None
-            if resolved != literal:
+                day_zero_locator.resolve_durable_locator(source_path, durable, literal)
+            except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
                 self.report.add(mid, "F30", ERROR,
                                 f"{mid} date-offsets {locator} has stale literal/block "
                                 f"identity for {entry.get('source')!r}.")
@@ -929,22 +890,16 @@ class Validator:
             for match in DAY_ZERO_FULL_DATE_RE.finditer(path.read_text(encoding="utf-8")):
                 inventory[(source, match.group(0))] += 1
 
-        def walk(value, source):
-            if isinstance(value, dict):
-                for child in value.values():
-                    walk(child, source)
-            elif isinstance(value, list):
-                for child in value:
-                    walk(child, source)
-            elif isinstance(value, str) and parse_date(value) is None:
-                for match in DAY_ZERO_FULL_DATE_RE.finditer(value):
-                    inventory[(source, match.group(0))] += 1
-
         for path in sorted(root.rglob("*.json")):
             if path.name == "date-offsets.json":
                 continue
             try:
-                walk(json.loads(path.read_text(encoding="utf-8")), self._normal_source(path))
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                source = self._normal_source(path)
+                for value in walk_strings(payload):
+                    if parse_date(value) is None:
+                        for match in DAY_ZERO_FULL_DATE_RE.finditer(value):
+                            inventory[(source, match.group(0))] += 1
             except (OSError, UnicodeError, json.JSONDecodeError):
                 continue
         return inventory

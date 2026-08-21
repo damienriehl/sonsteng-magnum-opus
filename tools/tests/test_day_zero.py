@@ -14,6 +14,7 @@ sys.path.insert(0, str(TOOLS))
 import day_zero  # noqa: E402
 import json_surgical  # noqa: E402
 import day_zero_equivalence  # noqa: E402
+import day_zero_locator  # noqa: E402
 import apply_day_zero_review  # noqa: E402
 
 
@@ -326,6 +327,23 @@ def test_approved_proposal_is_materialized_with_stable_durable_locators(tmp_path
     ]
     assert original_block in facts.read_text()
     assert any(proof.literal == "January 4, 2026" for proof in result.date_proofs)
+
+
+def test_raw_durable_locator_resolves_repeated_literal_on_one_line(tmp_path):
+    source = tmp_path / "facts.md"
+    source.write_text("Hearings January 3, 2026 and January 3, 2026.\n")
+    row = {
+        "key": "fixture-key",
+        "source": "facts.md",
+        "locator": "line:1:raw-occurrence:2",
+        "literal": "January 3, 2026",
+    }
+    durable = day_zero_locator.durable_locator(tmp_path, row)
+
+    assert durable.endswith(":occurrence:2:date:1")
+    assert day_zero_locator.resolve_durable_locator(
+        source, durable, row["literal"]
+    ) == 1
 
 
 def test_real_approved_proposal_projects_exact_materialization_without_writes():

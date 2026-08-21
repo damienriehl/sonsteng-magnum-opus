@@ -203,7 +203,8 @@ class LocalRehearsalPhases:
                 argv,
                 cwd=self.checkout,
                 check=True,
-                capture_output=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 timeout=self.timeout,
                 env=environment,
             )
