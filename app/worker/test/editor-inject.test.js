@@ -29,6 +29,7 @@ function stubEl(attrs) {
     removed: false,
     getAttribute(name) { return name in this._attrs ? this._attrs[name] : null; },
     setAttribute(name, value) { this._attrs[name] = value; },
+    removeAttribute(name) { delete this._attrs[name]; },
     remove() { this.removed = true; },
   };
 }
@@ -65,12 +66,13 @@ test("ScriptStripper removes inline + external page scripts, keeps JSON islands"
   assert.equal(ldJson.removed, false, "ld+json data island must be kept");
 });
 
-test("ReservedStateStripper removes every upstream collision regardless of element type", () => {
+test("ReservedStateStripper neutralizes every collision without deleting page content", () => {
   const s = new ReservedStateStripper();
   for (const id of ["editor-map-data", "edits-data", " EDITOR-MAP-DATA "]) {
     const forgedReservedNode = stubEl({ id });
     s.element(forgedReservedNode);
-    assert.equal(forgedReservedNode.removed, true, `${id} is reserved for Worker state`);
+    assert.equal(forgedReservedNode.removed, false, "colliding content remains in the page");
+    assert.equal(forgedReservedNode.getAttribute("id"), null, `${id} is reserved for Worker state`);
   }
 
   const ordinaryNode = stubEl({ id: "upstream-data" });
@@ -170,7 +172,7 @@ test("student view rejects missing, malformed, and prefix-escaping upstream valu
   assert.equal(buildStudentViewUrl("index.html?editor_token=secret", "https://example.org/platform/"), null);
 });
 
-test("injection chain strips forged state and emits only a safe Worker student URL", async () => {
+test("injection chain neutralizes forged state identity and emits a safe Worker student URL", async () => {
   const originalFetch = globalThis.fetch;
   const OriginalHTMLRewriter = globalThis.HTMLRewriter;
   const fetched = [];
@@ -199,7 +201,10 @@ test("injection chain strips forged state and emits only a safe Worker student U
           if (!reservedIds) return source;
           const el = stubEl(parseAttrs(rawAttrs));
           reservedIds[1].element(el);
-          return el.removed ? "" : source;
+          if (el.removed) return "";
+          return el.getAttribute("id") === null
+            ? source.replace(/\s+id\s*=\s*["'][^"']+["']/i, "")
+            : source;
         },
       );
       const scripts = this.handlers.find(([selector]) => selector === "script");
@@ -229,10 +234,12 @@ test("injection chain strips forged state and emits only a safe Worker student U
     const validHtml = await valid.text();
     assert.match(validHtml,
       /"student_view_url":"https:\/\/sonsteng-dev\.damienriehl\.com\/platform\/matters\/m03-tort-meridian\/"/);
-    assert.doesNotMatch(validHtml, /evil\.example|stolen|forged/,
-      "upstream reserved islands cannot precede or replace Worker state");
     assert.match(validHtml, /id="upstream-data">{"safe":true}/,
       "non-reserved upstream JSON data remains intact");
+    assert.match(validHtml, /<title>evil\.example non-script head collision<\/title>/,
+      "colliding head content remains after its reserved ID is removed");
+    assert.match(validHtml, /<div>forged non-script body collision<\/div>/,
+      "colliding body content remains after its reserved ID is removed");
     assert.equal((validHtml.match(/id="editor-map-data"/g) || []).length, 1);
     assert.equal((validHtml.match(/id="edits-data"/g) || []).length, 1);
 
@@ -240,7 +247,12 @@ test("injection chain strips forged state and emits only a safe Worker student U
       { EDIT_UPSTREAM: "https://example.org/platform/?editor_token=secret" }, args,
     );
     const invalidHtml = await invalid.text();
-    assert.doesNotMatch(invalidHtml, /student_view_url|editor_token|secret|evil\.example/);
+    const invalidMapIsland = invalidHtml.match(
+      /<script type="application\/json" id="editor-map-data">([\s\S]*?)<\/script>/,
+    );
+    assert.ok(invalidMapIsland, "Worker map island remains present");
+    assert.doesNotMatch(invalidMapIsland[1], /student_view_url|editor_token|secret/);
+    assert.doesNotMatch(invalidHtml, /editor_token|secret/);
 
     assert.equal(fetched.length, 2, "invalid public-link config retains the established page fetch");
     for (const request of fetched) {

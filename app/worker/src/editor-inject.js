@@ -176,12 +176,12 @@ export class AssetLinkRewriter {
 }
 
 // The editor client resolves these Worker-owned state islands with
-// getElementById(). Remove every upstream collision, regardless of element
-// type, so an earlier non-script node cannot preempt the injected state.
+// getElementById(). Neutralize every upstream collision without deleting the
+// element or its content, so structural containers remain intact.
 export class ReservedStateStripper {
   element(el) {
     const id = (el.getAttribute("id") || "").trim().toLowerCase();
-    if (id === "editor-map-data" || id === "edits-data") el.remove();
+    if (id === "editor-map-data" || id === "edits-data") el.removeAttribute("id");
   }
 }
 
