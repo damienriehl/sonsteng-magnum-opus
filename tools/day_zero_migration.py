@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Rehearse the one-off U15 Day Zero migration without touching production.
 
-The command's default path exports an exact candidate commit into a temporary
-copy and runs the complete corpus/write/build/validation/preflight sequence
-there.  The production state machine is dependency-injected and tested, but no
-CLI production adapter exists: U15 remains a supervised Damien-at-the-keyboard
-act until an exact-current-provider-ID reader can be added without bypassing
-the Publisher release authority.
+The command's default path checks out an exact candidate commit into a temporary
+standalone clone and runs the complete corpus/write/build/validation/preflight
+sequence there. The production state machine is dependency-injected and tested,
+but no CLI production adapter exists: U15 remains a supervised
+Damien-at-the-keyboard act until an exact-current-provider-ID reader can be
+added without bypassing the Publisher release authority.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ import argparse
 import contextlib
 import dataclasses
 import hashlib
-import io
 import json
 import os
 import pathlib
@@ -23,7 +22,6 @@ import re
 import signal
 import subprocess
 import sys
-import tarfile
 import tempfile
 from collections.abc import Callable, Iterator
 
@@ -151,8 +149,8 @@ def _run_phases(phases, candidate_sha: str, *, context: str) -> None:
 
 
 @contextlib.contextmanager
-def git_archive_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathlib.Path]:
-    """Export one exact commit to a disposable, non-Git working copy."""
+def isolated_git_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathlib.Path]:
+    """Check out one exact commit in a disposable, standalone local clone."""
     repo = pathlib.Path(repo).resolve()
     if not (repo / ".git").exists():
         raise MigrationError("rehearsal source is not a Git checkout")
@@ -170,24 +168,39 @@ def git_archive_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathlib
     if resolved_commit != candidate_sha:
         raise MigrationError("rehearsal candidate is not an exact commit object")
     try:
-        archived = subprocess.run(
-            ["git", "archive", "--format=tar", resolved_commit],
-            cwd=repo,
-            check=True,
-            capture_output=True,
-            timeout=120,
-        ).stdout
+        with tempfile.TemporaryDirectory(prefix="sonsteng-day-zero-rehearsal-") as directory:
+            target = pathlib.Path(directory) / "checkout"
+            subprocess.run(
+                [
+                    "git", "clone", "--quiet", "--no-local", "--no-checkout",
+                    str(repo), str(target),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            subprocess.run(
+                ["git", "checkout", "--quiet", "--detach", resolved_commit],
+                cwd=target,
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            checked_out = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=target,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ).stdout.strip()
+            if checked_out != resolved_commit:
+                raise MigrationError("isolated rehearsal checkout did not match the candidate")
+            yield target
+    except MigrationError:
+        raise
     except (OSError, subprocess.SubprocessError):
-        raise MigrationError("could not export the exact rehearsal candidate") from None
-    with tempfile.TemporaryDirectory(prefix="sonsteng-day-zero-rehearsal-") as directory:
-        target = pathlib.Path(directory) / "checkout"
-        target.mkdir()
-        try:
-            with tarfile.open(fileobj=io.BytesIO(archived), mode="r:") as archive:
-                archive.extractall(target, filter="data")
-        except (OSError, tarfile.TarError):
-            raise MigrationError("could not materialize the isolated rehearsal copy") from None
-        yield target
+        raise MigrationError("could not materialize the isolated rehearsal copy") from None
 
 
 class LocalRehearsalPhases:
@@ -269,7 +282,7 @@ def rehearse(
     candidate_sha: str,
     phases=None,
     *,
-    isolated_copy: Callable = git_archive_copy,
+    isolated_copy: Callable = isolated_git_copy,
 ) -> dict:
     """Run every U15 phase in a disposable copy and make zero PROD calls."""
     if not SHA_RE.fullmatch(candidate_sha or ""):

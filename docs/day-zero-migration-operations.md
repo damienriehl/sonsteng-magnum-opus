@@ -1,9 +1,9 @@
 # Day Zero migration rehearsal and supervised boundary
 
 `tools/day_zero_migration.py` closes the executable rehearsal gap in U15 without
-creating a new production bypass. Its default mode exports one exact Git commit
-to a temporary non-Git copy, runs all migration gates there, deletes the copy,
-and makes no production call.
+creating a new production bypass. Its default mode checks out one exact Git
+commit in a temporary standalone local clone, runs all migration gates there,
+deletes the clone, and makes no production call.
 
 ## Safe default: exact-SHA rehearsal
 
@@ -13,11 +13,14 @@ Run this from the dedicated daemon checkout or another clean trusted checkout:
 python3 tools/day_zero_migration.py --candidate-sha <40-character-lowercase-SHA>
 ```
 
-Omitting `--candidate-sha` uses the exact current `HEAD`. The command exports
-that commit with `git archive`; uncommitted files and the source checkout are
-never rewritten. It removes credential-like environment variables from every
-child process, forces both production controls false, suppresses child output,
-and runs these bounded phases in order:
+Omitting `--candidate-sha` uses the exact current `HEAD`. The command creates a
+standalone clone with no local hardlinks or object alternates and checks out
+that exact commit detached; uncommitted files and the source checkout are never
+rewritten. Retaining Git metadata is intentional because preflight's tracked-file
+and history checks must run under their real repository contract. The command
+removes credential-like environment variables from every child process, forces
+both production controls false, suppresses child output, and runs these bounded
+phases in order:
 
 1. governed Day Zero verification (dry run and round-trip proof);
 2. governed Day Zero write in the disposable copy;

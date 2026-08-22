@@ -94,6 +94,60 @@ class TestFactsSchema(unittest.TestCase):
 
 
 class TestFactsPage(unittest.TestCase):
+    def test_day_zero_machine_fields_are_not_editable_facts(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            saved_root = bs.ROOT
+            try:
+                bs.ROOT = tmp
+                matter_dir = os.path.join(tmp, "data", "matters", "sample")
+                business_dir = os.path.join(matter_dir, "business")
+                os.makedirs(business_dir)
+                with open(os.path.join(business_dir, "business.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"engagement": {
+                        "signed_date": "2025-01-01",
+                        "signed_date_day_zero_offset": 4,
+                    }}, fh)
+                rows = bs._fact_rows({
+                    "_dir": matter_dir,
+                    "open_date": "2025-01-02",
+                    "open_date_day_zero_offset": 5,
+                })
+            finally:
+                bs.ROOT = saved_root
+
+        paths = {path for _relpath, path, _value in rows}
+        self.assertIn("open_date", paths)
+        self.assertIn("engagement.signed_date", paths)
+        self.assertNotIn("open_date_day_zero_offset", paths)
+        self.assertNotIn("engagement.signed_date_day_zero_offset", paths)
+
+    def test_day_zero_sidecar_is_not_counted_as_an_authored_restatement(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            saved_root = bs.ROOT
+            try:
+                bs.ROOT = tmp
+                matter_dir = os.path.join(tmp, "data", "matters", "sample")
+                os.makedirs(matter_dir)
+                literal = "2025-01-02"
+                with open(os.path.join(matter_dir, "matter.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"open_date": literal}, fh)
+                with open(os.path.join(matter_dir, "date-offsets.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"entries": [{"literal": literal, "offset": 5}]}, fh)
+                derived, restated = bs.fact_usage(
+                    matter_dir,
+                    "data/matters/sample/matter.json",
+                    "open_date",
+                    literal,
+                )
+            finally:
+                bs.ROOT = saved_root
+
+        self.assertEqual(derived, 0)
+        self.assertEqual(restated, 0)
+
     def test_every_matter_has_a_facts_page_in_the_map(self):
         bundle = _build_fresh()["bundle"]
         pages = [p for p in bundle["pages"]
