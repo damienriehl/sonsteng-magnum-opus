@@ -289,8 +289,11 @@ def is_tenth(hours) -> bool:
 def parse_date(s):
     if not isinstance(s, str):
         return None
-    for parser in (date.fromisoformat,
-                   lambda value: datetime.strptime(value, "%B %d, %Y").date()):
+    parsers = []
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        parsers.append(lambda value: datetime.strptime(value, "%Y-%m-%d").date())
+    parsers.append(lambda value: datetime.strptime(value, "%B %d, %Y").date())
+    for parser in parsers:
         try:
             return parser(s)
         except ValueError:
@@ -801,7 +804,17 @@ class Validator:
                                 f"{mid} cannot resolve {locator} from {offset_key}={offset!r}.")
                 self._resolved_dates[field] = None
                 return None
-            resolved = anchor + timedelta(days=offset)
+            try:
+                resolved = anchor + timedelta(days=offset)
+            except OverflowError:
+                self.report.add(
+                    mid, "F30", ERROR,
+                    f"{mid} cannot resolve {locator} from "
+                    f"{offset_key}={offset!r}: offset is outside the "
+                    "supported calendar range.",
+                )
+                self._resolved_dates[field] = None
+                return None
             absolute = parse_date(literal)
             if absolute is not None and absolute != resolved:
                 self.report.add(mid, "F30", ERROR,
@@ -827,8 +840,36 @@ class Validator:
         if isinstance(value, dict):
             for key, child in value.items():
                 child_locator = f"{locator}.{key}" if locator else key
-                if (not key.endswith("_day_zero_offset") and
-                        parse_date(child) is not None):
+                if key.endswith("_day_zero_offset"):
+                    if type(child) is int:
+                        base_key = key[:-len("_day_zero_offset")]
+                        if base_key.endswith("_day_zero_offset"):
+                            self.report.add(
+                                mid, "F30", ERROR,
+                                f"{mid} {child_locator} chains Day Zero offset "
+                                "metadata instead of naming a date sibling.",
+                            )
+                        elif parse_date(value.get(base_key)) is None:
+                            self.report.add(
+                                mid, "F30", ERROR,
+                                f"{mid} {child_locator} has no supported date "
+                                f"sibling {base_key}.",
+                            )
+                    elif parse_date(child) is not None:
+                        if self.enforce_day_zero_offsets:
+                            self.report.add(
+                                mid, "F30", ERROR,
+                                f"{mid} {child_locator} is a date-valued "
+                                "authored fact using the reserved Day Zero "
+                                "offset suffix and must be renamed before "
+                                "conversion.",
+                            )
+                        self.report.record_checked_date(
+                            source, child_locator, used_offset=False)
+                    if isinstance(child, (dict, list)):
+                        self._walk_structured_dates(
+                            mid, child, source, anchor, child_locator)
+                elif parse_date(child) is not None:
                     self._resolve_date(mid, value, key, source, child_locator, anchor)
                 elif isinstance(child, (dict, list)):
                     self._walk_structured_dates(mid, child, source, anchor,

@@ -525,6 +525,160 @@ def test_checked_date_count_is_nonzero_for_absolute_and_offset_fixtures(tmp_path
     assert offset_report.day_zero_offset_enforcement is False
 
 
+def test_custom_fact_date_survives_conversion_and_strict_validation(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    matter_path = data / "matters" / "m99-noncompete-meridian" / "matter.json"
+    matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    matter["custom_facts"] = {
+        "hearing_date": "2026-01-13",
+        "authored_day_zero_offset": "Twelve days after filing",
+    }
+    matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+    converted = day_zero.convert_corpus(repo, write=True)
+    converted_matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    assert converted_matter["custom_facts"] == {
+        "hearing_date": "2026-01-13",
+        "hearing_date_day_zero_offset": 1,
+        "authored_day_zero_offset": "Twelve days after filing",
+    }
+    assert converted.converted_dates > 0
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert not any(f.severity == vs.ERROR for f in report.for_scope("m99"))
+    assert report.day_zero_offset_enforcement is True
+    assert report.offset_dates_checked > 0
+
+    converted_matter["custom_facts"]["hearing_date_day_zero_offset"] = 2
+    matter_path.write_text(json.dumps(converted_matter, indent=2), encoding="utf-8")
+    mismatch_report = run_validator(data, matter="m99", strict=True,
+                                    enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and
+               "custom_facts.hearing_date literal" in f.message and
+               "disagrees" in f.message
+               for f in mismatch_report.for_scope("m99"))
+
+
+def test_strict_validation_rejects_unbacked_custom_fact_offsets(tmp_path):
+    cases = {
+        "orphan": {"witness_count_day_zero_offset": 12},
+        "non-date": {
+            "witness_count": "Twelve witnesses",
+            "witness_count_day_zero_offset": 12,
+        },
+    }
+    for name, custom_facts in cases.items():
+        data = tmp_path / name
+        build_base_spine(data)
+        matter_path = (data / "matters" / "m99-noncompete-meridian" /
+                       "matter.json")
+        matter = json.loads(matter_path.read_text(encoding="utf-8"))
+        matter["custom_facts"] = custom_facts
+        matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+        report = run_validator(data, matter="m99", strict=True,
+                               enforce_day_zero_offsets=True)
+        assert any(f.check == "F30" and
+                   "custom_facts.witness_count_day_zero_offset" in f.message and
+                   "has no supported date sibling" in f.message
+                   for f in report.for_scope("m99")), name
+
+
+def test_strict_validation_rejects_chained_custom_fact_offset(tmp_path):
+    build_base_spine(tmp_path)
+    matter_path = (tmp_path / "matters" / "m99-noncompete-meridian" /
+                   "matter.json")
+    matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    matter["custom_facts"] = {
+        "deadline_day_zero_offset": "2026-01-13",
+        "deadline_day_zero_offset_day_zero_offset": 2,
+    }
+    matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+    report = run_validator(tmp_path, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(
+        f.check == "F30" and
+        "custom_facts.deadline_day_zero_offset_day_zero_offset" in f.message and
+        "chains Day Zero offset metadata" in f.message
+        for f in report.for_scope("m99")
+    )
+
+
+def test_strict_validation_rejects_date_valued_authored_offset_suffix(tmp_path):
+    build_base_spine(tmp_path)
+    matter_path = (tmp_path / "matters" / "m99-noncompete-meridian" /
+                   "matter.json")
+    matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    matter["custom_facts"] = {
+        "hearing_day_zero_offset": "2026-01-13",
+    }
+    matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+    report = run_validator(tmp_path, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(
+        f.check == "F30" and
+        "custom_facts.hearing_day_zero_offset" in f.message and
+        "must be renamed" in f.message
+        for f in report.for_scope("m99")
+    )
+
+
+def test_strict_validation_reports_huge_offset_instead_of_crashing(tmp_path):
+    build_base_spine(tmp_path)
+    matter_path = (tmp_path / "matters" / "m99-noncompete-meridian" /
+                   "matter.json")
+    matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    matter["custom_facts"] = {
+        "hearing_date": "2026-01-13",
+        "hearing_date_day_zero_offset": 10 ** 100,
+    }
+    matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+    report = run_validator(tmp_path, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(
+        f.check == "F30" and
+        "custom_facts.hearing_date" in f.message and
+        "outside the supported calendar range" in f.message
+        for f in report.for_scope("m99")
+    )
+
+
+def test_strict_validation_does_not_treat_extended_iso_forms_as_dates(tmp_path):
+    build_base_spine(tmp_path)
+    matter_path = (tmp_path / "matters" / "m99-noncompete-meridian" /
+                   "matter.json")
+    matter = json.loads(matter_path.read_text(encoding="utf-8"))
+    matter["custom_facts"] = {
+        "basic_iso": "20260113",
+        "basic_iso_day_zero_offset": 12,
+        "week_iso": "2026-W03-2",
+        "week_iso_day_zero_offset": 12,
+        "reduced_month": "2026-1-13",
+        "reduced_month_day_zero_offset": 12,
+        "reduced_day": "2026-01-3",
+        "reduced_day_day_zero_offset": 12,
+    }
+    matter_path.write_text(json.dumps(matter, indent=2), encoding="utf-8")
+
+    report = run_validator(tmp_path, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    messages = [f.message for f in report.for_scope("m99") if f.check == "F30"]
+    assert any("custom_facts.basic_iso_day_zero_offset" in message and
+               "has no supported date sibling" in message for message in messages)
+    assert any("custom_facts.week_iso_day_zero_offset" in message and
+               "has no supported date sibling" in message for message in messages)
+    assert any("custom_facts.reduced_month_day_zero_offset" in message and
+               "has no supported date sibling" in message for message in messages)
+    assert any("custom_facts.reduced_day_day_zero_offset" in message and
+               "has no supported date sibling" in message for message in messages)
+
+
 def test_mutated_prose_offset_fails_semantic_resolution(tmp_path):
     data = tmp_path / "repo" / "data"
     build_base_spine(data)

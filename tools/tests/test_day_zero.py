@@ -275,6 +275,57 @@ def test_collateral_sibling_mutation_is_rejected():
         )
 
 
+def test_custom_fact_offset_collision_fails_before_writes(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    matter_path = matter / "matter.json"
+    original = json.dumps({
+        "id": "m01",
+        "open_date": "2026-01-01",
+        "as_of_date": "2026-01-02",
+        "custom_facts": {
+            "hearing_date": "2026-01-03",
+            "hearing_date_day_zero_offset": "Two days after opening",
+        },
+    }).encode()
+    matter_path.write_bytes(original)
+
+    with pytest.raises(RuntimeError, match=(
+            r"data/matters/m01-fixture/matter\.json cannot add Day Zero "
+            r"sibling.*hearing_date_day_zero_offset")):
+        day_zero.convert_corpus(tmp_path, write=True)
+
+    assert matter_path.read_bytes() == original
+    assert not (matter / "date-offsets.json").exists()
+
+
+def test_date_valued_authored_offset_suffix_requires_rename(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    matter_path = matter / "matter.json"
+    matter_path.write_text(json.dumps({
+        "id": "m01",
+        "open_date": "2026-01-01",
+        "as_of_date": "2026-01-02",
+        "custom_facts": {"hearing_day_zero_offset": "2026-01-03"},
+    }), encoding="utf-8")
+
+    result = day_zero.convert_corpus(tmp_path, write=True)
+
+    assert result.converted_dates == 2
+    assert result.unclassified == [{
+        "source": "data/matters/m01-fixture/matter.json",
+        "locator": "custom_facts.hearing_day_zero_offset",
+        "literal": "2026-01-03",
+        "reason": (
+            "date-valued authored fact uses the reserved Day Zero offset "
+            "suffix and must be renamed"
+        ),
+    }]
+    converted = json.loads(matter_path.read_text(encoding="utf-8"))
+    assert "hearing_day_zero_offset_day_zero_offset" not in converted["custom_facts"]
+
+
 def test_cli_proof_failure_is_nonzero_and_precedes_reports(tmp_path, monkeypatch):
     audit = tmp_path / "audit.json"
     holdouts = tmp_path / "holdouts.json"

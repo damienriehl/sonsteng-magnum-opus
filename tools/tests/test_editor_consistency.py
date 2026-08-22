@@ -31,6 +31,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import build_site as bs  # noqa: E402
 import editor_consistency as ec  # noqa: E402
 
 SLUG = "m03-tort-meridian"
@@ -123,6 +124,34 @@ class TestStaleValue(unittest.TestCase):
             facts["custom_facts.authored_day_zero_offset"],
             "Twelve days after filing",
         )
+
+    def test_custom_fact_type_boundary_matches_generated_facts_surface(self):
+        custom_facts = {
+            "machine_day_zero_offset": 12,
+            "authored_day_zero_offset": "Twelve days after filing",
+            "boolean_day_zero_offset": True,
+            "float_day_zero_offset": 1.5,
+            "numeric_day_zero_offset": "12",
+            "ordinary_count": 12,
+        }
+        editor_rows = ec.fact_rows_from_data(
+            MATTER_REL, {"custom_facts": custom_facts})
+        generated_rows = bs._fact_rows({
+            "_dir": os.path.join(os.sep, "tmp", "sample"),
+            "custom_facts": custom_facts,
+        })
+
+        editor_facts = {path: value for _relpath, path, value in editor_rows}
+        generated_facts = {path: value for _relpath, path, value in generated_rows}
+        self.assertEqual(editor_facts, generated_facts)
+        self.assertNotIn("custom_facts.machine_day_zero_offset", editor_facts)
+        self.assertEqual(editor_facts, {
+            "custom_facts.authored_day_zero_offset": "Twelve days after filing",
+            "custom_facts.boolean_day_zero_offset": True,
+            "custom_facts.float_day_zero_offset": 1.5,
+            "custom_facts.numeric_day_zero_offset": "12",
+            "custom_facts.ordinary_count": 12,
+        })
 
     def test_prose_carrying_new_value_not_flagged(self):
         flags = self._flags([_block("memo.md#b:cccc",

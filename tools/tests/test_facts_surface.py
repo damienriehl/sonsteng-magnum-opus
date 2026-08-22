@@ -29,6 +29,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import jsonschema
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
 REPO = os.path.dirname(TOOLS)
@@ -92,6 +94,19 @@ class TestFactsSchema(unittest.TestCase):
         self.assertEqual(cf.get("type"), "object")
         self.assertEqual(cf.get("additionalProperties", {}).get("type"), "string")
         self.assertNotIn("custom_facts", schema.get("required", []))
+
+        validator = jsonschema.Draft202012Validator(cf)
+        validator.validate({
+            "hearing_date": "2026-02-02",
+            "hearing_date_day_zero_offset": 12,
+            "authored_day_zero_offset": "Twelve days after filing",
+        })
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate({"witness_count": 12})
+        for invalid in (True, 1.5):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(jsonschema.ValidationError):
+                    validator.validate({"hearing_date_day_zero_offset": invalid})
 
 
 class TestFactsPage(unittest.TestCase):
