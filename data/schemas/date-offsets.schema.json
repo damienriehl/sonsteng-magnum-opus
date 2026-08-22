@@ -15,13 +15,21 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["source", "block_id", "locator", "literal", "day_zero_offset"],
+        "required": ["source", "locator", "literal", "day_zero_offset"],
+        "oneOf": [
+          { "required": ["block_id"], "not": { "required": ["durable_locator"] } },
+          { "required": ["durable_locator"], "not": { "required": ["block_id"] } }
+        ],
         "properties": {
           "source": { "type": "string" },
           "block_id": { "type": "string", "pattern": "^b:[0-9a-f]{8}$" },
           "locator": { "type": "integer", "minimum": 0 },
           "literal": { "type": "string" },
-          "day_zero_offset": { "type": "integer" }
+          "day_zero_offset": { "type": "integer" },
+          "durable_locator": {
+            "type": "string",
+            "pattern": "^(?:raw:[0-9a-f]{16}:occurrence:[1-9][0-9]*:date:[0-9]+|json:.+:date:[0-9]+)$"
+          }
         }
       }
     }

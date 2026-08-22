@@ -17,19 +17,17 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
+from day_zero_locator import (
+    DATE_RE,
+    durable_locator as _shared_durable_locator,
+    resolve_raw_occurrence,
+)
+
 
 PROPOSAL_REL = Path("docs/evidence/2026-08-17-day-zero-review-proposal.json")
 APPROVAL_REL = Path("docs/decisions/2026-08-17-day-zero-review-approval.md")
 HOLDOUTS_REL = Path("data/day-zero-holdouts.json")
 AUDIT_REL = Path("data/day-zero-anchor-audit.json")
-
-DATE_RE = re.compile(
-    r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)|"
-    r"\b(?:January|February|March|April|May|June|July|August|September|October|"
-    r"November|December)\s+\d{1,2},\s+\d{4}\b"
-)
-LINE_LOCATOR_RE = re.compile(r"^line:(\d+):raw-occurrence:(\d+)$")
-
 
 def _load(path: Path):
     return json.loads(path.read_text())
@@ -60,38 +58,8 @@ def _proposal_map(proposal: dict) -> dict[str, dict]:
     return mapped
 
 
-def resolve_raw_occurrence(repo: Path, row: dict) -> tuple[str, int, int]:
-    """Resolve a raw locator to its exact literal occurrence.
-
-    Returns the source line, the zero-based date ordinal on that line, and the
-    one-based exact-literal occurrence across the source.
-    """
-    match = LINE_LOCATOR_RE.match(row["locator"])
-    if not match:
-        raise ValueError(f"unsupported raw locator: {row['key']}")
-    lines = (repo / row["source"]).read_text().splitlines()
-    requested_occurrence = int(match.group(2))
-    candidates = []
-    for line in lines:
-        for date_ordinal, dated in enumerate(DATE_RE.finditer(line)):
-            if dated.group(0) == row["literal"]:
-                candidates.append((line, date_ordinal))
-    if requested_occurrence < 1 or requested_occurrence > len(candidates):
-        raise ValueError(f"raw locator no longer resolves: {row['key']}")
-    line, date_ordinal = candidates[requested_occurrence - 1]
-    return line, date_ordinal, requested_occurrence
-
-
 def _durable_locator(repo: Path, row: dict) -> str:
-    locator = row["locator"]
-    if LINE_LOCATOR_RE.match(locator):
-        line, date_ordinal, occurrence = resolve_raw_occurrence(repo, row)
-        normalized = " ".join(DATE_RE.sub("<date>", line).split())
-        fingerprint = hashlib.sha256(normalized.encode()).hexdigest()[:16]
-        return f"raw:{fingerprint}:occurrence:{occurrence}:date:{date_ordinal}"
-    if ":date:" in locator:
-        return "json:" + locator
-    return locator
+    return _shared_durable_locator(repo, row)
 
 
 def _approved_conversion(repo: Path, row: dict, anchor_reason: str) -> dict:

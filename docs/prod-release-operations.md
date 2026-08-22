@@ -47,6 +47,16 @@ template at `~/.config/sonsteng-prod-release/env` and systemd user units, but do
 start them. The unit runs from `~/.local/share/sonsteng-daemon/checkout` and shares that checkout's
 `.locks/daemon.lock`; it may not run from an interactive tree.
 
+Rerunning the installer also migrates an existing legacy environment while it remains config-off.
+The migration accepts only a non-symlink regular file with mode 0600 and exactly one active
+`SONSTENG_PROD_RELEASE_ENABLED=false` assignment. It preserves every existing line and value,
+atomically appends only missing required settings, and is idempotent once the file is current. Any
+unsafe file or ambiguous/true enabled flag aborts the installer without changing the environment or
+units. Newly added blank non-secret controls still require an explicit operator choice. The release
+bearer and Cloudflare API token are labeled separately and remain blank pending independent
+least-privilege provisioning; the migration never evaluates, prints, hashes, or replaces their
+values.
+
 The template begins with `SONSTENG_PROD_RELEASE_ENABLED=false`. With the variable missing or false,
 the executor exits successfully before parsing release arguments, reading a bearer, opening the
 ledger, inspecting git, or contacting Cloudflare. Keep it false until all of these are recorded:
@@ -256,3 +266,7 @@ recovery inspection.
 
 The live acceptance matrix is in `docs/uat/editor-publisher-matrix.md`. Live deployment and secret
 handling are intentionally not part of repository-only testing.
+
+The one-off U15 corpus rewrite is rehearsed by `tools/day_zero_migration.py` under the separate
+fail-closed procedure in `docs/day-zero-migration-operations.md`. That command does not add a direct
+production writer or replace this Publisher-ledger lane.

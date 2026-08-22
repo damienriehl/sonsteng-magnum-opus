@@ -492,11 +492,12 @@ def build_base_spine(root: Path):
     (md / "facts.md").write_text(build_facts_md(), encoding="utf-8")
 
 
-def run_validator(root: Path, matter=None, strict=True):
+def run_validator(root: Path, matter=None, strict=True, enforce_day_zero_offsets=False):
     world = vs.discover(root, matter)
     schemas = vs.SchemaSet(root / "schemas")
     report = vs.Report()
-    vs.Validator(world, schemas, report, strict=strict, online=False).run()
+    vs.Validator(world, schemas, report, strict=strict, online=False,
+                 enforce_day_zero_offsets=enforce_day_zero_offsets).run()
     return report
 
 
@@ -590,6 +591,113 @@ def test_declared_absolute_holdout_remains_accepted(tmp_path):
                    for f in report.for_scope("m99"))
     assert any(f.check == "F30" and "open_date remains absolute" in f.message
                for f in report.for_scope("m99"))
+
+
+def _converted_prose_fixture(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    facts = data / "matters" / "m99-noncompete-meridian" / "facts.md"
+    facts.write_text(facts.read_text() +
+                     "\nHearing January 13, 2026. {#b:deadbeef}\n",
+                     encoding="utf-8")
+    day_zero.convert_corpus(repo, write=True)
+    return data, facts, facts.parent / "date-offsets.json"
+
+
+def test_enforcement_requires_prose_sidecar_and_entry(tmp_path):
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path)
+    sidecar.unlink()
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "missing date-offsets.json" in f.message
+               for f in report.for_scope("m99"))
+
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path / "second")
+    payload = json.loads(sidecar.read_text())
+    payload["entries"] = []
+    sidecar.write_text(json.dumps(payload, indent=2))
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "has no date-offsets entry" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_enforcement_accepts_complete_prose_sidecar(tmp_path):
+    data, _facts, _sidecar = _converted_prose_fixture(tmp_path)
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert report.checked_dates > 0
+    assert report.offset_dates_checked > 0
+    assert not any(f.check == "F30" and f.severity == vs.ERROR
+                   for f in report.for_scope("m99"))
+
+
+def test_enforcement_rejects_duplicate_sidecar_identity(tmp_path):
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path)
+    payload = json.loads(sidecar.read_text())
+    payload["entries"].append(dict(payload["entries"][0]))
+    sidecar.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "duplicates a prior source identity" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_degraded_schema_rejects_negative_sidecar_locator(tmp_path, monkeypatch):
+    data, _facts, sidecar = _converted_prose_fixture(tmp_path)
+    payload = json.loads(sidecar.read_text())
+    payload["entries"][0]["locator"] = -1
+    sidecar.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    monkeypatch.setattr(vs, "HAVE_JSONSCHEMA", False)
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+
+    assert any(f.check == "F30" and "stale literal/block" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_enforcement_rejects_json_date_moved_to_another_block(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    exercise = data / "matters" / "m99-noncompete-meridian" / "exercise.json"
+    payload = json.loads(exercise.read_text())
+    payload["sections"]["instructions"]["body_md"] = (
+        "Hearing January 13, 2026. {#b:deadbeef}"
+    )
+    payload["sections"]["objectives"]["body_md"] = "No date here. {#b:feedface}"
+    exercise.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    day_zero.convert_corpus(repo, write=True)
+
+    payload = json.loads(exercise.read_text())
+    payload["sections"]["instructions"]["body_md"] = "No date here. {#b:deadbeef}"
+    payload["sections"]["objectives"]["body_md"] = (
+        "Hearing January 13, 2026. {#b:feedface}"
+    )
+    exercise.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "stale literal/block" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_enforcement_rejects_stale_literal_or_block(tmp_path):
+    data, facts, _sidecar = _converted_prose_fixture(tmp_path)
+    facts.write_text(facts.read_text().replace("b:deadbeef", "b:feedface"))
+    report = run_validator(data, matter="m99", strict=True,
+                           enforce_day_zero_offsets=True)
+    assert any(f.check == "F30" and "stale literal/block" in f.message
+               for f in report.for_scope("m99"))
+
+
+def test_enforcement_cli_flag_is_opt_in():
+    parser = vs.build_arg_parser()
+    assert parser.parse_args([]).enforce_day_zero_offsets is False
+    assert parser.parse_args(["--enforce-day-zero-offsets"]).enforce_day_zero_offsets is True
 
 
 def test_json_summary_exposes_date_counts_and_effective_switch(tmp_path):

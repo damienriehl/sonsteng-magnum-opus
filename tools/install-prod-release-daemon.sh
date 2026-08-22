@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the config-off PROD release executor as a systemd user timer.
-# Run manually. This installer never deploys, reads a secret, or enables units.
+# Run manually. This installer never deploys, uses/prints a secret, or enables units.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,6 +26,10 @@ fi
 }
 
 mkdir -p "$UNIT_DIR" "$(dirname "$ENV_FILE")" "$STATE_ROOT" "$DAEMON_ROOT/.locks"
+if [[ -L "$ENV_FILE" ]] || { [[ -e "$ENV_FILE" ]] && [[ ! -f "$ENV_FILE" ]]; }; then
+  echo "[prod-release] environment migration refused; config remains unchanged" >&2
+  exit 1
+fi
 if [[ ! -f "$ENV_FILE" ]]; then
   umask 077
   cat > "$ENV_FILE" <<EOF
@@ -67,6 +71,14 @@ SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES=false
 EOF
   echo "[prod-release] wrote config-off 0600 template: $ENV_FILE"
 fi
+
+# Upgrade legacy config-off files in place without replacing any existing
+# assignment. The helper refuses ambiguous/unsafe files and appends
+# only newly required settings via an atomic 0600 replacement.
+/usr/bin/python3 "$REPO_ROOT/tools/migrate_prod_release_env.py" \
+  --env-file "$ENV_FILE" \
+  --daemon-root "$DAEMON_ROOT" \
+  --state-root "$STATE_ROOT"
 
 # ExecStart is quoted because the repository path may contain spaces;
 # WorkingDirectory is deliberately unquoted because systemd treats it literally.

@@ -116,3 +116,32 @@ The next step is the human leg: Damien reviews the one reconciled backfilled rev
 decision, and authorizes the resulting immutable candidate. The supervised process-scoped canary
 and exact-pair recovery drill remain required afterward; production stays config-off until both are
 recorded.
+
+## Evidence record — 2026-08-21 post-merge autonomous recheck
+
+This record rechecks the merged implementation and DEV deployment. It does not upgrade any human or
+production field from **NOT RUN**.
+
+| Field | Evidence |
+|---|---|
+| Observed at | `2026-08-21T12:17:13-05:00` |
+| Merged source exercised | `d18b657ba010cf800f1cd5faafad50d20bc5ed04` |
+| DEV Worker version | `5ae43990-84b2-4772-9cde-73bde49246f7` |
+| DEV generated build ID | `25fe75a7b465b205` |
+| Editor browser matrix | `89/89 PASS` via `EDITOR_HEADLESS=1 HEADLESS=1 node app/editor/verify-editor.js` |
+| Editor viewports | Desktop; Large Type / 200%; mobile `390x844` |
+| Publisher browser contract | `PUBLISHER CLIENT PASS` via `node tools/verify_publisher_client.mjs` |
+| Screenshot digest — desktop | `sha256:45a1135861b9cc05acfc0853479c234e831a49a2df285d0840a328742a0bb8ec` |
+| Screenshot digest — Large Type | `sha256:45a1135861b9cc05acfc0853479c234e831a49a2df285d0840a328742a0bb8ec` |
+| Screenshot digest — mobile | `sha256:772a507136ba2f8724f55e57349f7d82d920daedbba9ceeb14edee9c94edf52b` |
+| Screenshot retention | Disposable local files moved to Trash after digest capture; no edited content retained in Git |
+| Access door | Unauthenticated request redirects to Cloudflare Access |
+| Access actor | **NOT RUN** — authenticated Damien session still required |
+| Live edit and DEV apply batch IDs | **NOT RUN** — no live authored edit was made |
+| Prepared / authorized release ID | **NOT RUN** |
+| Production provider IDs and provenance | **NOT RUN** |
+| Production canary and exact-pair restoration | **NOT RUN** |
+
+Production remains configuration-off. The new repository-only streaming smoke, Day Zero migration
+rehearsal, and legacy-environment migrator are preparation evidence only; they do not substitute for
+the credentialed or supervised rows above.

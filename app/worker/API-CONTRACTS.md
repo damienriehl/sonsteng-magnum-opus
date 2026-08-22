@@ -29,6 +29,47 @@ The normalized SSE event contract is provider-independent:
 - `error` carries the ordinary typed error envelope. A transport, terminal
   frame, or settlement failure emits no `done` and stores no partial replay.
 
+### Live DEV streaming verification
+
+`test/live-stream-smoke.mjs` verifies one real DEV turn without printing reply
+text or credentials. Run it separately for `anthropic`, `openai`, and `google`.
+For each provider it requires normalized SSE (`x-sonsteng-stream: 1`), one or
+more `delta` events, exactly one `done`, canonical token usage, nonempty output,
+and a structurally identical settled JSON replay from the same `turn_id`. It
+also requires a delta to arrive in an earlier body read than `done`, so a fully
+buffered SSE transcript does not count as live streaming. Provider errors,
+early EOF, malformed frames, redirects, or credential reflection fail closed.
+The command-line harness accepts only the approved DEV Worker origin shown
+below; non-DEV and localhost origins are available only to the unit-test API.
+
+Load a protected environment file (mode 0600) before invoking the harness:
+
+```bash
+cd app/worker
+set -a
+. ~/.secrets/sonsteng-stream-smoke.env
+set +a
+WORKER_URL=https://sonsteng-chat.damienriehl.workers.dev PROVIDER=anthropic node test/live-stream-smoke.mjs
+```
+
+The protected environment may set `API_KEY` or the selected provider's
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GOOGLE_API_KEY`; it may also set the
+optional `DEMO_BYPASS_TOKEN`. Set only one applicable API-key variable. The
+bypass is sent through the documented `GET /v1/session?bypass=…` contract and
+is never included in harness output.
+
+Alternatively, set `CREDENTIALS_FILE` to a regular mode-0600 JSON file, or set
+`CREDENTIALS_STDIN=1` and supply the same JSON object on standard input from a
+secret manager:
+
+```json
+{ "api_key": "<provider key>", "demo_bypass_token": "<optional bypass>" }
+```
+
+Do not put credentials directly in command arguments. The harness emits only a
+bounded JSON receipt (provider, event/output counts, normalized usage, and
+replay result); it never emits response text, session tokens, or secret values.
+
 ---
 
 ## BYOK — bring your own key (provider-agnostic)
