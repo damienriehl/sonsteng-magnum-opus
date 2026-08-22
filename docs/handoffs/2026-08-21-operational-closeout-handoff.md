@@ -1,15 +1,17 @@
 # Operational closeout handoff
 
 Date: 2026-08-21
-Branch: `chore/operational-closeout-preflight`
-Base: `d18b657ba010cf800f1cd5faafad50d20bc5ed04`
+Branch: `chore/post-merge-closeout`
+Base: `56f392e74bb3a6bb096f650e17252584f5497477`
 
 ## Outcome
 
-The post-audit autonomous queue is implemented and locally committed. The trusted daemon checkout
-was synchronized to merged `main`, its ignored generated bundles were refreshed under the shared
-lock, parity passed, and a no-op service tick exited successfully. The merged site and Worker were
-deployed to DEV; production was not deployed or enabled.
+PR #19 merged to `main` as `56f392e74bb3a6bb096f650e17252584f5497477`. The trusted
+daemon checkout was then fast-forwarded to that exact merge under the shared lock. Its protected
+production environment was migrated in place while remaining mode 0600 and config-off; the
+migration is idempotent. Ignored generated bundles were refreshed, parity passed, a config-off
+production service tick exited before release work, and the normal apply service completed a
+no-op tick. The production release timer remains disabled; production was not deployed or enabled.
 
 The branch's focused implementation and review commits close the remaining repository defects:
 
@@ -21,6 +23,8 @@ The branch's focused implementation and review commits close the remaining repos
 - `bdf5003 fix(day-zero): centralize durable locator resolution`
 - `afb4cf2 fix(review): harden migration and stream verification`
 - `98c26af chore(build): refresh operational closeout artifacts`
+- `00216f8 fix(day-zero): make exact-SHA rehearsal representative (U15)`
+- `100d206 fix(review): preserve rehearsal candidate fidelity`
 
 ## Evidence
 
@@ -28,7 +32,8 @@ The branch's focused implementation and review commits close the remaining repos
   zero unclassified dates, and a reconciled inventory of 1,242.
 - Copied-corpus Day Zero write plus strict offset enforcement passed. The real corpus was not
   rewritten.
-- Full Python tools suite after review fixes: 780 passed, 1 expected xfail, and 21,679 subtests.
+- Full Python tools suite after the post-merge review fixes: 789 passed, 1 expected xfail, and
+  21,679 subtests.
 - Full Worker suite with the hardened live-stream harness: passed; focused harness behavior: 15
   cases.
 - Production-environment migration suite and neighbors: 41 passed.
@@ -36,6 +41,14 @@ The branch's focused implementation and review commits close the remaining repos
 - Publisher client harness: passed.
 - Production Wrangler compile-only dry run: passed; production routes remain absent and feature
   controls remain off.
+- Exact-SHA Day Zero rehearsal at `100d20688a41f6a1c260bd0e14e6d33da612bec2` passed all six
+  phases: governed verification, governed write, generated build, parity, strict offset
+  enforcement, and full repository preflight. The receipt reports `production_mutations: 0`.
+- The rehearsal now uses a detached standalone clone with Git metadata but no local hardlinks or
+  object alternates. This keeps uncommitted files out while allowing tracked-file and history
+  preflight guards to run under their real contract.
+- Day Zero offset fields and `date-offsets.json` sidecars are excluded from authored/editable fact
+  surfaces. The transformed-corpus semantic baseline therefore remains unchanged.
 - DEV Worker version: `5ae43990-84b2-4772-9cde-73bde49246f7`.
 - Every registered Git worktree is clean. The obsolete promotion/Cockpit refs selected for
   retirement are absent locally and remotely.
@@ -44,17 +57,14 @@ The branch's focused implementation and review commits close the remaining repos
 
 ## Autonomous follow-through after merge
 
-After this branch is reviewed and merged, synchronize the trusted daemon checkout. While the PROD
-timer stays disabled and `SONSTENG_PROD_RELEASE_ENABLED=false`, rerun
-`tools/install-prod-release-daemon.sh` there. The installer will atomically append missing config
-schema keys to the protected 0600 environment without replacing existing values; credentials remain
-blank or preserved. Re-run parity and one config-off service tick. Do not run the helper from an
-unmerged interactive checkout.
+The post-merge daemon synchronization, protected config migration, parity rebuild, config-off
+production tick, normal apply tick, and exact-SHA Day Zero rehearsal are complete. The daemon
+checkout is clean on merged `main`; its apply timer is enabled and its production release timer is
+disabled. No autonomous post-merge operational action remains before the human/external gates
+below.
 
-The Day Zero production command remains deliberately unwired. Run the exact-SHA rehearsal from
-`docs/day-zero-migration-operations.md`; its first five phases have passed in a disposable archive.
-The full-repository preflight phase is the known long pole and must pass before the supervised
-production window.
+The Day Zero production command remains deliberately unwired. Its complete rehearsal now passes,
+but that does not authorize the supervised production window.
 
 ## Decision and human-action sheet
 
@@ -88,6 +98,6 @@ queued rather than falsely marked complete.
 
 ## Publication state
 
-The branch is pushed and open for integration as
-[PR #19](https://github.com/damienriehl/sonsteng-magnum-opus/pull/19). It has not been merged.
-Production remains config-off.
+[PR #19](https://github.com/damienriehl/sonsteng-magnum-opus/pull/19) merged to `main` at
+`56f392e74bb3a6bb096f650e17252584f5497477`. The post-merge rehearsal correction is committed on
+`chore/post-merge-closeout` and is being prepared for integration. Production remains config-off.
