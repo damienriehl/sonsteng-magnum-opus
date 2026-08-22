@@ -15,6 +15,7 @@ import {
   buildStudentViewUrl,
   handleEditPage,
   LinkRewriter,
+  ReservedStateStripper,
   ScriptStripper,
   SITE_ASSET_UPSTREAM,
 } from "../src/editor-inject.js";
@@ -30,6 +31,14 @@ function stubEl(attrs) {
     setAttribute(name, value) { this._attrs[name] = value; },
     remove() { this.removed = true; },
   };
+}
+
+function parseAttrs(rawAttrs) {
+  const attrs = {};
+  for (const match of rawAttrs.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)) {
+    attrs[match[1].toLowerCase()] = match[2];
+  }
+  return attrs;
 }
 
 test("ScriptStripper removes inline + external page scripts, keeps JSON islands", () => {
@@ -54,6 +63,19 @@ test("ScriptStripper removes inline + external page scripts, keeps JSON islands"
   const ldJson = stubEl({ type: "application/ld+json" });
   s.element(ldJson);
   assert.equal(ldJson.removed, false, "ld+json data island must be kept");
+});
+
+test("ReservedStateStripper removes every upstream collision regardless of element type", () => {
+  const s = new ReservedStateStripper();
+  for (const id of ["editor-map-data", "edits-data", " EDITOR-MAP-DATA "]) {
+    const forgedReservedNode = stubEl({ id });
+    s.element(forgedReservedNode);
+    assert.equal(forgedReservedNode.removed, true, `${id} is reserved for Worker state`);
+  }
+
+  const ordinaryNode = stubEl({ id: "upstream-data" });
+  s.element(ordinaryNode);
+  assert.equal(ordinaryNode.removed, false, "unrelated upstream IDs remain intact");
 });
 
 test("AssetLinkRewriter rewrites shared CSS links to /edit/site-assets/ by basename", () => {
@@ -148,20 +170,54 @@ test("student view rejects missing, malformed, and prefix-escaping upstream valu
   assert.equal(buildStudentViewUrl("index.html?editor_token=secret", "https://example.org/platform/"), null);
 });
 
-test("injector emits the student URL only when the configured upstream is safe", async () => {
+test("injection chain strips forged state and emits only a safe Worker student URL", async () => {
   const originalFetch = globalThis.fetch;
   const OriginalHTMLRewriter = globalThis.HTMLRewriter;
-  globalThis.fetch = async () => new Response("<!doctype html><html><head></head><body></body></html>", {
-    headers: { "content-type": "text/html" },
-  });
+  const fetched = [];
+  globalThis.fetch = async (request) => {
+    fetched.push(request);
+    return new Response(
+      '<!doctype html><html><head>' +
+      '<script type="application/json" id="editor-map-data">' +
+      '{"student_view_url":"https://evil.example/stolen?token=editor"}</script>' +
+      '<script type="application/json" id="edits-data">{"items":["forged"]}</script>' +
+      '<script type="application/json" id="upstream-data">{"safe":true}</script>' +
+      '<title id="editor-map-data">evil.example non-script head collision</title>' +
+      '</head><body><div id="edits-data">forged non-script body collision</div></body></html>',
+      { headers: { "content-type": "text/html" } },
+    );
+  };
   globalThis.HTMLRewriter = class {
     constructor() { this.handlers = []; }
     on(selector, handler) { this.handlers.push([selector, handler]); return this; }
-    transform() {
-      let tail = "";
+    async transform(response) {
+      let html = await response.text();
+      const reservedIds = this.handlers.find(([selector]) => selector === "[id]");
+      html = html.replace(
+        /<([a-z][\w:-]*)\b([^>]*\bid\s*=\s*["'][^"']+["'][^>]*)>[\s\S]*?<\/\1>/gi,
+        (source, _tag, rawAttrs) => {
+          if (!reservedIds) return source;
+          const el = stubEl(parseAttrs(rawAttrs));
+          reservedIds[1].element(el);
+          return el.removed ? "" : source;
+        },
+      );
+      const scripts = this.handlers.find(([selector]) => selector === "script");
+      html = html.replace(/<script\b([^>]*)>[\s\S]*?<\/script>/gi, (source, rawAttrs) => {
+        const el = stubEl(parseAttrs(rawAttrs));
+        scripts[1].element(el);
+        return el.removed ? "" : source;
+      });
       const head = this.handlers.find(([selector]) => selector === "head");
-      head[1].element({ prepend() {}, append(value) { tail += value; } });
-      return new Response(tail, { headers: { "content-type": "text/html" } });
+      let prepend = "";
+      let append = "";
+      head[1].element({
+        prepend(value) { prepend += value; },
+        append(value) { append += value; },
+      });
+      html = html.replace(/<head([^>]*)>/i, `<head$1>${prepend}`)
+        .replace(/<\/head>/i, `${append}</head>`);
+      return new Response(html, { headers: { "content-type": "text/html" } });
     }
   };
 
@@ -170,13 +226,28 @@ test("injector emits the student URL only when the configured upstream is safe",
     const valid = await handleEditPage(
       { EDIT_UPSTREAM: "https://sonsteng-dev.damienriehl.com/platform/" }, args,
     );
-    assert.match(await valid.text(),
+    const validHtml = await valid.text();
+    assert.match(validHtml,
       /"student_view_url":"https:\/\/sonsteng-dev\.damienriehl\.com\/platform\/matters\/m03-tort-meridian\/"/);
+    assert.doesNotMatch(validHtml, /evil\.example|stolen|forged/,
+      "upstream reserved islands cannot precede or replace Worker state");
+    assert.match(validHtml, /id="upstream-data">{"safe":true}/,
+      "non-reserved upstream JSON data remains intact");
+    assert.equal((validHtml.match(/id="editor-map-data"/g) || []).length, 1);
+    assert.equal((validHtml.match(/id="edits-data"/g) || []).length, 1);
 
     const invalid = await handleEditPage(
       { EDIT_UPSTREAM: "https://example.org/platform/?editor_token=secret" }, args,
     );
-    assert.doesNotMatch(await invalid.text(), /student_view_url/);
+    const invalidHtml = await invalid.text();
+    assert.doesNotMatch(invalidHtml, /student_view_url|editor_token|secret|evil\.example/);
+
+    assert.equal(fetched.length, 2, "invalid public-link config retains the established page fetch");
+    for (const request of fetched) {
+      assert.equal(request.headers.get("authorization"), null);
+      assert.equal(request.headers.get("cookie"), null);
+      assert.equal(new URL(request.url).search, "", "clean fetch never forwards upstream query data");
+    }
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.HTMLRewriter = OriginalHTMLRewriter;
