@@ -175,6 +175,16 @@ export class AssetLinkRewriter {
   }
 }
 
+// The editor client resolves these Worker-owned state islands with
+// getElementById(). Neutralize every upstream collision without deleting the
+// element or its content, so structural containers remain intact.
+export class ReservedStateStripper {
+  element(el) {
+    const id = (el.getAttribute("id") || "").trim().toLowerCase();
+    if (id === "editor-map-data" || id === "edits-data") el.removeAttribute("id");
+  }
+}
+
 // HTMLRewriter handler that STRIPS the wrapped page's OWN scripts (inline and
 // external, e.g. platform.js scroll-spy/toggles). Edit mode does not need them,
 // and the races review wanted the origin page's interactive handlers neutralized
@@ -253,6 +263,7 @@ export async function handleEditPage(env, { pageKey, blocks, overrides = [], pen
     headers: { "content-type": "text/html; charset=utf-8" },
   });
   const rewritten = new HTMLRewriter()
+    .on("[id]", new ReservedStateStripper())
     .on("head", new HeadInjector(headHtml))
     .on("a[href]", new LinkRewriter(upstream))
     .on("link[rel]", new AssetLinkRewriter())
