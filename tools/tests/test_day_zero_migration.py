@@ -158,6 +158,23 @@ def test_isolated_git_copy_accepts_only_the_exact_commit_object(tmp_path):
         assert not (checkout / ".git" / "objects" / "info" / "alternates").exists()
 
 
+def test_isolated_git_copy_fetches_candidate_retained_only_by_release_ref(tmp_path):
+    repo = git_repo(tmp_path)
+    candidate_branch = git(repo, "branch", "--show-current")
+    candidate_sha = git(repo, "rev-parse", "HEAD")
+    git(repo, "update-ref", "refs/sonsteng/releases/test-candidate", candidate_sha)
+    git(repo, "checkout", "--orphan", "unrelated")
+    (repo / "candidate.txt").write_text("unrelated\n", encoding="utf-8")
+    git(repo, "add", "candidate.txt")
+    git(repo, "commit", "-m", "unrelated")
+    git(repo, "branch", "-D", candidate_branch)
+
+    with migration.isolated_git_copy(repo, candidate_sha) as checkout:
+        assert git(checkout, "rev-parse", "HEAD") == candidate_sha
+        assert (checkout / "candidate.txt").read_text(encoding="utf-8") == "candidate\n"
+        assert not (checkout / ".git" / "objects" / "info" / "alternates").exists()
+
+
 @pytest.mark.parametrize("object_kind", ["tree", "annotated-tag"])
 def test_isolated_git_copy_rejects_non_commit_object_ids(tmp_path, object_kind):
     repo = git_repo(tmp_path)

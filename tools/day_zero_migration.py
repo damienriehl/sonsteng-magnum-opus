@@ -180,6 +180,13 @@ def isolated_git_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathli
                 timeout=120,
             )
             subprocess.run(
+                ["git", "fetch", "--quiet", "--no-tags", str(repo), resolved_commit],
+                cwd=target,
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            subprocess.run(
                 ["git", "checkout", "--quiet", "--detach", resolved_commit],
                 cwd=target,
                 check=True,

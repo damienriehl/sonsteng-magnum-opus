@@ -83,6 +83,28 @@ class TestStaleValue(unittest.TestCase):
         self.assertIn("Osgard v. Meridian Freight", f["message"])   # old
         self.assertIn("Osgard v. Northland Freight", f["message"])  # new
 
+    def test_day_zero_machine_fields_are_not_facts(self):
+        rows = ec.fact_rows_from_data(
+            MATTER_REL,
+            {
+                "open_date": "2026-01-05",
+                "open_date_day_zero_offset": 0,
+            },
+            BIZ_REL,
+            {
+                "engagement": {
+                    "engagement_date": "2026-01-09",
+                    "engagement_date_day_zero_offset": 4,
+                },
+            },
+        )
+
+        paths = {path for _relpath, path, _value in rows}
+        self.assertIn("open_date", paths)
+        self.assertIn("engagement.engagement_date", paths)
+        self.assertNotIn("open_date_day_zero_offset", paths)
+        self.assertNotIn("engagement.engagement_date_day_zero_offset", paths)
+
     def test_prose_carrying_new_value_not_flagged(self):
         flags = self._flags([_block("memo.md#b:cccc",
                                     "Now captioned Osgard v. Northland Freight.")])
