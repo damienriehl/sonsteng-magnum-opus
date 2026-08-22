@@ -246,7 +246,20 @@
     },
     "custom_facts": {
       "type": "object",
-      "description": "Editor-added facts (U5 of the word-like-editing plan): free-form labelled facts of the scenario, added from the per-matter Facts page via the json_add suggestion kind. Keys are short slugs; values are the fact text. Rendered on the Facts page; mentioned in prose only through reviewed drafted edits.",
+      "description": "Editor-added facts (U5 of the word-like-editing plan): free-form labelled facts of the scenario, added from the per-matter Facts page via the json_add suggestion kind. Keys are short slugs; authored values are fact text. Day Zero may add integer siblings whose keys end in _day_zero_offset; an authored string with that suffix remains valid and visible. Rendered on the Facts page; mentioned in prose only through reviewed drafted edits.",
+      "patternProperties": {
+        "_day_zero_offset$": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Machine offsets are integers; string values remain authored facts."
+        }
+      },
       "additionalProperties": {
         "type": "string"
       }

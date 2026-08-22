@@ -31,6 +31,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import build_site as bs  # noqa: E402
 import editor_consistency as ec  # noqa: E402
 
 SLUG = "m03-tort-meridian"
@@ -82,6 +83,75 @@ class TestStaleValue(unittest.TestCase):
         self.assertIn("editing this paragraph", f["message"])
         self.assertIn("Osgard v. Meridian Freight", f["message"])   # old
         self.assertIn("Osgard v. Northland Freight", f["message"])  # new
+
+    def test_day_zero_machine_fields_are_not_facts(self):
+        rows = ec.fact_rows_from_data(
+            MATTER_REL,
+            {
+                "open_date": "2026-01-05",
+                "open_date_day_zero_offset": 0,
+            },
+            BIZ_REL,
+            {
+                "engagement": {
+                    "engagement_date": "2026-01-09",
+                    "engagement_date_day_zero_offset": 4,
+                },
+            },
+        )
+
+        paths = {path for _relpath, path, _value in rows}
+        self.assertIn("open_date", paths)
+        self.assertIn("engagement.engagement_date", paths)
+        self.assertNotIn("open_date_day_zero_offset", paths)
+        self.assertNotIn("engagement.engagement_date_day_zero_offset", paths)
+
+    def test_custom_fact_day_zero_offsets_only_hide_machine_integers(self):
+        rows = ec.fact_rows_from_data(
+            MATTER_REL,
+            {
+                "custom_facts": {
+                    "hearing_date_day_zero_offset": 12,
+                    "authored_day_zero_offset": "Twelve days after filing",
+                },
+            },
+        )
+
+        facts = {path: value for _relpath, path, value in rows}
+        self.assertNotIn(
+            "custom_facts.hearing_date_day_zero_offset", facts)
+        self.assertEqual(
+            facts["custom_facts.authored_day_zero_offset"],
+            "Twelve days after filing",
+        )
+
+    def test_custom_fact_type_boundary_matches_generated_facts_surface(self):
+        custom_facts = {
+            "machine_day_zero_offset": 12,
+            "authored_day_zero_offset": "Twelve days after filing",
+            "boolean_day_zero_offset": True,
+            "float_day_zero_offset": 1.5,
+            "numeric_day_zero_offset": "12",
+            "ordinary_count": 12,
+        }
+        editor_rows = ec.fact_rows_from_data(
+            MATTER_REL, {"custom_facts": custom_facts})
+        generated_rows = bs._fact_rows({
+            "_dir": os.path.join(os.sep, "tmp", "sample"),
+            "custom_facts": custom_facts,
+        })
+
+        editor_facts = {path: value for _relpath, path, value in editor_rows}
+        generated_facts = {path: value for _relpath, path, value in generated_rows}
+        self.assertEqual(editor_facts, generated_facts)
+        self.assertNotIn("custom_facts.machine_day_zero_offset", editor_facts)
+        self.assertEqual(editor_facts, {
+            "custom_facts.authored_day_zero_offset": "Twelve days after filing",
+            "custom_facts.boolean_day_zero_offset": True,
+            "custom_facts.float_day_zero_offset": 1.5,
+            "custom_facts.numeric_day_zero_offset": "12",
+            "custom_facts.ordinary_count": 12,
+        })
 
     def test_prose_carrying_new_value_not_flagged(self):
         flags = self._flags([_block("memo.md#b:cccc",

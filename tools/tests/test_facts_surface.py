@@ -27,6 +27,9 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
+
+import jsonschema
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
@@ -92,8 +95,86 @@ class TestFactsSchema(unittest.TestCase):
         self.assertEqual(cf.get("additionalProperties", {}).get("type"), "string")
         self.assertNotIn("custom_facts", schema.get("required", []))
 
+        validator = jsonschema.Draft202012Validator(cf)
+        validator.validate({
+            "hearing_date": "2026-02-02",
+            "hearing_date_day_zero_offset": 12,
+            "authored_day_zero_offset": "Twelve days after filing",
+        })
+        with self.assertRaises(jsonschema.ValidationError):
+            validator.validate({"witness_count": 12})
+        for invalid in (True, 1.5):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(jsonschema.ValidationError):
+                    validator.validate({"hearing_date_day_zero_offset": invalid})
+
 
 class TestFactsPage(unittest.TestCase):
+    def test_custom_fact_day_zero_offsets_only_hide_machine_integers(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            matter_dir = os.path.join(tmp, "data", "matters", "sample")
+            rows = bs._fact_rows({
+                "_dir": matter_dir,
+                "custom_facts": {
+                    "hearing_date_day_zero_offset": 12,
+                    "authored_day_zero_offset": "Twelve days after filing",
+                },
+            })
+
+        facts = {path: value for _relpath, path, value in rows}
+        self.assertNotIn(
+            "custom_facts.hearing_date_day_zero_offset", facts)
+        self.assertEqual(
+            facts["custom_facts.authored_day_zero_offset"],
+            "Twelve days after filing",
+        )
+
+    def test_day_zero_machine_fields_are_not_editable_facts(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            with mock.patch.object(bs, "ROOT", tmp):
+                matter_dir = os.path.join(tmp, "data", "matters", "sample")
+                business_dir = os.path.join(matter_dir, "business")
+                os.makedirs(business_dir)
+                with open(os.path.join(business_dir, "business.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"engagement": {
+                        "signed_date": "2025-01-01",
+                        "signed_date_day_zero_offset": 4,
+                    }}, fh)
+                rows = bs._fact_rows({
+                    "_dir": matter_dir,
+                    "open_date": "2025-01-02",
+                    "open_date_day_zero_offset": 5,
+                })
+
+        paths = {path for _relpath, path, _value in rows}
+        self.assertIn("open_date", paths)
+        self.assertIn("engagement.signed_date", paths)
+        self.assertNotIn("open_date_day_zero_offset", paths)
+        self.assertNotIn("engagement.signed_date_day_zero_offset", paths)
+
+    def test_day_zero_sidecar_is_not_counted_as_an_authored_restatement(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            with mock.patch.object(bs, "ROOT", tmp):
+                matter_dir = os.path.join(tmp, "data", "matters", "sample")
+                os.makedirs(matter_dir)
+                literal = "2025-01-02"
+                with open(os.path.join(matter_dir, "matter.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"open_date": literal}, fh)
+                with open(os.path.join(matter_dir, "date-offsets.json"), "w",
+                          encoding="utf-8") as fh:
+                    json.dump({"entries": [{"literal": literal, "offset": 5}]}, fh)
+                derived, restated = bs.fact_usage(
+                    matter_dir,
+                    "data/matters/sample/matter.json",
+                    "open_date",
+                    literal,
+                )
+
+        self.assertEqual(derived, 0)
+        self.assertEqual(restated, 0)
+
     def test_every_matter_has_a_facts_page_in_the_map(self):
         bundle = _build_fresh()["bundle"]
         pages = [p for p in bundle["pages"]

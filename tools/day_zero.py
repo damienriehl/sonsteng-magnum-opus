@@ -410,6 +410,17 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
             insertions = []
             for parent, key, value in _scalar_strings(obj):
                 if key.endswith("_day_zero_offset"):
+                    if _is_full_date(value):
+                        locator = "%s.%s" % (parent, key) if parent else key
+                        result.unclassified.append({
+                            "source": str(path.relative_to(repo)),
+                            "locator": locator,
+                            "literal": value,
+                            "reason": (
+                                "date-valued authored fact uses the reserved "
+                                "Day Zero offset suffix and must be renamed"
+                            ),
+                        })
                     continue
                 matches = _dated_matches(value)
                 if not matches:
@@ -456,7 +467,13 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
             if insertions:
                 source = str(path.relative_to(repo))
                 result.touched_files.add(source)
-                converted_raw = json_surgical.insert_object_properties(raw, insertions)
+                try:
+                    converted_raw = json_surgical.insert_object_properties(
+                        raw, insertions)
+                except json_surgical.SurgicalError as exc:
+                    raise RuntimeError(
+                        f"{source} cannot add Day Zero sibling: {exc}"
+                    ) from exc
                 _validate_intended_json_additions(raw, converted_raw, insertions)
                 _capture_file_proof(result, source, raw.encode(), converted_raw.encode())
                 staged_writes[path] = converted_raw.encode()
