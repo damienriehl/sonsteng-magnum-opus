@@ -105,6 +105,25 @@ class TestStaleValue(unittest.TestCase):
         self.assertNotIn("open_date_day_zero_offset", paths)
         self.assertNotIn("engagement.engagement_date_day_zero_offset", paths)
 
+    def test_custom_fact_day_zero_offsets_only_hide_machine_integers(self):
+        rows = ec.fact_rows_from_data(
+            MATTER_REL,
+            {
+                "custom_facts": {
+                    "hearing_date_day_zero_offset": 12,
+                    "authored_day_zero_offset": "Twelve days after filing",
+                },
+            },
+        )
+
+        facts = {path: value for _relpath, path, value in rows}
+        self.assertNotIn(
+            "custom_facts.hearing_date_day_zero_offset", facts)
+        self.assertEqual(
+            facts["custom_facts.authored_day_zero_offset"],
+            "Twelve days after filing",
+        )
+
     def test_prose_carrying_new_value_not_flagged(self):
         flags = self._flags([_block("memo.md#b:cccc",
                                     "Now captioned Osgard v. Northland Freight.")])

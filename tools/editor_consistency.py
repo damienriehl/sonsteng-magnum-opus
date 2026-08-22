@@ -87,6 +87,11 @@ def _is_day_zero_machine_field(key):
     return key.endswith("_day_zero_offset")
 
 
+def _is_custom_fact_day_zero_machine_field(key, value):
+    return (_is_day_zero_machine_field(key)
+            and isinstance(value, int) and not isinstance(value, bool))
+
+
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July",
            "August", "September", "October", "November", "December")
 
@@ -120,12 +125,15 @@ def fact_rows_from_data(matter_rel, matter, business_rel=None, business=None):
     matter = matter or {}
     for k, v in matter.items():
         if (k.startswith("_") or k in FACTS_DENY
-                or _is_day_zero_machine_field(k) or isinstance(v, (dict, list))):
+                or _is_day_zero_machine_field(k)
+                or isinstance(v, (dict, list))):
             continue
         if isinstance(v, (str, int, float)) and not isinstance(v, bool):
             rows.append((matter_rel, k, v))
-    for k in sorted((matter.get("custom_facts") or {})):
-        rows.append((matter_rel, "custom_facts.%s" % k, matter["custom_facts"][k]))
+    for k, v in sorted((matter.get("custom_facts") or {}).items()):
+        if _is_custom_fact_day_zero_machine_field(k, v):
+            continue
+        rows.append((matter_rel, "custom_facts.%s" % k, v))
     if business_rel and isinstance(business, dict):
         for section in FACTS_BUSINESS_SECTIONS:
             sec = business.get(section)

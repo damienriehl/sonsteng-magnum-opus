@@ -95,6 +95,25 @@ class TestFactsSchema(unittest.TestCase):
 
 
 class TestFactsPage(unittest.TestCase):
+    def test_custom_fact_day_zero_offsets_only_hide_machine_integers(self):
+        with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
+            matter_dir = os.path.join(tmp, "data", "matters", "sample")
+            rows = bs._fact_rows({
+                "_dir": matter_dir,
+                "custom_facts": {
+                    "hearing_date_day_zero_offset": 12,
+                    "authored_day_zero_offset": "Twelve days after filing",
+                },
+            })
+
+        facts = {path: value for _relpath, path, value in rows}
+        self.assertNotIn(
+            "custom_facts.hearing_date_day_zero_offset", facts)
+        self.assertEqual(
+            facts["custom_facts.authored_day_zero_offset"],
+            "Twelve days after filing",
+        )
+
     def test_day_zero_machine_fields_are_not_editable_facts(self):
         with tempfile.TemporaryDirectory(prefix="facts-day-zero-") as tmp:
             with mock.patch.object(bs, "ROOT", tmp):

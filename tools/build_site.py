@@ -3306,6 +3306,11 @@ def _is_day_zero_machine_field(key):
     return key.endswith("_day_zero_offset")
 
 
+def _is_custom_fact_day_zero_machine_field(key, value):
+    return (_is_day_zero_machine_field(key)
+            and isinstance(value, int) and not isinstance(value, bool))
+
+
 def _fact_label(path):
     """Human label from a dotted path: 'intake.client_name' -> 'Client name'."""
     leaf = path.split(".")[-1]
@@ -3358,12 +3363,15 @@ def _fact_rows(m):
     matter_rel = data_relpath(mdir, "matter.json")
     for k, v in m.items():
         if (k.startswith("_") or k in FACTS_DENY
-                or _is_day_zero_machine_field(k) or isinstance(v, (dict, list))):
+                or _is_day_zero_machine_field(k)
+                or isinstance(v, (dict, list))):
             continue
         if isinstance(v, (str, int, float)) and not isinstance(v, bool):
             rows.append((matter_rel, k, v))
-    for k in sorted((m.get("custom_facts") or {})):
-        rows.append((matter_rel, "custom_facts.%s" % k, m["custom_facts"][k]))
+    for k, v in sorted((m.get("custom_facts") or {}).items()):
+        if _is_custom_fact_day_zero_machine_field(k, v):
+            continue
+        rows.append((matter_rel, "custom_facts.%s" % k, v))
     bpath = os.path.join(mdir, "business", "business.json")
     if os.path.isfile(bpath):
         b = load_json(bpath)
