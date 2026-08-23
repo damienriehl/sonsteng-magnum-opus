@@ -945,9 +945,9 @@ def test_identifier_enforcement_rejects_zero_recognized_values(tmp_path):
     data = repo / "data"
     build_base_spine(data)
     for path in day_zero.authoritative_paths(data):
-        payload = path.read_bytes().replace(
-            day_zero.OLD_JSONLD_BASE, b"https://example.test/spine/"
-        )
+        payload = path.read_bytes()
+        for base in (day_zero.OLD_JSONLD_BASE, day_zero.NEW_JSONLD_BASE):
+            payload = payload.replace(base, b"https://example.test/spine/")
         path.write_bytes(payload)
 
     report = run_validator(
