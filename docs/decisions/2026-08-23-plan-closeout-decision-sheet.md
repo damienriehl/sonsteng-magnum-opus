@@ -4,7 +4,9 @@ Date: August 23, 2026
 Supersedes the residual-action sections of the August 20 and August 21 handoffs  
 Purpose: one ordered, copy-friendly sheet for every remaining human or external gate
 
-The autonomous repository work, Cloudflare cutover, and Google live-provider check are complete.
+The Cloudflare cutover and Google live-provider check are complete. The remaining autonomous
+repository prerequisite—the combined Day Zero date/JSON-LD rewrite, rehearsal, and validator—is
+queued immediately after this closeout sheet and must merge before Packet D can be scheduled.
 Do not send credentials, one-time codes, edited private text, or personal roster data in the result.
 For any failed step, stop that packet and paste back only the visible error and non-secret IDs.
 
@@ -40,8 +42,9 @@ Access-authenticated `damienadmin` instructor/admin role and is titled **Assessm
    total alone.
 5. Resize the browser to 390px wide and confirm every heading, score, evidence control, and signer
    control remains readable and keyboard reachable.
-6. Submit one harmless attributed override as yourself and record the audit ID and override receipt
-   ID. Do not paste the assessment content.
+6. Submit one harmless attributed override as yourself. Record the audit ID, but do not paste the
+   assessment content. The browser does not expose the override receipt ID; after you report that the
+   override persisted, the agent will retrieve that non-secret ID separately from the stored audit.
 7. Reopen the audit and confirm the attributed override persisted.
 
 ### Paste back Packet A
@@ -53,7 +56,7 @@ First suggestion/batch ID:
 Restoration suggestion/batch ID:
 Original text restored: YES | NO
 Assessment audit ID:
-Override receipt ID:
+Override persisted: YES | NO
 Desktop and 390px both usable: YES | NO
 Error shown (if any):
 ```
@@ -73,8 +76,11 @@ A waived provider remains unvalidated in every closeout artifact.
    - **Recommended:** create or identify a current active API key in protected machine storage; or
    - explicitly authorize a credential-safe status-only test of the legacy Anthropic-format keys
      already discovered on this machine. No values will be displayed or copied.
-3. Reply with the compact authorization below. The agent will run the smoke harness and record only
-   status, normalized event counts, usage, replay parity, and non-secret provider errors.
+3. Reply with the compact authorization below. For a current key, the agent will run the generation
+   smoke harness and record only status, normalized event counts, usage, replay parity, and non-secret
+   provider errors. For legacy status-only authorization, the agent will perform only the authorized
+   credential-status check, report that result, and keep Anthropic **BLOCKED** until generation is
+   separately authorized with a current key.
 4. Treat every discovered legacy credential as compromised regardless of whether a status-only test
    succeeds. Revoke it at the provider, create a replacement only if needed, and store the replacement
    only in the established protected credential location. After revocation, explicitly authorize the
