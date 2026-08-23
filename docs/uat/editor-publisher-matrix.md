@@ -164,3 +164,25 @@ human-authenticated edit that still requires an allowlisted identity session.
 | Repository verification | Full preflight: 21 passed, 0 failed, 0 skipped |
 | Access actor | **NOT RUN** — requires an allowlisted human identity session |
 | Authenticated suggestion round-trip | **NOT RUN** — queued in the domain-cutover human gate sheet |
+
+## Evidence record — 2026-08-23 live provider validation
+
+This record covers credential-safe DEV provider checks. Credentials were read only from protected
+machine state and were never printed, committed, or included in reports. The live Worker remained
+DEV-only; production publication remained configuration-off.
+
+| Provider / field | Evidence |
+|---|---|
+| Merged repair | PR #24, merge commit `f8d8dd47f29ec397e548fa375ee0f4ca5659d957` |
+| DEV Worker version | `c4d21de6-ea7d-454f-905a-d0203d800af0` |
+| Google | **PASS** with `gemini-2.5-flash`: normalized streaming, two delta events, one terminal event, non-empty output, normalized usage, and byte-identical replay |
+| Google usage observed | 4,894 input tokens; 49 output tokens; zero cache-read input tokens |
+| Google maintenance finding | The former `gemini-2.0-flash` default is retired upstream. The Worker default, allowlist, tests, Wrangler environments, and published API contract now agree on `gemini-2.5-flash`. |
+| OpenAI credential | **VALID** — the provider model-list endpoint returned HTTP 200 |
+| OpenAI generation | **BLOCKED EXTERNAL** — the provider returned HTTP 429 `insufficient_quota` / `credit_balance_exhausted`; the Worker correctly mapped the upstream failure to its safe error surface |
+| Anthropic | **NOT RUN** — no currently authorized active credential was available. Legacy credential-shaped files were not read or tested without explicit authority. |
+| Repository verification | Full preflight: 21 passed, 0 failed, 0 skipped; Python: 804 passed and 21,681 subtests; Worker: 44 test files passed; editor: 89/89; accessibility: zero failures; layout: 284/284; chat/critique: 28/28; cost: 13/13 |
+
+Google's U19 live-provider row is complete. OpenAI needs account credit, not a code change. Anthropic
+needs a current credential or an explicit, narrowly scoped authorization to test a discovered legacy
+credential without exposing it. The authenticated assessment exercise remains separate human UAT.

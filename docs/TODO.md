@@ -81,8 +81,9 @@ this file is what those decisions oblige us to *do*.
       property now serves at `legalpracticum.org`, the editor is Access-protected
       at `edit.legalpracticum.org`, and both personally named public/editor hosts
       are redirect-only. The remaining scope is the supervised U8 JSON-LD base
-      rewrite (262 files) and the repository rename; identifiers are names rather
-      than live URLs, so U10 deliberately did not rewrite them.
+      rewrite and the repository rename; identifiers are names rather than live
+      URLs, so U10 deliberately did not rewrite them. Recompute the exact migration
+      inventory at the freeze boundary instead of reusing a historical file count.
 - [x] **T07 — We host it; drop any Mitchell hosting claim** `@agent` `origin:call-2026-08-06`
       Damien hosts. Mitchell Hamline may adopt it and is welcome to help craft it,
       but gets no hosting byline. John: *"I don't think they're interested… I don't
