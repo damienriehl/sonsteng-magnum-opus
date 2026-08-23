@@ -18,6 +18,12 @@ import json_surgical
 import build_site
 import day_zero_equivalence
 import day_zero_locator
+from identifier_base import (
+    OLD_JSONLD_BASE,
+    NEW_JSONLD_BASE,
+    authoritative_paths,
+    replace_identifier_base,
+)
 
 ISO_RE = re.compile(r"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)")
 ISO_LIKE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -53,6 +59,9 @@ class Result:
     date_proofs: list[day_zero_equivalence.DateProof] = field(default_factory=list)
     staged_date_writes: int = 0
     governed_conversion_target: int | None = None
+    identifier_base_replacements: int = 0
+    identifier_files: set[str] = field(default_factory=set)
+    _file_proof_indexes: dict[str, int] = field(default_factory=dict, repr=False)
 
     @property
     def converted_dates(self):
@@ -144,6 +153,7 @@ def _record(result: Result, source: str, locator: str, literal: str, anchor: dat
 
 
 def _capture_file_proof(result: Result, source: str, before: bytes, after: bytes):
+    before = result.before_files.get(source, before)
     result.before_files[source] = before
     result.after_files[source] = after
     prefix = 0
@@ -159,7 +169,32 @@ def _capture_file_proof(result: Result, source: str, before: bytes, after: bytes
     reverse_edits = [] if before == after else [day_zero_equivalence.ReverseEdit(
         prefix, after_end, before[prefix:before_end]
     )]
-    result.file_proofs.append(day_zero_equivalence.FileProof(source, tuple(reverse_edits)))
+    proof = day_zero_equivalence.FileProof(source, tuple(reverse_edits))
+    index = result._file_proof_indexes.get(source)
+    if index is None:
+        result._file_proof_indexes[source] = len(result.file_proofs)
+        result.file_proofs.append(proof)
+    else:
+        result.file_proofs[index] = proof
+
+
+def _stage_identifier_base_rewrite(repo: Path, result: Result,
+                                   staged_writes: dict[Path, bytes]) -> None:
+    """Compose the exact identifier substitution into the atomic U8 write set."""
+    for path in authoritative_paths(repo / "data"):
+        source = str(path.relative_to(repo))
+        before = result.before_files.get(source)
+        if before is None:
+            before = path.read_bytes()
+        current = staged_writes.get(path, before)
+        after, replacements = replace_identifier_base(current)
+        if replacements == 0:
+            continue
+        result.identifier_base_replacements += replacements
+        result.identifier_files.add(source)
+        result.touched_files.add(source)
+        _capture_file_proof(result, source, before, after)
+        staged_writes[path] = after
 
 
 def _validate_intended_json_additions(before: str, after: str, insertions: list[tuple]):
@@ -523,6 +558,7 @@ def convert_corpus(repo: Path, write: bool = False) -> Result:
             1 for row in result.holdouts
             if _is_full_date(row.get("literal", ""))
         )
+    _stage_identifier_base_rewrite(repo, result, staged_writes)
     day_zero_equivalence.file_round_trip(
         sorted(result.touched_files), result.before_files, result.after_files,
         result.file_proofs, result.date_proofs,
@@ -676,7 +712,10 @@ def _assert_governed_materialization(result: Result, governed: int | None,
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--write", action="store_true", help="write corpus offsets (U8 only)")
+    parser.add_argument(
+        "--write", action="store_true",
+        help="write corpus offsets and the legalpracticum.org identifier base (U8 only)",
+    )
     parser.add_argument("--audit-output", type=Path)
     parser.add_argument("--holdouts-output", type=Path)
     args = parser.parse_args(argv)
@@ -708,6 +747,8 @@ def main(argv=None) -> int:
                       "iso_like_raw_occurrences": result.iso_like_raw_occurrences,
                       "excluded_non_dates": len(result.excluded_non_dates),
                       "full_date_holdouts": audit_report["summary"]["full_date_holdouts"],
+                      "identifier_base_replacements": result.identifier_base_replacements,
+                      "identifier_files": len(result.identifier_files),
                       "inventory_total": result.iso_dates + result.long_form_dates,
                       "reconciled_total": result.converted_dates + result.full_date_holdouts + len(result.unclassified)}))
     if audit_report["attention_required"]:

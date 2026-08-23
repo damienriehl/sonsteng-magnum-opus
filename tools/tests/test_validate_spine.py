@@ -465,6 +465,8 @@ def build_base_spine(root: Path):
     (root / "skills").mkdir()
     (root / "tasks").mkdir()
     (root / "jurisdictions").mkdir()
+    (root / "curriculum").mkdir()
+    (root / "taxonomy").mkdir()
 
     # copy schemas so SchemaSet finds them
     shutil.copytree(SCHEMAS_DIR, root / "schemas")
@@ -475,6 +477,12 @@ def build_base_spine(root: Path):
         path.write_text(json.dumps(obj, indent=2), encoding="utf-8")
 
     dump(root / "spine-manifest.json", spine_manifest_entity())
+    dump(root / "curriculum" / "identifier.json", {
+        "@id": "https://sonsteng.damienriehl.com/spine/curriculum-fixture",
+    })
+    dump(root / "taxonomy" / "identifier.json", {
+        "@id": "https://sonsteng.damienriehl.com/spine/taxonomy-fixture",
+    })
     dump(root / "matters" / "manifest.json", manifest_entity())
     dump(root / "firm" / "firm.json", firm_entity())
     for sid, s in skill_entities().items():
@@ -492,12 +500,16 @@ def build_base_spine(root: Path):
     (md / "facts.md").write_text(build_facts_md(), encoding="utf-8")
 
 
-def run_validator(root: Path, matter=None, strict=True, enforce_day_zero_offsets=False):
+def run_validator(root: Path, matter=None, strict=True, enforce_day_zero_offsets=False,
+                  enforce_legal_practicum_identifiers=False):
     world = vs.discover(root, matter)
     schemas = vs.SchemaSet(root / "schemas")
     report = vs.Report()
     vs.Validator(world, schemas, report, strict=strict, online=False,
-                 enforce_day_zero_offsets=enforce_day_zero_offsets).run()
+                 enforce_day_zero_offsets=enforce_day_zero_offsets,
+                 enforce_legal_practicum_identifiers=(
+                     enforce_legal_practicum_identifiers
+                 )).run()
     return report
 
 
@@ -852,6 +864,137 @@ def test_enforcement_cli_flag_is_opt_in():
     parser = vs.build_arg_parser()
     assert parser.parse_args([]).enforce_day_zero_offsets is False
     assert parser.parse_args(["--enforce-day-zero-offsets"]).enforce_day_zero_offsets is True
+    assert parser.parse_args([]).enforce_legal_practicum_identifiers is False
+    assert parser.parse_args([
+        "--enforce-legal-practicum-identifiers"
+    ]).enforce_legal_practicum_identifiers is True
+
+
+def test_identifier_enforcement_rejects_old_base_and_accepts_combined_rewrite(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+
+    compatible = run_validator(data, matter="m99", strict=True)
+    assert not any(f.check == "F31" for f in compatible.findings)
+
+    rejected = run_validator(
+        data, matter="m99", strict=True,
+        enforce_legal_practicum_identifiers=True,
+    )
+    assert rejected.identifier_base_enforcement is True
+    assert rejected.old_identifier_base_occurrences > 0
+    assert any(f.check == "F31" and "old JSON-LD base" in f.message
+               for f in rejected.for_scope("GLOBAL"))
+
+    day_zero.convert_corpus(repo, write=True)
+    accepted = run_validator(
+        data, matter="m99", strict=True,
+        enforce_legal_practicum_identifiers=True,
+    )
+    assert accepted.identifier_base_values_checked > 0
+    assert accepted.old_identifier_base_occurrences == 0
+    assert not any(f.check == "F31" and f.severity == vs.ERROR
+                   for f in accepted.for_scope("GLOBAL"))
+
+
+def test_identifier_enforcement_rejects_manifest_mismatch_without_old_base(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    day_zero.convert_corpus(repo, write=True)
+    manifest = data / "spine-manifest.json"
+    payload = json.loads(manifest.read_text())
+    payload["jsonld_context_base"] = "https://example.test/spine/"
+    manifest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    report = run_validator(
+        data, matter="m99", strict=True,
+        enforce_legal_practicum_identifiers=True,
+    )
+
+    errors = [f.message for f in report.for_scope("GLOBAL") if f.check == "F31"]
+    assert report.old_identifier_base_occurrences == 0
+    assert any("spine manifest JSON-LD base" in message for message in errors)
+    assert not any("old JSON-LD base" in message for message in errors)
+
+
+def test_identifier_enforcement_rejects_slash_escaped_old_base(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    day_zero.convert_corpus(repo, write=True)
+    (data / "curriculum" / "identifier.json").write_text(
+        '{"@id":"https:\\/\\/sonsteng.damienriehl.com\\/spine\\/escaped"}\n',
+        encoding="utf-8",
+    )
+
+    report = run_validator(
+        data, strict=True, enforce_legal_practicum_identifiers=True,
+    )
+
+    assert report.old_identifier_base_occurrences == 1
+    assert any(
+        f.check == "F31" and "old JSON-LD base" in f.message
+        for f in report.for_scope("GLOBAL")
+    )
+
+
+def test_identifier_enforcement_rejects_zero_recognized_values(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    for path in day_zero.authoritative_paths(data):
+        payload = path.read_bytes()
+        for base in (day_zero.OLD_JSONLD_BASE, day_zero.NEW_JSONLD_BASE):
+            payload = payload.replace(base, b"https://example.test/spine/")
+        path.write_bytes(payload)
+
+    report = run_validator(
+        data, matter="m99", strict=True,
+        enforce_legal_practicum_identifiers=True,
+    )
+
+    errors = [f.message for f in report.for_scope("GLOBAL") if f.check == "F31"]
+    assert report.identifier_base_values_checked == 0
+    assert any("zero recognized base values" in message for message in errors)
+    assert not any("old JSON-LD base" in message for message in errors)
+
+
+def test_identifier_enforcement_rejects_incomplete_authoritative_scope(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    day_zero.convert_corpus(repo, write=True)
+    shutil.rmtree(data / "curriculum")
+
+    report = run_validator(
+        data, strict=True, enforce_legal_practicum_identifiers=True,
+    )
+
+    finding = next(
+        f for f in report.for_scope("GLOBAL")
+        if f.check == "F31" and "scope is incomplete" in f.message
+    )
+    assert any("curriculum/" in gap for gap in finding.detail["gaps"])
+
+
+def test_identifier_enforcement_rejects_missing_manifest_matter(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    day_zero.convert_corpus(repo, write=True)
+    shutil.rmtree(data / "matters" / "m99-noncompete-meridian")
+
+    report = run_validator(
+        data, strict=True, enforce_legal_practicum_identifiers=True,
+    )
+
+    finding = next(
+        f for f in report.for_scope("GLOBAL")
+        if f.check == "F31" and "scope is incomplete" in f.message
+    )
+    assert any("m99" in gap for gap in finding.detail["gaps"])
 
 
 def test_json_summary_exposes_date_counts_and_effective_switch(tmp_path):
@@ -864,6 +1007,10 @@ def test_json_summary_exposes_date_counts_and_effective_switch(tmp_path):
     assert payload["totals"]["checked_dates"] == report.checked_dates > 0
     assert payload["totals"]["offset_dates_checked"] == 0
     assert payload["day_zero_offset_enforcement"] is False
+    assert payload["identifier_base_enforcement"] is False
+    assert payload["totals"]["identifier_files_checked"] > 0
+    assert payload["totals"]["identifier_base_values_checked"] > 0
+    assert payload["totals"]["old_identifier_base_occurrences"] > 0
 
 
 def test_validator_registry_count_matches_docstring_and_help():

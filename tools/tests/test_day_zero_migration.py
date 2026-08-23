@@ -228,6 +228,74 @@ def test_rehearsal_aborts_at_each_failed_phase_without_continuing(tmp_path, phas
     assert names == list(migration.MIGRATION_PHASES[: names.index(phase) + 1])
 
 
+def test_strict_rehearsal_requires_date_and_identifier_evidence(tmp_path, monkeypatch):
+    runner = migration.LocalRehearsalPhases(tmp_path)
+    commands = []
+
+    def command(argv):
+        commands.append(argv)
+        report = tmp_path / ".day-zero-migration-validation.json"
+        report.write_text(json.dumps({
+            "day_zero_offset_enforcement": True,
+            "identifier_base_enforcement": True,
+            "totals": {
+                "checked_dates": 10,
+                "offset_dates_checked": 8,
+                "identifier_files_checked": 3,
+                "identifier_base_values_checked": 4,
+                "old_identifier_base_occurrences": 0,
+            },
+        }))
+
+    monkeypatch.setattr(runner, "_command", command)
+    runner.run("strict-day-zero-enforcement", SHA_NEW)
+
+    assert "--enforce-day-zero-offsets" in commands[0]
+    assert "--enforce-legal-practicum-identifiers" in commands[0]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"day_zero_offset_enforcement": False}, "did not execute"),
+        ({"identifier_base_enforcement": False}, "did not execute"),
+        ({"totals": {"checked_dates": 0}}, "did not execute"),
+        ({"totals": {"offset_dates_checked": 0}}, "did not execute"),
+        ({"totals": {"identifier_files_checked": 0}}, "did not execute"),
+        ({"totals": {"identifier_base_values_checked": 0}}, "did not execute"),
+        ({"totals": {"old_identifier_base_occurrences": 1}}, "did not execute"),
+        ({"totals": {"checked_dates": "not-a-number"}}, "bounded evidence"),
+    ],
+)
+def test_strict_rehearsal_rejects_invalid_evidence_and_removes_report(
+        tmp_path, monkeypatch, change, message):
+    runner = migration.LocalRehearsalPhases(tmp_path)
+    report = tmp_path / ".day-zero-migration-validation.json"
+    payload = {
+        "day_zero_offset_enforcement": True,
+        "identifier_base_enforcement": True,
+        "totals": {
+            "checked_dates": 10,
+            "offset_dates_checked": 8,
+            "identifier_files_checked": 3,
+            "identifier_base_values_checked": 4,
+            "old_identifier_base_occurrences": 0,
+        },
+    }
+    if "totals" in change:
+        payload["totals"].update(change["totals"])
+    else:
+        payload.update(change)
+
+    def command(_argv):
+        report.write_text(json.dumps(payload))
+
+    monkeypatch.setattr(runner, "_command", command)
+    with pytest.raises(migration.MigrationError, match=message):
+        runner.run("strict-day-zero-enforcement", SHA_NEW)
+    assert not report.exists()
+
+
 def test_production_is_disabled_by_default_before_any_operator_call(tmp_path):
     production = FakeProduction()
     with pytest.raises(migration.MigrationError, match="disabled by default"):

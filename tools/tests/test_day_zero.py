@@ -17,6 +17,7 @@ import json_surgical  # noqa: E402
 import day_zero_equivalence  # noqa: E402
 import day_zero_locator  # noqa: E402
 import apply_day_zero_review  # noqa: E402
+import identifier_base  # noqa: E402
 
 
 def _approve_fixture_review(repo: Path, initial: day_zero.Result):
@@ -114,6 +115,173 @@ def test_fixture_conversion_leaves_markdown_and_writes_sidecar(tmp_path):
     before = {p: p.read_bytes() for p in matter.iterdir()}
     day_zero.convert_corpus(tmp_path, write=True)
     assert before == {p: p.read_bytes() for p in matter.iterdir()}
+
+
+def test_combined_conversion_rewrites_identifier_base_without_mutating_dry_run(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    curriculum = tmp_path / "data" / "curriculum"
+    curriculum.mkdir()
+    jurisdictions = tmp_path / "data" / "jurisdictions"
+    jurisdictions.mkdir()
+    firm = tmp_path / "data" / "firm"
+    firm.mkdir()
+    taxonomy = tmp_path / "data" / "taxonomy"
+    taxonomy.mkdir()
+    schemas = tmp_path / "data" / "schemas"
+    schemas.mkdir()
+    other = tmp_path / "data" / "other"
+    other.mkdir()
+    matter_json = matter / "matter.json"
+    matter_json.write_text(
+        '{\n  "@id": "https://sonsteng.damienriehl.com/spine/m01",\n'
+        '  "id": "m01",\n  "open_date": "2026-03-01",\n'
+        '  "as_of_date": "2026-03-04"\n}\n'
+    )
+    manifest = tmp_path / "data" / "spine-manifest.json"
+    manifest.write_text(
+        '{"jsonld_context_base":"https://sonsteng.damienriehl.com/spine/"}\n'
+    )
+    facts = matter / "facts.md"
+    facts.write_text(
+        "Identifier https://sonsteng.damienriehl.com/spine/fact. {#b:deadbeef}\n"
+    )
+    curriculum_json = curriculum / "module.json"
+    curriculum_json.write_text(
+        '{"@id":"https://sonsteng.damienriehl.com/spine/module"}\n'
+    )
+    jurisdiction_json = jurisdictions / "meridian.json"
+    jurisdiction_json.write_text(
+        '{"@id":"https://sonsteng.damienriehl.com/spine/meridian"}\n'
+    )
+    firm_json = firm / "firm.json"
+    firm_json.write_text(
+        '{"@id":"https://sonsteng.damienriehl.com/spine/firm"}\n'
+    )
+    taxonomy_json = taxonomy / "skills.json"
+    taxonomy_json.write_text(
+        '{"@id":"https:\\/\\/sonsteng.damienriehl.com\\/spine\\/skills"}\n'
+    )
+    schema_json = schemas / "matter.schema.json"
+    schema_json.write_text(
+        '{"$id":"https://sonsteng.damienriehl.com/spine/schemas/matter"}\n'
+    )
+    out_of_scope = other / "notes.json"
+    out_of_scope.write_text(
+        '{"@id":"https://sonsteng.damienriehl.com/spine/out-of-scope"}\n'
+    )
+    symlink = curriculum / "linked-firm.json"
+    symlink.symlink_to(out_of_scope)
+    before = {
+        path: path.read_bytes()
+        for path in (
+            matter_json, manifest, facts, curriculum_json,
+            jurisdiction_json, firm_json, taxonomy_json, schema_json,
+            out_of_scope,
+        )
+    }
+
+    result = day_zero.convert_corpus(tmp_path, write=False)
+
+    assert result.identifier_base_replacements == 8
+    assert result.identifier_files == {
+        "data/curriculum/module.json",
+        "data/firm/firm.json",
+        "data/jurisdictions/meridian.json",
+        "data/matters/m01-fixture/facts.md",
+        "data/matters/m01-fixture/matter.json",
+        "data/schemas/matter.schema.json",
+        "data/spine-manifest.json",
+        "data/taxonomy/skills.json",
+    }
+    assert {path: path.read_bytes() for path in before} == before
+    assert symlink.is_symlink()
+    assert day_zero.OLD_JSONLD_BASE in out_of_scope.read_bytes()
+    assert json.loads(result.after_files["data/taxonomy/skills.json"])["@id"] == (
+        "https://legalpracticum.org/spine/skills"
+    )
+    staged_matter = result.after_files["data/matters/m01-fixture/matter.json"]
+    assert day_zero.OLD_JSONLD_BASE not in staged_matter
+    assert day_zero.NEW_JSONLD_BASE in staged_matter
+    assert b'"as_of_date_day_zero_offset": 3' in staged_matter
+    assert b"{#b:deadbeef}" in result.after_files[
+        "data/matters/m01-fixture/facts.md"
+    ]
+
+
+@pytest.mark.parametrize("escaped_identifier", (
+    r"\u0068ttps:\/\/sonsteng.damienriehl.com\/spine/one",
+    r"https:\/\u002fsonsteng.damienriehl.com/spine\/two",
+))
+def test_identifier_rewrite_handles_arbitrary_json_escapes(escaped_identifier):
+    payload = (
+        '{  "@id" : "' + escaped_identifier + '", "note":"\\u263a"  }\n'
+    ).encode()
+
+    rewritten, replacements = identifier_base.replace_identifier_base(payload)
+
+    assert replacements == 1
+    assert json.loads(rewritten)["@id"].startswith(
+        identifier_base.NEW_JSONLD_BASE_TEXT
+    )
+    assert b'"note":"\\u263a"' in rewritten
+    assert identifier_base.identifier_base_counts(
+        Path("fixture.json"), rewritten
+    ) == (0, 1)
+
+
+def test_combined_conversion_is_atomic_and_identifier_rewrite_is_idempotent(tmp_path):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    matter_json = matter / "matter.json"
+    matter_json.write_text(
+        '{"@id":"https://sonsteng.damienriehl.com/spine/m01",'
+        '"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    )
+    manifest = tmp_path / "data" / "spine-manifest.json"
+    manifest.write_text(
+        '{"jsonld_context_base":"https://sonsteng.damienriehl.com/spine/"}\n'
+    )
+
+    first = day_zero.convert_corpus(tmp_path, write=True)
+    assert first.identifier_base_replacements == 2
+    assert day_zero.OLD_JSONLD_BASE not in matter_json.read_bytes()
+    assert day_zero.OLD_JSONLD_BASE not in manifest.read_bytes()
+    assert json.loads(matter_json.read_text())["as_of_date_day_zero_offset"] == 1
+    after_first = {path: path.read_bytes() for path in (matter_json, manifest)}
+
+    second = day_zero.convert_corpus(tmp_path, write=True)
+    assert second.identifier_base_replacements == 0
+    assert second.identifier_files == set()
+    assert {path: path.read_bytes() for path in after_first} == after_first
+
+
+def test_combined_conversion_proof_failure_writes_neither_dates_nor_identifiers(
+        tmp_path, monkeypatch):
+    matter = tmp_path / "data" / "matters" / "m01-fixture"
+    matter.mkdir(parents=True)
+    matter_json = matter / "matter.json"
+    original = (
+        '{"@id":"https://sonsteng.damienriehl.com/spine/m01",'
+        '"id":"m01","open_date":"2026-01-01","as_of_date":"2026-01-02"}'
+    )
+    matter_json.write_text(original)
+    manifest = tmp_path / "data" / "spine-manifest.json"
+    manifest_original = (
+        '{"jsonld_context_base":"https://sonsteng.damienriehl.com/spine/"}\n'
+    )
+    manifest.write_text(manifest_original)
+
+    def reject(*_args, **_kwargs):
+        raise day_zero_equivalence.EquivalenceError("combined proof rejected")
+
+    monkeypatch.setattr(day_zero_equivalence, "file_round_trip", reject)
+    with pytest.raises(day_zero_equivalence.EquivalenceError, match="combined proof"):
+        day_zero.convert_corpus(tmp_path, write=True)
+
+    assert matter_json.read_text() == original
+    assert manifest.read_text() == manifest_original
+    assert not (matter / "date-offsets.json").exists()
 
 
 def test_audit_has_anchor_and_reason_for_every_conversion(tmp_path):
