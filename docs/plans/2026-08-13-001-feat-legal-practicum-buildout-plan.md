@@ -429,6 +429,18 @@ Phase A is independent and ships first: U16 before U2 so the pitch work is check
   - `tools/check_build_parity.py` passes after regeneration.
   - No test still asserts the old hostname except a redirect test.
 - **Verification.** `bash tools/preflight.sh`; manual check that the editor round-trips under the new domain.
+- **Execution record (2026-08-23).** Autonomous cutover complete: Cloudflare zone
+  active; Pages serves `legalpracticum.org`; Turnstile accepts the new domain; the
+  cloned Access application enforces before the Worker and preserves the prior IdP,
+  policy, and session; reviewed Worker version `cc86efd2-636d-4823-be8e-a07810487bbf` owns the
+  new editor host and path-preserving redirects for the legacy editor host, `www`,
+  and the former public host; the old Access application and old Pages binding are
+  retired. The authenticated suggestion round-trip remains the sole human-identity
+  verification and is queued in
+  `docs/decisions/2026-08-23-domain-cutover-human-gate-sheet.md`.
+  The final repository preflight passed all 21 gates with zero skips. Review follow-up
+  also made legacy config-off release environments migrate the exact retired Pages
+  provenance URL safely and added a generated-page Large Type browser gate.
 
 ### U11. Seven-heading band anchors as versioned data
 

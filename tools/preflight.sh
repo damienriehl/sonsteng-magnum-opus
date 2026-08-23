@@ -74,6 +74,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     run "editor client (background)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
     run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     run "platform layout matrix"                 node tools/verify_platform_layout.js
+    run "weekly-hours client behavior"           node app/hours/verify-hours.js
     run "catalog client behavior"                node tools/verify_catalog_client.js
     run "Publisher authorization client"         node tools/verify_publisher_client.mjs
     run "platform print matrix"                  node tools/verify_platform_layout.js --print
@@ -99,6 +100,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "accessibility audit"  "no reachable X display"
     skip "rail placement"       "no reachable X display"
     skip "platform layout"      "no reachable X display"
+    skip "weekly-hours client"  "no reachable X display"
     skip "catalog client"       "no reachable X display"
     skip "Publisher client"     "no reachable X display"
     skip "platform print"       "no reachable X display"
@@ -111,6 +113,7 @@ else
   skip "accessibility audit"  "--no-browser"
   skip "rail placement"       "--no-browser"
   skip "platform layout"      "--no-browser"
+  skip "weekly-hours client"  "--no-browser"
   skip "catalog client"       "--no-browser"
   skip "Publisher client"     "--no-browser"
   skip "platform print"       "--no-browser"

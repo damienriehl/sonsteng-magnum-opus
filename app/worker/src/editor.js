@@ -54,7 +54,7 @@ function redirectTo(location) {
 // `node --test` at all, so anything left inline in that file is untestable by
 // construction. Returns a Response to send, or null to fall through.
 //
-// `edit.sonsteng.damienriehl.com` has to land somewhere useful when someone just
+// The Access hostname has to land somewhere useful when someone just
 // types it — that memorability is the entire point of the hostname — but the
 // editor surface lives under /edit. So the root forwards into it and the
 // scope-aware landing there picks the destination. Bound to EDIT_ACCESS_HOST so

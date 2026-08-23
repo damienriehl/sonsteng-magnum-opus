@@ -49,7 +49,10 @@
   // list precisely so this one cannot follow `--env production` and try to bind
   // the DEV hostname to sonsteng-chat-production. Do not remove that empty list.
   "routes": [
-    { "pattern": "edit.sonsteng.damienriehl.com", "custom_domain": true }
+    { "pattern": "edit.legalpracticum.org", "custom_domain": true },
+    { "pattern": "edit.sonsteng.damienriehl.com", "custom_domain": true },
+    { "pattern": "www.legalpracticum.org", "custom_domain": true },
+    { "pattern": "sonsteng.damienriehl.com", "custom_domain": true }
   ],
 
   // The generator-emitted editor map + server-only instructor bundle are copied
@@ -74,7 +77,7 @@
 
   // ---- TOP-LEVEL vars = DEV defaults (the default `wrangler deploy` target) ----
   "vars": {
-    "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+    "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://legalpracticum.org",
     "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
     "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
     "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
@@ -123,7 +126,7 @@
     // swapping it would leave every existing bookmark loading pages normally while
     // every save returned 403 csrf_failed. Drop the workers.dev entry only when
     // the last ?t= token retires (plan KD1).
-    "EDIT_ORIGIN": "https://edit.sonsteng.damienriehl.com,https://sonsteng-chat.damienriehl.workers.dev",
+    "EDIT_ORIGIN": "https://edit.legalpracticum.org,https://sonsteng-chat.damienriehl.workers.dev",
 
     // ---- Cloudflare Access door (plan KTD8) --------------------------------
     // The three verification inputs, declared as config and NEVER derived from
@@ -134,14 +137,18 @@
     // env.production stays safe under R7 while carrying none of them.
     //
     // EDIT_ACCESS_AUD is the Access application's Application Audience tag,
-    // captured from U2 on 2026-07-27 (app id 589cfc99-eb6d-40da-a225-f0f0c5828f74,
-    // "Sonsteng Practicum Editor"). It is not a secret — it rides in every
+    // captured during the U10 domain cutover on 2026-08-23 (app id
+    // d64fe7d0-ee8b-4670-a6e1-5676d7b3815d, "Legal Practicum Editor"). It is not a secret — it rides in every
     // assertion — but it IS load-bearing: access-jwt.js checks the token's `aud`
     // against it, so a wrong value fails every sign-in closed. Emptying it turns
     // the Access door off and leaves only the ?t= door, which is the safe state.
-    "EDIT_ACCESS_AUD": "ff942be4e3b4957a8106266e057dc916ac4153f8f28a7698186e8725d5c54ecc",
+    "EDIT_ACCESS_AUD": "b0acc1e2841eacbd9d5d99090a33ff2b558bd0ca2241310762309bc77778fc21",
     "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
-    "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
+    "EDIT_ACCESS_HOST": "edit.legalpracticum.org",
+    "EDIT_LEGACY_HOST": "edit.sonsteng.damienriehl.com",
+    // Canonical public host and exact aliases served only as permanent redirects.
+    "PUBLIC_CANONICAL_HOST": "legalpracticum.org",
+    "PUBLIC_REDIRECT_HOSTS": "www.legalpracticum.org,sonsteng.damienriehl.com",
 
     // Scope grants per token slot (independent per-scope version for rotation).
     // The opaque token values are SECRETS: EDIT_TOKEN_JOHN, EDIT_TOKEN_ROGER,
@@ -183,7 +190,7 @@
         ]
       },
       "vars": {
-        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://legalpracticum.org",
         "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
         "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
         "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
@@ -202,10 +209,13 @@
         // Mirrors the top-level list (KTD6). vars are NON-INHERITABLE, so this
         // block must repeat every value — setting only the top-level one would
         // leave `--env dev` serving the old single origin.
-        "EDIT_ORIGIN": "https://edit.sonsteng.damienriehl.com,https://sonsteng-chat.damienriehl.workers.dev",
-        "EDIT_ACCESS_AUD": "ff942be4e3b4957a8106266e057dc916ac4153f8f28a7698186e8725d5c54ecc",
+        "EDIT_ORIGIN": "https://edit.legalpracticum.org,https://sonsteng-chat.damienriehl.workers.dev",
+        "EDIT_ACCESS_AUD": "b0acc1e2841eacbd9d5d99090a33ff2b558bd0ca2241310762309bc77778fc21",
         "EDIT_ACCESS_TEAM_DOMAIN": "young-unit-68fd.cloudflareaccess.com",
-        "EDIT_ACCESS_HOST": "edit.sonsteng.damienriehl.com",
+        "EDIT_ACCESS_HOST": "edit.legalpracticum.org",
+        "EDIT_LEGACY_HOST": "edit.sonsteng.damienriehl.com",
+        "PUBLIC_CANONICAL_HOST": "legalpracticum.org",
+        "PUBLIC_REDIRECT_HOSTS": "www.legalpracticum.org,sonsteng.damienriehl.com",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"damienadmin\":{\"edit\":1,\"instructor\":1,\"admin\":1,\"publisher\":1},\"admin\":{\"admin\":1},\"release\":{\"release_service\":1}}",
         "PROD_RELEASE_LEDGER": "true",
         "EDIT_MAX_PENDING_PER_EDITOR": "200",
@@ -224,15 +234,15 @@
     // ⚠ DAMIEN DECISION — EDIT_ORIGIN below assumes the PROD worker is reachable
     // at its default workers.dev subdomain (sonsteng-chat-production.
     // damienriehl.workers.dev). If PROD instead mounts the worker on a custom
-    // route/subdomain (e.g. edit.sonsteng.damienriehl.com or a route on
-    // sonsteng.damienriehl.com), set EDIT_ORIGIN to THAT origin and add a
+    // route/subdomain (e.g. edit.legalpracticum.org or a route on
+    // legalpracticum.org), set EDIT_ORIGIN to THAT origin and add a
     // `routes` block here. EDIT_ORIGIN is the sole /edit CORS allowlist, so it
     // MUST equal the browser origin the editor is actually served from.
     "production": {
       "name": "sonsteng-chat-production",
       // ⚠ DELIBERATELY EMPTY — do not delete. `routes` is inheritable, so without
-      // this the top-level Access-door custom domain (edit.sonsteng.damienriehl
-      // .com) would follow `wrangler deploy --env production` and try to bind the
+      // the top-level Access-door custom domains would follow `wrangler deploy
+      // --env production` and try to bind the
       // DEV hostname to this PROD worker — failing the deploy, or stealing the
       // hostname from DEV. R7 ("PROD is untouched") is true of the file text
       // without this line and FALSE of the effective config. Verify with
@@ -246,7 +256,7 @@
         ]
       },
       "vars": {
-        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://sonsteng.damienriehl.com",
+        "ALLOWED_ORIGINS": "https://sonsteng-dev.damienriehl.com,https://legalpracticum.org",
         "MODEL_DEFAULT_ANTHROPIC": "claude-haiku-4-5",
         "MODEL_DEFAULT_OPENAI": "gpt-4o-mini",
         "MODEL_DEFAULT_GOOGLE": "gemini-2.0-flash",
@@ -259,14 +269,14 @@
         "MAX_SESSIONS_PER_DAY": "200",
         "MAX_ASSESSMENTS_PER_SESSION_DAY": "20",
         "STREAMING": "false",
-        // Bot-gate ON in PROD too; the widget's domain list already covers
-        // sonsteng.damienriehl.com, so no new widget at enable time — but PROD
+        // Bot-gate ON in PROD too; the widget's domain list covers
+        // legalpracticum.org, so no new widget at enable time — but PROD
         // needs its OWN `wrangler secret put TURNSTILE_SECRET --env production`
         // (docs/prod-enable.md). Same public sitekey as DEV (one widget).
         "TURNSTILE_ENABLED": "true",
         "TURNSTILE_SITEKEY": "0x4AAAAAAD4uPMN8eNwzYvAy",
-        // PROD static is served by Cloudflare Pages at sonsteng.damienriehl.com.
-        "EDIT_UPSTREAM": "https://sonsteng.damienriehl.com/platform/",
+        // PROD static is served by Cloudflare Pages at legalpracticum.org.
+        "EDIT_UPSTREAM": "https://legalpracticum.org/platform/",
         // The PROD worker's OWN edit origin (see ⚠ DAMIEN DECISION above).
         "EDIT_ORIGIN": "https://sonsteng-chat-production.damienriehl.workers.dev",
         "EDIT_TOKEN_SCOPES": "{\"john\":{\"edit\":1,\"instructor\":1},\"roger\":{\"edit\":1,\"instructor\":1},\"damien\":{\"edit\":1,\"instructor\":1},\"admin\":{\"admin\":1}}",

@@ -729,7 +729,7 @@ slash), `EDIT_ORIGIN` (the worker's edit origin = the sole /edit CORS allowlist)
 **Environment-scoped (WP1):** `EDIT_UPSTREAM`/`EDIT_ORIGIN` differ per env — the
 top-level/default (and `env.dev`) point at DEV (`sonsteng-dev…/platform/`,
 worker `sonsteng-chat`); `env.production` points at the PROD CF Pages origin
-(`sonsteng.damienriehl.com/platform/`, separate worker `sonsteng-chat-production`).
+(`legalpracticum.org/platform/`, separate worker `sonsteng-chat-production`).
 A bare `wrangler deploy` still targets DEV. PROD enable = `docs/prod-enable.md`
 (held). `vars`/`durable_objects` are non-inheritable, so each env re-declares them.
 Secrets (never in source, **per-environment**): `EDIT_TOKEN_JOHN`,
