@@ -12,10 +12,10 @@ const ENV = {
   ANTHROPIC_API_KEY: "sk-hosted-key",
   MODEL_DEFAULT_ANTHROPIC: "claude-haiku-4-5",
   MODEL_DEFAULT_OPENAI: "gpt-4o-mini",
-  MODEL_DEFAULT_GOOGLE: "gemini-2.0-flash",
+  MODEL_DEFAULT_GOOGLE: "gemini-2.5-flash",
   MODEL_ALLOW_ANTHROPIC: "claude-haiku-4-5,claude-sonnet-4-5",
   MODEL_ALLOW_OPENAI: "gpt-4o-mini,gpt-4o",
-  MODEL_ALLOW_GOOGLE: "gemini-2.0-flash,gemini-2.5-flash",
+  MODEL_ALLOW_GOOGLE: "gemini-2.5-flash",
 };
 
 test("no byok + hosted key present -> hosted anthropic, budget ENFORCED", () => {
@@ -35,7 +35,7 @@ test("no byok + NO hosted key -> typed no_hosted_key error", () => {
 });
 
 test("valid byok -> that provider, budget SKIPPED (their money)", () => {
-  for (const [provider, model] of [["anthropic", "claude-haiku-4-5"], ["openai", "gpt-4o-mini"], ["google", "gemini-2.0-flash"]]) {
+  for (const [provider, model] of [["anthropic", "claude-haiku-4-5"], ["openai", "gpt-4o-mini"], ["google", "gemini-2.5-flash"]]) {
     const up = resolveUpstream(ENV, { provider, api_key: "user-key-12345" });
     assert.ok(up.ok, provider);
     assert.equal(up.mode, "byok");
@@ -59,6 +59,13 @@ test("byok model must be in the per-provider allowlist", () => {
   const bad = resolveUpstream(ENV, { provider: "openai", api_key: "user-key-12345", model: "gpt-3.5-turbo" });
   assert.equal(bad.ok, false);
   assert.equal(bad.code, "validation_error");
+  const retired = resolveUpstream(ENV, {
+    provider: "google",
+    api_key: "user-key-12345",
+    model: "gemini-2.0-flash",
+  });
+  assert.equal(retired.ok, false);
+  assert.equal(retired.code, "validation_error");
 });
 
 test("byok rejects unknown providers and missing/short keys", () => {
@@ -73,9 +80,19 @@ test("model config comes from env vars, with safe fallbacks", () => {
   const cfg = providerModelConfig({});
   assert.equal(cfg.anthropic.default, "claude-haiku-4-5");
   assert.equal(cfg.openai.default, "gpt-4o-mini");
-  assert.equal(cfg.google.default, "gemini-2.0-flash");
+  assert.equal(cfg.google.default, "gemini-2.5-flash");
   const custom = providerModelConfig({ MODEL_ALLOW_GOOGLE: "a,b , c" });
   assert.deepEqual(custom.google.allow, ["a", "b", "c"]);
+});
+
+test("published API contract matches the Worker contract", () => {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const workerContract = readFileSync(join(testDir, "..", "API-CONTRACTS.md"), "utf8");
+  const publishedContract = readFileSync(
+    join(testDir, "..", "..", "..", "site", "platform", "data", "api-contracts.md"),
+    "utf8",
+  );
+  assert.equal(publishedContract, workerContract);
 });
 
 test("panel resolution never multiplies one hosted or BYOK key into synthetic graders", () => {

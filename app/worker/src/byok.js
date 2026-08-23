@@ -29,8 +29,8 @@ export function providerModelConfig(env) {
       allow: csv(env.MODEL_ALLOW_OPENAI || "gpt-4o-mini"),
     },
     google: {
-      default: env.MODEL_DEFAULT_GOOGLE || "gemini-2.0-flash",
-      allow: csv(env.MODEL_ALLOW_GOOGLE || "gemini-2.0-flash"),
+      default: env.MODEL_DEFAULT_GOOGLE || "gemini-2.5-flash",
+      allow: csv(env.MODEL_ALLOW_GOOGLE || "gemini-2.5-flash"),
     },
   };
 }
