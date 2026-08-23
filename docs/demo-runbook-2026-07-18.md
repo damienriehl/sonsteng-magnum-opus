@@ -2,7 +2,7 @@
 
 *Prepared 2026-07-17→18; rehearsed end-to-end on DEV 2026-07-18 (WP9). Everything below works with ZERO API keys except the steps marked 🔑. Total time: ~20 minutes + discussion.*
 
-*The editing/DEV site is **https://sonsteng-dev.damienriehl.com/platform/** · Worker (chat / critique / debrief + the `/edit` editor) **https://sonsteng-chat.damienriehl.workers.dev**. Public PROD is **https://sonsteng.damienriehl.com/platform/** and has a separate release lifecycle; DEV auto-apply never publishes it.*
+*The editing/DEV site is **https://sonsteng-dev.damienriehl.com/platform/** · Worker (chat / critique / debrief + the `/edit` editor) **https://sonsteng-chat.damienriehl.workers.dev**. Public PROD is **https://legalpracticum.org/platform/** and has a separate release lifecycle; DEV auto-apply never publishes it.*
 
 ## What changed since the 2026-07-17 build (weekend fast-follows)
 

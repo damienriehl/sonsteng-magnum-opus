@@ -32,7 +32,7 @@ Comments are the exception — they're notes for Damien, not live edits.
 
 ## Getting in
 
-**Go to `edit.sonsteng.damienriehl.com`.** Type it into your browser, or save it as a bookmark —
+**Go to `edit.legalpracticum.org`.** Type it into your browser, or save it as a bookmark —
 it is short enough to read aloud over the phone, and there is nothing secret in it.
 
 The first time (and about once a month after), the page asks for your email address and then
@@ -55,7 +55,7 @@ any time to make everything bigger.
 - **The code didn't arrive.** Check the junk folder first. If it still isn't there, the address
   on the list may be a different one — text Damien and he can add the one you're using.
 - **You get a page saying "Please reopen your editing link".** That means you reached the editor
-  but aren't recognised yet. Go to `edit.sonsteng.damienriehl.com` again and sign in with the
+  but aren't recognised yet. Go to `edit.legalpracticum.org` again and sign in with the
   emailed code. Nothing you wrote has been lost.
 
 ## The things you can do

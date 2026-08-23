@@ -24,12 +24,19 @@ import assert from "node:assert/strict";
 import { resolveAuth, mintCookieValue, attributionLabel, lookupAccessSlot } from "../src/editor-auth.js";
 import { __resetJwksCache } from "../src/access-jwt.js";
 import { uniform404 } from "../src/editor-http.js";
-import { editorFetch, accessDoorwayRedirect } from "../src/editor.js";
+import {
+  editorFetch, accessDoorwayRedirect,
+} from "../src/editor.js";
+import { legacyEditorHostRedirect, publicHostRedirect } from "../src/host-routing.js";
 
 const TEAM = "young-unit-68fd.cloudflareaccess.com";
 const AUD = "aud-tag-for-the-editor-app";
-const ACCESS_HOST = "edit.sonsteng.damienriehl.com";
-const OLD_HOST = "sonsteng-chat.damienriehl.workers.dev";
+const ACCESS_HOST = "edit.legalpracticum.org";
+const LEGACY_HOST = "edit.sonsteng.damienriehl.com";
+const FALLBACK_HOST = "sonsteng-chat.damienriehl.workers.dev";
+const PUBLIC_HOST = "legalpracticum.org";
+const WWW_HOST = "www.legalpracticum.org";
+const LEGACY_PUBLIC_HOST = "sonsteng.damienriehl.com";
 const SIGNING_KEY = "test-signing-key-not-a-real-secret";
 
 // The real shape from wrangler.jsonc, including the Access-only combined slot.
@@ -55,7 +62,10 @@ function baseEnv(overrides = {}) {
     EDIT_ACCESS_AUD: AUD,
     EDIT_ACCESS_TEAM_DOMAIN: TEAM,
     EDIT_ACCESS_HOST: ACCESS_HOST,
-    EDIT_ORIGIN: `https://${ACCESS_HOST},https://${OLD_HOST}`,
+    EDIT_LEGACY_HOST: LEGACY_HOST,
+    PUBLIC_CANONICAL_HOST: PUBLIC_HOST,
+    PUBLIC_REDIRECT_HOSTS: `${WWW_HOST},${LEGACY_PUBLIC_HOST}`,
+    EDIT_ORIGIN: `https://${ACCESS_HOST},https://${FALLBACK_HOST}`,
     EDIT_UPSTREAM: "https://sonsteng-dev.damienriehl.com/platform/",
     ...overrides,
   };
@@ -166,7 +176,7 @@ test("a VALID assertion on the workers.dev host grants nothing (KTD3)", async ()
   __resetJwksCache();
   // Same token that works on the Access host, presented on the origin anyone can
   // reach directly and forge headers on.
-  const auth = await resolveAuth(baseEnv(), await accessReq("damien@example.com", { host: OLD_HOST }));
+  const auth = await resolveAuth(baseEnv(), await accessReq("damien@example.com", { host: FALLBACK_HOST }));
   assert.equal(auth.slot, null, "header presence alone must never grant access");
   assert.equal(auth.scopes.admin.granted, false);
 });
@@ -209,7 +219,7 @@ test("cookie identity still resolves with the Access branch present", async () =
     slot: "john",
     stamp: "john|edit:1,instructor:1,admin:-",
   });
-  const auth = await resolveAuth(baseEnv(), req(OLD_HOST, "/edit/index.html", { Cookie: `edit_scope=${value}` }));
+  const auth = await resolveAuth(baseEnv(), req(FALLBACK_HOST, "/edit/index.html", { Cookie: `edit_scope=${value}` }));
   assert.equal(auth.slot, "john");
   assert.equal(auth.scopes.edit.granted, true);
 });
@@ -232,7 +242,7 @@ test("cookie identity WINS when both a cookie and an assertion are present", asy
 test("the apply daemon's Bearer path is untouched by the Access branch", async () => {
   __resetJwksCache();
   const env = baseEnv({ EDIT_TOKEN_ADMIN: "service-token-value" });
-  const auth = await resolveAuth(env, req(OLD_HOST, "/edit/v1/review", {
+  const auth = await resolveAuth(env, req(FALLBACK_HOST, "/edit/v1/review", {
     Authorization: "Bearer service-token-value",
   }));
   assert.equal(auth.slot, "admin");
@@ -244,7 +254,7 @@ test("the apply daemon's Bearer path is untouched by the Access branch", async (
 test("damienadmin is NOT reachable by a Bearer token (no secret exists for it)", async () => {
   __resetJwksCache();
   const env = baseEnv({ EDIT_TOKEN_DAMIEN: "damien-token" });
-  const auth = await resolveAuth(env, req(OLD_HOST, "/edit/v1/pending", {
+  const auth = await resolveAuth(env, req(FALLBACK_HOST, "/edit/v1/pending", {
     Authorization: "Bearer damien-token",
   }));
   assert.equal(auth.slot, "damien", "the token maps to the edit-only slot");
@@ -274,7 +284,7 @@ test("the bare Access hostname 302s into /edit/", () => {
 });
 
 test("the workers.dev root is NOT redirected", () => {
-  assert.equal(accessDoorwayRedirect(baseEnv(), new URL(`https://${OLD_HOST}/`)), null);
+  assert.equal(accessDoorwayRedirect(baseEnv(), new URL(`https://${FALLBACK_HOST}/`)), null);
 });
 
 test("a non-root path on the Access host is not redirected", () => {
@@ -285,6 +295,37 @@ test("a non-root path on the Access host is not redirected", () => {
 test("with EDIT_ACCESS_HOST unset there is no doorway at all", () => {
   const env = baseEnv({ EDIT_ACCESS_HOST: "" });
   assert.equal(accessDoorwayRedirect(env, new URL(`https://${ACCESS_HOST}/`)), null);
+});
+
+test("the legacy editor hostname redirects every path and query to the new Access host", () => {
+  const res = legacyEditorHostRedirect(
+    baseEnv(),
+    new URL(`https://${LEGACY_HOST}/edit/admin?from=bookmark`),
+  );
+  assert.ok(res, "the legacy custom domain must remain a useful doorway");
+  assert.equal(res.status, 308);
+  assert.equal(res.headers.get("Location"), `https://${ACCESS_HOST}/edit/admin?from=bookmark`);
+  assert.equal(res.headers.get("Cache-Control"), "private, no-store");
+});
+
+test("the legacy-host redirect does not affect the new host or workers.dev fallback", () => {
+  assert.equal(legacyEditorHostRedirect(baseEnv(), new URL(`https://${ACCESS_HOST}/edit/`)), null);
+  assert.equal(legacyEditorHostRedirect(baseEnv(), new URL(`https://${FALLBACK_HOST}/edit/`)), null);
+});
+
+test("public aliases permanently redirect to the canonical domain with path and query intact", () => {
+  for (const host of [WWW_HOST, LEGACY_PUBLIC_HOST]) {
+    const res = publicHostRedirect(baseEnv(), new URL(`https://${host}/platform/?from=bookmark`));
+    assert.ok(res, `${host} must remain a useful doorway`);
+    assert.equal(res.status, 308);
+    assert.equal(res.headers.get("Location"), `https://${PUBLIC_HOST}/platform/?from=bookmark`);
+    assert.equal(res.headers.get("Cache-Control"), "public, max-age=3600");
+  }
+});
+
+test("the canonical public domain and unrelated hosts are not redirected", () => {
+  assert.equal(publicHostRedirect(baseEnv(), new URL(`https://${PUBLIC_HOST}/platform/`)), null);
+  assert.equal(publicHostRedirect(baseEnv(), new URL(`https://${FALLBACK_HOST}/platform/`)), null);
 });
 
 // ---- 6. the scope-aware landing and the admin page -------------------------
@@ -406,16 +447,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-function wranglerConfig() {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const raw = readFileSync(join(here, "..", "wrangler.jsonc"), "utf8");
-  // The file is JSONC; strip whole-line // comments only (no block comments and
-  // no trailing comments are used in it).
-  return JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ""));
-}
+const HERE = dirname(fileURLToPath(import.meta.url));
+const WRANGLER_CONFIG = JSON.parse(
+  readFileSync(join(HERE, "..", "wrangler.jsonc"), "utf8")
+    // The file is JSONC; strip whole-line // comments only (no block comments
+    // and no trailing comments are used in it).
+    .replace(/^\s*\/\/.*$/gm, ""),
+);
 
 test("workers_dev stays explicitly true so the fallback door survives a route", () => {
-  const cfg = wranglerConfig();
+  const cfg = WRANGLER_CONFIG;
   assert.equal(
     cfg.workers_dev, true,
     "adding any `routes` key defaults workers_dev to false and unbinds " +
@@ -424,7 +465,7 @@ test("workers_dev stays explicitly true so the fallback door survives a route", 
 });
 
 test("env.production declares an empty routes list so it cannot inherit the Access host", () => {
-  const cfg = wranglerConfig();
+  const cfg = WRANGLER_CONFIG;
   assert.deepEqual(
     cfg.env.production.routes, [],
     "`routes` is inheritable; without an explicit empty list the Access custom " +
@@ -432,8 +473,27 @@ test("env.production declares an empty routes list so it cannot inherit the Acce
   );
 });
 
+test("DEV binds editor and public canonicalization hostnames", () => {
+  const cfg = WRANGLER_CONFIG;
+  const routes = cfg.routes.map((route) => route.pattern);
+  assert.ok(routes.includes(ACCESS_HOST), "the new Access hostname must route to the DEV Worker");
+  assert.ok(routes.includes(LEGACY_HOST), "the old custom domain must remain bound for redirects");
+  assert.ok(routes.includes(WWW_HOST), "www must route to the canonical-host redirect");
+  assert.ok(routes.includes(LEGACY_PUBLIC_HOST), "the old public domain must remain bound for redirects");
+  for (const vars of [cfg.vars, cfg.env.dev.vars]) {
+    assert.equal(vars.EDIT_ACCESS_HOST, ACCESS_HOST);
+    assert.equal(vars.EDIT_LEGACY_HOST, LEGACY_HOST);
+    assert.equal(vars.EDIT_ACCESS_AUD, "b0acc1e2841eacbd9d5d99090a33ff2b558bd0ca2241310762309bc77778fc21");
+    assert.equal(vars.PUBLIC_CANONICAL_HOST, PUBLIC_HOST);
+    assert.deepEqual(String(vars.PUBLIC_REDIRECT_HOSTS).split(","), [WWW_HOST, LEGACY_PUBLIC_HOST]);
+    const publicOrigins = String(vars.ALLOWED_ORIGINS).split(",").map((origin) => origin.trim());
+    assert.ok(publicOrigins.includes("https://legalpracticum.org"));
+    assert.ok(!publicOrigins.includes("https://sonsteng.damienriehl.com"));
+  }
+});
+
 test("PROD carries no Access config, so its door is closed by construction (R7)", () => {
-  const v = wranglerConfig().env.production.vars;
+  const v = WRANGLER_CONFIG.env.production.vars;
   assert.equal(v.EDIT_ACCESS_AUD, undefined);
   assert.equal(v.EDIT_ACCESS_TEAM_DOMAIN, undefined);
   assert.equal(v.EDIT_ACCESS_HOST, undefined);
@@ -442,7 +502,7 @@ test("PROD carries no Access config, so its door is closed by construction (R7)"
 });
 
 test("the Access-only Damien slot is the Publisher on the canonical DEV ledger", () => {
-  const cfg = wranglerConfig();
+  const cfg = WRANGLER_CONFIG;
   for (const vars of [cfg.vars, cfg.env.dev.vars]) {
     assert.equal(JSON.parse(vars.EDIT_TOKEN_SCOPES).damienadmin.publisher, 1);
     assert.equal(vars.PROD_RELEASE_LEDGER, "true");
@@ -451,16 +511,17 @@ test("the Access-only Damien slot is the Publisher on the canonical DEV ledger",
 });
 
 test("both browser origins are on the DEV allowlist while the tokens live (KTD6)", () => {
-  const cfg = wranglerConfig();
+  const cfg = WRANGLER_CONFIG;
   for (const [name, vars] of [["top-level", cfg.vars], ["env.dev", cfg.env.dev.vars]]) {
     const list = String(vars.EDIT_ORIGIN).split(",").map((s) => s.trim());
-    assert.ok(list.includes("https://edit.sonsteng.damienriehl.com"), `${name}: Access origin`);
+    assert.ok(list.includes("https://edit.legalpracticum.org"), `${name}: Access origin`);
+    assert.ok(!list.includes("https://edit.sonsteng.damienriehl.com"), `${name}: legacy origin retired`);
     assert.ok(list.includes("https://sonsteng-chat.damienriehl.workers.dev"), `${name}: fallback origin`);
   }
 });
 
 test("streaming is enabled consistently on DEV and remains disabled on production (U19)", () => {
-  const cfg = wranglerConfig();
+  const cfg = WRANGLER_CONFIG;
   const topLevelDev = cfg.vars.STREAMING;
   const explicitDev = cfg.env.dev.vars.STREAMING;
 

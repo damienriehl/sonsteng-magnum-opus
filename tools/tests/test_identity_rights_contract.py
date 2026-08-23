@@ -138,7 +138,6 @@ def test_center_name_is_publicly_retired_but_outline_provenance_stands():
     assert "Center for Law and Business" in outline
 
 
-@pytest.mark.xfail(strict=True, reason="U10 domain cutover will move the public property")
 def test_readme_uses_legal_practicum_domain():
     readme = README.read_text(encoding="utf-8")
     assert "legalpracticum.org" in readme

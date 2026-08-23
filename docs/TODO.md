@@ -77,11 +77,12 @@ this file is what those decisions oblige us to *do*.
       doesn't say enough, but… let's just put legal practicum and stick with it."*
       Revisiting later is explicitly allowed; shipping under it is not blocked.
       **Partly done; the rest is owned elsewhere — do not re-derive it here.** The
-      name ships in copy and UI. The remaining scope is the identity migration —
-      `legalpracticum.org`, the JSON-LD base still on `sonsteng.damienriehl.com`
-      (262 files), and the repo name — owned by U10 of
-      `plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md` and blocked on
-      Cockpit ask `sonsteng-magnum-opus-2026-08-14-1202-legalpracticum-domain`.
+      name ships in copy and UI. **Domain cutover done 2026-08-23:** the public
+      property now serves at `legalpracticum.org`, the editor is Access-protected
+      at `edit.legalpracticum.org`, and both personally named public/editor hosts
+      are redirect-only. The remaining scope is the supervised U8 JSON-LD base
+      rewrite (262 files) and the repository rename; identifiers are names rather
+      than live URLs, so U10 deliberately did not rewrite them.
 - [x] **T07 — We host it; drop any Mitchell hosting claim** `@agent` `origin:call-2026-08-06`
       Damien hosts. Mitchell Hamline may adopt it and is welcome to help craft it,
       but gets no hosting byline. John: *"I don't think they're interested… I don't

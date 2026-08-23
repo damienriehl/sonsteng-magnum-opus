@@ -95,8 +95,68 @@ def test_migration_is_idempotent_and_does_not_replace_a_current_file(tmp_path, m
     )
 
     assert result.added_count == 0
+    assert result.updated_count == 0
     assert env_file.read_bytes() == migrated
     assert env_file.stat().st_ino == inode
+
+
+def test_migration_rewrites_retired_pages_provenance_and_clears_digest(tmp_path):
+    env_file = tmp_path / "env"
+    defaults = migration._defaults(tmp_path / "daemon", tmp_path / "state")
+    defaults["SONSTENG_PROD_PAGES_PROVENANCE_URL"] = (
+        "https://sonsteng.damienriehl.com/platform/"
+    )
+    defaults["SONSTENG_PROD_EXPECTED_CONFIG_DIGEST"] = "a" * 64
+    original = "# operator comment\n" + "\n".join(
+        f"{key}={defaults[key]}" for key in migration.REQUIRED_DEFAULTS
+    ) + "\n"
+    env_file.write_text(original, encoding="utf-8")
+    env_file.chmod(0o600)
+
+    result = migration.migrate_env_file(
+        env_file, daemon_root=tmp_path / "daemon", state_root=tmp_path / "state"
+    )
+
+    migrated = env_file.read_text(encoding="utf-8")
+    assert result == migration.MigrationResult(added_count=0, updated_count=2)
+    assert "SONSTENG_PROD_PAGES_PROVENANCE_URL=https://legalpracticum.org/platform/\n" in migrated
+    assert "SONSTENG_PROD_EXPECTED_CONFIG_DIGEST=\n" in migrated
+    assert migrated.startswith("# operator comment\n")
+
+    second = migration.migrate_env_file(
+        env_file, daemon_root=tmp_path / "daemon", state_root=tmp_path / "state"
+    )
+    assert second == migration.MigrationResult(added_count=0, updated_count=0)
+
+
+def test_migration_preserves_custom_pages_provenance(tmp_path):
+    env_file = tmp_path / "env"
+    original = _legacy_env(
+        env_file,
+        "SONSTENG_PROD_PAGES_PROVENANCE_URL=https://custom.example/platform/\n",
+    )
+
+    migration.migrate_env_file(
+        env_file, daemon_root=tmp_path / "daemon", state_root=tmp_path / "state"
+    )
+
+    assert env_file.read_bytes().startswith(original)
+
+
+def test_migration_rejects_duplicate_pages_provenance_assignments(tmp_path):
+    env_file = tmp_path / "env"
+    original = _legacy_env(
+        env_file,
+        "SONSTENG_PROD_PAGES_PROVENANCE_URL=https://sonsteng.damienriehl.com/platform/\n"
+        "SONSTENG_PROD_PAGES_PROVENANCE_URL=https://custom.example/platform/\n",
+    )
+
+    with pytest.raises(migration.MigrationError, match="duplicate Pages provenance"):
+        migration.migrate_env_file(
+            env_file, daemon_root=tmp_path / "daemon", state_root=tmp_path / "state"
+        )
+
+    assert env_file.read_bytes() == original
 
 
 def test_migration_uses_same_directory_atomic_replace_with_mode_0600(tmp_path, monkeypatch):

@@ -1,10 +1,10 @@
-/* Headless contract check for the local-only weekly-hours editor.
+/* Headless contract check for the built weekly-hours editor.
    Run: EDITOR_HEADLESS=1 node app/hours/verify-hours.js */
 'use strict';
 const path = require('path');
 const puppeteer = require('/home/damienriehl/.npm/_npx/7d92d9a2d2ccc630/node_modules/puppeteer');
 
-const PAGE = 'file://' + path.join(__dirname, 'index.html');
+const PAGE = 'file://' + path.join(__dirname, '..', '..', 'site', 'platform', 'hours', 'index.html');
 const results = [];
 function check(name, value) {
   results.push(!!value);
@@ -20,11 +20,21 @@ function check(name, value) {
   const page = await browser.newPage();
   await page.setViewport({width: 390, height: 844});
   const external = [];
+  const failed = [];
   page.on('request', req => { if (!req.url().startsWith('file:') && !req.url().startsWith('blob:')) external.push(req.url()); });
+  page.on('requestfailed', req => failed.push(`${req.url()}: ${req.failure()?.errorText || 'failed'}`));
   await page.evaluateOnNewDocument(() => {
     localStorage.setItem('sonsteng.weekly-hours.v1', '{"storage_version":99,"opaque":"future bytes"}');
+    localStorage.setItem('sonsteng-type-lg', '1');
   });
   await page.goto(PAGE, {waitUntil: 'load'});
+  const typePreference = await page.evaluate(() => ({
+    active: document.documentElement.classList.contains('type-lg'),
+    rootFontSize: parseFloat(getComputedStyle(document.documentElement).fontSize),
+  }));
+  check('built page loads every local asset', failed.length === 0);
+  check('saved Large Type preference applies before interaction', typePreference.active);
+  check('Large Type increases the root font size', typePreference.rootFontSize >= 19);
   await page.click('[data-mode="persistent"]');
   const quarantined = await page.$eval('#storage-status', n => n.textContent);
   await page.type('#learner-id', 'synthetic-change');

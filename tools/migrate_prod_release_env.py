@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Safely append missing settings to a config-off PROD release environment.
+"""Safely migrate settings in a config-off PROD release environment.
 
-This helper deliberately has no facility for changing an existing assignment.
-It accepts only a regular 0600 file with one literal config-off flag, preserves
-its bytes, and appends defaults for keys introduced after the file was created.
+This helper accepts only a regular 0600 file with one literal config-off flag.
+It appends defaults for keys introduced after the file was created and rewrites
+only explicitly recognized retired defaults, preserving all other assignments.
 """
 
 from __future__ import annotations
@@ -46,6 +46,8 @@ _CREDENTIAL_KEYS = (
     "SONSTENG_PROD_CLOUDFLARE_API_TOKEN",
 )
 _ASSIGNMENT = re.compile(r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*=(.*)$")
+_LEGACY_PAGES_PROVENANCE_URL = "https://sonsteng.damienriehl.com/platform/"
+_CANONICAL_PAGES_PROVENANCE_URL = "https://legalpracticum.org/platform/"
 
 
 class MigrationError(RuntimeError):
@@ -54,6 +56,7 @@ class MigrationError(RuntimeError):
 
 class MigrationResult(NamedTuple):
     added_count: int
+    updated_count: int
 
 
 def _defaults(daemon_root: Path, state_root: Path) -> dict[str, str]:
@@ -69,7 +72,7 @@ def _defaults(daemon_root: Path, state_root: Path) -> dict[str, str]:
         "SONSTENG_PROD_CLOUDFLARE_API_TOKEN": "",
         "SONSTENG_PROD_PAGES_BRANCH": "main",
         "SONSTENG_PROD_PAGES_ARTIFACT": str(daemon_root / "site"),
-        "SONSTENG_PROD_PAGES_PROVENANCE_URL": "https://sonsteng.damienriehl.com/platform/",
+        "SONSTENG_PROD_PAGES_PROVENANCE_URL": "https://legalpracticum.org/platform/",
         "SONSTENG_PROD_WORKER_CONFIG": str(daemon_root / "app/worker/wrangler.jsonc"),
         "SONSTENG_PROD_WORKER_PROVENANCE_URL": (
             "https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance"
@@ -105,6 +108,50 @@ def _enabled_values(text: str) -> list[str]:
         if match and match.group(1) == "SONSTENG_PROD_RELEASE_ENABLED":
             values.append(match.group(2).strip())
     return values
+
+
+def _active_values(text: str, key: str) -> list[str]:
+    values = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        match = _ASSIGNMENT.match(line)
+        if match and match.group(1) == key:
+            values.append(match.group(2).strip())
+    return values
+
+
+def _rewrite_assignment(text: str, key: str, value: str) -> str:
+    rewritten = []
+    for line in text.splitlines(keepends=True):
+        content = line.rstrip("\r\n")
+        ending = line[len(content):]
+        match = _ASSIGNMENT.match(content)
+        if match and match.group(1) == key and not content.lstrip().startswith("#"):
+            content = content[:match.start(2)] + value
+        rewritten.append(content + ending)
+    return "".join(rewritten)
+
+
+def _migrate_retired_defaults(text: str) -> tuple[str, int]:
+    provenance_key = "SONSTENG_PROD_PAGES_PROVENANCE_URL"
+    provenance_values = _active_values(text, provenance_key)
+    if len(provenance_values) > 1:
+        raise MigrationError("production environment has duplicate Pages provenance assignments")
+    if provenance_values != [_LEGACY_PAGES_PROVENANCE_URL]:
+        return text, 0
+
+    digest_key = "SONSTENG_PROD_EXPECTED_CONFIG_DIGEST"
+    digest_values = _active_values(text, digest_key)
+    if len(digest_values) > 1:
+        raise MigrationError("production environment has duplicate config digest assignments")
+
+    migrated = _rewrite_assignment(text, provenance_key, _CANONICAL_PAGES_PROVENANCE_URL)
+    updated_count = 1
+    if digest_values:
+        migrated = _rewrite_assignment(migrated, digest_key, "")
+        updated_count += 1
+    return migrated, updated_count
 
 
 def _read_safe_existing(path: Path) -> tuple[bytes, os.stat_result]:
@@ -198,7 +245,7 @@ def _atomic_replace(path: Path, payload: bytes, original_stat: os.stat_result) -
 
 
 def migrate_env_file(env_file: Path, *, daemon_root: Path, state_root: Path) -> MigrationResult:
-    """Append missing required settings while preserving the config-off file."""
+    """Add missing settings and migrate retired defaults in a config-off file."""
     path = Path(env_file)
     original, original_stat = _read_safe_existing(path)
     try:
@@ -210,12 +257,16 @@ def migrate_env_file(env_file: Path, *, daemon_root: Path, state_root: Path) -> 
     if enabled != ["false"]:
         raise MigrationError("production environment is not unambiguously config-off")
 
+    text, updated_count = _migrate_retired_defaults(text)
+    migrated = text.encode("utf-8")
+
     defaults = _defaults(Path(daemon_root), Path(state_root))
     missing = [(key, defaults[key]) for key in REQUIRED_DEFAULTS if key not in assignments]
-    if not missing:
-        return MigrationResult(added_count=0)
-    _atomic_replace(path, _append_block(original, missing), original_stat)
-    return MigrationResult(added_count=len(missing))
+    if not missing and not updated_count:
+        return MigrationResult(added_count=0, updated_count=0)
+    payload = _append_block(migrated, missing) if missing else migrated
+    _atomic_replace(path, payload, original_stat)
+    return MigrationResult(added_count=len(missing), updated_count=updated_count)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -231,8 +282,11 @@ def main(argv: list[str] | None = None) -> int:
     except MigrationError:
         print("[prod-release] environment migration refused; config remains unchanged", file=os.sys.stderr)
         return 1
-    if result.added_count:
-        print(f"[prod-release] appended {result.added_count} missing config-off settings")
+    if result.added_count or result.updated_count:
+        print(
+            "[prod-release] migrated config-off environment "
+            f"({result.added_count} added, {result.updated_count} updated)"
+        )
     else:
         print("[prod-release] config-off environment is current")
     return 0

@@ -113,7 +113,7 @@ test("csrfOk rejects a missing custom header even with same-origin", () => {
 // suite — these are the tests that actually hold the property.
 // ---------------------------------------------------------------------------
 
-const NEW_DOOR = "https://edit.sonsteng.damienriehl.com";
+const NEW_DOOR = "https://edit.legalpracticum.org";
 const OLD_DOOR = "https://sonsteng-chat.damienriehl.workers.dev";
 const STRANGER = "https://evil.example.com";
 
@@ -172,7 +172,7 @@ test("an unlisted third origin is refused by BOTH csrfOk and editCorsHeaders", (
   assert.equal(csrfOk(editXhr(STRANGER), env), false);
   assert.deepEqual(editCorsHeaders(env, STRANGER), {});
   // A near-miss (right suffix, wrong host) must not slip through a substring bug.
-  const lookalike = "https://evil-edit.sonsteng.damienriehl.com.attacker.test";
+  const lookalike = "https://evil-edit.legalpracticum.org.attacker.test";
   assert.equal(csrfOk(editXhr(lookalike), env), false);
   assert.deepEqual(editCorsHeaders(env, lookalike), {});
   // No Origin at all still gets no CORS headers (and needs none: same-origin).
@@ -235,7 +235,7 @@ test("uniform404 is byte-identical across unknown, under-scoped and hostile path
 
 test("uniform404 names the Access address and drops the token-only phrasing", async () => {
   const body = await uniform404().text();
-  assert.match(body, /edit\.sonsteng\.damienriehl\.com/, "must name the durable way back in");
+  assert.match(body, /edit\.legalpracticum\.org/, "must name the durable way back in");
   assert.doesNotMatch(
     body,
     /only opens through the\s+personal link|personal link Damien sent you/i,

@@ -78,9 +78,10 @@ python3 tools/validate_spine.py && python3 tools/build_site.py --check
 
 | Env | URL | Host | Deploy |
 |-----|-----|------|--------|
-| **PROD** | https://sonsteng.damienriehl.com | Cloudflare Pages (project `sonsteng`) | `bash deploy/deploy-prod.sh` |
+| **PROD** | https://legalpracticum.org | Cloudflare Pages (project `sonsteng`) | Publisher release lane; see `docs/prod-release-operations.md` |
 | **DEV** | https://sonsteng-dev.damienriehl.com | Hetzner box, nginx behind Coolify/Traefik | `bash deploy/deploy-dev.sh <branch>` |
 | **API** | https://sonsteng-chat.damienriehl.workers.dev | Cloudflare Worker | `cd app/worker && npx wrangler@4 deploy` |
+| **EDITOR** | https://edit.legalpracticum.org | Cloudflare Access + Worker custom domain | Ships with the default DEV Worker deploy |
 
 - ⚠️ The DEV stack uses an explicit Compose project name (`-p sonsteng`) and **must not**
   use `--remove-orphans` — other stacks on the box share the `deploy/` dir naming.

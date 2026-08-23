@@ -145,3 +145,22 @@ production field from **NOT RUN**.
 Production remains configuration-off. The new repository-only streaming smoke, Day Zero migration
 rehearsal, and legacy-environment migrator are preparation evidence only; they do not substitute for
 the credentialed or supervised rows above.
+
+## Evidence record — 2026-08-23 domain cutover
+
+This record covers the autonomous U10 infrastructure leg. It does not claim the
+human-authenticated edit that still requires an allowlisted identity session.
+
+| Field | Evidence |
+|---|---|
+| Public property | `https://legalpracticum.org/platform/` returned HTTP 200 from Cloudflare Pages |
+| DEV Worker version | `cc86efd2-636d-4823-be8e-a07810487bbf` |
+| New Access door | Unauthenticated `/edit/v1/status` returned 302 to the Access team login |
+| Access policy parity | Same IdP, one allow policy, three email selectors, `730h` session |
+| Old Access application | Retired; API returns unknown application |
+| Legacy editor host | HTTP 308 to `edit.legalpracticum.org`, path and query preserved |
+| Public aliases | `www.legalpracticum.org` and `sonsteng.damienriehl.com` return path/query-preserving HTTP 308s to the apex |
+| Production release config | Provenance URL points to `legalpracticum.org`; release remains config-off |
+| Repository verification | Full preflight: 21 passed, 0 failed, 0 skipped |
+| Access actor | **NOT RUN** — requires an allowlisted human identity session |
+| Authenticated suggestion round-trip | **NOT RUN** — queued in the domain-cutover human gate sheet |

@@ -22,21 +22,25 @@ scope. These grants do not themselves publish; only the frozen release workflow 
 
 ---
 
-# Access door runbook (`edit.sonsteng.damienriehl.com`)
+# Access door runbook (`edit.legalpracticum.org`)
 
-*Added 2026-07-27 with the Cloudflare Access door. Plan:
-`docs/plans/2026-07-27-001-feat-cloudflare-access-door-plan.md`.*
+*Added 2026-07-27 with the Cloudflare Access door and moved to the de-named
+hostname on 2026-08-23 under
+`docs/plans/2026-08-13-001-feat-legal-practicum-buildout-plan.md`.*
 
 ## Topology
 
 | Thing | Value |
 |---|---|
-| Editor hostname | `edit.sonsteng.damienriehl.com` (Worker custom domain, DEV/default env) |
+| Editor hostname | `edit.legalpracticum.org` (Worker custom domain, DEV/default env) |
 | Access team | `young-unit-68fd.cloudflareaccess.com` |
 | Access application | self-hosted, one policy, one-time PIN, 30-day session |
-| AUD tag | **set at U2** — paste into `EDIT_ACCESS_AUD` in `wrangler.jsonc` (top-level **and** `env.dev`) |
-| Admin page | `edit.sonsteng.damienriehl.com/edit/admin` (`admin` scope) |
+| AUD tag | `b0acc1e2…fc21` — set in `EDIT_ACCESS_AUD` at top level and in `env.dev` |
+| Admin page | `edit.legalpracticum.org/edit/admin` (`admin` scope) |
 | Bare hostname | 302s into `/edit/`; the landing is scope-aware |
+| Legacy hostname | `edit.sonsteng.damienriehl.com` remains Worker-bound only to issue a 308 redirect |
+| Public hostname | `legalpracticum.org` (Cloudflare Pages) |
+| Public aliases | `www.legalpracticum.org` and `sonsteng.damienriehl.com` are Worker-bound 308 redirects |
 | Fallback door | `?t=` links on `sonsteng-chat.damienriehl.workers.dev`, still live |
 
 **Both doors are open on purpose.** `EDIT_ORIGIN` is a comma-separated list carrying
@@ -54,25 +58,31 @@ advisory warning during deploy. Adding the Access-door route therefore silently 
 `error code: 1042` until it was caught by probing the live host. `env.production` declares
 `routes: []`, which is enough to trip the same default there.
 
-After any deploy that touches routing, **read the trigger list wrangler prints**. It must name
-both:
+After any deploy that touches routing, **read the trigger list Wrangler prints**. It must name
+all five:
 
     Deployed sonsteng-chat triggers
       https://sonsteng-chat.damienriehl.workers.dev
-      edit.sonsteng.damienriehl.com (custom domain)
+      edit.legalpracticum.org (custom domain)
+      edit.sonsteng.damienriehl.com (legacy redirect custom domain)
+      www.legalpracticum.org (public canonicalization custom domain)
+      sonsteng.damienriehl.com (legacy public redirect custom domain)
 
-## Enabling it (the two credentialed steps)
+## Cutover state and safe redeploy
 
-1. **Attach the hostname.** The `routes` block is already in `wrangler.jsonc`; a default-env
-   deploy provisions DNS + certificate:
+1. **Hostname attachment is complete (2026-08-23).** The `routes` block in
+   `wrangler.jsonc` is the source of truth. A default-environment deploy preserves
+   the four custom domains; always dry-run production first:
 
        cd app/worker
        npx wrangler@4 deploy --env production --dry-run   # MUST show no route for the Access host
-       npx wrangler@4 deploy                              # default env == DEV
+       npx wrangler@4 deploy --env=""                    # explicit top-level DEV
 
-2. **Create the Access application** on team `young-unit-68fd`. ✅ **DONE 2026-07-27** — — self-hosted, hostname above,
-   policy allowing the three addresses, one-time PIN included, session 30 days. Capture the
-   **AUD tag**, put it in `EDIT_ACCESS_AUD` in both var blocks, and redeploy.
+2. **Create the Access application** on team `young-unit-68fd`. ✅ **DONE 2026-08-23** — self-hosted,
+   hostname above, policy allowing the same three addresses, one-time PIN identity provider,
+   and the existing 730-hour session. The new AUD is present in both DEV var blocks.
+   The obsolete `edit.sonsteng.damienriehl.com` Access application is deleted; that
+   hostname now reaches the Worker's path-preserving 308 redirect.
 
    ⚠ **Do NOT use the one-click "Access for Workers" flow.** It covers `workers.dev` and
    Preview URLs only — using it would put a login screen in front of the *fallback* door and
@@ -102,24 +112,23 @@ any of the three `EDIT_ACCESS_*` vars is empty, so the only working door is `?t=
 correct, safe intermediate state, and it is also why PROD (which carries none of these vars)
 cannot take the Access branch at all.
 
-## The application, as built (2026-07-27)
+## The application, as cut over (2026-08-23)
 
 | Field | Value |
 |---|---|
-| App ID | `589cfc99-eb6d-40da-a225-f0f0c5828f74` |
-| Name | Sonsteng Practicum Editor |
-| Domain | `edit.sonsteng.damienriehl.com` |
+| App ID | `d64fe7d0-ee8b-4670-a6e1-5676d7b3815d` |
+| Name | Legal Practicum Editor |
+| Domain | `edit.legalpracticum.org` |
 | Type | `self_hosted` |
 | Session | `730h` (matches the Cockpit and Fence Edit) |
 | Identity | One-time PIN only (`9be03666-eb42-44b2-b3a0-7fa448455e4a`) |
-| AUD | `ff942be4…4ecc` — in `EDIT_ACCESS_AUD`, both var blocks |
+| AUD | `b0acc1e2…fc21` — in `EDIT_ACCESS_AUD`, both DEV var blocks |
 | Policy | "Practicum editors" · allow · 3 emails · no require/exclude |
 
-**The credential that can manage it is `~/.secrets/cloudflare-zt-token`.** Neither the wrangler
-OAuth token nor `~/.config/cloudflare/creds.env` can touch Access (both 403); the Cloudflare MCP
-can read Access but not write it. If you need to distinguish "no permission" from "bad request"
-on this API, POST an empty body: a permissions failure returns `10000 Authentication error`, a
-capable token returns a validation code such as `12130`.
+**The credential that can manage it is `~/.secrets/cloudflare-zt-token`.** It can read and write
+Access applications and policies. The ordinary DNS/Workers token in
+`~/.config/cloudflare/creds.env` can list account-level Access applications but cannot create or
+update them (`403 auth.forbidden`).
 
 Verified live immediately after: the hostname 302s to
 `young-unit-68fd.cloudflareaccess.com/cdn-cgi/access/login/…` carrying the same AUD;
@@ -143,7 +152,7 @@ invalidates every cookie already minted under the old version.
 
 ## ⚠ The workers.dev origin is load-bearing for the machine clients
 
-Access gates `edit.sonsteng.damienriehl.com` **at the edge**, so a Bearer service token is not
+Access gates `edit.legalpracticum.org` **at the edge**, so a Bearer service token is not
 enough there — `GET /edit/v1/review` with the admin token returns **200** on `workers.dev` and
 **302** to the Access login on the Access hostname. The apply daemon and the digest are both
 configured against the ungated origin:

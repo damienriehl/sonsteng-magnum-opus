@@ -30,17 +30,18 @@ const SAMPLES = [
 
 test("JS normalize/normHash matches Python text_norm byte-for-byte", async () => {
   // JS side
-  const jsRows = [];
-  for (const s of SAMPLES) jsRows.push([normalize(s), await normHash(s)]);
+  const jsRows = await Promise.all(
+    SAMPLES.map(async (sample) => [normalize(sample), await normHash(sample)]),
+  );
 
   // Python side (stdlib only; uses the frozen tools/text_norm.py).
   const py = spawnSync("python3", ["-c", `
 import sys, json
 sys.path.insert(0, ${JSON.stringify(join(REPO_ROOT, "tools"))})
 import text_norm
-S = json.loads(sys.stdin.read())
+S = json.loads(sys.argv[1])
 print(json.dumps([[text_norm.normalize(s), text_norm.norm_hash(s)] for s in S]))
-`], { input: JSON.stringify(SAMPLES), encoding: "utf8" });
+`, JSON.stringify(SAMPLES)], { encoding: "utf8" });
 
   assert.equal(py.status, 0, `python failed: ${py.stderr}`);
   const pyRows = JSON.parse(py.stdout);

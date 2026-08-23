@@ -10,7 +10,7 @@
 //
 // EDIT_ORIGIN is a COMMA-SEPARATED LIST, not one value (KTD6). One deployment now
 // answers on two browser origins at once — the Cloudflare Access hostname
-// (edit.sonsteng.damienriehl.com) and the older workers.dev fallback that every
+// (edit.legalpracticum.org) and the older workers.dev fallback that every
 // already-sent link points at — and BOTH are served by the same env. The list is
 // enforced twice, and the second one is the one that bites: editCorsHeaders
 // withholds CORS headers from an unlisted origin, and csrfOk REJECTS any request
@@ -141,7 +141,7 @@ export function editError(code, message, status) {
 // with nothing to do about it. (Damien hit exactly this on 2026-07-27.)
 //
 // The copy now has to serve TWO doors at once, because there are two. Someone can
-// reach this page by typing edit.sonsteng.damienriehl.com and being turned away at
+// reach this page by typing edit.legalpracticum.org and being turned away at
 // the Access check, having never held a personal link in their life; or by opening
 // a lapsed bookmark from the older link-based door. The previous wording told
 // EVERY such person to "reopen the personal link Damien sent you" — recovery
@@ -176,7 +176,7 @@ const NOT_FOUND_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-
 <h1>Let's get you back into the editor</h1>
 <p>This page is part of the practicum editor, and it opens only for people who
 have been let in. To pick your work back up, go to
-<strong>edit.sonsteng.damienriehl.com</strong> and sign in with your email
+<strong>edit.legalpracticum.org</strong> and sign in with your email
 address. You will be sent a short code to confirm it is you, and then you will
 land right back here, able to edit.</p>
 <p>Already have an editing link from Damien, sent by text or email? You can

@@ -30,6 +30,7 @@ import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-
 import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
 import { json, errorEnvelope } from "./errors.js";
 import { editorFetch, accessDoorwayRedirect } from "./editor.js";
+import { legacyEditorHostRedirect, publicHostRedirect } from "./host-routing.js";
 import { streamingEnabled, supportsStreaming, startProviderStream, makeChatTransform, pipeProviderStream } from "./chat-stream.js";
 
 export { BudgetCounter } from "./budget.js";
@@ -603,7 +604,6 @@ async function handleCritique(request, env, origin) {
 // ---- router -----------------------------------------------------------------
 export default {
   async fetch(request, env, ctx) {
-    const allowed = parseAllowedOrigins(env.ALLOWED_ORIGINS);
     const url = new URL(request.url);
 
     // The /edit surface is a self-contained router with its OWN auth, CORS
@@ -614,6 +614,12 @@ export default {
     // Placed before the /edit delegation so it cannot shadow any real path. The
     // decision itself lives in editor.js so it is testable — this module imports
     // cloudflare:workers and cannot be loaded by the test runner.
+    const publicRedirect = publicHostRedirect(env, url);
+    if (publicRedirect) return publicRedirect;
+
+    const legacyRedirect = legacyEditorHostRedirect(env, url);
+    if (legacyRedirect) return legacyRedirect;
+
     const doorway = accessDoorwayRedirect(env, url);
     if (doorway) return doorway;
 
@@ -629,6 +635,7 @@ export default {
       }
     }
 
+    const allowed = parseAllowedOrigins(env.ALLOWED_ORIGINS);
     if (request.method === "OPTIONS") return handlePreflight(request, allowed);
 
     const origin = matchOrigin(request, allowed);
