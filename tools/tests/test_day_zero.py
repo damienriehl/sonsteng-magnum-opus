@@ -17,6 +17,7 @@ import json_surgical  # noqa: E402
 import day_zero_equivalence  # noqa: E402
 import day_zero_locator  # noqa: E402
 import apply_day_zero_review  # noqa: E402
+import identifier_base  # noqa: E402
 
 
 def _approve_fixture_review(repo: Path, initial: day_zero.Result):
@@ -206,6 +207,27 @@ def test_combined_conversion_rewrites_identifier_base_without_mutating_dry_run(t
     assert b"{#b:deadbeef}" in result.after_files[
         "data/matters/m01-fixture/facts.md"
     ]
+
+
+@pytest.mark.parametrize("escaped_identifier", (
+    r"\u0068ttps:\/\/sonsteng.damienriehl.com\/spine/one",
+    r"https:\/\u002fsonsteng.damienriehl.com/spine\/two",
+))
+def test_identifier_rewrite_handles_arbitrary_json_escapes(escaped_identifier):
+    payload = (
+        '{  "@id" : "' + escaped_identifier + '", "note":"\\u263a"  }\n'
+    ).encode()
+
+    rewritten, replacements = identifier_base.replace_identifier_base(payload)
+
+    assert replacements == 1
+    assert json.loads(rewritten)["@id"].startswith(
+        identifier_base.NEW_JSONLD_BASE_TEXT
+    )
+    assert b'"note":"\\u263a"' in rewritten
+    assert identifier_base.identifier_base_counts(
+        Path("fixture.json"), rewritten
+    ) == (0, 1)
 
 
 def test_combined_conversion_is_atomic_and_identifier_rewrite_is_idempotent(tmp_path):

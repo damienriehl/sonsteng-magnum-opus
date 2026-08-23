@@ -17,12 +17,102 @@ IDENTIFIER_TREE_NAMES = (
 
 
 def replace_identifier_base(payload: bytes) -> tuple[bytes, int]:
-    """Replace raw and conventionally slash-escaped legacy identifier bases."""
-    replacements = payload.count(OLD_JSONLD_BASE)
-    replacements += payload.count(OLD_JSONLD_ESCAPED_BASE)
-    payload = payload.replace(OLD_JSONLD_BASE, NEW_JSONLD_BASE)
-    payload = payload.replace(OLD_JSONLD_ESCAPED_BASE, NEW_JSONLD_ESCAPED_BASE)
-    return payload, replacements
+    """Replace legacy bases, including arbitrarily escaped JSON strings.
+
+    JSON permits any character in the URL to be represented by an escape (for
+    example, ``\\u0068`` for ``h``), so byte substitutions alone are not
+    complete. For valid JSON, rewrite string tokens according to their decoded
+    value while preserving all bytes outside the matched URL. Non-JSON files
+    retain the deliberately narrow literal-byte behavior.
+    """
+    try:
+        json.loads(payload)
+        text = payload.decode("utf-8")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        replacements = payload.count(OLD_JSONLD_BASE)
+        replacements += payload.count(OLD_JSONLD_ESCAPED_BASE)
+        payload = payload.replace(OLD_JSONLD_BASE, NEW_JSONLD_BASE)
+        payload = payload.replace(OLD_JSONLD_ESCAPED_BASE, NEW_JSONLD_ESCAPED_BASE)
+        return payload, replacements
+
+    rewritten, replacements = _replace_json_string_tokens(text)
+    return rewritten.encode("utf-8"), replacements
+
+
+def _replace_json_string_tokens(text: str) -> tuple[str, int]:
+    """Surgically replace semantic bases inside the strings of valid JSON."""
+    chunks = []
+    cursor = 0
+    replacements = 0
+    index = 0
+    while index < len(text):
+        if text[index] != '"':
+            index += 1
+            continue
+        end = index + 1
+        while end < len(text):
+            if text[end] == "\\":
+                end += 2
+            elif text[end] == '"':
+                end += 1
+                break
+            else:
+                end += 1
+        token, token_replacements = _replace_json_string_token(text[index:end])
+        if token_replacements:
+            chunks.extend((text[cursor:index], token))
+            cursor = end
+            replacements += token_replacements
+        index = end
+    chunks.append(text[cursor:])
+    return "".join(chunks), replacements
+
+
+def _replace_json_string_token(token: str) -> tuple[str, int]:
+    """Rewrite one JSON string without normalizing its unrelated escapes."""
+    raw = token[1:-1]
+    characters = []
+    spans = []
+    index = 0
+    while index < len(raw):
+        start = index
+        if raw[index] != "\\":
+            character = raw[index]
+            index += 1
+        elif raw[index + 1] != "u":
+            index += 2
+            character = json.loads('"' + raw[start:index] + '"')
+        else:
+            index += 6
+            codepoint = int(raw[start + 2:index], 16)
+            if (0xD800 <= codepoint <= 0xDBFF and raw[index:index + 2] == "\\u"
+                    and index + 6 <= len(raw)):
+                low = int(raw[index + 2:index + 6], 16)
+                if 0xDC00 <= low <= 0xDFFF:
+                    index += 6
+            character = json.loads('"' + raw[start:index] + '"')
+        characters.append(character)
+        spans.append((start, index))
+
+    semantic = "".join(characters)
+    count = semantic.count(OLD_JSONLD_BASE_TEXT)
+    if count == 0:
+        return token, 0
+
+    pieces = []
+    raw_cursor = 0
+    semantic_cursor = 0
+    while True:
+        match = semantic.find(OLD_JSONLD_BASE_TEXT, semantic_cursor)
+        if match < 0:
+            break
+        raw_start = spans[match][0]
+        raw_end = spans[match + len(OLD_JSONLD_BASE_TEXT) - 1][1]
+        pieces.extend((raw[raw_cursor:raw_start], NEW_JSONLD_BASE_TEXT))
+        raw_cursor = raw_end
+        semantic_cursor = match + len(OLD_JSONLD_BASE_TEXT)
+    pieces.append(raw[raw_cursor:])
+    return '"' + "".join(pieces) + '"', count
 
 
 def identifier_base_counts(path: Path, payload: bytes) -> tuple[int, int]:
