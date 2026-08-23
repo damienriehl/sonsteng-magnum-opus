@@ -4,9 +4,9 @@ Date: August 23, 2026
 Supersedes the residual-action sections of the August 20 and August 21 handoffs  
 Purpose: one ordered, copy-friendly sheet for every remaining human or external gate
 
-The Cloudflare cutover and Google live-provider check are complete. The remaining autonomous
-repository prerequisite—the combined Day Zero date/JSON-LD rewrite, rehearsal, and validator—is
-queued immediately after this closeout sheet and must merge before Packet D can be scheduled.
+The Cloudflare cutover, Google live-provider check, and combined Day Zero date/JSON-LD implementation
+are complete. PR #26 merged the atomic rewrite, permanent validator, and copied-corpus rehearsal.
+Packet D may be scheduled once its human coordination and empty-queue conditions are satisfied.
 Do not send credentials, one-time codes, edited private text, or personal roster data in the result.
 For any failed step, stop that packet and paste back only the visible error and non-secret IDs.
 
@@ -151,9 +151,10 @@ been notified and the editing/release queues are empty. The governing U8 plan re
 rewrite and JSON-LD base rewrite to run in one freeze window. The settled new base is
 `https://legalpracticum.org/spine/`; the old base is `https://sonsteng.damienriehl.com/spine/`.
 
-**Agent-owned prerequisite:** do not schedule D1 until the combined rewrite path, permanent old-base
-validator, copied-corpus rehearsal, and rollback proof are implemented, reviewed, and merged. The
-current repository rehearses dates only; the agent is responsible for closing this implementation gap.
+**Agent-owned prerequisite complete:** PR #26 merged the combined rewrite path, permanent old-base
+validator, copied-corpus rehearsal, and rollback proof. The final exact-head rehearsal at
+`b54c8b3854d0dabde038530293b1e567df5f61be` passed all six phases with zero production mutations.
+Packet D remains supervised because it changes the live corpus and provider pair.
 
 ### D1. Schedule and authorize the supervised window
 
