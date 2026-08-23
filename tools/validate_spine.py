@@ -2,7 +2,7 @@
 """tools/validate_spine.py — the integrity gate for the Sonsteng data spine.
 
 This is the spine's ONLY automated integrity gate, designed to run at
-20-parallel-author scale. It implements the 30 checks in
+20-parallel-author scale. It implements the 31 checks in
 docs/research/validator-spec.md plus the countable depth floor from
 docs/content-style-guide.md.
 
@@ -40,6 +40,13 @@ from pathlib import Path
 
 import build_site
 import day_zero_locator
+from identifier_base import (
+    OLD_JSONLD_BASE,
+    NEW_JSONLD_BASE,
+    authoritative_paths,
+    authoritative_scope_gaps,
+    identifier_base_counts,
+)
 
 # ---------------------------------------------------------------------------
 # jsonschema is used when importable; otherwise we degrade to structural checks
@@ -64,11 +71,12 @@ INFO = "INFO"
 SEVERITY_RANK = {ERROR: 0, WARN: 1, INFO: 2}
 
 CENT = Decimal("0.01")
-VALIDATOR_CHECK_COUNT = 30
+VALIDATOR_CHECK_COUNT = 31
 
 # U16a compatibility mode: resolve and validate additive offsets now, but do
 # not require every convertible absolute date to carry one until U16b.
 ENFORCE_DAY_ZERO_OFFSETS = False
+ENFORCE_LEGAL_PRACTICUM_IDENTIFIERS = False
 DECLARED_HOLDOUT_STATUS = "declared_absolute_holdout"
 DAY_ZERO_FULL_DATE_RE = day_zero_locator.DATE_RE
 
@@ -235,6 +243,10 @@ class Report:
         self.checked_dates = 0
         self.offset_dates_checked = 0
         self.day_zero_offset_enforcement = ENFORCE_DAY_ZERO_OFFSETS
+        self.identifier_base_enforcement = ENFORCE_LEGAL_PRACTICUM_IDENTIFIERS
+        self.identifier_base_values_checked = 0
+        self.identifier_files_checked = 0
+        self.old_identifier_base_occurrences = 0
         self._checked_date_fields: set[tuple[str, str]] = set()
 
     def add(self, scope, check, severity, message, detail=None):
@@ -404,9 +416,10 @@ class MatterBundle:
 
 
 class World:
-    def __init__(self, data_dir: Path, schemas_dir: Path):
+    def __init__(self, data_dir: Path, schemas_dir: Path, only_matter: str | None):
         self.data_dir = data_dir
         self.schemas_dir = schemas_dir
+        self.only_matter = only_matter
         self.spine_manifest = None
         self.matters_manifest = None
         self.manifest_index: dict[str, dict] = {}
@@ -432,7 +445,7 @@ def read_json(path: Path):
 
 def discover(data_dir: Path, only_matter: str | None) -> World:
     schemas_dir = data_dir / "schemas"
-    world = World(data_dir, schemas_dir)
+    world = World(data_dir, schemas_dir, only_matter)
 
     # spine manifest (schema versions)
     sm_path = data_dir / "spine-manifest.json"
@@ -750,14 +763,23 @@ def _declare_criteria(criteria, src, st: SymbolTable):
 class Validator:
     def __init__(self, world: World, schemas: SchemaSet, report: Report,
                  strict: bool, online: bool,
-                 enforce_day_zero_offsets: bool = ENFORCE_DAY_ZERO_OFFSETS):
+                 enforce_day_zero_offsets: bool = ENFORCE_DAY_ZERO_OFFSETS,
+                 enforce_legal_practicum_identifiers: bool = (
+                     ENFORCE_LEGAL_PRACTICUM_IDENTIFIERS
+                 )):
         self.world = world
         self.schemas = schemas
         self.report = report
         self.strict = strict
         self.online = online
         self.enforce_day_zero_offsets = enforce_day_zero_offsets
+        self.enforce_legal_practicum_identifiers = (
+            enforce_legal_practicum_identifiers
+        )
         self.report.day_zero_offset_enforcement = enforce_day_zero_offsets
+        self.report.identifier_base_enforcement = (
+            enforce_legal_practicum_identifiers
+        )
         self.st: SymbolTable | None = None
         self.declared_holdouts = self._declared_holdout_keys()
         self._resolved_dates: dict[tuple[str, str], date | None] = {}
@@ -1035,6 +1057,7 @@ class Validator:
             self.report.add("GLOBAL", "LOAD", ERROR, f"could not parse {path}: {err}")
 
         self._check_spine_manifest()
+        self._check_identifier_base()
         self.st = build_symbols(self.world, self.report)
 
         # F29 schema conformance first (short-circuits semantics per file).
@@ -1061,6 +1084,67 @@ class Validator:
         if not self.world.spine_manifest:
             self.report.add("GLOBAL", "F29", ERROR,
                             "data/spine-manifest.json missing — cannot verify schema_version.")
+
+    def _check_identifier_base(self):
+        data = self.world.data_dir
+        paths = authoritative_paths(data)
+        old_files = []
+        for path in paths:
+            try:
+                payload = path.read_bytes()
+            except OSError:
+                if self.enforce_legal_practicum_identifiers:
+                    self.report.add(
+                        "GLOBAL", "F31", ERROR,
+                        f"cannot inspect identifier base in {path.relative_to(data)}.",
+                    )
+                continue
+            self.report.identifier_files_checked += 1
+            old_count, new_count = identifier_base_counts(path, payload)
+            self.report.identifier_base_values_checked += old_count + new_count
+            self.report.old_identifier_base_occurrences += old_count
+            if old_count:
+                old_files.append((str(path.relative_to(data)), old_count))
+
+        if not self.enforce_legal_practicum_identifiers:
+            return
+        scope_gaps = authoritative_scope_gaps(data, paths)
+        if not self.world.only_matter:
+            missing_matters = sorted(
+                set(self.world.manifest_index) - set(self.world.matters)
+            )
+            if missing_matters:
+                scope_gaps.append(
+                    "manifest matters are missing from the loaded corpus: "
+                    + ", ".join(missing_matters)
+                )
+        if scope_gaps:
+            self.report.add(
+                "GLOBAL", "F31", ERROR,
+                "identifier-base enforcement scope is incomplete.",
+                {"gaps": scope_gaps},
+            )
+        if old_files:
+            self.report.add(
+                "GLOBAL", "F31", ERROR,
+                "old JSON-LD base remains in "
+                f"{self.report.old_identifier_base_occurrences} occurrence(s) "
+                f"across {len(old_files)} authoritative file(s).",
+                {"files": old_files},
+            )
+        manifest_base = ((self.world.spine_manifest or {})
+                         .get("jsonld_context_base"))
+        expected = NEW_JSONLD_BASE.decode("ascii")
+        if manifest_base != expected:
+            self.report.add(
+                "GLOBAL", "F31", ERROR,
+                f"spine manifest JSON-LD base {manifest_base!r} != {expected!r}.",
+            )
+        if self.report.identifier_base_values_checked == 0:
+            self.report.add(
+                "GLOBAL", "F31", ERROR,
+                "identifier-base enforcement inspected zero recognized base values.",
+            )
 
     def _manifest_version(self, etype):
         if not self.world.spine_manifest:
@@ -1867,8 +1951,12 @@ def build_json_report(world: World, report: Report, strict: bool) -> dict:
             "warnings": sum(1 for f in report.findings if f.severity == WARN),
             "checked_dates": report.checked_dates,
             "offset_dates_checked": report.offset_dates_checked,
+            "identifier_files_checked": report.identifier_files_checked,
+            "identifier_base_values_checked": report.identifier_base_values_checked,
+            "old_identifier_base_occurrences": report.old_identifier_base_occurrences,
         },
         "day_zero_offset_enforcement": report.day_zero_offset_enforcement,
+        "identifier_base_enforcement": report.identifier_base_enforcement,
         "result": "FAIL" if report.has_errors() else "PASS",
         "matters": matters,
         "modules": modules,
@@ -1906,6 +1994,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "              checked offline.\n"
             "  Day Zero additive offsets are resolved and counted; converted-\n"
             "  representation enforcement is opt-in with --enforce-day-zero-offsets.\n"
+            "  The settled Legal Practicum JSON-LD base is checked with\n"
+            "  --enforce-legal-practicum-identifiers.\n"
         ),
         epilog=(
             "Examples:\n"
@@ -1925,6 +2015,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Check FOLIO IRI existence against the local crosswalk snapshot.")
     p.add_argument("--enforce-day-zero-offsets", action="store_true",
                    help="Reject missing/stale prose sidecars and convertible absolute dates.")
+    p.add_argument(
+        "--enforce-legal-practicum-identifiers", action="store_true",
+        help="Reject the retired Sonsteng JSON-LD base in authoritative corpus files.",
+    )
     p.add_argument("--json", metavar="PATH", default=None,
                    help="Write a machine-readable JSON report to PATH.")
     p.add_argument("--quiet", action="store_true",
@@ -1955,7 +2049,10 @@ def main(argv=None) -> int:
     report = Report()
 
     Validator(world, schemas, report, strict=args.strict, online=args.online,
-              enforce_day_zero_offsets=args.enforce_day_zero_offsets).run()
+              enforce_day_zero_offsets=args.enforce_day_zero_offsets,
+              enforce_legal_practicum_identifiers=(
+                  args.enforce_legal_practicum_identifiers
+              )).run()
 
     if not args.quiet:
         emit_human(world, report, args.strict)

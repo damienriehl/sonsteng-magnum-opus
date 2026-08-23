@@ -77,6 +77,18 @@ actually checked; trust-ledger chronology uses resolved dates rather than raw da
 Enforcement that every convertible date carries its offset sibling is separately switchable
 and remains disabled until the corpus conversion is complete.
 
+## H. Canonical JSON-LD identifier base — P0
+
+31. The combined U8 migration replaces the retired
+`https://sonsteng.damienriehl.com/spine/` base with
+`https://legalpracticum.org/spine/` in `data/spine-manifest.json` and every file under
+`data/matters/`, `data/curriculum/`, `data/jurisdictions/`, `data/firm/`,
+`data/taxonomy/`, and `data/schemas/`. Enforcement reports the
+number of authoritative files and recognized base values inspected; rejects missing, empty,
+or symlinked governed roots and manifest matters absent from the loaded corpus; rejects every
+old-base occurrence; and requires the manifest to declare the settled new base. The enforcement
+switch remains opt-in until the supervised combined migration is complete.
+
 ## Implementation priority
 
 1. F + A1–A2 (symbol table core — catches collisions/dangling refs the moment the fleet starts)

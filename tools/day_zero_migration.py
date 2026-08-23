@@ -266,14 +266,22 @@ class LocalRehearsalPhases:
             try:
                 self._command([
                     "python3", "tools/validate_spine.py", "--strict",
-                    "--enforce-day-zero-offsets", "--quiet", "--json", str(report),
+                    "--enforce-day-zero-offsets",
+                    "--enforce-legal-practicum-identifiers",
+                    "--quiet", "--json", str(report),
                 ])
                 payload = json.loads(report.read_text(encoding="utf-8"))
                 totals = payload.get("totals") or {}
                 if payload.get("day_zero_offset_enforcement") is not True or \
+                   payload.get("identifier_base_enforcement") is not True or \
                    int(totals.get("checked_dates") or 0) <= 0 or \
-                   int(totals.get("offset_dates_checked") or 0) <= 0:
-                    raise MigrationError("strict Day Zero gate did not execute date checks")
+                   int(totals.get("offset_dates_checked") or 0) <= 0 or \
+                   int(totals.get("identifier_files_checked") or 0) <= 0 or \
+                   int(totals.get("identifier_base_values_checked") or 0) <= 0 or \
+                   int(totals.get("old_identifier_base_occurrences") or 0) != 0:
+                    raise MigrationError(
+                        "strict Day Zero gate did not execute date and identifier checks"
+                    )
             except (OSError, ValueError, json.JSONDecodeError):
                 raise MigrationError("strict Day Zero gate did not emit bounded evidence") from None
             finally:
@@ -468,8 +476,9 @@ Publisher-bypass tripwire.
    have no process or lease; acquire the dedicated checkout's `.locks/daemon.lock`.
 4. Run this command without `--execute` at the exact candidate SHA. Require all
    six rehearsal phases to pass in its isolated copy.
-5. In a separate isolated candidate checkout, run the same governed write,
-   generators, parity, strict Day Zero gate, and preflight. Stop on any failure.
+5. In a separate isolated candidate checkout, run the same combined date-offset
+   and JSON-LD-base write, generators, parity, strict Day Zero/identifier gate,
+   and preflight. Stop on any failure.
 6. Using only the bounded Cloudflare PROD principal, upload the Pages artifact
    and named production Worker version. Do not mutate DNS, Access, DEV, or account policy.
 7. Read back the exact new provider IDs and both live SHA values. Atomically

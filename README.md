@@ -26,7 +26,7 @@ text and AI platform.
 | `app/worker/` | Cloudflare Worker: `/v1/session · /v1/chat · /v1/debrief · /v1/critique` — server-side persona injection, turn caps, spend-capped hosted pool (dormant until a key is set), **provider-agnostic BYOK** (Anthropic / Google Gemini / OpenAI). Contract: `app/worker/API-CONTRACTS.md`. |
 | `app/chat/` | Source of the chat + critique UI (copied into the site at build). Mock harness: `app/chat/test.html`. |
 | `tools/build_site.py` | Regenerates `site/platform/` from the spine (`--check` = fatal link/leak checks). |
-| `tools/validate_spine.py` | The 29-check integrity gate (referential, money-math, persona, rubric, taxonomy). Run per matter with `--matter mNN`. |
+| `tools/validate_spine.py` | The 31-check integrity gate (referential, money-math, persona, rubric, taxonomy, Day Zero offsets, JSON-LD identifier bases). Run per matter with `--matter mNN`. |
 | `tools/build_worker_personas.py` | Builds the Worker's server-only persona bundle + leak-safe debrief fact map. |
 | `docs/` | Design record: master outline, brainstorms, the build plan, research briefs (validator spec, design direction, viz spec, interview pedagogy, LLM facts), style guide, data-spine conventions. |
 

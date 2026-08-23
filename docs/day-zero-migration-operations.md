@@ -22,12 +22,15 @@ removes credential-like environment variables from every child process, forces
 both production controls false, suppresses child output, and runs these bounded
 phases in order:
 
-1. governed Day Zero verification (dry run and round-trip proof);
-2. governed Day Zero write in the disposable copy;
+1. governed combined date-offset/JSON-LD verification (dry run and round-trip proof);
+2. one atomic date-offset and JSON-LD-base write in the disposable copy;
 3. site, Worker-persona, instructor, history, and editor-map builds;
 4. generated-bundle parity;
-5. strict spine validation with Day Zero enforcement, including nonzero
-   `checked_dates` and `offset_dates_checked` evidence;
+5. strict spine validation with Day Zero and Legal Practicum identifier enforcement,
+   including nonzero `checked_dates`, `offset_dates_checked`, and
+   `identifier_files_checked` and `identifier_base_values_checked` evidence,
+   complete manifest/matters/curriculum/jurisdictions/firm/taxonomy/schemas scope, plus zero
+   `old_identifier_base_occurrences`;
 6. repository preflight in headless/no-browser mode.
 
 Any failed phase aborts the rehearsal. A passing JSON receipt reports the exact
@@ -103,8 +106,8 @@ Cloudflare PROD principal described in `docs/prod-release-operations.md`:
 1. notify John and independently prove the queue is empty;
 2. capture and verify the exact prior provider pair and both live SHA headers;
 3. stop the apply timer, prove both services quiescent, and take the daemon lock;
-4. run the exact-SHA rehearsal and repeat its phase sequence in an isolated
-   candidate checkout;
+4. run the exact-SHA rehearsal and repeat its single combined date-offset and
+   JSON-LD-base write sequence in an isolated candidate checkout;
 5. upload only the Pages artifact and named production Worker version;
 6. read back the exact new pair and SHA, then atomically record the complete pair;
 7. reactivate and prove the exact prior pair;
