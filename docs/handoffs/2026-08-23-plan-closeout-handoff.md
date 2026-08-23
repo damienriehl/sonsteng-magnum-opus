@@ -20,7 +20,12 @@ Since the prior handoffs:
   published API contract.
 - PR #23 merged the domain cutover as `9c8669782536abcd173e666b21445148727ef973`.
 - PR #24 merged the Google provider repair as `f8d8dd47f29ec397e548fa375ee0f4ca5659d957`.
-- The trusted daemon checkout and the primary checkout were fast-forwarded to the PR #24 merge.
+- PR #25 merged the durable closeout sheet and handoff as
+  `443d932c9110823853d2b4fbca7d30fd4e6a0412`.
+- PR #26 merged the atomic combined Day Zero date/identifier implementation as
+  `8d898d9011320b484c85db023452d2cf7977c3e7`.
+- The trusted daemon checkout was fast-forwarded to the PR #26 merge. The primary checkout is on
+  this focused documentation branch from that same merged `main`.
 - Production publication and the Day Zero corpus migration remain deliberately off/not run.
 
 ## Current evidence
@@ -32,11 +37,15 @@ Since the prior handoffs:
   HTTP 429 `insufficient_quota` / `credit_balance_exhausted`.
 - Anthropic live smoke: not run; no currently authorized active credential was available. Legacy
   credential-shaped files were not read or tested.
-- Full post-fix preflight: 21 passed, 0 failed, 0 skipped. Python: 804 passed and 21,681 subtests;
-  Worker: 44 test files; editor: 89/89; accessibility: zero failures; layout: 284/284;
-  chat/critique: 28/28; cost: 13/13.
-- CE code review found two documentation/test parity issues; both were fixed before merge. The final
-  review had no unresolved findings, and the GitHub reviewer completed with a thumbs-up.
+- Full PR #26 repository suite: 824 passed. The final exact-head rehearsal at
+  `b54c8b3854d0dabde038530293b1e567df5f61be` passed governed verification, atomic write,
+  generated build, build parity, strict Day Zero enforcement, and network preflight with
+  `production_mutations: 0`.
+- The rehearsed write converts 1,236 dates and rewrites 368 identifier occurrences across 167 files.
+  It rejects missing governed roots, old-base residue, unclassified values, and proof mismatches.
+- CE review found six implementation/test gaps; all were validated and fixed. GitHub review then
+  found one additional legal-JSON-escape mismatch; it was fixed semantically, covered by regression
+  tests, answered, and resolved before merge.
 
 ## De-duplicated remaining queue
 
@@ -47,8 +56,9 @@ Since the prior handoffs:
 2. **U18 consistency-daemon verification** — after the Publisher workflow produces a real published
    revision.
 3. **Source ingestion** — after the files and applicable permissions/provenance arrive.
-4. **U8 identifier migration** — in the same scheduled freeze window as the Day Zero date rewrite;
-   the repository rename follows only after that combined migration is accepted.
+4. **Combined production corpus migration** — the implementation and copied-corpus rehearsal are
+   merged; live execution still waits for the scheduled freeze window. The repository rename follows
+   only after that combined migration is accepted.
 
 ### Human, identity, account, or external operations
 
@@ -73,7 +83,8 @@ Detailed, paste-back-ready instructions are in
 ## Truthful closure state
 
 - **Complete:** every unblocked repository implementation unit; domain infrastructure; Google live
-  provider validation; merge/integration and daemon synchronization through PR #24.
+  provider validation; combined Day Zero implementation and exact-head rehearsal; merge/integration
+  and daemon synchronization through PR #26.
 - **Queued:** U16b, U18, source ingestion, and the identifier/repository migration, each behind its
   named prerequisite.
 - **Human/external:** the six packets in the current Decision Sheet.
