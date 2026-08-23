@@ -89,7 +89,7 @@ replay result); it never emits response text, session tokens, or secret values.
   |-----------|--------------------|--------------------------------------------------------|
   | anthropic | `claude-haiku-4-5` | `claude-haiku-4-5`, `claude-haiku-4-5-20251001`, `claude-sonnet-4-5` |
   | openai    | `gpt-4o-mini`      | `gpt-4o-mini`, `gpt-4o`                                |
-  | google    | `gemini-2.0-flash` | `gemini-2.0-flash`, `gemini-2.5-flash`                 |
+  | google    | `gemini-2.5-flash` | `gemini-2.5-flash`                                     |
 
 - **When `byok` is present:** the Worker calls that provider with the user's
   key and **skips the hosted spend counter entirely** (their money). Everything
