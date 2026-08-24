@@ -18,23 +18,37 @@ from pathlib import Path
 from typing import Any, Sequence
 
 
-HEADING_IDS = (
-    "governing_law",
-    "strengths_and_weaknesses",
-    "issues",
-    "suggested_solutions",
-    "theory_and_themes",
-    "elements_to_prevail",
-    "liabilities_and_remedies",
-)
+REPO = Path(__file__).resolve().parents[1]
+INSTRUMENT_PATH = REPO / "data" / "curriculum" / "assessment-instrument.json"
 RATER_ROLES = ("faculty-1", "faculty-2", "panel")
 WORK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+HEADING_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MIN_WORKS = 40
 MAX_WORKS = 60
 
 
 class CalibrationInputError(ValueError):
     """The caller-supplied calibration data is unsafe or incomplete."""
+
+
+def _load_heading_ids() -> tuple[str, ...]:
+    try:
+        payload = json.loads(INSTRUMENT_PATH.read_text(encoding="utf-8"))
+        dimensions = payload["content"]["dimensions"]
+        heading_ids = tuple(dimension["id"] for dimension in dimensions)
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise CalibrationInputError("canonical assessment headings are unavailable") from exc
+    if (
+        len(heading_ids) != 7
+        or len(set(heading_ids)) != 7
+        or any(not isinstance(heading, str) or not HEADING_ID_RE.fullmatch(heading)
+               for heading in heading_ids)
+    ):
+        raise CalibrationInputError("canonical assessment headings are invalid")
+    return heading_ids
+
+
+HEADING_IDS = _load_heading_ids()
 
 
 def _finite_number(value: Any, label: str) -> float:
@@ -114,12 +128,15 @@ def _rounded(value: float) -> float:
 
 
 def _comparison(
-    left: Sequence[int], right: Sequence[int], difference: Sequence[int]
+    reference: Sequence[int], comparison: Sequence[int]
 ) -> tuple[dict[str, Any], float | None]:
-    raw_kappa = quadratic_weighted_kappa(left, right)
+    raw_kappa = quadratic_weighted_kappa(reference, comparison)
     return {
         "quadratic_weighted_kappa": None if raw_kappa is None else _rounded(raw_kappa),
-        "mean_signed_difference": _rounded(sum(difference) / len(difference)),
+        "mean_signed_difference": _rounded(
+            sum(candidate - baseline for baseline, candidate in zip(reference, comparison))
+            / len(reference)
+        ),
     }, raw_kappa
 
 
@@ -139,21 +156,9 @@ def analyze(
         faculty_1 = [works[work_id]["faculty-1"][heading] for work_id in work_ids]
         faculty_2 = [works[work_id]["faculty-2"][heading] for work_id in work_ids]
         panel = [works[work_id]["panel"][heading] for work_id in work_ids]
-        baseline, baseline_kappa = _comparison(
-            faculty_1,
-            faculty_2,
-            [right - left for left, right in zip(faculty_1, faculty_2)],
-        )
-        panel_f1, panel_f1_kappa = _comparison(
-            panel,
-            faculty_1,
-            [panel_score - faculty_score for panel_score, faculty_score in zip(panel, faculty_1)],
-        )
-        panel_f2, panel_f2_kappa = _comparison(
-            panel,
-            faculty_2,
-            [panel_score - faculty_score for panel_score, faculty_score in zip(panel, faculty_2)],
-        )
+        baseline, baseline_kappa = _comparison(faculty_1, faculty_2)
+        panel_f1, panel_f1_kappa = _comparison(faculty_1, panel)
+        panel_f2, panel_f2_kappa = _comparison(faculty_2, panel)
         baseline_pass = baseline_kappa is not None and baseline_kappa >= floor
         comparisons_pass = {}
         for label, comparison, kappa in (

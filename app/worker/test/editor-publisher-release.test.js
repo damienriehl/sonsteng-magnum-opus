@@ -864,9 +864,10 @@ function post(body) {
       Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" },
     body:JSON.stringify(body) });
 }
-const scopes = (publisher = false, admin = false, releaseService = false, observer = false) => ({ edit:{granted:false},
+const scopes = ({ publisher = false, admin = false, releaseService = false,
+  releaseObserver = false } = {}) => ({ edit:{granted:false},
   instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher},
-  release_service:{granted:releaseService}, release_observer:{granted:observer} });
+  release_service:{granted:releaseService}, release_observer:{granted:releaseObserver} });
 
 test("only a human Access Publisher can authorize; bearer and admin-only cannot", async () => {
   let calls = 0;
@@ -876,13 +877,16 @@ test("only a human Access Publisher can authorize; bearer and admin-only cannot"
   const body = { id:"release-1", idempotency_key:"idem-1", target_batch_id:"batch-1",
     base_sha:"base", candidate_sha:"candidate", generator_id:"gen", evidence_hash:"ev",
     manifest_hash:"man", membership_hash:"members" };
-  const human = { editor:"slot:damien", credential_channel:"access", scopes:scopes(true) };
+  const human = { editor:"slot:damien", credential_channel:"access",
+    scopes:scopes({ publisher:true }) };
   assert.equal((await publisherAuthorizeEndpoint(post(body), env, human)).status, 201);
   for (const denied of [
-    { editor:"slot:damien", credential_channel:"access", scopes:scopes(false, true) },
-    { editor:"slot:service", credential_channel:"bearer", scopes:scopes(true, true) },
-    { editor:"slot:ai", service:"ai-review", credential_channel:"service", scopes:scopes(true) },
-    { editor:"slot:damien", credential_channel:"cookie", scopes:scopes(true) },
+    { editor:"slot:damien", credential_channel:"access", scopes:scopes({ admin:true }) },
+    { editor:"slot:service", credential_channel:"bearer",
+      scopes:scopes({ publisher:true, admin:true }) },
+    { editor:"slot:ai", service:"ai-review", credential_channel:"service",
+      scopes:scopes({ publisher:true }) },
+    { editor:"slot:damien", credential_channel:"cookie", scopes:scopes({ publisher:true }) },
   ]) assert.equal((await publisherAuthorizeEndpoint(post(body), env, denied)).status, 403);
   assert.equal(calls, 1);
 });
@@ -894,7 +898,7 @@ test("authorized membership and audit are machine-readable without edited conten
     getProductionRelease:async () => release }) } };
   const request = new Request("https://edit.example/edit/v1/prod/releases/status?id=release-1");
   const response = await publisherReleaseEndpoint(request, env,
-    { scopes:scopes(false, false, true), credential_channel:"bearer" });
+    { scopes:scopes({ releaseService:true }), credential_channel:"bearer" });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).release, release);
 });
@@ -912,7 +916,8 @@ test("trusted release service alone can prepare, claim, and transition", async (
   };
   const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => stub } };
-  const auth = { editor:"service:release", credential_channel:"bearer", scopes:scopes(false,false,true) };
+  const auth = { editor:"service:release", credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }) };
   const req = (path, body) => new Request("https://edit.example" + path, { method:"POST",
     headers:{ "Content-Type":"application/json", "X-Edit-Request":"1",
       Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" }, body:JSON.stringify(body) });
@@ -938,7 +943,8 @@ test("trusted release service alone can prepare, claim, and transition", async (
     { id:"release-1",fencing_token:"fence" }),env,auth)).status,200);
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence",detail:{ candidate_sha:"candidate"} }),env,auth)).status,200);
-  const humanAdmin = { editor:"slot:damien",credential_channel:"access",scopes:scopes(false,true) };
+  const humanAdmin = { editor:"slot:damien",credential_channel:"access",
+    scopes:scopes({ admin:true }) };
   assert.equal((await productionPrepareEndpoint(req(
     "/edit/v1/prod/releases/prepare",binding),env,humanAdmin)).status,403);
   assert.equal((await productionPreparationContextEndpoint(new Request(
@@ -950,7 +956,8 @@ test("trusted release service alone can prepare, claim, and transition", async (
     { id:"release-1",fencing_token:"fence" }),env,humanAdmin)).status,403);
   assert.equal((await productionTransitionEndpoint(req("/edit/v1/prod/releases/transition",
     { id:"release-1",state:"verified",fencing_token:"fence" }),env,humanAdmin)).status,403);
-  const devDaemon = { editor:"service:apply",credential_channel:"bearer",scopes:scopes(false,true) };
+  const devDaemon = { editor:"service:apply",credential_channel:"bearer",
+    scopes:scopes({ admin:true }) };
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),
     ["prepare","prepare","frontier","claim","restore-claim","renew","transition"]);
@@ -974,7 +981,7 @@ test("release observer can read only status frontier and audit", async () => {
   const env = { EDIT_ORIGIN:"https://edit.example",PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => stub } };
   const observer = { editor:"service:observer",credential_channel:"bearer",
-    scopes:scopes(false,false,false,true) };
+    scopes:scopes({ releaseObserver:true }) };
   assert.equal((await publisherReleaseEndpoint(new Request(
     "https://edit.example/edit/v1/prod/releases/status?id=release-1"),env,observer)).status,200);
   assert.equal((await productionPreparationContextEndpoint(new Request(
@@ -1013,7 +1020,8 @@ test("schema-v2 preparation idempotency binds the operation membership", async (
   } };
   const env = { EDIT_ORIGIN:"https://edit.example",PROD_RELEASE_LEDGER:"true",
     EDITOR:{ getByName:() => stub } };
-  const auth = { editor:"service:release",credential_channel:"bearer",scopes:scopes(false,false,true) };
+  const auth = { editor:"service:release",credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }) };
   const postPrepare = (body) => productionPrepareEndpoint(new Request(
     "https://edit.example/edit/v1/prod/releases/prepare",{ method:"POST",
       headers:{ "Content-Type":"application/json","X-Edit-Request":"1",

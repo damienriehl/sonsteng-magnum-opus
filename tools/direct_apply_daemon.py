@@ -56,6 +56,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_push  # noqa: E402  (reuse resolve_topic/publish_ntfy — never modified)
@@ -590,6 +591,43 @@ def run_consistency_from(frontier_sha, *, api_base, token, repo_root=REPO_ROOT):
     return editor_consistency.daemon_summary(result)
 
 
+@dataclasses.dataclass(frozen=True)
+class LegacyU18Hooks:
+    fetch_frontier: Callable[[], object]
+    check: Callable[[str], object]
+    notify: Callable[[str, str], object] = notify_consistency
+
+
+def _legacy_u18_result(hooks):
+    """Collect one bounded U18 result; injected failures never escape."""
+    summary = {"status":"checker-error","stale_count":0,
+               "model_count":0,"filed":0}
+    frontier_sha = None
+    try:
+        frontier_sha = hooks.fetch_frontier()
+        if frontier_sha is None:
+            summary["status"] = "missing-baseline"
+        elif not isinstance(frontier_sha,str) or not re.fullmatch(r"[0-9a-f]{40}",frontier_sha):
+            frontier_sha = None
+            summary["status"] = "bad-revision"
+        else:
+            candidate = hooks.check(frontier_sha)
+            if not isinstance(candidate, dict) or candidate.get("status") not in {
+                    "clean","flagged","bad-revision"}:
+                raise ValueError("unbounded consistency result")
+            numbers = [candidate.get(key,0) for key in
+                       ("stale_count","model_count","filed")]
+            if any(not isinstance(value,int) or isinstance(value,bool) or
+                   value < 0 or value > 1_000_000 for value in numbers):
+                raise ValueError("unbounded consistency counts")
+            summary = {"status":candidate["status"],
+                "stale_count":numbers[0],"model_count":numbers[1],"filed":numbers[2]}
+    except Exception:
+        summary = {"status":"checker-error","stale_count":0,
+                   "model_count":0,"filed":0}
+    return frontier_sha, summary
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration (thin; every side effect injected -> fully unit-testable)
 # --------------------------------------------------------------------------- #
@@ -640,8 +678,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
         revert_record=None,
         clean_site=None, do_deploy_worker=None, do_scoped=None,
-        fetch_prod_frontier=None, do_consistency=None,
-        consistency_notify=None):
+        legacy_u18=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -662,7 +699,6 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     heartbeat = heartbeat or (
         lambda ok, applied: post_heartbeat(api_base, token, ok=ok, applied=applied, ts=ts))
     notify = notify or notify_failure
-    consistency_notify = consistency_notify or notify_consistency
     editorial = editorial or (lambda bid: dispatch_editorial(bid))
 
     steps = []
@@ -843,38 +879,14 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     # merge + DEV publication. It observes the exact last completed PROD SHA via
     # a separate read-only bearer; its result is evidence, never publication
     # authority, and every failure is nonfatal to the already-completed apply.
-    if fetch_prod_frontier is not None and do_consistency is not None:
-        summary = {"status":"checker-error","stale_count":0,
-                   "model_count":0,"filed":0}
-        frontier_sha = None
-        try:
-            frontier_sha = fetch_prod_frontier()
-            if frontier_sha is None:
-                summary["status"] = "missing-baseline"
-            elif not isinstance(frontier_sha,str) or not re.fullmatch(r"[0-9a-f]{40}",frontier_sha):
-                frontier_sha = None
-                summary["status"] = "bad-revision"
-            else:
-                candidate = do_consistency(frontier_sha)
-                if not isinstance(candidate, dict) or candidate.get("status") not in {
-                        "clean","flagged","bad-revision"}:
-                    raise ValueError("unbounded consistency result")
-                numbers = [candidate.get(key,0) for key in
-                           ("stale_count","model_count","filed")]
-                if any(not isinstance(value,int) or isinstance(value,bool) or
-                       value < 0 or value > 1_000_000 for value in numbers):
-                    raise ValueError("unbounded consistency counts")
-                summary = {"status":candidate["status"],
-                    "stale_count":numbers[0],"model_count":numbers[1],"filed":numbers[2]}
-        except Exception:
-            summary = {"status":"checker-error","stale_count":0,
-                       "model_count":0,"filed":0}
+    if legacy_u18 is not None:
+        frontier_sha, summary = _legacy_u18_result(legacy_u18)
         state["legacy_u18"] = {"batch_id":batch_id,"status":summary["status"],
             "frontier_sha":frontier_sha,"stale_count":summary["stale_count"],
             "model_count":summary["model_count"],"filed":summary["filed"],"at":ts}
         steps.append(("legacy_u18", dict(state["legacy_u18"])))
         with contextlib.suppress(Exception):
-            consistency_notify(summary["status"], batch_id)
+            legacy_u18.notify(summary["status"], batch_id)
     save_state(state_path, state)
 
     print("[daemon] applied %d, rebuilt, deployed %s, heartbeat sent."
@@ -924,10 +936,11 @@ def main(argv=None):
                          revert_record=lambda evidence, action: record_revert_mutation(
                              api_base, token, evidence, action),
                          do_scoped=lambda: dispatch_scoped_drafts(),
-                         fetch_prod_frontier=(lambda: completed_production_frontier(observer))
-                            if observer else (lambda: None),
-                         do_consistency=lambda sha: run_consistency_from(
-                             sha,api_base=api_base,token=token))
+                         legacy_u18=LegacyU18Hooks(
+                             fetch_frontier=(lambda: completed_production_frontier(observer))
+                                if observer else (lambda: None),
+                             check=lambda sha: run_consistency_from(
+                                 sha,api_base=api_base,token=token)))
     except DaemonError as exc:
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2

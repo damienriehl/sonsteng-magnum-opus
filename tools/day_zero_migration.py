@@ -27,6 +27,8 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterator
 
+from prod_release_executor import BOUNDED_PROVIDER_ID_RE as PROVIDER_ID_RE
+
 
 APPLY_TIMER = "sonsteng-apply.timer"
 RELEASE_TIMER = "sonsteng-prod-release.timer"
@@ -60,7 +62,6 @@ REQUIRED_CHANGE_WINDOW_ACTORS = (
     "provider-deployment-actors",
 )
 SHA_RE = re.compile(r"[0-9a-f]{40}")
-PROVIDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 CLOUDFLARE_ACCOUNT_ID_RE = re.compile(r"[0-9a-f]{32}")
 CLOUDFLARE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
 CLOUDFLARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,512}")
@@ -1060,6 +1061,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _migration_request(args, candidate_sha: str, prior_pair: ProductionPair) -> MigrationRequest:
+    return MigrationRequest(
+        candidate_sha=candidate_sha,
+        prior_pair=prior_pair,
+        recovery_registry=(args.recovery_registry or pathlib.Path(".")),
+        john_notified=args.ack_john_notified,
+        queue_empty_acknowledged=args.ack_queue_empty,
+        enabled=os.environ.get("SONSTENG_DAY_ZERO_MIGRATION_ENABLED") == "true",
+        normal_release_config_off=(
+            os.environ.get("SONSTENG_PROD_RELEASE_ENABLED", "false") == "false"
+        ),
+    )
+
+
 def main(argv=None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -1093,18 +1108,8 @@ def main(argv=None) -> int:
                     raise MigrationError(
                         "inspected prior-pair coordinates cannot be overridden"
                     )
-                request = MigrationRequest(
-                    candidate_sha=args.candidate_sha or _head_sha(repo),
-                    prior_pair=pair,
-                    recovery_registry=(args.recovery_registry or pathlib.Path(".")),
-                    john_notified=args.ack_john_notified,
-                    queue_empty_acknowledged=args.ack_queue_empty,
-                    enabled=(
-                        os.environ.get("SONSTENG_DAY_ZERO_MIGRATION_ENABLED") == "true"
-                    ),
-                    normal_release_config_off=(
-                        os.environ.get("SONSTENG_PROD_RELEASE_ENABLED", "false") == "false"
-                    ),
+                request = _migration_request(
+                    args, args.candidate_sha or _head_sha(repo), pair
                 )
                 _validate_request(request)
                 print(operator_plan(request))
@@ -1117,19 +1122,13 @@ def main(argv=None) -> int:
             return 0
         candidate_sha = args.candidate_sha or _head_sha(repo)
         if args.execute or args.print_operator_plan:
-            request = MigrationRequest(
-                candidate_sha=candidate_sha,
-                prior_pair=ProductionPair(
+            request = _migration_request(
+                args,
+                candidate_sha,
+                ProductionPair(
                     args.prior_sha or "",
                     args.prior_pages_deployment_id or "",
                     args.prior_worker_version_id or "",
-                ),
-                recovery_registry=(args.recovery_registry or pathlib.Path(".")),
-                john_notified=args.ack_john_notified,
-                queue_empty_acknowledged=args.ack_queue_empty,
-                enabled=os.environ.get("SONSTENG_DAY_ZERO_MIGRATION_ENABLED") == "true",
-                normal_release_config_off=(
-                    os.environ.get("SONSTENG_PROD_RELEASE_ENABLED", "false") == "false"
                 ),
             )
             _validate_request(request)

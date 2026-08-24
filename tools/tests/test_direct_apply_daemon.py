@@ -179,11 +179,11 @@ class TestLegacyU18Consistency(unittest.TestCase):
             sp = os.path.join(d,"state.json")
             rec = Recorder(rows=[row("aaaaaaaa")])
             calls,alerts = [],[]
-            result = _run(rec,state_path=sp,
-                fetch_prod_frontier=lambda: "a"*40,
-                do_consistency=lambda sha: (calls.append(sha) or {
+            result = _run(rec,state_path=sp,legacy_u18=dad.LegacyU18Hooks(
+                fetch_frontier=lambda: "a"*40,
+                check=lambda sha: (calls.append(sha) or {
                   "status":"clean","stale_count":0,"model_count":0,"filed":0}),
-                consistency_notify=lambda status,batch: alerts.append((status,batch)))
+                notify=lambda status,batch: alerts.append((status,batch))))
             state = dad.load_state(sp)
         self.assertEqual(result.reason,"applied")
         self.assertEqual(calls,["a"*40])
@@ -205,8 +205,8 @@ class TestLegacyU18Consistency(unittest.TestCase):
             with self.subTest(expected),tempfile.TemporaryDirectory() as d:
                 sp = os.path.join(d,"state.json")
                 rec = Recorder(rows=[row("aaaaaaaa")])
-                result = _run(rec,state_path=sp,fetch_prod_frontier=frontier,
-                    do_consistency=checker,consistency_notify=lambda *_:None)
+                result = _run(rec,state_path=sp,legacy_u18=dad.LegacyU18Hooks(
+                    fetch_frontier=frontier,check=checker,notify=lambda *_:None))
                 state = dad.load_state(sp)
                 self.assertEqual(result.reason,"applied")
                 self.assertEqual(state["legacy_u18"]["status"],expected)
@@ -218,9 +218,9 @@ class TestLegacyU18Consistency(unittest.TestCase):
                 sp = os.path.join(d,"state.json")
                 rec = Recorder(rows=rows)
                 called=[]
-                _run(rec,state_path=sp,dry_run=dry,
-                    fetch_prod_frontier=lambda: called.append("frontier"),
-                    do_consistency=lambda _sha: called.append("checker"))
+                _run(rec,state_path=sp,dry_run=dry,legacy_u18=dad.LegacyU18Hooks(
+                    fetch_frontier=lambda: called.append("frontier"),
+                    check=lambda _sha: called.append("checker")))
                 self.assertEqual(called,[])
                 self.assertNotIn("legacy_u18",dad.load_state(sp))
 

@@ -32,6 +32,14 @@ def analyze(payload: dict, floor: float = 0.5, bias: float = 0.5) -> dict:
     return calibration.analyze(payload, min_kappa=floor, max_abs_signed_difference=bias)
 
 
+def test_heading_ids_come_from_the_canonical_instrument():
+    instrument = json.loads(calibration.INSTRUMENT_PATH.read_text())
+    assert calibration.HEADING_IDS == tuple(
+        dimension["id"] for dimension in instrument["content"]["dimensions"]
+    )
+    assert "strengths_and_weaknesses_both_sides" in calibration.HEADING_IDS
+
+
 def test_perfect_complete_sample_reports_only_aggregate_metrics():
     report = analyze(complete_payload())
     assert report["sample_size"] == 40

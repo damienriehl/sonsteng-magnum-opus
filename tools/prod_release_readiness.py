@@ -135,12 +135,17 @@ def inspect_readiness(observer, *, release_enabled, timer):
                 "queue":[],"queue_count":0,"releases":[]}
 
 
-def load_observer_bearer(path):
-    """Load one observer token from an owned, regular 0600 file."""
+def _protected_file(path, label):
     target = pathlib.Path(path)
     info = target.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
-        raise ObserverError("observer environment file must be owned regular mode 0600")
+        raise ObserverError(f"{label} must be owned regular mode 0600")
+    return target
+
+
+def load_observer_bearer(path):
+    """Load one observer token from an owned, regular 0600 file."""
+    target = _protected_file(path, "observer environment file")
     values = {}
     for line in target.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -160,10 +165,7 @@ def load_observer_bearer(path):
 
 def read_release_enabled(path):
     """Read only the config-off flag from the protected production env file."""
-    target = pathlib.Path(path)
-    info = target.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600:
-        raise ObserverError("production environment file must be owned regular mode 0600")
+    target = _protected_file(path, "production environment file")
     found = []
     with target.open(encoding="utf-8") as source:
         for raw in source:
