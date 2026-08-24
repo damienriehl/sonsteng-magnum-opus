@@ -352,3 +352,28 @@ test("rejects oversized response declarations before parsing", async () => {
     (error) => error.code === "session_transport" && !containsSecret(error.message),
   );
 });
+
+test("stops reading an undeclared oversized response body", async () => {
+  const chunk = new Uint8Array(256 * 1024);
+  let pulls = 0;
+  let canceled = false;
+  const fetchImpl = async () => new Response(new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(chunk);
+    },
+    cancel() { canceled = true; },
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json",
+      "access-control-allow-origin": ORIGIN,
+    },
+  });
+  await assert.rejects(
+    run(fetchImpl),
+    (error) => error.code === "session_transport" && /size limit/.test(error.message),
+  );
+  assert.equal(canceled, true);
+  assert.ok(pulls <= 4);
+});

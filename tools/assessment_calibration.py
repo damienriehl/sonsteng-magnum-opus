@@ -25,6 +25,7 @@ WORK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 HEADING_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MIN_WORKS = 40
 MAX_WORKS = 60
+MAX_INPUT_BYTES = 1_048_576
 
 
 class CalibrationInputError(ValueError):
@@ -218,6 +219,17 @@ def human_summary(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _read_payload(path: Path) -> Any:
+    with path.open("rb") as source:
+        data = source.read(MAX_INPUT_BYTES + 1)
+    if len(data) > MAX_INPUT_BYTES:
+        raise CalibrationInputError("input exceeds the calibration size limit")
+    try:
+        return json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CalibrationInputError("input must be valid UTF-8 JSON") from exc
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="caller-owned de-identified JSON file")
@@ -230,7 +242,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        payload = json.loads(args.input.read_text(encoding="utf-8"))
+        payload = _read_payload(args.input)
         report = analyze(
             payload,
             min_kappa=args.min_kappa,

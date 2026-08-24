@@ -15,7 +15,6 @@ import {
   nonempty,
   parseJsonResponse,
   request,
-  responseText,
   validateProvider,
   workerBaseUrl,
   workerEndpoint,
@@ -81,11 +80,30 @@ async function boundedResponseText(response, code) {
   if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
     fail(code, "The Worker response exceeded the audit preparer's size limit.");
   }
-  const text = await responseText(response, code);
-  if (Buffer.byteLength(text) > MAX_RESPONSE_BYTES) {
-    fail(code, "The Worker response exceeded the audit preparer's size limit.");
+  if (!response.body || typeof response.body.getReader !== "function") {
+    fail(code, "The Worker response body was unavailable.");
   }
-  return text;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const parts = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {});
+        fail(code, "The Worker response exceeded the audit preparer's size limit.");
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+  } catch (error) {
+    if (error instanceof SmokeError) throw error;
+    fail(code, "The Worker response body ended unexpectedly.");
+  }
+  return parts.join("");
 }
 
 function assertJsonResponse(response, code) {

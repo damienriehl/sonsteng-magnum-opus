@@ -173,3 +173,15 @@ def test_cli_requires_thresholds_and_never_rewrites_input(tmp_path):
     assert json.loads(valid.stdout)["calibration_pass"] is True
     assert source.read_bytes() == before
     assert list(tmp_path.iterdir()) == [source]
+
+
+def test_cli_rejects_oversized_input_before_json_parsing(tmp_path):
+    source = tmp_path / "ratings.json"
+    source.write_bytes(b" " * (calibration.MAX_INPUT_BYTES + 1))
+    result = subprocess.run(
+        [sys.executable, str(TOOLS / "assessment_calibration.py"), str(source),
+         "--min-kappa", "0.5", "--max-abs-signed-difference", "0.5"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 2
+    assert "size limit" in result.stderr

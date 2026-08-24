@@ -364,3 +364,17 @@ test("accepts only a mode-0600 regular credential file", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("rejects an oversized credential file before parsing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sonsteng-stream-smoke-"));
+  const path = join(directory, "credentials.json");
+  try {
+    await writeFile(path, "x".repeat(64 * 1024 + 1), { mode: 0o600 });
+    await assert.rejects(
+      loadCredentials({ provider: "google", env: { CREDENTIALS_FILE: path } }),
+      (error) => error.code === "credentials" && /64 KiB/.test(error.message),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

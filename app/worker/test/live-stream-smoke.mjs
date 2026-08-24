@@ -3,7 +3,8 @@
 // smoke harness, not part of the Worker's request path and not a provider mock.
 
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
@@ -77,8 +78,7 @@ export async function loadCredentials({
   provider,
   env = process.env,
   stdin = process.stdin,
-  readFileImpl = readFile,
-  statImpl = stat,
+  openImpl = open,
   allowDirectEnvironment = true,
 } = {}) {
   validateProvider(provider);
@@ -106,22 +106,36 @@ export async function loadCredentials({
   }
 
   if (hasFile) {
-    let metadata;
+    let handle;
     try {
-      metadata = await statImpl(env.CREDENTIALS_FILE);
+      handle = await openImpl(
+        env.CREDENTIALS_FILE,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
     } catch {
       fail("credentials", "Unable to inspect CREDENTIALS_FILE.");
     }
-    if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600) {
-      fail("credentials", "CREDENTIALS_FILE must be a regular mode-0600 file.");
-    }
-    let text;
     try {
-      text = await readFileImpl(env.CREDENTIALS_FILE, "utf8");
-    } catch {
+      const metadata = await handle.stat();
+      const owned = typeof process.getuid !== "function" || metadata.uid === process.getuid();
+      if (!metadata.isFile() || !owned || (metadata.mode & 0o777) !== 0o600) {
+        fail("credentials", "CREDENTIALS_FILE must be an owned regular mode-0600 file.");
+      }
+      if (metadata.size > MAX_STDIN_BYTES) {
+        fail("credentials", "Credential input exceeds the 64 KiB limit.");
+      }
+      const buffer = Buffer.alloc(MAX_STDIN_BYTES + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (bytesRead > MAX_STDIN_BYTES) {
+        fail("credentials", "Credential input exceeds the 64 KiB limit.");
+      }
+      return parseCredentialJson(buffer.subarray(0, bytesRead).toString("utf8"));
+    } catch (error) {
+      if (error instanceof SmokeError) throw error;
       fail("credentials", "Unable to read CREDENTIALS_FILE.");
+    } finally {
+      await handle.close().catch(() => {});
     }
-    return parseCredentialJson(text);
   }
 
   return parseCredentialJson(await readStdin(stdin));
