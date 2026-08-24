@@ -60,6 +60,79 @@ Thus a disposable rewrite cannot be deployed while claiming the unchanged
 source commit, and verifying a materialized commit cannot repeat the governed
 corpus write.
 
+## Inspect the exact active Cloudflare pair without mutation
+
+The `--inspect-cloudflare-pair` mode is a read-only U15 prerequisite. It issues
+only redirect-disabled `GET` requests, with a 20-second timeout, to these fixed
+Cloudflare API shapes:
+
+- `https://api.cloudflare.com/client/v4/accounts/<account>/pages/projects/<project>`
+- `https://api.cloudflare.com/client/v4/accounts/<account>/workers/scripts/<script>/deployments`
+
+It selects `result.canonical_deployment` for Pages and never substitutes
+`latest_deployment`, which may be a newer preview. The canonical deployment
+must have a bounded non-null ID, `environment: production`, `is_skipped: false`,
+and `latest_stage.status: success`. It selects `result.deployments[0]` for the
+Worker and accepts only one version allocation at exactly 100 percent. A
+50/50 split, a 0/100 override, multiple entries of any percentages, or a
+malformed allocation is intentionally unrepresentable.
+
+The inspector reads both provider records, fetches the Pages and Worker live
+URLs without the Cloudflare bearer, and requires both `x-release-sha` headers
+to be the same exact lowercase 40-character SHA. It then reads both provider
+records again and requires the Pages ID, Worker deployment ID, and complete
+Worker allocation to be unchanged. This is a stable two-read proof, not a
+claim that Cloudflare offers an atomic cross-product snapshot. Capture recovery
+coordinates only while the six-actor exclusive change window remains proved.
+
+Supply the least-privilege Cloudflare read token through stdin. There is no
+token command-line option and the tool does not consult an environment variable
+for it. A regular stdin credential file must be owned by the current user and
+mode `0600`; a password-manager or credential-helper pipe is also accepted.
+The tool never writes the token or provider response bodies.
+
+```bash
+credential-helper-that-prints-only-the-token | \
+python3 tools/day_zero_migration.py \
+  --inspect-cloudflare-pair \
+  --cloudflare-account-id <32-character-lowercase-account-ID> \
+  --pages-project <Pages-project-name> \
+  --worker-script <Worker-script-name> \
+  --pages-provenance-url https://legalpracticum.org/ \
+  --worker-provenance-url https://<production-worker-host>/
+```
+
+Normal inspection output contains the shared SHA, digests of the two recovery
+IDs, and `production_mutations: 0`. Exact provider IDs are non-secret but are
+not printed in the ordinary receipt. To place the inspected exact IDs directly
+into the explicitly requested supervised operator sheet, add
+`--print-operator-plan` and all of its candidate, registry, enablement, and
+acknowledgement inputs:
+
+```bash
+credential-helper-that-prints-only-the-token | \
+SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
+SONSTENG_PROD_RELEASE_ENABLED=false \
+python3 tools/day_zero_migration.py \
+  --inspect-cloudflare-pair \
+  --print-operator-plan \
+  --cloudflare-account-id <32-character-lowercase-account-ID> \
+  --pages-project <Pages-project-name> \
+  --worker-script <Worker-script-name> \
+  --pages-provenance-url https://legalpracticum.org/ \
+  --worker-provenance-url https://<production-worker-host>/ \
+  --candidate-sha <committed-migration-SHA> \
+  --recovery-registry "$HOME/.local/state/sonsteng-prod-release/known-good-pairs.json" \
+  --ack-john-notified \
+  --ack-queue-empty
+```
+
+Do not add `--prior-sha`, `--prior-pages-deployment-id`, or
+`--prior-worker-version-id` in this combined mode: the stable inspection owns
+those values and refuses overrides. Redirects, HTTP errors, timeouts, malformed
+JSON, `success: false`, ambiguous provider state, and invalid provenance all
+produce bounded errors without including raw Cloudflare details.
+
 ## Production remains fail closed
 
 `--execute` is intentionally not connected to Cloudflare, systemd, Git, the

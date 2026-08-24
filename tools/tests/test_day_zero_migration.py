@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -743,3 +744,403 @@ def test_operator_plan_contains_exact_inputs_and_supervised_boundary(tmp_path):
     assert "governed write" not in plan
     assert "commit the complete" not in plan
     assert "Merge only" not in plan
+
+
+# U3: stable, read-only Cloudflare production-pair inspection.
+
+CF_ACCOUNT = "1" * 32
+CF_TOKEN = "read_only_token_" + "x" * 32
+PAGES_URL = "https://legalpracticum.org/"
+WORKER_URL = "https://sonsteng-chat.example.workers.dev/"
+
+
+def https_json(payload, *, status=200, headers=None):
+    return migration.HTTPSResponse(
+        status=status,
+        headers=headers or {},
+        body=json.dumps(payload).encode("utf-8"),
+    )
+
+
+def pages_payload(deployment_id="pages-production", **changes):
+    canonical = {
+        "id": deployment_id,
+        "environment": "production",
+        "is_skipped": False,
+        "latest_stage": {"status": "success"},
+    }
+    canonical.update(changes)
+    return {
+        "success": True,
+        "result": {
+            "canonical_deployment": canonical,
+            "latest_deployment": {
+                "id": "newer-preview-must-not-win",
+                "environment": "preview",
+                "latest_stage": {"status": "success"},
+            },
+        },
+    }
+
+
+def worker_payload(
+    allocations=None,
+    *,
+    deployment_id="worker-deployment-active",
+):
+    if allocations is None:
+        allocations = [{"version_id": "worker-version-active", "percentage": 100}]
+    return {
+        "success": True,
+        "result": {
+            "deployments": [
+                {"id": deployment_id, "versions": allocations},
+                {
+                    "id": "older-deployment",
+                    "versions": [{"version_id": "older-version", "percentage": 100}],
+                },
+            ],
+        },
+    }
+
+
+def live_response(sha=SHA_NEW, **headers):
+    values = {"x-release-sha": sha}
+    values.update(headers)
+    return migration.HTTPSResponse(status=200, headers=values, body=b"ignored authored body")
+
+
+class FakeHTTPSReader:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def __call__(self, request, timeout):
+        self.requests.append((request, timeout))
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            raise response
+        return response
+
+
+def inspector_responses(*, pages_a=None, worker_a=None, pages_b=None, worker_b=None,
+                        pages_live=None, worker_live=None):
+    return [
+        https_json(pages_a or pages_payload()),
+        https_json(worker_a or worker_payload()),
+        pages_live or live_response(),
+        worker_live or live_response(),
+        https_json(pages_b or pages_a or pages_payload()),
+        https_json(worker_b or worker_a or worker_payload()),
+    ]
+
+
+def make_inspector(responses):
+    reader = FakeHTTPSReader(responses)
+    return migration.CloudflarePairInspector(
+        CF_ACCOUNT,
+        "legal-practicum",
+        "sonsteng-chat",
+        CF_TOKEN,
+        reader=reader,
+    ), reader
+
+
+def test_cloudflare_inspector_selects_canonical_pages_and_first_active_worker():
+    inspector, reader = make_inspector(inspector_responses())
+
+    pair = inspector.inspect(PAGES_URL, WORKER_URL)
+
+    assert pair == migration.ProductionPair(
+        SHA_NEW, "pages-production", "worker-version-active",
+    )
+    assert len(reader.requests) == 6
+    assert all(request.get_method() == "GET" for request, _timeout in reader.requests)
+    assert all(timeout == migration.HTTP_TIMEOUT_SECONDS for _request, timeout in reader.requests)
+    api_requests = [request for request, _timeout in reader.requests[:2] + reader.requests[4:]]
+    live_requests = [request for request, _timeout in reader.requests[2:4]]
+    assert all(request.full_url.startswith("https://api.cloudflare.com/client/v4/accounts/")
+               for request in api_requests)
+    assert all(request.get_header("Authorization") == f"Bearer {CF_TOKEN}"
+               for request in api_requests)
+    assert all(request.get_header("Authorization") is None for request in live_requests)
+    assert "newer-preview-must-not-win" not in pair.redacted().values()
+
+
+@pytest.mark.parametrize(
+    "allocations",
+    [
+        [],
+        [{"version_id": "worker-a", "percentage": 0},
+         {"version_id": "worker-b", "percentage": 100}],
+        [{"version_id": "worker-a", "percentage": 100},
+         {"version_id": "worker-b", "percentage": 0}],
+        [{"version_id": "worker-a", "percentage": 50},
+         {"version_id": "worker-b", "percentage": 50}],
+        [{"version_id": "worker-a", "percentage": True}],
+        [{"version_id": "worker-a", "percentage": "100"}],
+        [{"version_id": "", "percentage": 100}],
+        [{"version_id": 123, "percentage": 100}],
+    ],
+)
+def test_cloudflare_inspector_rejects_every_ambiguous_worker_allocation(allocations):
+    inspector, _reader = make_inspector(inspector_responses(
+        worker_a=worker_payload(allocations),
+    ))
+
+    with pytest.raises(migration.MigrationError, match="Worker active deployment was ambiguous"):
+        inspector.inspect(PAGES_URL, WORKER_URL)
+
+
+@pytest.mark.parametrize(
+    "canonical",
+    [
+        None,
+        pages_payload(id=None),
+        pages_payload(id=123),
+        pages_payload(is_skipped=True),
+        pages_payload(environment="preview"),
+        pages_payload(latest_stage={"status": "failure"}),
+        pages_payload(latest_stage=None),
+        pages_payload(deployment_id="x" * 129),
+    ],
+)
+def test_cloudflare_inspector_rejects_invalid_canonical_pages_deployment(canonical):
+    payload = canonical
+    if canonical is None:
+        payload = {"success": True, "result": {"canonical_deployment": None}}
+    inspector, _reader = make_inspector(inspector_responses(pages_a=payload))
+
+    with pytest.raises(migration.MigrationError, match="Pages canonical deployment was invalid"):
+        inspector.inspect(PAGES_URL, WORKER_URL)
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({"pages_b": pages_payload("pages-replaced")}, "provider state changed"),
+        ({"worker_b": worker_payload(deployment_id="worker-deployment-replaced")},
+         "provider state changed"),
+        ({"worker_b": worker_payload([
+            {"version_id": "worker-version-replaced", "percentage": 100},
+        ])}, "provider state changed"),
+    ],
+)
+def test_cloudflare_inspector_rejects_control_plane_changes(changes, expected):
+    inspector, _reader = make_inspector(inspector_responses(**changes))
+    with pytest.raises(migration.MigrationError, match=expected):
+        inspector.inspect(PAGES_URL, WORKER_URL)
+
+
+@pytest.mark.parametrize(
+    ("pages_live", "worker_live", "expected"),
+    [
+        (migration.HTTPSResponse(200, {}, b"private"), live_response(),
+         "Pages provenance was invalid"),
+        (live_response("A" * 40), live_response(), "Pages provenance was invalid"),
+        (live_response(), live_response(SHA_OLD), "live provenance SHAs did not match"),
+        (live_response(), migration.HTTPSResponse(200, {"X-Other": SHA_NEW}, b"private"),
+         "Worker provenance was invalid"),
+    ],
+)
+def test_cloudflare_inspector_rejects_missing_malformed_or_mismatched_live_sha(
+        pages_live, worker_live, expected):
+    inspector, _reader = make_inspector(inspector_responses(
+        pages_live=pages_live,
+        worker_live=worker_live,
+    ))
+    with pytest.raises(migration.MigrationError, match=expected):
+        inspector.inspect(PAGES_URL, WORKER_URL)
+
+
+@pytest.mark.parametrize(
+    ("first_response", "expected"),
+    [
+        (TimeoutError("token=" + CF_TOKEN), "Pages provider request failed"),
+        (https_json(pages_payload(), status=302), "Pages provider request failed"),
+        (migration.HTTPSResponse(200, {}, b"not-json " + CF_TOKEN.encode()),
+         "Pages provider response was invalid"),
+        (https_json({"success": False, "errors": [{"message": CF_TOKEN}]}),
+         "Pages provider response was invalid"),
+    ],
+)
+def test_cloudflare_inspector_maps_provider_failures_without_secret_or_body(
+        first_response, expected):
+    inspector, _reader = make_inspector([first_response])
+    with pytest.raises(migration.MigrationError, match=expected) as failure:
+        inspector.inspect(PAGES_URL, WORKER_URL)
+    assert CF_TOKEN not in str(failure.value)
+    assert "not-json" not in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://legalpracticum.org/",
+        "https://user:pass@legalpracticum.org/",
+        "https://legalpracticum.org:8443/",
+        "https://legalpracticum.org/#fragment",
+        "not-a-url",
+    ],
+)
+def test_cloudflare_inspector_rejects_invalid_live_urls_before_sending_credentials(url):
+    inspector, reader = make_inspector(inspector_responses())
+    with pytest.raises(migration.MigrationError, match="provenance URL is invalid"):
+        inspector.inspect(url, WORKER_URL)
+    assert reader.requests == []
+
+
+def test_cloudflare_configuration_and_timeout_are_bounded():
+    with pytest.raises(migration.MigrationError, match="account identifier"):
+        migration.CloudflarePairInspector("../other-host", "pages", "worker", CF_TOKEN)
+    with pytest.raises(migration.MigrationError, match="project name"):
+        migration.CloudflarePairInspector(CF_ACCOUNT, "../pages", "worker", CF_TOKEN)
+    with pytest.raises(migration.MigrationError, match="script name"):
+        migration.CloudflarePairInspector(CF_ACCOUNT, "pages", "../worker", CF_TOKEN)
+    with pytest.raises(migration.MigrationError, match="read token"):
+        migration.CloudflarePairInspector(CF_ACCOUNT, "pages", "worker", "short")
+    with pytest.raises(migration.MigrationError, match="timeout"):
+        migration.CloudflarePairInspector(CF_ACCOUNT, "pages", "worker", CF_TOKEN, timeout=31)
+
+
+def test_cloudflare_bearer_and_reader_cannot_be_redirected_or_mutating():
+    inspector, reader = make_inspector(inspector_responses())
+    inspector._pages_url = "https://attacker.example/client/v4/stolen"
+    with pytest.raises(migration.MigrationError, match="endpoint is not allowlisted"):
+        inspector.inspect(PAGES_URL, WORKER_URL)
+    assert reader.requests == []
+
+    request = migration.urllib.request.Request(
+        "https://api.cloudflare.com/client/v4/test",
+        method="POST",
+        headers={"Authorization": f"Bearer {CF_TOKEN}"},
+    )
+    with pytest.raises(migration.MigrationError, match="not read-only"):
+        inspector._read(request, "provider")
+    assert reader.requests == []
+
+    request = migration.urllib.request.Request(
+        "https://attacker.example/client/v4/stolen",
+        method="GET",
+        headers={"Authorization": f"Bearer {CF_TOKEN}"},
+    )
+    with pytest.raises(migration.MigrationError, match="bearer target was not allowlisted"):
+        inspector._read(request, "provider")
+    assert reader.requests == []
+
+
+def test_no_redirect_handler_refuses_redirect_construction():
+    request = migration.urllib.request.Request("https://api.cloudflare.com/client/v4/test")
+    assert migration._NoRedirect().redirect_request(
+        request, None, 302, "Found", {}, "https://attacker.example/",
+    ) is None
+
+
+def test_cloudflare_token_regular_stdin_file_must_be_mode_0600(tmp_path):
+    credential = tmp_path / "cloudflare-token"
+    credential.write_text(CF_TOKEN + "\n", encoding="utf-8")
+    credential.chmod(0o644)
+    with credential.open(encoding="utf-8") as stream:
+        with pytest.raises(migration.MigrationError, match="mode 0600"):
+            migration.read_cloudflare_token(stream)
+    credential.chmod(0o600)
+    with credential.open(encoding="utf-8") as stream:
+        assert migration.read_cloudflare_token(stream) == CF_TOKEN
+
+
+def test_cloudflare_token_accepts_an_owner_held_pipe():
+    read_descriptor, write_descriptor = os.pipe()
+    try:
+        os.write(write_descriptor, (CF_TOKEN + "\n").encode("utf-8"))
+    finally:
+        os.close(write_descriptor)
+    with os.fdopen(read_descriptor, encoding="utf-8") as stream:
+        assert migration.read_cloudflare_token(stream) == CF_TOKEN
+
+
+def test_cli_has_no_token_argument_and_emits_only_redacted_pair(monkeypatch, tmp_path, capsys):
+    credential = tmp_path / "cloudflare-token"
+    credential.write_text(CF_TOKEN, encoding="utf-8")
+    credential.chmod(0o600)
+    observed = {}
+
+    class FakeInspector:
+        def __init__(self, account_id, pages_project, worker_script, token):
+            observed.update({
+                "account_id": account_id,
+                "pages_project": pages_project,
+                "worker_script": worker_script,
+                "token": token,
+            })
+
+        def inspect(self, pages_url, worker_url):
+            observed.update({"pages_url": pages_url, "worker_url": worker_url})
+            return migration.ProductionPair(SHA_NEW, "exact-pages-id", "exact-worker-id")
+
+    monkeypatch.setattr(migration, "CloudflarePairInspector", FakeInspector)
+    with credential.open(encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stdin", stream)
+        code = migration.main([
+            "--inspect-cloudflare-pair",
+            "--cloudflare-account-id", CF_ACCOUNT,
+            "--pages-project", "legal-practicum",
+            "--worker-script", "sonsteng-chat",
+            "--pages-provenance-url", PAGES_URL,
+            "--worker-provenance-url", WORKER_URL,
+        ])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert CF_TOKEN not in captured.out + captured.err
+    assert "exact-pages-id" not in captured.out
+    assert "exact-worker-id" not in captured.out
+    assert SHA_NEW in captured.out
+    assert '"production_mutations":0' in captured.out
+    assert observed["token"] == CF_TOKEN
+    assert not any(action.dest in {"cloudflare_token", "token"}
+                   for action in migration.build_parser()._actions)
+
+
+def test_rejected_token_shaped_command_argument_is_not_reflected(capsys):
+    code = migration.main(["--cloudflare-token", CF_TOKEN])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert CF_TOKEN not in captured.out + captured.err
+    assert "invalid command arguments" in captured.err
+
+
+def test_cli_explicit_operator_plan_can_emit_inspected_exact_nonsecret_ids(
+        monkeypatch, tmp_path, capsys):
+    credential = tmp_path / "cloudflare-token"
+    credential.write_text(CF_TOKEN, encoding="utf-8")
+    credential.chmod(0o600)
+
+    class FakeInspector:
+        def __init__(self, _account_id, _pages_project, _worker_script, token):
+            assert token == CF_TOKEN
+
+        def inspect(self, _pages_url, _worker_url):
+            return migration.ProductionPair(SHA_OLD, "exact-pages-id", "exact-worker-id")
+
+    monkeypatch.setattr(migration, "CloudflarePairInspector", FakeInspector)
+    monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "false")
+    with credential.open(encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stdin", stream)
+        code = migration.main([
+            "--inspect-cloudflare-pair",
+            "--print-operator-plan",
+            "--cloudflare-account-id", CF_ACCOUNT,
+            "--pages-project", "legal-practicum",
+            "--worker-script", "sonsteng-chat",
+            "--pages-provenance-url", PAGES_URL,
+            "--worker-provenance-url", WORKER_URL,
+            "--candidate-sha", SHA_NEW,
+            "--recovery-registry", str(tmp_path / "registry.json"),
+            "--ack-john-notified",
+            "--ack-queue-empty",
+        ])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "exact-pages-id" in captured.out
+    assert "exact-worker-id" in captured.out
+    assert CF_TOKEN not in captured.out + captured.err

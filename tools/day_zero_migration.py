@@ -19,9 +19,12 @@ import os
 import pathlib
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
+import urllib.parse
+import urllib.request
 from collections.abc import Callable, Iterator
 
 
@@ -58,6 +61,13 @@ REQUIRED_CHANGE_WINDOW_ACTORS = (
 )
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 PROVIDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+CLOUDFLARE_ACCOUNT_ID_RE = re.compile(r"[0-9a-f]{32}")
+CLOUDFLARE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
+CLOUDFLARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,512}")
+CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com"
+CLOUDFLARE_API_PREFIX = "/client/v4"
+MAX_HTTP_BODY_BYTES = 1_048_576
+HTTP_TIMEOUT_SECONDS = 20
 EX_CONFIG = 78
 
 
@@ -71,6 +81,13 @@ class MigrationInterrupted(MigrationError):
 
 class MigrationFenced(MigrationError):
     """A control boundary could not close, so automatic unfreezing is unsafe."""
+
+
+class BoundedArgumentParser(argparse.ArgumentParser):
+    """Never reflect rejected command-line values into an error."""
+
+    def error(self, _message):
+        raise MigrationError("invalid command arguments")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -91,6 +108,298 @@ class ProductionPair:
             "pages_id_digest": _id_digest(self.pages_deployment_id),
             "worker_id_digest": _id_digest(self.worker_version_id),
         }
+
+
+@dataclasses.dataclass(frozen=True)
+class HTTPSResponse:
+    """Allowlisted response data returned by an injected HTTPS reader."""
+
+    status: int
+    headers: dict[str, str]
+    body: bytes
+
+
+@dataclasses.dataclass(frozen=True)
+class CloudflareControlState:
+    """The provider coordinates whose stability is proved around live reads."""
+
+    pages_deployment_id: str
+    worker_deployment_id: str
+    worker_allocations: tuple[tuple[str, float], ...]
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        return None
+
+
+def _default_https_reader(
+    request: urllib.request.Request,
+    timeout: int,
+) -> HTTPSResponse:
+    """Perform one redirect-disabled request and return a bounded response."""
+    opener = urllib.request.build_opener(_NoRedirect)
+    with opener.open(request, timeout=timeout) as response:
+        body = response.read(MAX_HTTP_BODY_BYTES + 1)
+        if len(body) > MAX_HTTP_BODY_BYTES:
+            raise ValueError("response too large")
+        headers = {str(key): str(value) for key, value in response.headers.items()}
+        release_values = response.headers.get_all("x-release-sha") or []
+        if len(release_values) > 1:
+            headers["x-release-sha"] = ",".join(str(value) for value in release_values)
+        return HTTPSResponse(
+            status=int(response.getcode()),
+            headers=headers,
+            body=body,
+        )
+
+
+def _cloudflare_api_url(path: str) -> str:
+    """Build a token-safe URL from one internal, absolute API path."""
+    url = f"{CLOUDFLARE_API_ORIGIN}{CLOUDFLARE_API_PREFIX}{path}"
+    parsed = urllib.parse.urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "api.cloudflare.com"
+        or parsed.port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise MigrationError("Cloudflare provider endpoint is not allowlisted")
+    return url
+
+
+def _live_provenance_url(value: str, surface: str) -> str:
+    parsed = urllib.parse.urlsplit(value or "")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise MigrationError(f"{surface} provenance URL is invalid") from None
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+        or parsed.fragment
+    ):
+        raise MigrationError(f"{surface} provenance URL is invalid")
+    return value
+
+
+def read_cloudflare_token(stdin) -> str:
+    """Read one API token from a pipe or a mode-0600 regular stdin file."""
+    try:
+        descriptor = stdin.fileno()
+        metadata = os.fstat(descriptor)
+    except (AttributeError, OSError):
+        raise MigrationError("Cloudflare token stdin is not a protected channel") from None
+    try:
+        interactive = stdin.isatty()
+    except (AttributeError, OSError):
+        raise MigrationError("Cloudflare token stdin is not a protected channel") from None
+    if interactive:
+        raise MigrationError("Cloudflare token stdin must not be interactive")
+    is_regular = stat.S_ISREG(metadata.st_mode)
+    is_pipe = stat.S_ISFIFO(metadata.st_mode)
+    permissions = stat.S_IMODE(metadata.st_mode)
+    if not (is_regular or is_pipe):
+        raise MigrationError("Cloudflare token stdin is not a protected channel")
+    if metadata.st_uid != os.geteuid():
+        raise MigrationError("Cloudflare token stdin is not owner-held")
+    if is_regular and permissions != 0o600:
+        raise MigrationError("Cloudflare token stdin file must be owner-held mode 0600")
+    if is_pipe and (permissions & 0o077):
+        raise MigrationError("Cloudflare token stdin pipe is not owner-held")
+    try:
+        value = stdin.read(514)
+    except (OSError, UnicodeError):
+        raise MigrationError("Cloudflare token could not be read from stdin") from None
+    if not isinstance(value, str):
+        raise MigrationError("Cloudflare token stdin is malformed")
+    token = value.strip()
+    if len(value) > 513 or not CLOUDFLARE_TOKEN_RE.fullmatch(token):
+        raise MigrationError("Cloudflare token stdin is malformed")
+    return token
+
+
+class CloudflarePairInspector:
+    """Read and prove the exact active Pages/Worker production pair."""
+
+    def __init__(
+        self,
+        account_id: str,
+        pages_project: str,
+        worker_script: str,
+        token: str,
+        *,
+        reader: Callable[[urllib.request.Request, int], HTTPSResponse] = _default_https_reader,
+        timeout: int = HTTP_TIMEOUT_SECONDS,
+    ):
+        if not CLOUDFLARE_ACCOUNT_ID_RE.fullmatch(account_id or ""):
+            raise MigrationError("Cloudflare account identifier is invalid")
+        if not CLOUDFLARE_NAME_RE.fullmatch(pages_project or ""):
+            raise MigrationError("Cloudflare Pages project name is invalid")
+        if not CLOUDFLARE_NAME_RE.fullmatch(worker_script or ""):
+            raise MigrationError("Cloudflare Worker script name is invalid")
+        if not CLOUDFLARE_TOKEN_RE.fullmatch(token or ""):
+            raise MigrationError("Cloudflare read token is invalid")
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 30:
+            raise MigrationError("Cloudflare inspection timeout is invalid")
+        quoted_account = urllib.parse.quote(account_id, safe="")
+        self._pages_url = _cloudflare_api_url(
+            f"/accounts/{quoted_account}/pages/projects/"
+            f"{urllib.parse.quote(pages_project, safe='')}"
+        )
+        self._worker_url = _cloudflare_api_url(
+            f"/accounts/{quoted_account}/workers/scripts/"
+            f"{urllib.parse.quote(worker_script, safe='')}/deployments"
+        )
+        self._token = token
+        self._reader = reader
+        self._timeout = timeout
+
+    def _read(self, request: urllib.request.Request, category: str) -> HTTPSResponse:
+        parsed = urllib.parse.urlsplit(request.full_url)
+        bearer = request.get_header("Authorization")
+        if request.get_method() != "GET":
+            raise MigrationError(f"{category} request was not read-only")
+        if bearer is not None and (
+            parsed.scheme != "https"
+            or parsed.hostname != "api.cloudflare.com"
+            or parsed.port not in (None, 443)
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise MigrationError("Cloudflare bearer target was not allowlisted")
+        try:
+            response = self._reader(request, self._timeout)
+        except Exception:
+            raise MigrationError(f"{category} request failed") from None
+        if (
+            not isinstance(response, HTTPSResponse)
+            or response.status != 200
+            or not isinstance(response.headers, dict)
+            or not isinstance(response.body, bytes)
+            or len(response.body) > MAX_HTTP_BODY_BYTES
+        ):
+            raise MigrationError(f"{category} request failed")
+        return response
+
+    def _provider_json(self, url: str, category: str) -> dict:
+        parsed = urllib.parse.urlsplit(url)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "api.cloudflare.com"
+            or parsed.port not in (None, 443)
+        ):
+            raise MigrationError("Cloudflare provider endpoint is not allowlisted")
+        request = urllib.request.Request(
+            url,
+            method="GET",
+            headers={
+                "Authorization": f"Bearer {self._token}",
+                "Accept": "application/json",
+                "User-Agent": "sonsteng-read-only-pair-inspector/1",
+            },
+        )
+        response = self._read(request, category)
+        try:
+            payload = json.loads(response.body.decode("utf-8"))
+        except (UnicodeError, ValueError, RecursionError):
+            raise MigrationError(f"{category} response was invalid") from None
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            raise MigrationError(f"{category} response was invalid")
+        return payload
+
+    @staticmethod
+    def _pages_id(payload: dict) -> str:
+        result = payload.get("result")
+        canonical = result.get("canonical_deployment") if isinstance(result, dict) else None
+        stage = canonical.get("latest_stage") if isinstance(canonical, dict) else None
+        deployment_id = canonical.get("id") if isinstance(canonical, dict) else None
+        if (
+            not isinstance(canonical, dict)
+            or not isinstance(deployment_id, str)
+            or not PROVIDER_ID_RE.fullmatch(deployment_id)
+            or canonical.get("environment") != "production"
+            or canonical.get("is_skipped") is not False
+            or not isinstance(stage, dict)
+            or stage.get("status") != "success"
+        ):
+            raise MigrationError("Pages canonical deployment was invalid")
+        return deployment_id
+
+    @staticmethod
+    def _worker_state(payload: dict) -> tuple[str, tuple[tuple[str, float], ...]]:
+        result = payload.get("result")
+        deployments = result.get("deployments") if isinstance(result, dict) else None
+        active = deployments[0] if isinstance(deployments, list) and deployments else None
+        deployment_id = active.get("id") if isinstance(active, dict) else None
+        allocations = active.get("versions") if isinstance(active, dict) else None
+        if (
+            not isinstance(deployment_id, str)
+            or not PROVIDER_ID_RE.fullmatch(deployment_id)
+            or not isinstance(allocations, list)
+            or len(allocations) != 1
+        ):
+            raise MigrationError("Worker active deployment was ambiguous")
+        allocation = allocations[0]
+        version_id = allocation.get("version_id") if isinstance(allocation, dict) else None
+        percentage = allocation.get("percentage") if isinstance(allocation, dict) else None
+        if (
+            not isinstance(version_id, str)
+            or not PROVIDER_ID_RE.fullmatch(version_id)
+            or isinstance(percentage, bool)
+            or not isinstance(percentage, (int, float))
+            or not float(percentage) == 100.0
+        ):
+            raise MigrationError("Worker active deployment was ambiguous")
+        return deployment_id, ((version_id, float(percentage)),)
+
+    def _control_state(self) -> CloudflareControlState:
+        pages_id = self._pages_id(self._provider_json(self._pages_url, "Pages provider"))
+        worker_deployment_id, allocations = self._worker_state(
+            self._provider_json(self._worker_url, "Worker provider")
+        )
+        return CloudflareControlState(pages_id, worker_deployment_id, allocations)
+
+    def _live_sha(self, url: str, surface: str) -> str:
+        request = urllib.request.Request(
+            _live_provenance_url(url, surface),
+            method="GET",
+            headers={"Accept": "*/*", "User-Agent": "sonsteng-read-only-pair-inspector/1"},
+        )
+        response = self._read(request, f"{surface} provenance")
+        values = [value for name, value in response.headers.items()
+                  if isinstance(name, str) and name.lower() == "x-release-sha"]
+        if (
+            len(values) != 1
+            or not isinstance(values[0], str)
+            or not SHA_RE.fullmatch(values[0])
+        ):
+            raise MigrationError(f"{surface} provenance was invalid")
+        return values[0]
+
+    def inspect(self, pages_provenance_url: str, worker_provenance_url: str) -> ProductionPair:
+        """Prove stable provider coordinates around matching live SHA reads."""
+        pages_provenance_url = _live_provenance_url(pages_provenance_url, "Pages")
+        worker_provenance_url = _live_provenance_url(worker_provenance_url, "Worker")
+        state_before = self._control_state()
+        pages_sha = self._live_sha(pages_provenance_url, "Pages")
+        worker_sha = self._live_sha(worker_provenance_url, "Worker")
+        if pages_sha != worker_sha:
+            raise MigrationError("live provenance SHAs did not match")
+        state_after = self._control_state()
+        if state_before != state_after:
+            raise MigrationError("Cloudflare provider state changed during inspection")
+        return ProductionPair(
+            pages_sha,
+            state_after.pages_deployment_id,
+            state_after.worker_allocations[0][0],
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -728,10 +1037,17 @@ def _head_sha(repo: pathlib.Path) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = BoundedArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=pathlib.Path,
                         default=pathlib.Path(__file__).resolve().parents[1])
     parser.add_argument("--candidate-sha")
+    parser.add_argument("--inspect-cloudflare-pair", action="store_true",
+                        help="read and prove the active provider pair without mutation")
+    parser.add_argument("--cloudflare-account-id")
+    parser.add_argument("--pages-project")
+    parser.add_argument("--worker-script")
+    parser.add_argument("--pages-provenance-url")
+    parser.add_argument("--worker-provenance-url")
     parser.add_argument("--execute", action="store_true",
                         help="request production mode (intentionally unwired and fail-closed)")
     parser.add_argument("--prior-sha")
@@ -745,9 +1061,60 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
-    repo = args.repo.resolve()
     try:
+        args = build_parser().parse_args(argv)
+        repo = args.repo.resolve()
+        if args.inspect_cloudflare_pair:
+            if args.execute:
+                raise MigrationError("Cloudflare inspection cannot be combined with execution")
+            required = (
+                args.cloudflare_account_id,
+                args.pages_project,
+                args.worker_script,
+                args.pages_provenance_url,
+                args.worker_provenance_url,
+            )
+            if any(value is None for value in required):
+                raise MigrationError("Cloudflare inspection requires all non-secret coordinates")
+            token = read_cloudflare_token(sys.stdin)
+            inspector = CloudflarePairInspector(
+                args.cloudflare_account_id,
+                args.pages_project,
+                args.worker_script,
+                token,
+            )
+            pair = inspector.inspect(
+                args.pages_provenance_url,
+                args.worker_provenance_url,
+            )
+            if args.print_operator_plan:
+                if any((args.prior_sha, args.prior_pages_deployment_id,
+                        args.prior_worker_version_id)):
+                    raise MigrationError(
+                        "inspected prior-pair coordinates cannot be overridden"
+                    )
+                request = MigrationRequest(
+                    candidate_sha=args.candidate_sha or _head_sha(repo),
+                    prior_pair=pair,
+                    recovery_registry=(args.recovery_registry or pathlib.Path(".")),
+                    john_notified=args.ack_john_notified,
+                    queue_empty_acknowledged=args.ack_queue_empty,
+                    enabled=(
+                        os.environ.get("SONSTENG_DAY_ZERO_MIGRATION_ENABLED") == "true"
+                    ),
+                    normal_release_config_off=(
+                        os.environ.get("SONSTENG_PROD_RELEASE_ENABLED", "false") == "false"
+                    ),
+                )
+                _validate_request(request)
+                print(operator_plan(request))
+                return 0
+            print(json.dumps({
+                "mode": "read-only-cloudflare-inspection",
+                "pair": pair.redacted(),
+                "production_mutations": 0,
+            }, sort_keys=True, separators=(",", ":")))
+            return 0
         candidate_sha = args.candidate_sha or _head_sha(repo)
         if args.execute or args.print_operator_plan:
             request = MigrationRequest(
