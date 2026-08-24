@@ -57,6 +57,27 @@ test("an unknown / empty token resolves to nothing", async () => {
   assert.equal(await resolveOpaqueToken(ENV, null), null);
 });
 
+test("a secret duplicated across slots fails closed regardless of slot order", async () => {
+  const duplicate = "shared-observer-and-release-secret";
+  for (const scopes of [
+    { observer:{ release_observer:1 }, release:{ release_service:1 } },
+    { release:{ release_service:1 }, observer:{ release_observer:1 } },
+  ]) {
+    const env = { ...ENV,EDIT_TOKEN_SCOPES:JSON.stringify(scopes),
+      EDIT_TOKEN_OBSERVER:duplicate,EDIT_TOKEN_RELEASE:duplicate };
+    assert.equal(await resolveOpaqueToken(env, duplicate), null);
+  }
+});
+
+test("release observer authority cannot be combined with another scope", async () => {
+  for (const extra of ["release_service","admin","publisher","edit","instructor"]) {
+    const env = { ...ENV,EDIT_TOKEN_SCOPES:JSON.stringify({
+      observer:{ release_observer:1,[extra]:1 },
+    }) };
+    assert.equal(await resolveOpaqueToken(env, ENV.EDIT_TOKEN_OBSERVER), null);
+  }
+});
+
 test("cookie round-trips and carries only the slot + stamp (not the raw token)", async () => {
   const matched = await resolveOpaqueToken(ENV, "john-opaque-token-value-123");
   const value = await mintCookieValue(SIGNING, { slot: matched.slot, stamp: matched.stamp });

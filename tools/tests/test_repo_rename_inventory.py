@@ -71,6 +71,15 @@ def test_hosted_actions_consumers_are_not_treated_as_redirectable_urls(tmp_path)
     assert report["references"][0]["classification"] == "hosted_actions_consumer_patch"
 
 
+def test_current_name_matching_is_case_insensitive(tmp_path):
+    path = "README.md"
+    write(tmp_path, path, "https://github.com/example-owner/CURRENT-REPO\n")
+    report = build(tmp_path, [path])
+    assert report["references"] == [{
+        "path":"README.md","line":1,"classification":"clone_or_web_url_patch",
+    }]
+
+
 def test_unclassified_current_name_reference_fails(tmp_path):
     path = "misc/config.toml"
     write(tmp_path, path, 'repo = "current-repo"\n')

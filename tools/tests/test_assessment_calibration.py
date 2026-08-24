@@ -144,6 +144,19 @@ def test_sub_floor_baseline_and_excessive_bias_fail():
     assert analyze(generous, floor=-1.0, bias=0.01)["calibration_pass"] is False
 
 
+def test_signed_difference_threshold_uses_raw_not_display_rounding(monkeypatch):
+    payload = complete_payload(60)
+    for row in payload["ratings"]:
+        if row["work_id"] == "work-000" and row["rater_role"] == "panel":
+            row["scores"] = {heading: min(7, score + 1) for heading, score in row["scores"].items()}
+    monkeypatch.setattr(calibration, "quadratic_weighted_kappa", lambda _left, _right: 0.8)
+    report = analyze(payload, floor=0.8, bias=0.0166668)
+    assert report["calibration_pass"] is True
+    assert report["headings"][0]["comparisons"]["panel_faculty_1"][
+        "mean_signed_difference"
+    ] == 0.016667
+
+
 @pytest.mark.parametrize(
     "floor,ceiling",
     [(None, 1.0), (0.5, None), (float("nan"), 1.0), (1.1, 1.0), (0.5, -0.1)],

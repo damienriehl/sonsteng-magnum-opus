@@ -83,7 +83,7 @@ def test_unprepared_active_invariant_and_transport_failures_are_bounded():
 
 def test_queue_is_bounded_to_ids_hashes_and_counts():
     observer = Observer(batches=[{"batch_id":"batch-1","commit_sha":SHA,
-        "generator_id":"generator-1","suggestion_ids":["one","two"],
+        "generator_id":"generator-1","member_count":2,
         "original_text":"private"}])
     result = readiness.inspect_readiness(observer,release_enabled=False,timer=OFF)
     assert result["ready"] is True

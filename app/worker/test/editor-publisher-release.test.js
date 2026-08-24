@@ -967,9 +967,12 @@ test("release observer can read only status frontier and audit", async () => {
   const calls = [];
   const stub = {
     getProductionRelease:async (id) => (calls.push(["status",id]),
-      { id,state:"prepared",base_sha:"a".repeat(40),candidate_sha:"b".repeat(40) }),
+      { id,state:"prepared",base_sha:"a".repeat(40),candidate_sha:"b".repeat(40),
+        fencing_token:"secret-fence",authorization_key:"secret-authorization",events:[{detail:"secret"}] }),
     productionPreparationContext:async () => (calls.push(["frontier"]),
-      { active_release:null,base_sha:"a".repeat(40),batches:[] }),
+      { active_release:null,base_sha:"a".repeat(40),batches:[{ batch_id:"batch-1",
+        commit_sha:"c".repeat(40),generator_id:"generator-1",suggestion_ids:["private-id"] }],
+        projection:{ sources:[{ original_text:"secret prose" }] } }),
     productionReleaseAudit:async () => (calls.push(["audit"]),
       { counts:{},invariants:{},active_releases:[] }),
     prepareProductionRelease:async () => { throw new Error("observer reached mutation"); },
@@ -982,10 +985,21 @@ test("release observer can read only status frontier and audit", async () => {
     EDITOR:{ getByName:() => stub } };
   const observer = { editor:"service:observer",credential_channel:"bearer",
     scopes:scopes({ releaseObserver:true }) };
-  assert.equal((await publisherReleaseEndpoint(new Request(
-    "https://edit.example/edit/v1/prod/releases/status?id=release-1"),env,observer)).status,200);
-  assert.equal((await productionPreparationContextEndpoint(new Request(
-    "https://edit.example/edit/v1/prod/releases/frontier"),env,observer)).status,200);
+  const statusResponse = await publisherReleaseEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/status?id=release-1"),env,observer);
+  assert.equal(statusResponse.status,200);
+  const statusBody = await statusResponse.json();
+  assert.deepEqual(statusBody.release,{ id:"release-1",state:"prepared",
+    base_sha:"a".repeat(40),candidate_sha:"b".repeat(40) });
+  assert.doesNotMatch(JSON.stringify(statusBody),/secret|fencing|authorization|events/);
+  const frontierResponse = await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,observer);
+  assert.equal(frontierResponse.status,200);
+  const frontierBody = await frontierResponse.json();
+  assert.deepEqual(frontierBody.context,{ active_release:null,base_sha:"a".repeat(40),
+    batches:[{ batch_id:"batch-1",commit_sha:"c".repeat(40),generator_id:"generator-1",
+      member_count:1 }] });
+  assert.doesNotMatch(JSON.stringify(frontierBody),/secret|private|projection|suggestion_ids/);
   assert.equal((await productionAuditEndpoint(new Request(
     "https://edit.example/edit/v1/prod/releases/audit"),env,observer)).status,200);
   const postMutation = (path, body={}) => new Request("https://edit.example"+path,{

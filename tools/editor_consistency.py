@@ -38,8 +38,8 @@ IDEMPOTENCY: the suggestion id is derived from (source_ref, fact_path,
 old_literal) — re-runs re-file the same ids and the Worker dedupes; no
 duplicate flags ever accumulate.
 
-NOT WIRED into the direct-apply daemon tick — that wiring lands with U8's
-polish. Runnable standalone:
+WIRED into the direct-apply daemon after a successful accepted DEV batch; it
+remains runnable standalone for read-only diagnosis:
 
     python3 tools/editor_consistency.py --matter m03-tort-meridian \
         --since BASE..HEAD [--dry-run] [--no-model]

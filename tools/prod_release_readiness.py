@@ -101,12 +101,13 @@ def inspect_readiness(observer, *, release_enabled, timer):
                 raise ObserverError("readiness queue malformed")
             batch_id = _bounded_id(batch.get("batch_id"))
             commit_sha = batch.get("commit_sha")
-            suggestions = batch.get("suggestion_ids", [])
+            member_count = batch.get("member_count")
             if not batch_id or not isinstance(commit_sha, str) or not SHA_RE.fullmatch(commit_sha) or \
-                    not isinstance(suggestions, list):
+                    not isinstance(member_count, int) or isinstance(member_count, bool) or \
+                    member_count < 0:
                 raise ObserverError("readiness queue malformed")
             queue.append({"batch_id":batch_id,"commit_sha":commit_sha,
-                          "member_count":len(suggestions)})
+                          "member_count":member_count})
         base_sha = context.get("base_sha")
         if base_sha is not None and (not isinstance(base_sha, str) or not SHA_RE.fullmatch(base_sha)):
             raise ObserverError("readiness frontier malformed")

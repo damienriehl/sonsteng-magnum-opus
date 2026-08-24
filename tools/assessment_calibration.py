@@ -130,15 +130,16 @@ def _rounded(value: float) -> float:
 
 def _comparison(
     reference: Sequence[int], comparison: Sequence[int]
-) -> tuple[dict[str, Any], float | None]:
+) -> tuple[dict[str, Any], float | None, float]:
     raw_kappa = quadratic_weighted_kappa(reference, comparison)
+    raw_signed_difference = (
+        sum(candidate - baseline for baseline, candidate in zip(reference, comparison))
+        / len(reference)
+    )
     return {
         "quadratic_weighted_kappa": None if raw_kappa is None else _rounded(raw_kappa),
-        "mean_signed_difference": _rounded(
-            sum(candidate - baseline for baseline, candidate in zip(reference, comparison))
-            / len(reference)
-        ),
-    }, raw_kappa
+        "mean_signed_difference": _rounded(raw_signed_difference),
+    }, raw_kappa, raw_signed_difference
 
 
 def analyze(
@@ -157,21 +158,21 @@ def analyze(
         faculty_1 = [works[work_id]["faculty-1"][heading] for work_id in work_ids]
         faculty_2 = [works[work_id]["faculty-2"][heading] for work_id in work_ids]
         panel = [works[work_id]["panel"][heading] for work_id in work_ids]
-        baseline, baseline_kappa = _comparison(faculty_1, faculty_2)
-        panel_f1, panel_f1_kappa = _comparison(faculty_1, panel)
-        panel_f2, panel_f2_kappa = _comparison(faculty_2, panel)
+        baseline, baseline_kappa, _ = _comparison(faculty_1, faculty_2)
+        panel_f1, panel_f1_kappa, panel_f1_bias = _comparison(faculty_1, panel)
+        panel_f2, panel_f2_kappa, panel_f2_bias = _comparison(faculty_2, panel)
         baseline_pass = baseline_kappa is not None and baseline_kappa >= floor
         comparisons_pass = {}
-        for label, comparison, kappa in (
-            ("panel_faculty_1", panel_f1, panel_f1_kappa),
-            ("panel_faculty_2", panel_f2, panel_f2_kappa),
+        for label, kappa, raw_bias in (
+            ("panel_faculty_1", panel_f1_kappa, panel_f1_bias),
+            ("panel_faculty_2", panel_f2_kappa, panel_f2_bias),
         ):
             comparisons_pass[label] = (
                 baseline_pass
                 and kappa is not None
                 and kappa >= floor
                 and kappa >= baseline_kappa
-                and abs(comparison["mean_signed_difference"]) <= ceiling
+                and abs(raw_bias) <= ceiling
             )
         heading_pass = baseline_pass and all(comparisons_pass.values())
         overall_pass = overall_pass and heading_pass

@@ -71,6 +71,8 @@ function parseScopeConfig(env) {
     for (const s of Object.keys(EMPTY_SCOPES)) {
       if (scopes && typeof scopes[s] === "number") rec[s] = scopes[s];
     }
+    if (rec.release_observer != null &&
+        Object.keys(rec).some((scope) => scope !== "release_observer")) continue;
     out.set(slot.toLowerCase(), rec);
   }
   return out;
@@ -107,6 +109,7 @@ export async function resolveOpaqueToken(env, presented) {
   if (typeof presented !== "string" || presented.length === 0) return null;
   const config = parseScopeConfig(env);
   let matched = null;
+  let matchCount = 0;
   for (const [slot, grants] of config) {
     const secret = env["EDIT_TOKEN_" + slot.toUpperCase()];
     if (typeof secret !== "string" || secret.length === 0) {
@@ -115,11 +118,16 @@ export async function resolveOpaqueToken(env, presented) {
       continue;
     }
     const eq = await constantTimeEqualStr(presented, secret);
-    if (eq && !matched) {
-      matched = { slot, record: scopeRecord(grants), stamp: scopeStamp(slot, grants) };
+    if (eq) {
+      matchCount += 1;
+      if (!matched) {
+        matched = { slot, record: scopeRecord(grants), stamp: scopeStamp(slot, grants) };
+      }
     }
   }
-  return matched;
+  // Duplicate secrets make authority ambiguous. Fail closed instead of
+  // inheriting whichever slot appears first in configuration order.
+  return matchCount === 1 ? matched : null;
 }
 
 // ---- signed cookie (slot + stamp, never the raw token) ----------------------

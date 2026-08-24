@@ -17,6 +17,13 @@ this file is what those decisions oblige us to *do*.
 > **A later record also governs.** `decisions/2026-08-12-john-pitch-docket-outcomes.md`
 > postdates this file and amends T06, T11, T21 and T23. Where the two disagree, the
 > August 12 record wins. Read it before acting on anything below.
+>
+> **Autonomous readiness reconciled 2026-08-24.** The remaining open boxes below are human,
+> source-material, account, or supervised-live outcomes—not missing preparer code. The repository now
+> contains protected assessment-UAT preparation, aggregate calibration analysis, committed-tree Day
+> Zero verification/compensation, read-only Cloudflare and Publisher inspection, automatic dual
+> representation enforcement, U18 post-apply wiring, and read-only rename inventory. Exact merge
+> evidence is recorded in `docs/handoffs/2026-08-23-plan-closeout-handoff.md` after integration.
 
 ## Format — keep it, the parser depends on it
 
@@ -83,8 +90,10 @@ this file is what those decisions oblige us to *do*.
       are redirect-only. **Migration tooling done 2026-08-23:** PR #26 merged the
       atomic date/JSON-LD rewrite, permanent validator, and exact-head copied-corpus
       rehearsal. The remaining scope is the supervised live corpus window and the
-      later repository rename. Recompute the exact migration inventory at the freeze
-      boundary instead of reusing a historical file count.
+      later repository rename. Automatic date-offset and Legal Practicum identifier
+      enforcement, committed-tree verification/compensation, GET-only pair inspection,
+      and a read-only rename inventory are implemented. Recompute the exact inventory
+      at the freeze boundary instead of reusing a historical file count.
 - [x] **T07 — We host it; drop any Mitchell hosting claim** `@agent` `origin:call-2026-08-06`
       Damien hosts. Mitchell Hamline may adopt it and is welcome to help craft it,
       but gets no hosting byline. John: *"I don't think they're interested… I don't
@@ -218,6 +227,9 @@ this file is what those decisions oblige us to *do*.
       and gives the Access-authenticated signer an attributed override workflow.
       Summative use remains blocked on human-human calibration and provider-terms
       review; the authenticated 1280/390 browser exercise is still external UAT.
+      Credential-safe audit preparation and aggregate-only calibration tooling are
+      implemented. The human calibration result and its numeric kappa/bias thresholds
+      remain external policy decisions; the tool intentionally invents no defaults.
 
 ## Institutional
 

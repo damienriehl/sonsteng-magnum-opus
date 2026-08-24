@@ -69,7 +69,7 @@ def _historical(path: str) -> bool:
 
 def classify_reference(path: str, line: str, *, owner: str, current: str) -> str | None:
     """Classify one textual current-name reference without returning its content."""
-    if current not in line:
+    if current.casefold() not in line.casefold():
         return None
     if _historical(path):
         return "historical_evidence_preserve"
@@ -122,7 +122,7 @@ def _read_reference_rows(
         except UnicodeDecodeError:
             continue
         for line_number, line in enumerate(text.splitlines(), start=1):
-            if current not in line:
+            if current.casefold() not in line.casefold():
                 continue
             category = classify_reference(relative, line, owner=owner, current=current)
             row = {"path": relative, "line": line_number}
@@ -152,7 +152,7 @@ def _runtime_state(repo: Path, current: str) -> dict[str, Any]:
     remotes = sorted({
         line.split()[0]
         for line in remote_result.stdout.splitlines()
-        if len(line.split()) >= 2 and current in line.split()[1]
+        if len(line.split()) >= 2 and current.casefold() in line.split()[1].casefold()
     })
     worktrees = sorted(
         _digest(line.removeprefix("worktree "))
