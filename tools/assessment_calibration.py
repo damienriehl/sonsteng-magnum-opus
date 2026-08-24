@@ -113,12 +113,14 @@ def _rounded(value: float) -> float:
     return 0.0 if rounded == -0.0 else rounded
 
 
-def _comparison(left: Sequence[int], right: Sequence[int], difference: Sequence[int]) -> dict[str, Any]:
-    kappa = quadratic_weighted_kappa(left, right)
+def _comparison(
+    left: Sequence[int], right: Sequence[int], difference: Sequence[int]
+) -> tuple[dict[str, Any], float | None]:
+    raw_kappa = quadratic_weighted_kappa(left, right)
     return {
-        "quadratic_weighted_kappa": None if kappa is None else _rounded(kappa),
+        "quadratic_weighted_kappa": None if raw_kappa is None else _rounded(raw_kappa),
         "mean_signed_difference": _rounded(sum(difference) / len(difference)),
-    }
+    }, raw_kappa
 
 
 def analyze(
@@ -137,26 +139,27 @@ def analyze(
         faculty_1 = [works[work_id]["faculty-1"][heading] for work_id in work_ids]
         faculty_2 = [works[work_id]["faculty-2"][heading] for work_id in work_ids]
         panel = [works[work_id]["panel"][heading] for work_id in work_ids]
-        baseline = _comparison(
+        baseline, baseline_kappa = _comparison(
             faculty_1,
             faculty_2,
             [right - left for left, right in zip(faculty_1, faculty_2)],
         )
-        panel_f1 = _comparison(
+        panel_f1, panel_f1_kappa = _comparison(
             panel,
             faculty_1,
             [panel_score - faculty_score for panel_score, faculty_score in zip(panel, faculty_1)],
         )
-        panel_f2 = _comparison(
+        panel_f2, panel_f2_kappa = _comparison(
             panel,
             faculty_2,
             [panel_score - faculty_score for panel_score, faculty_score in zip(panel, faculty_2)],
         )
-        baseline_kappa = baseline["quadratic_weighted_kappa"]
         baseline_pass = baseline_kappa is not None and baseline_kappa >= floor
         comparisons_pass = {}
-        for label, comparison in (("panel_faculty_1", panel_f1), ("panel_faculty_2", panel_f2)):
-            kappa = comparison["quadratic_weighted_kappa"]
+        for label, comparison, kappa in (
+            ("panel_faculty_1", panel_f1, panel_f1_kappa),
+            ("panel_faculty_2", panel_f2, panel_f2_kappa),
+        ):
             comparisons_pass[label] = (
                 baseline_pass
                 and kappa is not None
