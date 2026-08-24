@@ -977,7 +977,7 @@ def test_cloudflare_inspector_maps_provider_failures_without_secret_or_body(
     "url",
     [
         "http://legalpracticum.org/",
-        "https://user:pass@legalpracticum.org/",
+        "https://user:seed@legalpracticum.org/",
         "https://legalpracticum.org:8443/",
         "https://legalpracticum.org/#fragment",
         "not-a-url",
