@@ -1,13 +1,14 @@
 # Decision Sheet — Remaining 21-day plan gates
 
-Date: August 23, 2026  
+Date: August 24, 2026 (updated; first issued August 23)
 Supersedes the residual-action sections of the August 20 and August 21 handoffs  
 Purpose: one ordered, copy-friendly sheet for every remaining human or external gate
 
 The Cloudflare cutover, Google live-provider check, and combined Day Zero date/JSON-LD implementation
 are complete. PR #26 merged the atomic rewrite, permanent validator, and copied-corpus rehearsal.
 Packet D may be scheduled once its human coordination and empty-queue conditions are satisfied.
-The August 24 autonomous-readiness change set also supplies the read-only/preparation commands named
+PR #28 merged the August 24 autonomous-readiness work as
+`d9ed7d1b67d698bf25e145d2373cf24e9f9ea564`. It supplies the read-only/preparation commands named
 under Packets A, C, D, E, and F. Those tools do not satisfy a human gate and make no production,
 account, identity, source-ingestion, or repository-rename mutation by themselves.
 Do not send credentials, one-time codes, edited private text, or personal roster data in the result.

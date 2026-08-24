@@ -1,6 +1,6 @@
 # 21-day plan closeout — current handoff
 
-Date: 2026-08-23  
+Date: 2026-08-24 (updated; first issued 2026-08-23)
 Supersedes: `2026-08-20-21-day-plan-completion-handoff.md` and the residual-action section of
 `2026-08-21-operational-closeout-handoff.md`
 
@@ -24,8 +24,10 @@ Since the prior handoffs:
   `443d932c9110823853d2b4fbca7d30fd4e6a0412`.
 - PR #26 merged the atomic combined Day Zero date/identifier implementation as
   `8d898d9011320b484c85db023452d2cf7977c3e7`.
-- The trusted daemon checkout was fast-forwarded to the PR #26 merge. The primary checkout is on
-  this focused documentation branch from that same merged `main`.
+- PR #28 merged all autonomous packet-readiness behavioral units (U1-U7 and U9) as
+  `d9ed7d1b67d698bf25e145d2373cf24e9f9ea564`. The trusted daemon checkout was
+  fast-forwarded cleanly to that exact merge.
+- The primary checkout is on this focused closeout branch from the PR #28 merged `main`.
 - Production publication and the Day Zero corpus migration remain deliberately off/not run.
 
 ## Current evidence
@@ -46,11 +48,13 @@ Since the prior handoffs:
 - CE review found six implementation/test gaps; all were validated and fixed. GitHub review then
   found one additional legal-JSON-escape mismatch; it was fixed semantically, covered by regression
   tests, answered, and resolved before merge.
-- The August 24 autonomous-readiness change set implements automatic dual strictness, committed-tree
+- PR #28 implements automatic dual strictness, committed-tree
   migration verification and compensation, GET-only Cloudflare pair inspection, read-only Publisher
   readiness, explicit protected assessment-UAT preparation, aggregate calibration analysis, read-only
-  repository-rename inventory, and post-apply U18 consistency wiring. Its exact PR and merge SHA are
-  recorded by the post-merge closeout update rather than guessed here.
+  repository-rename inventory, and post-apply U18 consistency wiring.
+- Formal correctness/security review found four issues and GitHub review found two more. All six were
+  fixed with regression coverage before merge. Final validation recorded 950 Python tests plus 21,687
+  subtests, all 45 Worker test files, both governed validators, and 21/21 full preflight gates passing.
 
 ## De-duplicated remaining queue
 
@@ -91,8 +95,8 @@ Detailed, paste-back-ready instructions are in
 
 - **Complete:** every unblocked repository implementation unit; domain infrastructure; Google live
   provider validation; combined Day Zero implementation and exact-head rehearsal; autonomous
-  preparation for Packets A, C, D, E, and F; merge/integration and daemon synchronization through
-  PR #26 (with the August 24 merge receipt to be appended after merge).
+  preparation for Packets A, C, D, E, and F; merge/integration and trusted-daemon synchronization
+  through PR #28 at `d9ed7d1b67d698bf25e145d2373cf24e9f9ea564`.
 - **Queued:** U16b and U18 live acceptance evidence, source ingestion, the supervised corpus
   migration, and the later repository rename, each behind its named prerequisite.
 - **Human/external:** the six packets in the current Decision Sheet.

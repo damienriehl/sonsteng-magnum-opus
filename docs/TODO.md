@@ -23,7 +23,8 @@ this file is what those decisions oblige us to *do*.
 > contains protected assessment-UAT preparation, aggregate calibration analysis, committed-tree Day
 > Zero verification/compensation, read-only Cloudflare and Publisher inspection, automatic dual
 > representation enforcement, U18 post-apply wiring, and read-only rename inventory. Exact merge
-> evidence is recorded in `docs/handoffs/2026-08-23-plan-closeout-handoff.md` after integration.
+> evidence is PR #28 / `d9ed7d1b67d698bf25e145d2373cf24e9f9ea564`, recorded in
+> `docs/handoffs/2026-08-23-plan-closeout-handoff.md`; the trusted daemon checkout is synchronized.
 
 ## Format — keep it, the parser depends on it
 
