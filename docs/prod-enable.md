@@ -20,6 +20,32 @@ revocation. The Access-only `damienadmin` slot carries the independent Publisher
 canonical DEV/apply ledger. The separate production Worker carries neither Access nor Publisher
 scope. These grants do not themselves publish; only the frozen release workflow may do so.
 
+## Assessment calibration evidence
+
+Summative assessment remains blocked until faculty supply a de-identified calibration sample and
+a human policy owner selects the acceptable agreement and bias thresholds. The local calculator
+does not choose those thresholds and does not decide whether provider terms authorize summative
+use.
+
+Prepare a caller-owned JSON file outside this repository. Its only top-level field is `ratings`.
+Provide 40–60 opaque work IDs, with one `faculty-1`, `faculty-2`, and `panel` row per work. Every
+row contains only `work_id`, `rater_role`, and `scores`; `scores` contains integer 1–7 ratings for
+all seven memo heading IDs. Do not include names, email addresses, student work, comments, or
+other free text.
+
+Run the calculator with both policy values stated explicitly:
+
+    python3 tools/assessment_calibration.py /protected/path/ratings.json \
+      --min-kappa <HUMAN_SELECTED_FLOOR> \
+      --max-abs-signed-difference <HUMAN_SELECTED_CEILING>
+
+The output contains only sample size, thresholds, heading IDs, quadratic weighted kappa, mean
+signed difference, and threshold results. Each panel-human kappa must meet both the human-human
+baseline and the absolute floor. Each panel-minus-faculty signed difference must remain within
+the absolute ceiling. Undefined or sub-floor faculty agreement fails closed. The input file is
+never copied or rewritten; after securing the aggregate report in the approved evidence system,
+delete the caller-owned row-level file according to the faculty data-handling procedure.
+
 ---
 
 # Access door runbook (`edit.legalpracticum.org`)
