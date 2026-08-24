@@ -750,8 +750,8 @@ def test_operator_plan_contains_exact_inputs_and_supervised_boundary(tmp_path):
 
 CF_ACCOUNT = "1" * 32
 CF_TOKEN = "read_only_token_" + "x" * 32
-PAGES_URL = "https://legalpracticum.org/"
-WORKER_URL = "https://sonsteng-chat.example.workers.dev/"
+PAGES_URL = migration.PAGES_PROVENANCE_ORIGIN + "/"
+WORKER_URL = migration.WORKER_PROVENANCE_ORIGIN + "/"
 
 
 def https_json(payload, *, status=200, headers=None):
@@ -987,6 +987,22 @@ def test_cloudflare_inspector_rejects_invalid_live_urls_before_sending_credentia
     inspector, reader = make_inspector(inspector_responses())
     with pytest.raises(migration.MigrationError, match="provenance URL is invalid"):
         inspector.inspect(url, WORKER_URL)
+    assert reader.requests == []
+
+
+@pytest.mark.parametrize(
+    ("pages_url", "worker_url", "expected"),
+    [
+        ("https://preview.legalpracticum.org/", WORKER_URL, "Pages provenance URL is not"),
+        (PAGES_URL, "https://sonsteng-chat.damienriehl.workers.dev/", "Worker provenance URL is not"),
+        (PAGES_URL, PAGES_URL, "Worker provenance URL is not"),
+    ],
+)
+def test_cloudflare_inspector_binds_each_provenance_read_to_its_production_origin(
+        pages_url, worker_url, expected):
+    inspector, reader = make_inspector(inspector_responses())
+    with pytest.raises(migration.MigrationError, match=expected):
+        inspector.inspect(pages_url, worker_url)
     assert reader.requests == []
 
 

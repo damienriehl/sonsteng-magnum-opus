@@ -61,11 +61,17 @@ def _release_summary(release):
 def timer_state(run=subprocess.run):
     """Read systemd state only; never start, stop, enable, or disable a unit."""
     try:
-        enabled = run(["systemctl","--user","is-enabled",TIMER_UNIT],
-            capture_output=True,text=True,timeout=5,check=False).stdout.strip()
-        active = run(["systemctl","--user","is-active",TIMER_UNIT],
-            capture_output=True,text=True,timeout=5,check=False).stdout.strip()
+        enabled_result = run(["systemctl","--user","is-enabled",TIMER_UNIT],
+            capture_output=True,text=True,timeout=5,check=False)
+        active_result = run(["systemctl","--user","is-active",TIMER_UNIT],
+            capture_output=True,text=True,timeout=5,check=False)
     except (OSError, subprocess.SubprocessError):
+        return {"available":False,"enabled":None,"active":None}
+    enabled = enabled_result.stdout.strip()
+    active = active_result.stdout.strip()
+    enabled_valid = (enabled_result.returncode, enabled) in {(0,"enabled"),(1,"disabled")}
+    active_valid = (active_result.returncode, active) in {(0,"active"),(3,"inactive")}
+    if not enabled_valid or not active_valid:
         return {"available":False,"enabled":None,"active":None}
     return {"available":True,"enabled":enabled == "enabled","active":active == "active"}
 

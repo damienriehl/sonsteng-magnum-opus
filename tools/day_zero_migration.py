@@ -67,6 +67,8 @@ CLOUDFLARE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
 CLOUDFLARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,512}")
 CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com"
 CLOUDFLARE_API_PREFIX = "/client/v4"
+PAGES_PROVENANCE_ORIGIN = "https://legalpracticum.org"
+WORKER_PROVENANCE_ORIGIN = "https://sonsteng-chat-production.damienriehl.workers.dev"
 MAX_HTTP_BODY_BYTES = 1_048_576
 HTTP_TIMEOUT_SECONDS = 20
 EX_CONFIG = 78
@@ -172,7 +174,7 @@ def _cloudflare_api_url(path: str) -> str:
     return url
 
 
-def _live_provenance_url(value: str, surface: str) -> str:
+def _live_provenance_url(value: str, surface: str, expected_origin: str | None = None) -> str:
     parsed = urllib.parse.urlsplit(value or "")
     try:
         port = parsed.port
@@ -187,6 +189,9 @@ def _live_provenance_url(value: str, surface: str) -> str:
         or parsed.fragment
     ):
         raise MigrationError(f"{surface} provenance URL is invalid")
+    origin = f"{parsed.scheme}://{parsed.hostname}"
+    if expected_origin is not None and origin != expected_origin:
+        raise MigrationError(f"{surface} provenance URL is not the production origin")
     return value
 
 
@@ -386,8 +391,14 @@ class CloudflarePairInspector:
 
     def inspect(self, pages_provenance_url: str, worker_provenance_url: str) -> ProductionPair:
         """Prove stable provider coordinates around matching live SHA reads."""
-        pages_provenance_url = _live_provenance_url(pages_provenance_url, "Pages")
-        worker_provenance_url = _live_provenance_url(worker_provenance_url, "Worker")
+        pages_provenance_url = _live_provenance_url(
+            pages_provenance_url, "Pages", PAGES_PROVENANCE_ORIGIN
+        )
+        worker_provenance_url = _live_provenance_url(
+            worker_provenance_url, "Worker", WORKER_PROVENANCE_ORIGIN
+        )
+        if pages_provenance_url == worker_provenance_url:
+            raise MigrationError("production provenance surfaces must be distinct")
         state_before = self._control_state()
         pages_sha = self._live_sha(pages_provenance_url, "Pages")
         worker_sha = self._live_sha(worker_provenance_url, "Worker")

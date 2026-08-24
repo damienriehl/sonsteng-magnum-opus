@@ -192,9 +192,9 @@ python3 tools/day_zero_migration.py \
   --inspect-cloudflare-pair \
   --cloudflare-account-id <account-id> \
   --pages-project <pages-project> \
-  --worker-script <worker-script> \
+  --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
-  --worker-provenance-url https://<production-worker-host>/
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/
 ```
 
 ### D1. Schedule and authorize the supervised window

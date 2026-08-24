@@ -124,6 +124,27 @@ def test_timer_reader_uses_status_only():
     calls = []
     def run(argv,**kwargs):
         calls.append(argv)
-        return SimpleNamespace(stdout="disabled\n" if "is-enabled" in argv else "inactive\n")
+        return SimpleNamespace(
+            stdout="disabled\n" if "is-enabled" in argv else "inactive\n",
+            returncode=1 if "is-enabled" in argv else 3,
+        )
     assert readiness.timer_state(run) == {"available":True,"enabled":False,"active":False}
     assert all(argv[2] in {"is-enabled","is-active"} for argv in calls)
+
+
+@pytest.mark.parametrize(
+    "enabled_output,enabled_code,active_output,active_code",
+    [
+        ("enabled-runtime\n",0,"inactive\n",3),
+        ("disabled\n",1,"activating\n",0),
+        ("disabled\n",0,"inactive\n",3),
+        ("disabled\n",1,"inactive\n",0),
+    ],
+)
+def test_timer_reader_fails_closed_on_unknown_output_or_exit_status(
+        enabled_output, enabled_code, active_output, active_code):
+    def run(argv,**_kwargs):
+        if "is-enabled" in argv:
+            return SimpleNamespace(stdout=enabled_output,returncode=enabled_code)
+        return SimpleNamespace(stdout=active_output,returncode=active_code)
+    assert readiness.timer_state(run) == {"available":False,"enabled":None,"active":None}

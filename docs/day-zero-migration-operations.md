@@ -97,9 +97,9 @@ python3 tools/day_zero_migration.py \
   --inspect-cloudflare-pair \
   --cloudflare-account-id <32-character-lowercase-account-ID> \
   --pages-project <Pages-project-name> \
-  --worker-script <Worker-script-name> \
+  --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
-  --worker-provenance-url https://<production-worker-host>/
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/
 ```
 
 Normal inspection output contains the shared SHA, digests of the two recovery
@@ -118,9 +118,9 @@ python3 tools/day_zero_migration.py \
   --print-operator-plan \
   --cloudflare-account-id <32-character-lowercase-account-ID> \
   --pages-project <Pages-project-name> \
-  --worker-script <Worker-script-name> \
+  --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
-  --worker-provenance-url https://<production-worker-host>/ \
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/ \
   --candidate-sha <committed-migration-SHA> \
   --recovery-registry "$HOME/.local/state/sonsteng-prod-release/known-good-pairs.json" \
   --ack-john-notified \
