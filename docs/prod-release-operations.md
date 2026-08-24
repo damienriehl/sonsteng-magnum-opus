@@ -10,6 +10,12 @@ default). Each provider's bounded deployable ID is atomically recorded in the
 0600 `SONSTENG_PROD_RECOVERY_REGISTRY`; unbounded CLI output and credentials
 never enter either that registry or the release ledger.
 
+Read-only preparation checks use a third principal, `EDIT_TOKEN_OBSERVER`,
+granted only `release_observer`. That scope is accepted exclusively by the GET
+status, frontier, and text-free audit routes. It is rejected by every prepare,
+claim, renew, transition, restore, review-decision, authorization, DEV-apply,
+and provider operation.
+
 For a fenced release, an operator may invoke the disabled-by-default service
 manually with `--restore-release-id RELEASE_ID`. The daemon loads only that
 release's recorded base pair and reactivates the exact Pages deployment and
@@ -157,6 +163,8 @@ Use distinct environment-scoped principals:
 - the DEV apply bearer may claim/finalize DEV apply batches and deploy DEV only;
 - the PROD release bearer may prepare, claim, transition, and read release status, but cannot
   authorize a release;
+- the PROD observer bearer may read release status, preparation frontier, and
+  text-free audit only; it has no mutation method or provider credential;
 - the human Publisher signs in through Access and is the only actor that may authorize;
 - the Cloudflare PROD principal may upload the `sonsteng` Pages artifact and create/activate the
   named production Worker version only. It must have no DNS, Access-policy, account-admin, or DEV
@@ -168,6 +176,50 @@ existing same-origin/CSRF marker for every review submission and authorization m
 bearer cannot submit or authorize. Conversely, Access sessions cannot prepare, claim, renew,
 transition, fence, restore, or bootstrap. Bootstrap is a separate local-operator authority and accepts
 neither the browser session nor the release-service bearer.
+
+### Text-free readiness check
+
+Provision the observer as its own Worker token slot (for example,
+`observer: {"release_observer":1}` in `EDIT_TOKEN_SCOPES`) and inject its opaque
+value only into a separate owned regular 0600 file:
+
+```text
+~/.config/sonsteng-release-observer/env
+SONSTENG_PROD_OBSERVER_BEARER=<observer-only token>
+```
+
+Do not add `admin`, `publisher`, or `release_service` to that slot. Do not put
+`EDIT_SERVICE_TOKEN` or `SONSTENG_PROD_RELEASE_BEARER` in this file. Verify the
+file without printing its contents:
+
+```bash
+stat -c '%a %U %F' ~/.config/sonsteng-release-observer/env
+```
+
+The result must show mode `600`, the service account owner, and a regular file.
+With the production executor still config-off and its timer stopped and
+disabled, run:
+
+```bash
+python3 tools/prod_release_readiness.py \
+  --ledger-url https://sonsteng-chat.damienriehl.workers.dev \
+  --observer-env-file ~/.config/sonsteng-release-observer/env \
+  --prod-env-file ~/.config/sonsteng-prod-release/env
+```
+
+The command performs only three allowlisted GET shapes. It reads only the
+explicit config-off flag from the protected production environment (never its
+bearer or provider values), reads systemd status
+without changing it and emits only invariant counts, queue counts, bounded IDs,
+commit/evidence hashes, the active/prepared/authorized state, timer state, and
+config-off state. It never emits authored operations. `ready_to_prepare` means
+the text-free queue and invariants are safe for the separate release service to
+prepare; this observer does not perform that action and the result does not mean
+authorized or published. A `prepared` record is reported by ID and hashes as an
+`active_release`, not as permission to advance it. `unprepared`, `active_release`, `config_on`,
+`timer_not_proved_off`, invariant failures, malformed responses, authentication
+failures, and timeouts are bounded non-ready results. The command refuses to run
+when a DEV-admin or production-mutation bearer is present in its process.
 
 Secrets live only in 0600 environment files or the provider's secret store. **Never copy credentials**
 into source, manifests, command arguments, journals, receipts, notifications, screenshots, or UAT

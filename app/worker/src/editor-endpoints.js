@@ -1013,8 +1013,9 @@ export async function publisherAuthorizeEndpoint(request, env, auth) {
 
 export async function publisherReleaseEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.release_service?.granted)
-    return editError("forbidden", "Publisher or release-service scope required.", 403);
+  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.release_service?.granted &&
+      !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return editError("validation_error", "id required.", 400);
   const release = await editorStub(env).getProductionRelease(id);
@@ -1023,6 +1024,13 @@ export async function publisherReleaseEndpoint(request, env, auth) {
 
 function releaseService(auth) {
   return auth?.credential_channel === "bearer" && auth?.scopes?.release_service?.granted;
+}
+
+// A separate, bearer-only scope for text-free observation. It is intentionally
+// absent from every mutation guard below: possession can never prepare, claim,
+// authorize, renew, transition, restore, or otherwise advance a release.
+function releaseObserver(auth) {
+  return auth?.credential_channel === "bearer" && auth?.scopes?.release_observer?.granted;
 }
 
 export async function productionPrepareEndpoint(request, env, auth) {
@@ -1062,13 +1070,15 @@ export async function productionPrepareEndpoint(request, env, auth) {
 
 export async function productionPreparationContextEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  if (!releaseService(auth) && !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
   return json({ ok:true, context:await editorStub(env).productionPreparationContext() });
 }
 
 export async function productionAuditEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  if (!releaseService(auth) && !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
   return json({ ok:true, audit:await editorStub(env).productionReleaseAudit() });
 }
 

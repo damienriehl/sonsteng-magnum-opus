@@ -21,13 +21,46 @@ from prod_release_executor import (  # noqa: E402
     FrozenRelease,
     ProductionExecutor,
     ReleaseError,
+    ObserverError,
     LedgerHTTP,
+    ReleaseObserverHTTP,
     GitRefAdapter,
     RecordedPairRestorer,
     RecoveryRegistry,
     WranglerPagesAdapter,
     WranglerWorkerAdapter,
 )
+
+
+def test_release_observer_is_get_only_allowlisted_and_bounded():
+    requests = []
+    payloads = {
+      "/edit/v1/prod/releases/frontier":{"ok":True,"context":{"base_sha":"a"*40,"batches":[]}},
+      "/edit/v1/prod/releases/audit":{"ok":True,"audit":{"counts":{},"invariants":{},"active_releases":[]}},
+      "/edit/v1/prod/releases/status?id=release-1":{"ok":True,"release":{"id":"release-1","state":"prepared"}},
+    }
+    class Response:
+        def __init__(self,payload): self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self,*_args): return False
+        def read(self,_limit): return json.dumps(self.payload).encode()
+    def opener(request, timeout):
+        requests.append((request,timeout))
+        path = request.full_url.removeprefix("https://ledger.example")
+        return Response(payloads[path])
+    observer = ReleaseObserverHTTP("https://ledger.example","sentinel-secret",opener=opener)
+    assert observer.preparation_context()["base_sha"] == "a"*40
+    assert observer.audit()["counts"] == {}
+    assert observer.get_release("release-1")["state"] == "prepared"
+    assert all(req.method == "GET" and req.data is None for req,_ in requests)
+    assert all(req.get_header("Authorization") == "Bearer sentinel-secret" for req,_ in requests)
+    assert {req.full_url for req,_ in requests} == {
+      "https://ledger.example/edit/v1/prod/releases/frontier",
+      "https://ledger.example/edit/v1/prod/releases/audit",
+      "https://ledger.example/edit/v1/prod/releases/status?id=release-1"}
+    assert not hasattr(observer,"prepare") and not hasattr(observer,"transition")
+    with pytest.raises(ObserverError,match="release id malformed"):
+        observer.get_release("../claim")
 
 
 def projection_source(**overrides):

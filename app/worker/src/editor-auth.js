@@ -3,7 +3,8 @@
 //
 // SCOPE MODEL (Decision 2 + Enhancement item 2):
 //   * One opaque token maps to a scope record:
-//       { edit: {granted, ver}, instructor: {granted, ver}, admin: {granted, ver} }
+//       { edit, instructor, admin, publisher, release_service, release_observer }
+//     where every scope is {granted, ver}.
 //   * John's single bookmark carries edit+instructor (one token, two scopes);
 //     Damien's admin token carries admin only. admin is NEVER reachable from an
 //     edit/instructor token (separate secret, separate record).
@@ -52,9 +53,10 @@ const EMPTY_SCOPES = Object.freeze({
   admin: { granted: false, ver: 0 },
   publisher: { granted: false, ver: 0 },
   release_service: { granted: false, ver: 0 },
+  release_observer: { granted: false, ver: 0 },
 });
 
-// Parse EDIT_TOKEN_SCOPES (JSON) into a Map slot -> { edit?:ver, instructor?:ver, admin?:ver }.
+// Parse EDIT_TOKEN_SCOPES into a Map of slot -> granted scope versions.
 function parseScopeConfig(env) {
   let cfg;
   try {
@@ -74,7 +76,7 @@ function parseScopeConfig(env) {
   return out;
 }
 
-// Build the { edit, instructor, admin } record from a slot's granted scopes.
+// Build a complete all-known-scopes record from a slot's grants.
 function scopeRecord(grants) {
   const rec = Object.fromEntries(Object.keys(EMPTY_SCOPES)
     .map((scope) => [scope, { granted: false, ver: 0 }]));
@@ -92,6 +94,7 @@ function scopeStamp(slot, grants) {
   const names = ["edit", "instructor", "admin"];
   if (grants.publisher != null) names.push("publisher");
   if (grants.release_service != null) names.push("release_service");
+  if (grants.release_observer != null) names.push("release_observer");
   const parts = names.map((s) => `${s}:${grants[s] ?? "-"}`);
   return `${slot}|${parts.join(",")}`;
 }

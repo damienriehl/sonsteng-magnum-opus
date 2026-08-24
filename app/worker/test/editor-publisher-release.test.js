@@ -116,14 +116,16 @@ test("production audit bounds migrations and active releases", () => {
   assert.equal(bounded.migrations.at(-1).id,null);
 });
 
-test("routed production audit requires the dedicated release-service bearer", async () => {
+test("routed production audit accepts only dedicated release read bearers", async () => {
   const audit = { schema_version:1,counts:{},invariants:{},migrations:[],release_states:[],
     active_releases:[],migrations_truncated:false,active_releases_truncated:false };
   let calls = 0;
   const env = {
     PROD_RELEASE_LEDGER:"true",SESSION_SIGNING_KEY:"test-signing-key",
-    EDIT_TOKEN_SCOPES:JSON.stringify({ release:{ release_service:1 },admin:{ admin:1 } }),
-    EDIT_TOKEN_RELEASE:"release-secret",EDIT_TOKEN_ADMIN:"admin-secret",
+    EDIT_TOKEN_SCOPES:JSON.stringify({ release:{ release_service:1 },observer:{ release_observer:1 },
+      admin:{ admin:1 } }),
+    EDIT_TOKEN_RELEASE:"release-secret",EDIT_TOKEN_OBSERVER:"observer-secret",
+    EDIT_TOKEN_ADMIN:"admin-secret",
     EDIT_ORIGIN:"https://edit.example",EDITOR:{ getByName:() => ({
       productionReleaseAudit:async () => { calls++; return audit; },
     }) },
@@ -136,9 +138,11 @@ test("routed production audit requires the dedicated release-service bearer", as
   assert.equal(ok.status,200);
   assert.deepEqual((await ok.json()).audit,audit);
   assert.equal(calls,1);
+  assert.equal((await routed("observer-secret")).status,200);
+  assert.equal(calls,2);
   assert.equal((await routed("admin-secret")).status,403);
   assert.equal((await routed("wrong-secret")).status,403);
-  assert.equal(calls,1,"forbidden callers never reach the Durable Object RPC");
+  assert.equal(calls,2,"forbidden callers never reach the Durable Object RPC");
   assert.equal((await editorFetch(new Request(
     "https://edit.example/edit/v1/prod/releases/audit",{
       headers:{ Authorization:"Bearer release-secret","X-Edit-Request":"1" },
@@ -860,9 +864,9 @@ function post(body) {
       Origin:"https://edit.example", "Sec-Fetch-Site":"same-origin" },
     body:JSON.stringify(body) });
 }
-const scopes = (publisher = false, admin = false, releaseService = false) => ({ edit:{granted:false},
+const scopes = (publisher = false, admin = false, releaseService = false, observer = false) => ({ edit:{granted:false},
   instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher},
-  release_service:{granted:releaseService} });
+  release_service:{granted:releaseService}, release_observer:{granted:observer} });
 
 test("only a human Access Publisher can authorize; bearer and admin-only cannot", async () => {
   let calls = 0;
@@ -950,6 +954,54 @@ test("trusted release service alone can prepare, claim, and transition", async (
   assert.equal((await productionClaimEndpoint(req("/edit/v1/prod/releases/claim", {}),env,devDaemon)).status,403);
   assert.deepEqual(calls.map((x) => x[0]),
     ["prepare","prepare","frontier","claim","restore-claim","renew","transition"]);
+});
+
+test("release observer can read only status frontier and audit", async () => {
+  const calls = [];
+  const stub = {
+    getProductionRelease:async (id) => (calls.push(["status",id]),
+      { id,state:"prepared",base_sha:"a".repeat(40),candidate_sha:"b".repeat(40) }),
+    productionPreparationContext:async () => (calls.push(["frontier"]),
+      { active_release:null,base_sha:"a".repeat(40),batches:[] }),
+    productionReleaseAudit:async () => (calls.push(["audit"]),
+      { counts:{},invariants:{},active_releases:[] }),
+    prepareProductionRelease:async () => { throw new Error("observer reached mutation"); },
+    claimAuthorizedProductionRelease:async () => { throw new Error("observer reached mutation"); },
+    claimProductionRestore:async () => { throw new Error("observer reached mutation"); },
+    renewProductionReleaseLease:async () => { throw new Error("observer reached mutation"); },
+    transitionProductionRelease:async () => { throw new Error("observer reached mutation"); },
+  };
+  const env = { EDIT_ORIGIN:"https://edit.example",PROD_RELEASE_LEDGER:"true",
+    EDITOR:{ getByName:() => stub } };
+  const observer = { editor:"service:observer",credential_channel:"bearer",
+    scopes:scopes(false,false,false,true) };
+  assert.equal((await publisherReleaseEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/status?id=release-1"),env,observer)).status,200);
+  assert.equal((await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,observer)).status,200);
+  assert.equal((await productionAuditEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/audit"),env,observer)).status,200);
+  const postMutation = (path, body={}) => new Request("https://edit.example"+path,{
+    method:"POST",headers:{ "Content-Type":"application/json","X-Edit-Request":"1",
+      Origin:"https://edit.example","Sec-Fetch-Site":"same-origin" },body:JSON.stringify(body) });
+  const binding = { id:"release-1",idempotency_key:"prepare-1",target_batch_id:"batch-1",
+    base_sha:"base",candidate_sha:"candidate",generator_id:"gen",evidence_hash:"evidence",
+    manifest_hash:"manifest",ancestry_verified:true };
+  assert.equal((await productionPrepareEndpoint(postMutation(
+    "/edit/v1/prod/releases/prepare",binding),env,observer)).status,403);
+  assert.equal((await productionClaimEndpoint(postMutation(
+    "/edit/v1/prod/releases/claim"),env,observer)).status,403);
+  assert.equal((await productionRestoreClaimEndpoint(postMutation(
+    "/edit/v1/prod/releases/restore-claim",{id:"release-1"}),env,observer)).status,403);
+  assert.equal((await productionRenewEndpoint(postMutation(
+    "/edit/v1/prod/releases/renew",{id:"release-1",fencing_token:"fence"}),env,observer)).status,403);
+  assert.equal((await productionTransitionEndpoint(postMutation(
+    "/edit/v1/prod/releases/transition",{id:"release-1",state:"verified",fencing_token:"fence"}),env,observer)).status,403);
+  assert.deepEqual(calls,[["status","release-1"],["frontier"],["audit"]]);
+
+  const cookieObserver = { ...observer,credential_channel:"cookie" };
+  assert.equal((await productionAuditEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/audit"),env,cookieObserver)).status,403);
 });
 
 test("schema-v2 preparation idempotency binds the operation membership", async () => {

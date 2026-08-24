@@ -46,6 +46,7 @@ DAEMON_ROOT="${SONSTENG_DAEMON_ROOT:-$HOME/.local/share/sonsteng-daemon/checkout
 CANONICAL_BRANCH="${APPLY_DEPLOY_BRANCH:-main}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sonsteng-apply/env"
+OBSERVER_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/sonsteng-release-observer/env"
 APPLY_SERVICE="sonsteng-apply.service"
 APPLY_TIMER="sonsteng-apply.timer"
 EDIT_SERVICE="sonsteng-editorial.service"
@@ -57,7 +58,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   rm -f "$UNIT_DIR/$APPLY_SERVICE" "$UNIT_DIR/$APPLY_TIMER" \
         "$UNIT_DIR/$EDIT_SERVICE" "$UNIT_DIR/$EDIT_TIMER"
   systemctl --user daemon-reload
-  echo "[apply-daemon] uninstalled timers/services (env file left at $ENV_FILE)."
+  echo "[apply-daemon] uninstalled timers/services (env files left at $ENV_FILE and $OBSERVER_ENV_FILE)."
   exit 0
 fi
 
@@ -74,6 +75,26 @@ APPLY_DEPLOY_BRANCH=main
 EOF
   echo "[apply-daemon] wrote a template env file: $ENV_FILE"
   echo "[apply-daemon] -> fill EDIT_SERVICE_TOKEN (EDIT_TOKEN_ADMIN from ~/.secrets/sonsteng-editor-tokens), then re-run."
+fi
+
+# The PROD observer is a different least-privilege principal in its own 0600
+# file. It may call only release status/frontier/audit GETs. Never put the DEV
+# admin token or the production release-service token here.
+mkdir -p "$(dirname "$OBSERVER_ENV_FILE")"
+if [[ ! -f "$OBSERVER_ENV_FILE" ]]; then
+  umask 077
+  cat > "$OBSERVER_ENV_FILE" <<EOF
+# Dedicated read-only production-ledger observer. Never reuse EDIT_SERVICE_TOKEN
+# or SONSTENG_PROD_RELEASE_BEARER.
+SONSTENG_PROD_OBSERVER_BEARER=
+EOF
+  echo "[apply-daemon] wrote observer template: $OBSERVER_ENV_FILE"
+fi
+if [[ ! -f "$OBSERVER_ENV_FILE" || -L "$OBSERVER_ENV_FILE" \
+      || "$(stat -c '%a' "$OBSERVER_ENV_FILE")" != "600" \
+      || "$(stat -c '%u' "$OBSERVER_ENV_FILE")" != "$(id -u)" ]]; then
+  echo "[apply-daemon] observer env must be an owned, regular, non-symlink mode-0600 file: $OBSERVER_ENV_FILE" >&2
+  exit 1
 fi
 
 # ---- dedicated daemon checkout (git worktree on the canonical branch) ------- #
@@ -123,6 +144,7 @@ Description=Sonsteng direct-apply daemon (flush accepted editor edits -> canonic
 [Service]
 Type=oneshot
 EnvironmentFile=$ENV_FILE
+EnvironmentFile=$OBSERVER_ENV_FILE
 Environment=HOME=$HOME
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/bin/python3 "$DAEMON_ROOT/tools/direct_apply_daemon.py"

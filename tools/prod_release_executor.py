@@ -29,6 +29,10 @@ class ReleaseError(RuntimeError):
     pass
 
 
+class ObserverError(RuntimeError):
+    """Bounded failure from the read-only production-ledger observer."""
+
+
 BOUNDED_PROVIDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
@@ -440,6 +444,82 @@ class LedgerHTTP:
         if lease_ms is not None:
             body["lease_ms"] = lease_ms
         return self._request("/edit/v1/prod/releases/renew", body)
+
+
+class ReleaseObserverHTTP:
+    """GET-only, allowlisted production-ledger client.
+
+    This intentionally does not inherit from ``LedgerHTTP``: a caller holding
+    the observer bearer has no method that can construct a mutation request.
+    Provider operations and authored release operations are outside this
+    adapter's contract.
+    """
+
+    MAX_RESPONSE_BYTES = 1024 * 1024
+    _FIXED_GETS = frozenset({
+        "/edit/v1/prod/releases/frontier",
+        "/edit/v1/prod/releases/audit",
+    })
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+            return None
+
+    def __init__(self, base_url, bearer, opener=None, timeout=15):
+        _require_https_url(base_url, "release observer")
+        if not isinstance(bearer, str) or not bearer or len(bearer) > 4096:
+            raise ObserverError("observer credential unavailable")
+        self.base_url = base_url.rstrip("/")
+        self.__bearer = bearer
+        self.__opener = opener or urllib.request.build_opener(self._NoRedirect).open
+        self.__timeout = timeout
+
+    def __get(self, path):
+        if path not in self._FIXED_GETS and not path.startswith(
+                "/edit/v1/prod/releases/status?id="):
+            raise ObserverError("observer endpoint is not allowlisted")
+        request = urllib.request.Request(self.base_url + path, method="GET", headers={
+            "Authorization":"Bearer " + self.__bearer,
+            "User-Agent":SERVICE_USER_AGENT,
+        })
+        try:
+            with self.__opener(request, timeout=self.__timeout) as response:
+                raw = response.read(self.MAX_RESPONSE_BYTES + 1)
+        except (TimeoutError, urllib.error.URLError, urllib.error.HTTPError, OSError):
+            raise ObserverError("observer request unavailable") from None
+        if len(raw) > self.MAX_RESPONSE_BYTES:
+            raise ObserverError("observer response exceeded bound")
+        try:
+            result = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            raise ObserverError("observer response malformed") from None
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise ObserverError("observer response rejected")
+        return result
+
+    def preparation_context(self):
+        result = self.__get("/edit/v1/prod/releases/frontier")
+        context = result.get("context")
+        if not isinstance(context, dict):
+            raise ObserverError("observer frontier malformed")
+        return context
+
+    def audit(self):
+        result = self.__get("/edit/v1/prod/releases/audit")
+        audit = result.get("audit")
+        if not isinstance(audit, dict):
+            raise ObserverError("observer audit malformed")
+        return audit
+
+    def get_release(self, release_id):
+        if not isinstance(release_id, str) or not BOUNDED_PROVIDER_ID_RE.fullmatch(release_id):
+            raise ObserverError("observer release id malformed")
+        result = self.__get("/edit/v1/prod/releases/status?id=" +
+                            urllib.parse.quote(release_id, safe=""))
+        release = result.get("release")
+        if not isinstance(release, dict):
+            raise ObserverError("observer release malformed")
+        return release
 
 
 class GitRefAdapter:

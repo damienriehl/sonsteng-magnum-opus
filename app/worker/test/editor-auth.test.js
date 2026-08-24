@@ -13,10 +13,11 @@ const ENV = {
   SESSION_SIGNING_KEY: SIGNING,
   EDIT_ORIGIN: "https://worker.example.com",
   EDIT_TOKEN_SCOPES: JSON.stringify({ john: { edit: 1, instructor: 1 }, admin: { admin: 1 },
-    release: { release_service: 1 } }),
+    release: { release_service: 1 }, observer: { release_observer: 1 } }),
   EDIT_TOKEN_JOHN: "john-opaque-token-value-123",
   EDIT_TOKEN_ADMIN: "admin-opaque-token-value-999",
   EDIT_TOKEN_RELEASE: "release-opaque-token-value-456",
+  EDIT_TOKEN_OBSERVER: "observer-opaque-token-value-789",
 };
 
 function reqWithCookie(value, headers = {}) {
@@ -43,6 +44,11 @@ test("opaque token resolves to the correct scope record", async () => {
   assert.equal(release.slot, "release");
   assert.equal(release.record.release_service.granted, true);
   assert.equal(release.record.admin.granted, false);
+
+  const observer = await resolveOpaqueToken(ENV, "observer-opaque-token-value-789");
+  assert.equal(observer.record.release_observer.granted, true);
+  assert.equal(observer.record.release_service.granted, false);
+  assert.equal(observer.record.admin.granted, false);
 });
 
 test("an unknown / empty token resolves to nothing", async () => {

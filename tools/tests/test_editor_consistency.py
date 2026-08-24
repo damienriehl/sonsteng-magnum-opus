@@ -34,6 +34,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import build_site as bs  # noqa: E402
 import editor_consistency as ec  # noqa: E402
 
+
+def test_daemon_summary_is_text_free_and_preserves_u18_categories():
+    clean = ec.ConsistencyResult(["matter"],[],[],0,"",[])
+    assert ec.daemon_summary(clean) == {"status":"clean","stale_count":0,
+        "model_count":0,"filed":0}
+    flagged = ec.ConsistencyResult(["matter"],[{"message":"private"}],[],1,"",[])
+    assert ec.daemon_summary(flagged) == {"status":"flagged","stale_count":1,
+        "model_count":0,"filed":1}
+    bad = ec.ConsistencyResult([],[],[],0,"bad_since",[])
+    assert ec.daemon_summary(bad)["status"] == "bad-revision"
+    assert "private" not in json.dumps(ec.daemon_summary(flagged))
+
 SLUG = "m03-tort-meridian"
 MATTER_REL = "data/matters/%s/matter.json" % SLUG
 BIZ_REL = "data/matters/%s/business/business.json" % SLUG

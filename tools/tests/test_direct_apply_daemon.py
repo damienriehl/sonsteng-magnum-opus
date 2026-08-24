@@ -164,6 +164,78 @@ class TestApplyBatchOrdering(unittest.TestCase):
         self.assertFalse(st["batch_reviewed"])  # editorial window opens
 
 
+class TestLegacyU18Consistency(unittest.TestCase):
+    def test_main_rejects_dev_bearer_reused_as_observer(self):
+        env = {dad.ENV_API_BASE:"https://edit.example/edit/v1",
+               dad.ENV_SERVICE_TOKEN:"same-secret",
+               dad.ENV_OBSERVER_TOKEN:"same-secret"}
+        with mock.patch.dict(os.environ,env,clear=True), \
+             mock.patch("sys.stderr",new=io.StringIO()) as err:
+            self.assertEqual(dad.main(["--dry-run","--no-lock"]),2)
+            self.assertIn("must be distinct",err.getvalue())
+
+    def test_successful_accepted_batch_uses_exact_frontier_and_records_clean(self):
+        with tempfile.TemporaryDirectory() as d:
+            sp = os.path.join(d,"state.json")
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            calls,alerts = [],[]
+            result = _run(rec,state_path=sp,
+                fetch_prod_frontier=lambda: "a"*40,
+                do_consistency=lambda sha: (calls.append(sha) or {
+                  "status":"clean","stale_count":0,"model_count":0,"filed":0}),
+                consistency_notify=lambda status,batch: alerts.append((status,batch)))
+            state = dad.load_state(sp)
+        self.assertEqual(result.reason,"applied")
+        self.assertEqual(calls,["a"*40])
+        self.assertEqual(state["legacy_u18"]["status"],"clean")
+        self.assertEqual(state["legacy_u18"]["frontier_sha"],"a"*40)
+        self.assertEqual(alerts,[("clean",result.batch_id)])
+        self.assertEqual([step[0] for step in result.steps].count("legacy_u18"),1)
+
+    def test_flagged_missing_bad_revision_and_checker_error_are_nonfatal(self):
+        scenarios = [
+          (lambda: "b"*40,lambda _sha:{"status":"flagged","stale_count":2,
+             "model_count":0,"filed":2},"flagged"),
+          (lambda: None,lambda _sha:None,"missing-baseline"),
+          (lambda: "c"*40,lambda _sha:{"status":"bad-revision"},"bad-revision"),
+          (lambda: "d"*40,lambda _sha:(_ for _ in ()).throw(RuntimeError("private")),
+             "checker-error"),
+        ]
+        for frontier,checker,expected in scenarios:
+            with self.subTest(expected),tempfile.TemporaryDirectory() as d:
+                sp = os.path.join(d,"state.json")
+                rec = Recorder(rows=[row("aaaaaaaa")])
+                result = _run(rec,state_path=sp,fetch_prod_frontier=frontier,
+                    do_consistency=checker,consistency_notify=lambda *_:None)
+                state = dad.load_state(sp)
+                self.assertEqual(result.reason,"applied")
+                self.assertEqual(state["legacy_u18"]["status"],expected)
+                self.assertNotIn("private",json.dumps(state))
+
+    def test_no_accepted_and_dry_run_never_invoke_or_persist(self):
+        for rows,dry in [([],False),([row("aaaaaaaa")],True)]:
+            with self.subTest(dry=dry),tempfile.TemporaryDirectory() as d:
+                sp = os.path.join(d,"state.json")
+                rec = Recorder(rows=rows)
+                called=[]
+                _run(rec,state_path=sp,dry_run=dry,
+                    fetch_prod_frontier=lambda: called.append("frontier"),
+                    do_consistency=lambda _sha: called.append("checker"))
+                self.assertEqual(called,[])
+                self.assertNotIn("legacy_u18",dad.load_state(sp))
+
+    def test_completed_frontier_accepts_context_or_active_base_only(self):
+        class Observer:
+            def __init__(self,context): self.context=context
+            def preparation_context(self): return self.context
+        self.assertEqual(dad.completed_production_frontier(
+            Observer({"base_sha":"a"*40})),"a"*40)
+        self.assertEqual(dad.completed_production_frontier(
+            Observer({"active_release":{"base_sha":"b"*40}})),"b"*40)
+        self.assertIsNone(dad.completed_production_frontier(
+            Observer({"base_sha":"not-a-revision"})))
+
+
 class TestFailurePath(unittest.TestCase):
     def test_apply_failure_heartbeats_false_and_alerts_ids_only(self):
         with tempfile.TemporaryDirectory() as d:
