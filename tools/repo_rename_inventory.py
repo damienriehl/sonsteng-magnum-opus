@@ -19,10 +19,6 @@ HISTORICAL_ROOTS = (
     "docs/handoffs/",
     "docs/evidence/",
 )
-TEXT_SUFFIXES = {
-    ".css", ".html", ".js", ".json", ".jsonc", ".md", ".mjs", ".py",
-    ".service", ".sh", ".toml", ".txt", ".yaml", ".yml",
-}
 TRANSITION_STEPS = (
     "confirm-quiet-window",
     "confirm-no-active-release",
@@ -113,10 +109,16 @@ def _read_reference_rows(
         path = Path(relative)
         if path.is_absolute() or ".." in path.parts:
             raise InventoryError("tracked path escapes repository")
-        if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in {"README", "Makefile"}:
-            continue
+        candidate = repo / path
         try:
-            text = (repo / path).read_text(encoding="utf-8")
+            data = (
+                candidate.readlink().as_posix().encode("utf-8")
+                if candidate.is_symlink()
+                else candidate.read_bytes()
+            )
+            if b"\0" in data:
+                continue
+            text = data.decode("utf-8")
         except UnicodeDecodeError:
             continue
         for line_number, line in enumerate(text.splitlines(), start=1):

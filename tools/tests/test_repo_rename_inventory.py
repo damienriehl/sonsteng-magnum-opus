@@ -78,6 +78,24 @@ def test_unclassified_current_name_reference_fails(tmp_path):
         build(tmp_path, [path])
 
 
+def test_extensionless_active_reference_is_not_skipped(tmp_path):
+    path = "OPERATIONS"
+    write(tmp_path, path, "current-repo\n")
+    with pytest.raises(inventory.InventoryError, match="OPERATIONS:1"):
+        build(tmp_path, [path])
+
+
+def test_symlink_is_scanned_without_following_its_target(tmp_path):
+    outside = tmp_path.parent / "outside-rename-inventory.txt"
+    outside.write_text("private current-repo source text\n")
+    link = tmp_path / "README-link"
+    link.symlink_to(outside)
+    # The target path contains no current-name reference, so the outside file's
+    # content must not be read and surfaced as an active occurrence.
+    report = build(tmp_path, ["README-link"])
+    assert report["references"] == []
+
+
 def test_manifest_contains_every_controlled_transition_step(tmp_path):
     report = build(tmp_path, [])
     assert report["transition_steps"] == [
