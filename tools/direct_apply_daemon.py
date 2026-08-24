@@ -51,10 +51,12 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_push  # noqa: E402  (reuse resolve_topic/publish_ntfy — never modified)
@@ -71,6 +73,7 @@ ENV_SERVICE_TOKEN = "EDIT_SERVICE_TOKEN"  # admin/service bookmark token (opaque
 ENV_DEPLOY_BRANCH = "APPLY_DEPLOY_BRANCH"  # canonical branch to publish; default below
 ENV_STATE_FILE = "SONSTENG_APPLY_STATE"   # override the daemon state path
 ENV_IDLE_MIN = "APPLY_EDITORIAL_IDLE_MIN"  # session-end idle threshold (min); default 30
+ENV_OBSERVER_TOKEN = "SONSTENG_PROD_OBSERVER_BEARER"  # dedicated read-only PROD bearer
 
 DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
 SERVICE_USER_AGENT = "sonsteng-apply-daemon/1.0"
@@ -554,6 +557,77 @@ def notify_failure(failed_ids, *, topic_resolver=None, publish=None):
         publish(topic, title, body, None, priority="high", tags="rotating_light")
 
 
+def notify_consistency(status, batch_id, *, topic_resolver=None, publish=None):
+    """Best-effort, text-free U18 alert. Clean results need no interruption."""
+    if status == "clean":
+        return
+    topic_resolver = topic_resolver or digest_push.resolve_topic
+    publish = publish or digest_push.publish_ntfy
+    title = "Sonsteng consistency check: %s" % status
+    body = ("Post-apply legacy U18 result for batch %s: %s. "
+            "The DEV apply remains complete; this result cannot authorize publication."
+            % (batch_id, status))
+    with contextlib.suppress(Exception):
+        publish(topic_resolver(), title, body, None, priority="high",
+                tags="mag,warning")
+
+
+def completed_production_frontier(observer):
+    """Read the exact completed PROD baseline through observer-only authority."""
+    context = observer.preparation_context()
+    candidate = context.get("base_sha")
+    if candidate is None and isinstance(context.get("active_release"), dict):
+        candidate = context["active_release"].get("base_sha")
+    if not isinstance(candidate, str) or not re.fullmatch(r"[0-9a-f]{40}", candidate):
+        return None
+    return candidate
+
+
+def run_consistency_from(frontier_sha, *, api_base, token, repo_root=REPO_ROOT):
+    """Invoke the existing checker; its service bearer may file DEV flags only."""
+    import editor_consistency
+    result = editor_consistency.run(api_base=api_base, token=token,
+                                    since=frontier_sha, repo_root=repo_root)
+    return editor_consistency.daemon_summary(result)
+
+
+@dataclasses.dataclass(frozen=True)
+class LegacyU18Hooks:
+    fetch_frontier: Callable[[], object]
+    check: Callable[[str], object]
+    notify: Callable[[str, str], object] = notify_consistency
+
+
+def _legacy_u18_result(hooks):
+    """Collect one bounded U18 result; injected failures never escape."""
+    summary = {"status":"checker-error","stale_count":0,
+               "model_count":0,"filed":0}
+    frontier_sha = None
+    try:
+        frontier_sha = hooks.fetch_frontier()
+        if frontier_sha is None:
+            summary["status"] = "missing-baseline"
+        elif not isinstance(frontier_sha,str) or not re.fullmatch(r"[0-9a-f]{40}",frontier_sha):
+            frontier_sha = None
+            summary["status"] = "bad-revision"
+        else:
+            candidate = hooks.check(frontier_sha)
+            if not isinstance(candidate, dict) or candidate.get("status") not in {
+                    "clean","flagged","bad-revision"}:
+                raise ValueError("unbounded consistency result")
+            numbers = [candidate.get(key,0) for key in
+                       ("stale_count","model_count","filed")]
+            if any(not isinstance(value,int) or isinstance(value,bool) or
+                   value < 0 or value > 1_000_000 for value in numbers):
+                raise ValueError("unbounded consistency counts")
+            summary = {"status":candidate["status"],
+                "stale_count":numbers[0],"model_count":numbers[1],"filed":numbers[2]}
+    except Exception:
+        summary = {"status":"checker-error","stale_count":0,
+                   "model_count":0,"filed":0}
+    return frontier_sha, summary
+
+
 # --------------------------------------------------------------------------- #
 # Orchestration (thin; every side effect injected -> fully unit-testable)
 # --------------------------------------------------------------------------- #
@@ -603,7 +677,8 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         heartbeat=None, notify=None, editorial=None, out=None,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
         revert_record=None,
-        clean_site=None, do_deploy_worker=None, do_scoped=None):
+        clean_site=None, do_deploy_worker=None, do_scoped=None,
+        legacy_u18=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -799,6 +874,19 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     state["last_batch_id"] = batch_id
     state["last_batch_size"] = len(accepted)
     state["batch_reviewed"] = False
+
+    # Legacy U18 runs only after a real, accepted batch has completed canonical
+    # merge + DEV publication. It observes the exact last completed PROD SHA via
+    # a separate read-only bearer; its result is evidence, never publication
+    # authority, and every failure is nonfatal to the already-completed apply.
+    if legacy_u18 is not None:
+        frontier_sha, summary = _legacy_u18_result(legacy_u18)
+        state["legacy_u18"] = {"batch_id":batch_id,"status":summary["status"],
+            "frontier_sha":frontier_sha,"stale_count":summary["stale_count"],
+            "model_count":summary["model_count"],"filed":summary["filed"],"at":ts}
+        steps.append(("legacy_u18", dict(state["legacy_u18"])))
+        with contextlib.suppress(Exception):
+            legacy_u18.notify(summary["status"], batch_id)
     save_state(state_path, state)
 
     print("[daemon] applied %d, rebuilt, deployed %s, heartbeat sent."
@@ -822,11 +910,18 @@ def main(argv=None):
 
     api_base = os.environ.get(ENV_API_BASE)
     token = os.environ.get(ENV_SERVICE_TOKEN)
+    observer_token = os.environ.get(ENV_OBSERVER_TOKEN)
     idle = int(os.environ.get(ENV_IDLE_MIN, DEFAULT_IDLE_MINUTES) or DEFAULT_IDLE_MINUTES)
 
     lock_cm = contextlib.nullcontext() if args.no_lock else daemon_lock()
     try:
         with lock_cm:
+            if observer_token and token and observer_token == token:
+                raise DaemonError("release observer token must be distinct from the DEV apply bearer")
+            observer = None
+            if observer_token and api_base:
+                from prod_release_executor import ReleaseObserverHTTP
+                observer = ReleaseObserverHTTP(api_base.rsplit("/edit/v1",1)[0],observer_token)
             result = run(api_base=api_base, token=token, branch=args.branch,
                          dry_run=args.dry_run, state_path=args.state_file,
                          idle_minutes=idle,
@@ -840,7 +935,12 @@ def main(argv=None):
                              api_base, token, rid, st),
                          revert_record=lambda evidence, action: record_revert_mutation(
                              api_base, token, evidence, action),
-                         do_scoped=lambda: dispatch_scoped_drafts())
+                         do_scoped=lambda: dispatch_scoped_drafts(),
+                         legacy_u18=LegacyU18Hooks(
+                             fetch_frontier=(lambda: completed_production_frontier(observer))
+                                if observer else (lambda: None),
+                             check=lambda sha: run_consistency_from(
+                                 sha,api_base=api_base,token=token)))
     except DaemonError as exc:
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2

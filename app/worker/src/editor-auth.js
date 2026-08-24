@@ -3,7 +3,8 @@
 //
 // SCOPE MODEL (Decision 2 + Enhancement item 2):
 //   * One opaque token maps to a scope record:
-//       { edit: {granted, ver}, instructor: {granted, ver}, admin: {granted, ver} }
+//       { edit, instructor, admin, publisher, release_service, release_observer }
+//     where every scope is {granted, ver}.
 //   * John's single bookmark carries edit+instructor (one token, two scopes);
 //     Damien's admin token carries admin only. admin is NEVER reachable from an
 //     edit/instructor token (separate secret, separate record).
@@ -52,9 +53,10 @@ const EMPTY_SCOPES = Object.freeze({
   admin: { granted: false, ver: 0 },
   publisher: { granted: false, ver: 0 },
   release_service: { granted: false, ver: 0 },
+  release_observer: { granted: false, ver: 0 },
 });
 
-// Parse EDIT_TOKEN_SCOPES (JSON) into a Map slot -> { edit?:ver, instructor?:ver, admin?:ver }.
+// Parse EDIT_TOKEN_SCOPES into a Map of slot -> granted scope versions.
 function parseScopeConfig(env) {
   let cfg;
   try {
@@ -69,12 +71,14 @@ function parseScopeConfig(env) {
     for (const s of Object.keys(EMPTY_SCOPES)) {
       if (scopes && typeof scopes[s] === "number") rec[s] = scopes[s];
     }
+    if (rec.release_observer != null &&
+        Object.keys(rec).some((scope) => scope !== "release_observer")) continue;
     out.set(slot.toLowerCase(), rec);
   }
   return out;
 }
 
-// Build the { edit, instructor, admin } record from a slot's granted scopes.
+// Build a complete all-known-scopes record from a slot's grants.
 function scopeRecord(grants) {
   const rec = Object.fromEntries(Object.keys(EMPTY_SCOPES)
     .map((scope) => [scope, { granted: false, ver: 0 }]));
@@ -92,6 +96,7 @@ function scopeStamp(slot, grants) {
   const names = ["edit", "instructor", "admin"];
   if (grants.publisher != null) names.push("publisher");
   if (grants.release_service != null) names.push("release_service");
+  if (grants.release_observer != null) names.push("release_observer");
   const parts = names.map((s) => `${s}:${grants[s] ?? "-"}`);
   return `${slot}|${parts.join(",")}`;
 }
@@ -104,6 +109,7 @@ export async function resolveOpaqueToken(env, presented) {
   if (typeof presented !== "string" || presented.length === 0) return null;
   const config = parseScopeConfig(env);
   let matched = null;
+  let matchCount = 0;
   for (const [slot, grants] of config) {
     const secret = env["EDIT_TOKEN_" + slot.toUpperCase()];
     if (typeof secret !== "string" || secret.length === 0) {
@@ -112,11 +118,16 @@ export async function resolveOpaqueToken(env, presented) {
       continue;
     }
     const eq = await constantTimeEqualStr(presented, secret);
-    if (eq && !matched) {
-      matched = { slot, record: scopeRecord(grants), stamp: scopeStamp(slot, grants) };
+    if (eq) {
+      matchCount += 1;
+      if (!matched) {
+        matched = { slot, record: scopeRecord(grants), stamp: scopeStamp(slot, grants) };
+      }
     }
   }
-  return matched;
+  // Duplicate secrets make authority ambiguous. Fail closed instead of
+  // inheriting whichever slot appears first in configuration order.
+  return matchCount === 1 ? matched : null;
 }
 
 // ---- signed cookie (slot + stamp, never the raw token) ----------------------

@@ -70,6 +70,53 @@ Do not put credentials directly in command arguments. The harness emits only a
 bounded JSON receipt (provider, event/output counts, normalized usage, and
 replay result); it never emits response text, session tokens, or secret values.
 
+### Explicit assessment signer UAT preparation
+
+`test/assessment-live-uat.mjs` prepares the one disposable formative audit used
+by Packet A2. Merely importing the module or running its tests performs no
+network request and creates no audit. A live audit is created only by explicitly
+invoking the command. From `app/worker/`, run:
+
+```bash
+PROVIDER=google CREDENTIALS_FILE=/absolute/path/to/assessment-uat.json node test/assessment-live-uat.mjs
+```
+
+The credential file must be a regular mode-0600 JSON file in the same format as
+the streaming harness, and both values are required:
+
+```json
+{ "api_key": "<provider key>", "demo_bypass_token": "<DEV bypass>" }
+```
+
+Protected standard input is also supported: set `CREDENTIALS_STDIN=1` and pipe
+the same JSON object from the secret manager. This command deliberately rejects
+direct API-key environment variables and never accepts credentials or memo text
+in command arguments. `PROVIDER` selects `anthropic`, `openai`, or `google`; it
+is not secret. The fixed evidence is fictional, non-identifying, and covers the
+seven canonical memo headings. Operator-supplied evidence cannot enter the
+request.
+
+Before sending credentials, the preparer requires the exact DEV Worker target
+and an approved public request origin. It uses bounded timeouts, manual redirect
+handling, CORS-origin confirmation, bounded JSON bodies, and exact credential
+reflection checks across response headers and bodies. The response must remain
+formative-only and contain each canonical heading exactly once with its own
+integer 1–7 score. Missing or duplicate headings, malformed JSON, non-formative
+results, unsafe audit IDs, redirects, timeouts, HTTP failures, wrong origins, or
+credential reflection fail with a bounded message that never includes the
+response body.
+
+Success prints exactly one JSON object containing only the non-secret audit ID
+and its fixed Access-protected review URL:
+
+```json
+{"assessment_audit_id":"memo-assessment-…","assessment_url":"https://edit.legalpracticum.org/edit/assessments/memo-assessment-…"}
+```
+
+The preparer does not authenticate to Cloudflare Access, open the protected
+page, submit an attributed override, or record human sign-off. Those remain the
+supervised `damienadmin` acts documented in Packet A2.
+
 ---
 
 ## BYOK — bring your own key (provider-agnostic)

@@ -323,6 +323,18 @@ test("loads credentials from protected environment variables", async () => {
   assert.deepEqual(credentials, { apiKey: API_KEY, bypassToken: BYPASS });
 });
 
+test("callers may require protected file or stdin and reject direct environment credentials", async () => {
+  await assert.rejects(
+    loadCredentials({
+      provider: "openai",
+      env: { OPENAI_API_KEY: API_KEY, DEMO_BYPASS_TOKEN: BYPASS },
+      allowDirectEnvironment: false,
+    }),
+    (error) => error.code === "credentials" &&
+      !error.message.includes(API_KEY) && !error.message.includes(BYPASS),
+  );
+});
+
 test("loads a credential JSON object from stdin without echoing it", async () => {
   const stdin = Readable.from([JSON.stringify({ api_key: API_KEY, demo_bypass_token: BYPASS })]);
   const credentials = await loadCredentials({
@@ -347,6 +359,20 @@ test("accepts only a mode-0600 regular credential file", async () => {
     await assert.rejects(
       loadCredentials({ provider: "google", env: { CREDENTIALS_FILE: path } }),
       (error) => error.code === "credentials" && !error.message.includes(API_KEY),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects an oversized credential file before parsing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sonsteng-stream-smoke-"));
+  const path = join(directory, "credentials.json");
+  try {
+    await writeFile(path, "x".repeat(64 * 1024 + 1), { mode: 0o600 });
+    await assert.rejects(
+      loadCredentials({ provider: "google", env: { CREDENTIALS_FILE: path } }),
+      (error) => error.code === "credentials" && /64 KiB/.test(error.message),
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

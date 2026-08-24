@@ -38,8 +38,8 @@ IDEMPOTENCY: the suggestion id is derived from (source_ref, fact_path,
 old_literal) — re-runs re-file the same ids and the Worker dedupes; no
 duplicate flags ever accumulate.
 
-NOT WIRED into the direct-apply daemon tick — that wiring lands with U8's
-polish. Runnable standalone:
+WIRED into the direct-apply daemon after a successful accepted DEV batch; it
+remains runnable standalone for read-only diagnosis:
 
     python3 tools/editor_consistency.py --matter m03-tort-meridian \
         --since BASE..HEAD [--dry-run] [--no-model]
@@ -503,6 +503,17 @@ class ConsistencyResult:
     filed: int
     model_degraded: str
     payloads: list
+
+
+def daemon_summary(result):
+    """Return the bounded, text-free U18 outcome persisted by the apply daemon."""
+    if result.model_degraded in {"missing_since", "bad_since"}:
+        return {"status":"bad-revision","stale_count":0,"model_count":0,"filed":0}
+    stale_count = len(result.stale_flags)
+    model_count = len(result.model_flags)
+    return {"status":"flagged" if stale_count or model_count else "clean",
+            "stale_count":stale_count,"model_count":model_count,
+            "filed":int(result.filed)}
 
 
 def run(*, api_base=None, token=None, matter=None, since=None, dry_run=False,

@@ -13,10 +13,11 @@ const ENV = {
   SESSION_SIGNING_KEY: SIGNING,
   EDIT_ORIGIN: "https://worker.example.com",
   EDIT_TOKEN_SCOPES: JSON.stringify({ john: { edit: 1, instructor: 1 }, admin: { admin: 1 },
-    release: { release_service: 1 } }),
+    release: { release_service: 1 }, observer: { release_observer: 1 } }),
   EDIT_TOKEN_JOHN: "john-opaque-token-value-123",
   EDIT_TOKEN_ADMIN: "admin-opaque-token-value-999",
   EDIT_TOKEN_RELEASE: "release-opaque-token-value-456",
+  EDIT_TOKEN_OBSERVER: "observer-opaque-token-value-789",
 };
 
 function reqWithCookie(value, headers = {}) {
@@ -43,12 +44,38 @@ test("opaque token resolves to the correct scope record", async () => {
   assert.equal(release.slot, "release");
   assert.equal(release.record.release_service.granted, true);
   assert.equal(release.record.admin.granted, false);
+
+  const observer = await resolveOpaqueToken(ENV, "observer-opaque-token-value-789");
+  assert.equal(observer.record.release_observer.granted, true);
+  assert.equal(observer.record.release_service.granted, false);
+  assert.equal(observer.record.admin.granted, false);
 });
 
 test("an unknown / empty token resolves to nothing", async () => {
   assert.equal(await resolveOpaqueToken(ENV, "not-a-real-token"), null);
   assert.equal(await resolveOpaqueToken(ENV, ""), null);
   assert.equal(await resolveOpaqueToken(ENV, null), null);
+});
+
+test("a secret duplicated across slots fails closed regardless of slot order", async () => {
+  const duplicate = "shared-observer-and-release-secret";
+  for (const scopes of [
+    { observer:{ release_observer:1 }, release:{ release_service:1 } },
+    { release:{ release_service:1 }, observer:{ release_observer:1 } },
+  ]) {
+    const env = { ...ENV,EDIT_TOKEN_SCOPES:JSON.stringify(scopes),
+      EDIT_TOKEN_OBSERVER:duplicate,EDIT_TOKEN_RELEASE:duplicate };
+    assert.equal(await resolveOpaqueToken(env, duplicate), null);
+  }
+});
+
+test("release observer authority cannot be combined with another scope", async () => {
+  for (const extra of ["release_service","admin","publisher","edit","instructor"]) {
+    const env = { ...ENV,EDIT_TOKEN_SCOPES:JSON.stringify({
+      observer:{ release_observer:1,[extra]:1 },
+    }) };
+    assert.equal(await resolveOpaqueToken(env, ENV.EDIT_TOKEN_OBSERVER), null);
+  }
 });
 
 test("cookie round-trips and carries only the slot + stamp (not the raw token)", async () => {

@@ -46,19 +46,26 @@ Since the prior handoffs:
 - CE review found six implementation/test gaps; all were validated and fixed. GitHub review then
   found one additional legal-JSON-escape mismatch; it was fixed semantically, covered by regression
   tests, answered, and resolved before merge.
+- The August 24 autonomous-readiness change set implements automatic dual strictness, committed-tree
+  migration verification and compensation, GET-only Cloudflare pair inspection, read-only Publisher
+  readiness, explicit protected assessment-UAT preparation, aggregate calibration analysis, read-only
+  repository-rename inventory, and post-apply U18 consistency wiring. Its exact PR and merge SHA are
+  recorded by the post-merge closeout update rather than guessed here.
 
 ## De-duplicated remaining queue
 
 ### Agent-executable only after an external prerequisite
 
-1. **U16b date-offset enforcement** — after the supervised Day Zero corpus rewrite produces
-   accepted sidecars.
-2. **U18 consistency-daemon verification** — after the Publisher workflow produces a real published
-   revision.
+1. **U16b live acceptance evidence** — automatic date-offset and identifier enforcement is
+   implemented; observe it after the supervised Day Zero rewrite produces accepted sidecars and the
+   representation marker changes.
+2. **U18 live acceptance evidence** — the daemon hook and durable result states are implemented;
+   inspect the first result after the Publisher workflow produces a real published revision and an
+   accepted DEV batch.
 3. **Source ingestion** — after the files and applicable permissions/provenance arrive.
-4. **Combined production corpus migration** — the implementation and copied-corpus rehearsal are
-   merged; live execution still waits for the scheduled freeze window. The repository rename follows
-   only after that combined migration is accepted.
+4. **Combined production corpus migration** — implementation, committed-tree verification,
+   compensation, and copied-corpus rehearsal are complete; live execution still waits for the
+   scheduled freeze window. The repository rename follows only after that migration is accepted.
 
 ### Human, identity, account, or external operations
 
@@ -83,10 +90,11 @@ Detailed, paste-back-ready instructions are in
 ## Truthful closure state
 
 - **Complete:** every unblocked repository implementation unit; domain infrastructure; Google live
-  provider validation; combined Day Zero implementation and exact-head rehearsal; merge/integration
-  and daemon synchronization through PR #26.
-- **Queued:** U16b, U18, source ingestion, and the identifier/repository migration, each behind its
-  named prerequisite.
+  provider validation; combined Day Zero implementation and exact-head rehearsal; autonomous
+  preparation for Packets A, C, D, E, and F; merge/integration and daemon synchronization through
+  PR #26 (with the August 24 merge receipt to be appended after merge).
+- **Queued:** U16b and U18 live acceptance evidence, source ingestion, the supervised corpus
+  migration, and the later repository rename, each behind its named prerequisite.
 - **Human/external:** the six packets in the current Decision Sheet.
 - **Not authorized or not run:** production publication, Day Zero corpus mutation, OpenAI paid
   generation, Anthropic credential testing, authenticated human actions, and the repository rename.

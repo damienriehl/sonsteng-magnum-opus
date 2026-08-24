@@ -1013,16 +1013,52 @@ export async function publisherAuthorizeEndpoint(request, env, auth) {
 
 export async function publisherReleaseEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.release_service?.granted)
-    return editError("forbidden", "Publisher or release-service scope required.", 403);
+  if (!auth?.scopes?.publisher?.granted && !auth?.scopes?.release_service?.granted &&
+      !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return editError("validation_error", "id required.", 400);
   const release = await editorStub(env).getProductionRelease(id);
-  return release ? json({ ok:true, release }) : editError("not_found", "Not found.", 404);
+  if (!release) return editError("not_found", "Not found.", 404);
+  return json({ ok:true, release:releaseObserver(auth) ? observerReleaseSummary(release) : release });
 }
 
 function releaseService(auth) {
   return auth?.credential_channel === "bearer" && auth?.scopes?.release_service?.granted;
+}
+
+// A separate, bearer-only scope for text-free observation. It is intentionally
+// absent from every mutation guard below: possession can never prepare, claim,
+// authorize, renew, transition, restore, or otherwise advance a release.
+function releaseObserver(auth) {
+  return auth?.credential_channel === "bearer" && auth?.scopes?.release_observer?.granted;
+}
+
+const OBSERVER_RELEASE_KEYS = Object.freeze([
+  "id","state","target_batch_id","base_sha","candidate_sha","generator_id",
+  "evidence_hash","manifest_hash","membership_hash","review_receipt_hash",
+  "projection_identity","schema_version",
+]);
+
+function observerReleaseSummary(release) {
+  return Object.fromEntries(OBSERVER_RELEASE_KEYS
+    .filter((key) => release?.[key] !== undefined && release[key] !== null)
+    .map((key) => [key,release[key]]));
+}
+
+function observerPreparationSummary(context) {
+  return {
+    active_release:context?.active_release ? observerReleaseSummary(context.active_release) : null,
+    ...(context?.base_sha !== undefined ? { base_sha:context.base_sha } : {}),
+    ...(context?.blocked_reason !== undefined ? { blocked_reason:context.blocked_reason } : {}),
+    ...(context?.blocked_batch_id !== undefined ? { blocked_batch_id:context.blocked_batch_id } : {}),
+    batches:Array.isArray(context?.batches) ? context.batches.map((batch) => ({
+      batch_id:batch.batch_id,
+      commit_sha:batch.commit_sha,
+      ...(batch.generator_id !== undefined ? { generator_id:batch.generator_id } : {}),
+      member_count:Array.isArray(batch.suggestion_ids) ? batch.suggestion_ids.length : 0,
+    })) : [],
+  };
 }
 
 export async function productionPrepareEndpoint(request, env, auth) {
@@ -1062,13 +1098,16 @@ export async function productionPrepareEndpoint(request, env, auth) {
 
 export async function productionPreparationContextEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
-  return json({ ok:true, context:await editorStub(env).productionPreparationContext() });
+  if (!releaseService(auth) && !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
+  const context = await editorStub(env).productionPreparationContext();
+  return json({ ok:true, context:releaseObserver(auth) ? observerPreparationSummary(context) : context });
 }
 
 export async function productionAuditEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
-  if (!releaseService(auth)) return editError("forbidden", "Release service required.", 403);
+  if (!releaseService(auth) && !releaseObserver(auth))
+    return editError("forbidden", "Release read scope required.", 403);
   return json({ ok:true, audit:await editorStub(env).productionReleaseAudit() });
 }
 

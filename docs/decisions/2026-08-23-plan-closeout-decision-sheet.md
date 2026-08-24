@@ -7,6 +7,9 @@ Purpose: one ordered, copy-friendly sheet for every remaining human or external 
 The Cloudflare cutover, Google live-provider check, and combined Day Zero date/JSON-LD implementation
 are complete. PR #26 merged the atomic rewrite, permanent validator, and copied-corpus rehearsal.
 Packet D may be scheduled once its human coordination and empty-queue conditions are satisfied.
+The August 24 autonomous-readiness change set also supplies the read-only/preparation commands named
+under Packets A, C, D, E, and F. Those tools do not satisfy a human gate and make no production,
+account, identity, source-ingestion, or repository-rename mutation by themselves.
 Do not send credentials, one-time codes, edited private text, or personal roster data in the result.
 For any failed step, stop that packet and paste back only the visible error and non-secret IDs.
 
@@ -29,10 +32,19 @@ service token cannot honestly substitute for the signer or Publisher.
 
 ### A2. Assessment signer exercise
 
-There is no audit index or create button. Before starting A2, reply `A2 READY`; the agent will create
-one harmless formative audit through the existing API and return its exact
+There is no audit index or create button. Before starting A2, reply `A2 READY`; the agent can now run
+the explicit credential-safe preparer below to create one harmless formative audit and return its exact
 `https://edit.legalpracticum.org/edit/assessments/<audit-id>` URL. The page requires the
 Access-authenticated `damienadmin` instructor/admin role and is titled **Assessment signer review**.
+
+Agent preparer (run only after A2 is requested and a protected provider/bypass credential file is
+available; the command accepts no authored memo text and emits only the audit ID and protected URL):
+
+```bash
+PROVIDER=<google|openai|anthropic> \
+CREDENTIALS_FILE=<owned-mode-0600-credential-json> \
+node app/worker/test/assessment-live-uat.mjs
+```
 
 1. While still authenticated, open the exact protected assessment URL supplied by the agent.
 2. At a desktop width near 1280px, confirm the disposable formative audit loads. A uniform 404 means
@@ -103,6 +115,17 @@ changes authored content. The agent can operate the machinery after those judgme
 
 ### C1. Review and authorize one exact candidate
 
+Before C1, the agent can prove that routine release remains off, the timer is off, ledger invariants
+are clean, and the exact text-free queue is visible. The dedicated observer bearer can construct only
+the status, frontier, and audit GETs; it cannot prepare, claim, authorize, transition, or restore:
+
+```bash
+python3 tools/prod_release_readiness.py \
+  --ledger-url https://edit.legalpracticum.org \
+  --observer-env-file <owned-mode-0600-observer-env> \
+  --prod-env-file <owned-mode-0600-production-env>
+```
+
 1. Open `https://edit.legalpracticum.org/edit/publish` as the Access-authenticated
    `damienadmin` Publisher. The page title is **Production Publisher**. It is also linked from
    `/edit/review` as **Open Production Publisher**.
@@ -154,7 +177,25 @@ rewrite and JSON-LD base rewrite to run in one freeze window. The settled new ba
 **Agent-owned prerequisite complete:** PR #26 merged the combined rewrite path, permanent old-base
 validator, copied-corpus rehearsal, and rollback proof. The final exact-head rehearsal at
 `b54c8b3854d0dabde038530293b1e567df5f61be` passed all six phases with zero production mutations.
-Packet D remains supervised because it changes the live corpus and provider pair.
+The August 24 readiness work adds a GET-only exact-pair inspector and binds deployment to the already
+committed migrated tree. Packet D remains supervised because it changes the live corpus and provider
+pair and requires the six-actor freeze.
+
+At the start of the supervised window, the agent can capture the stable pair by piping the Cloudflare
+token on protected standard input. Ordinary output contains only the shared SHA, digested recovery
+IDs, and `production_mutations: 0`; adding the fully acknowledged operator-plan inputs emits exact
+non-secret recovery IDs into the requested supervised checklist:
+
+```bash
+credential-helper-that-prints-only-the-token | \
+python3 tools/day_zero_migration.py \
+  --inspect-cloudflare-pair \
+  --cloudflare-account-id <account-id> \
+  --pages-project <pages-project> \
+  --worker-script sonsteng-chat-production \
+  --pages-provenance-url https://legalpracticum.org/ \
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/
+```
 
 ### D1. Schedule and authorize the supervised window
 
@@ -210,6 +251,9 @@ Old JSON-LD base occurrences after migration: 0 | [count]
 
 These items depend on people or materials outside the repository. Complete them independently; no
 technical ordering is required except that publication waits for the relevant permission.
+The settled rights model remains dual-license: MIT for software and CC BY 4.0 for the governed content,
+with Sonsteng originals separately attributed as already recorded in `CONTENT-LICENSE.md`. Nothing in
+this packet reopens or replaces that decision.
 
 1. Obtain John's one-sentence written confirmation that he bought the Midstate materials from Anita.
 2. Identify the other lawyers whose disc briefings may be published and obtain permission or mark
@@ -221,6 +265,20 @@ technical ordering is required except that publication waits for the relevant pe
    protected channel.
 5. Have John complete his editor pass.
 6. Arrange human-human assessment calibration and complete provider-terms review before any
+   summative use. The repository now validates 40–60 de-identified works, all three anonymous rater
+   roles, all seven memo headings, 1–7 integer scores, quadratic weighted kappa, and mean signed
+   difference. It intentionally supplies no policy thresholds: choose the minimum acceptable kappa
+   and maximum absolute signed difference, then the agent can run:
+
+   ```bash
+   python3 tools/assessment_calibration.py \
+     <protected-de-identified-ratings.json> \
+     --min-kappa <chosen-threshold> \
+     --max-abs-signed-difference <chosen-threshold> \
+     --human
+   ```
+
+   The aggregate result is tooling evidence, not the human calibration itself and not permission for
    summative use.
 7. Have John and Roger each replace the temporary-token path independently: complete one Access
    sign-in and one saved/restored harmless edit. After each person succeeds, the agent may retire only
@@ -249,9 +307,22 @@ automation, integrations, and durable references.
 
 1. After Packet D passes, choose a quiet rename window while no release is active.
 2. Confirm the target GitHub repository name. The recommendation is `legal-practicum`.
-3. Before the rename, let the agent inventory and update repository badges, CI references, deployment
-   automation, Cockpit links, clone URLs, worktree/daemon metadata, and rollback instructions.
-4. Review the inventory and migration evidence before the external GitHub rename is executed.
+3. Before the rename, let the agent refresh the already-implemented read-only inventory. It scans
+   tracked files without following symlinks, preserves historical evidence, distinguishes hosted
+   Actions consumers, digests worktree paths, and performs no GitHub mutation:
+
+   ```bash
+   python3 tools/repo_rename_inventory.py \
+     --repo . \
+     --owner damienriehl \
+     --current sonsteng-magnum-opus \
+     --target legal-practicum
+   ```
+
+4. After the inventory is accepted, the agent updates active badges, CI references, deployment
+   automation, Cockpit links, clone URLs, worktree/daemon metadata, and rollback instructions inside
+   the quiet window.
+5. Review the inventory and migration evidence before the external GitHub rename is executed.
 
 ### Paste back Packet F
 
@@ -266,13 +337,15 @@ Target repository name: legal-practicum | [different name]
 - Packet B: run authorized credential-safe provider smokes, record PASS/BLOCKED/WAIVED distinctly,
   and perform separately authorized post-revocation plaintext cleanup.
 - Packet C1: operate the supervised canary/restoration workflow; after a real published revision,
-  execute U18 consistency-daemon verification and return the evidence needed for C2.
+  inspect the already-wired durable U18 consistency result and return the evidence needed for C2.
 - Packet C2: apply the routine-publication decision only after the evidence exists.
-- Packet D: operate the combined date/identifier migration and then execute U16b strict offset
-  enforcement after accepted sidecars exist.
+- Packet D: operate the combined date/identifier migration; the representation marker automatically
+  enables both strict U16b offset and Legal Practicum identifier enforcement once accepted sidecars
+  exist.
 - Packet E: ingest only material with recorded provenance/permission, update the source ledger, and
   retire named-user temporary tokens only after each replacement Access path passes.
-- Packet F: prepare and execute the repository rename after Packet D evidence is accepted.
+- Packet F: refresh the read-only inventory, then prepare and execute the repository rename after
+  Packet D evidence is accepted.
 
 No packet asks for a secret. If a requested choice differs from the recommendation, add one sentence
 explaining the desired outcome; the agent will adapt the execution plan without re-asking settled

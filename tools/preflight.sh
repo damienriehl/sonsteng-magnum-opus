@@ -47,6 +47,9 @@ run() {  # run <name> <command…>
 skip() { results+=("SKIP  $1 — $2"); skipped=$((skipped+1)); printf '\n\033[2m── %s (skipped: %s)\033[0m\n' "$1" "$2"; }
 
 # ---- headless gates --------------------------------------------------------
+# Deliberately pass no representation switches: validate_spine derives both
+# migration enforcement modes atomically from data/spine-manifest.json while
+# retaining explicit flags for copied-corpus rehearsal.
 run "spine integrity (validate_spine)"      python3 tools/validate_spine.py
 run "site build + link/leak sweeps"         python3 tools/build_site.py --check
 run "public source repository (anonymous)"  curl -fsSIL https://github.com/damienriehl/sonsteng-magnum-opus

@@ -73,8 +73,9 @@ SEVERITY_RANK = {ERROR: 0, WARN: 1, INFO: 2}
 CENT = Decimal("0.01")
 VALIDATOR_CHECK_COUNT = 31
 
-# U16a compatibility mode: resolve and validate additive offsets now, but do
-# not require every convertible absolute date to carry one until U16b.
+# U16a compatibility mode: resolve and validate additive offsets while the
+# manifest still declares the legacy representation. The settled manifest
+# marker activates both U16b enforcement modes atomically.
 ENFORCE_DAY_ZERO_OFFSETS = False
 ENFORCE_LEGAL_PRACTICUM_IDENTIFIERS = False
 DECLARED_HOLDOUT_STATUS = "declared_absolute_holdout"
@@ -772,13 +773,19 @@ class Validator:
         self.report = report
         self.strict = strict
         self.online = online
-        self.enforce_day_zero_offsets = enforce_day_zero_offsets
-        self.enforce_legal_practicum_identifiers = (
-            enforce_legal_practicum_identifiers
+        representation_is_settled = (
+            (world.spine_manifest or {}).get("jsonld_context_base")
+            == NEW_JSONLD_BASE.decode("ascii")
         )
-        self.report.day_zero_offset_enforcement = enforce_day_zero_offsets
+        self.enforce_day_zero_offsets = (
+            representation_is_settled or enforce_day_zero_offsets
+        )
+        self.enforce_legal_practicum_identifiers = (
+            representation_is_settled or enforce_legal_practicum_identifiers
+        )
+        self.report.day_zero_offset_enforcement = self.enforce_day_zero_offsets
         self.report.identifier_base_enforcement = (
-            enforce_legal_practicum_identifiers
+            self.enforce_legal_practicum_identifiers
         )
         self.st: SymbolTable | None = None
         self.declared_holdouts = self._declared_holdout_keys()
@@ -1992,10 +1999,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "  --online    FOLIO IRI existence vs data/taxonomy/folio-crosswalk.json\n"
             "              (a local snapshot; never live MCP). IRI *format* is always\n"
             "              checked offline.\n"
-            "  Day Zero additive offsets are resolved and counted; converted-\n"
-            "  representation enforcement is opt-in with --enforce-day-zero-offsets.\n"
-            "  The settled Legal Practicum JSON-LD base is checked with\n"
-            "  --enforce-legal-practicum-identifiers.\n"
+            "  The manifest's settled Legal Practicum JSON-LD base automatically\n"
+            "  enables both Day Zero and identifier-base enforcement. The explicit\n"
+            "  --enforce-* flags remain available for copied-corpus rehearsal.\n"
         ),
         epilog=(
             "Examples:\n"

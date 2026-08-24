@@ -29,6 +29,13 @@ Secrets live in the 0600 env file `~/.config/sonsteng-apply/env` (`EDIT_API_BASE
 `~/.secrets/sonsteng-editor-tokens`, `APPLY_DEPLOY_BRANCH`). The ntfy topic is read
 by path from `~/.config/claude-rc/ntfy-topic`. Nothing is inlined in git.
 
+Legacy U18 uses a second 0600 file,
+`~/.config/sonsteng-release-observer/env`, containing only
+`SONSTENG_PROD_OBSERVER_BEARER`. It must be a distinct Worker token granted only
+`release_observer`; never copy `EDIT_SERVICE_TOKEN` or the production
+`release_service` bearer into it. The installer creates the blank protected
+template and injects it only into `sonsteng-apply.service`.
+
 ## Deploy topology (since 2026-07-24)
 
 | | path | branch | who writes it |
@@ -116,7 +123,16 @@ from and cooperating with the engine's `.locks/apply.lock`):
    The endpoint is being added by the worker lane; the daemon sends **best-effort
    and tolerates 404** until that merges (a 404/unreachable heartbeat never gates
    the apply).
-6. On **any** apply/rebuild/deploy failure: heartbeat `{ok:false}` + an **ntfy
+6. After a successful accepted batch only, read the exact completed production
+   frontier through the separate `release_observer` bearer and run the existing
+   consistency checker from that SHA. Persist one text-free `legacy_u18` state
+   record as `clean`, `flagged`, `missing-baseline`, `bad-revision`, or
+   `checker-error`; alert on every non-clean result. The checker may file DEV
+   comment flags through the existing DEV bearer, but its result cannot prepare,
+   authorize, or publish a production release. Missing observer provisioning and
+   checker failures are visible and nonfatal to the already-completed DEV apply.
+   No-accepted ticks and `--dry-run` never invoke or record U18.
+7. On **any** apply/rebuild/deploy failure: heartbeat `{ok:false}` + an **ntfy
    alert** naming the failed suggestion **IDs only** (never content), so a stalled
    home box is never silent (SL1/SL6).
 

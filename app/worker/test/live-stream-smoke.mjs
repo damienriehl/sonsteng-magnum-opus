@@ -3,18 +3,19 @@
 // smoke harness, not part of the Worker's request path and not a provider mock.
 
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
 const PROVIDERS = new Set(["anthropic", "openai", "google"]);
-const DEFAULT_ORIGIN = "https://sonsteng-dev.damienriehl.com";
-const DEV_WORKER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev";
+export const DEFAULT_ORIGIN = "https://sonsteng-dev.damienriehl.com";
+export const DEV_WORKER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev";
 const MATTER_ID = "m00";
 const PERSONA_ID = "m00.per.tester";
 const PROMPT = "In one or two sentences, please tell me what brought you in today.";
 const MAX_STDIN_BYTES = 64 * 1024;
-const REQUEST_TIMEOUT_MS = 90_000;
+export const REQUEST_TIMEOUT_MS = 90_000;
 
 export class SmokeError extends Error {
   constructor(code, message) {
@@ -28,11 +29,11 @@ function fail(code, message) {
   throw new SmokeError(code, message);
 }
 
-function nonempty(value) {
+export function nonempty(value) {
   return typeof value === "string" && value.length > 0;
 }
 
-function validateProvider(provider) {
+export function validateProvider(provider) {
   if (!PROVIDERS.has(provider)) {
     fail("config", "PROVIDER must be one of: anthropic, openai, google.");
   }
@@ -77,8 +78,8 @@ export async function loadCredentials({
   provider,
   env = process.env,
   stdin = process.stdin,
-  readFileImpl = readFile,
-  statImpl = stat,
+  openImpl = open,
+  allowDirectEnvironment = true,
 } = {}) {
   validateProvider(provider);
   const providerVar = `${provider.toUpperCase()}_API_KEY`;
@@ -90,6 +91,9 @@ export async function loadCredentials({
   const hasDirect = directCandidates.length === 1;
   const hasFile = nonempty(env.CREDENTIALS_FILE);
   const hasStdin = env.CREDENTIALS_STDIN === "1";
+  if (hasDirect && !allowDirectEnvironment) {
+    fail("credentials", "This command accepts credentials only from a mode-0600 file or protected standard input.");
+  }
   if (Number(hasDirect) + Number(hasFile) + Number(hasStdin) !== 1) {
     fail("credentials", "Select exactly one credential source: environment, CREDENTIALS_FILE, or CREDENTIALS_STDIN=1.");
   }
@@ -102,32 +106,46 @@ export async function loadCredentials({
   }
 
   if (hasFile) {
-    let metadata;
+    let handle;
     try {
-      metadata = await statImpl(env.CREDENTIALS_FILE);
+      handle = await openImpl(
+        env.CREDENTIALS_FILE,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
     } catch {
       fail("credentials", "Unable to inspect CREDENTIALS_FILE.");
     }
-    if (!metadata.isFile() || (metadata.mode & 0o777) !== 0o600) {
-      fail("credentials", "CREDENTIALS_FILE must be a regular mode-0600 file.");
-    }
-    let text;
     try {
-      text = await readFileImpl(env.CREDENTIALS_FILE, "utf8");
-    } catch {
+      const metadata = await handle.stat();
+      const owned = typeof process.getuid !== "function" || metadata.uid === process.getuid();
+      if (!metadata.isFile() || !owned || (metadata.mode & 0o777) !== 0o600) {
+        fail("credentials", "CREDENTIALS_FILE must be an owned regular mode-0600 file.");
+      }
+      if (metadata.size > MAX_STDIN_BYTES) {
+        fail("credentials", "Credential input exceeds the 64 KiB limit.");
+      }
+      const buffer = Buffer.alloc(MAX_STDIN_BYTES + 1);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (bytesRead > MAX_STDIN_BYTES) {
+        fail("credentials", "Credential input exceeds the 64 KiB limit.");
+      }
+      return parseCredentialJson(buffer.subarray(0, bytesRead).toString("utf8"));
+    } catch (error) {
+      if (error instanceof SmokeError) throw error;
       fail("credentials", "Unable to read CREDENTIALS_FILE.");
+    } finally {
+      await handle.close().catch(() => {});
     }
-    return parseCredentialJson(text);
   }
 
   return parseCredentialJson(await readStdin(stdin));
 }
 
-function credentialValues(apiKey, bypassToken) {
+export function credentialValues(apiKey, bypassToken) {
   return [apiKey, bypassToken].filter(nonempty);
 }
 
-function assertCredentialAbsent(value, secrets) {
+export function assertCredentialAbsent(value, secrets) {
   const serialized = typeof value === "string" ? value : JSON.stringify(value);
   for (const secret of secrets) {
     if (serialized.includes(secret)) {
@@ -136,7 +154,7 @@ function assertCredentialAbsent(value, secrets) {
   }
 }
 
-function parseJsonResponse(text, code) {
+export function parseJsonResponse(text, code) {
   try {
     return JSON.parse(text);
   } catch {
@@ -270,12 +288,12 @@ async function readNormalizedStream(response, secrets) {
   return validateNormalizedFrames(frames);
 }
 
-async function request(fetchImpl, url, init, code) {
+export async function request(fetchImpl, url, init, code, timeoutMs = REQUEST_TIMEOUT_MS) {
   try {
     const response = await fetchImpl(url, {
       ...init,
       redirect: "manual",
-      signal: init.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: init.signal || AbortSignal.timeout(timeoutMs),
     });
     if (response.status >= 300 && response.status < 400) {
       fail(code, "The Worker attempted to redirect a credential-bearing request.");
@@ -287,7 +305,7 @@ async function request(fetchImpl, url, init, code) {
   }
 }
 
-async function responseText(response, code) {
+export async function responseText(response, code) {
   try {
     return await response.text();
   } catch {
@@ -295,7 +313,7 @@ async function responseText(response, code) {
   }
 }
 
-function workerBaseUrl(workerUrl, { allowTestOrigin = false } = {}) {
+export function workerBaseUrl(workerUrl, { allowTestOrigin = false } = {}) {
   let parsed;
   try {
     parsed = new URL(workerUrl);
@@ -314,7 +332,7 @@ function workerBaseUrl(workerUrl, { allowTestOrigin = false } = {}) {
   return parsed;
 }
 
-function workerEndpoint(base, pathname) {
+export function workerEndpoint(base, pathname) {
   const endpoint = new URL(base.href);
   const prefix = endpoint.pathname.replace(/\/+$/, "");
   endpoint.pathname = `${prefix}/${pathname.replace(/^\/+/, "")}`;

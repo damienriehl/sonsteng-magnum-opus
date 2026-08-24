@@ -534,7 +534,8 @@ def test_checked_date_count_is_nonzero_for_absolute_and_offset_fixtures(tmp_path
     offset_report = run_validator(offset, matter="m99", strict=True)
     assert offset_report.checked_dates > 0
     assert offset_report.offset_dates_checked >= len(sidecar["entries"])
-    assert offset_report.day_zero_offset_enforcement is False
+    assert offset_report.day_zero_offset_enforcement is True
+    assert offset_report.identifier_base_enforcement is True
 
 
 def test_custom_fact_date_survives_conversion_and_strict_validation(tmp_path):
@@ -876,6 +877,8 @@ def test_identifier_enforcement_rejects_old_base_and_accepts_combined_rewrite(tm
     build_base_spine(data)
 
     compatible = run_validator(data, matter="m99", strict=True)
+    assert compatible.day_zero_offset_enforcement is False
+    assert compatible.identifier_base_enforcement is False
     assert not any(f.check == "F31" for f in compatible.findings)
 
     rejected = run_validator(
@@ -896,6 +899,46 @@ def test_identifier_enforcement_rejects_old_base_and_accepts_combined_rewrite(tm
     assert accepted.old_identifier_base_occurrences == 0
     assert not any(f.check == "F31" and f.severity == vs.ERROR
                    for f in accepted.for_scope("GLOBAL"))
+
+
+def test_new_representation_marker_automatically_enables_both_enforcements(tmp_path):
+    repo = tmp_path / "repo"
+    data = repo / "data"
+    build_base_spine(data)
+    day_zero.convert_corpus(repo, write=True)
+
+    report = run_validator(data, matter="m99", strict=True)
+
+    assert report.day_zero_offset_enforcement is True
+    assert report.identifier_base_enforcement is True
+    assert not any(f.check in {"F30", "F31"} and f.severity == vs.ERROR
+                   for f in report.findings)
+
+
+def test_new_representation_marker_rejects_both_partial_migration_residues(tmp_path):
+    data = tmp_path / "data"
+    build_base_spine(data)
+    manifest = data / "spine-manifest.json"
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["jsonld_context_base"] = vs.NEW_JSONLD_BASE.decode("ascii")
+    manifest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    facts = data / "matters" / "m99-noncompete-meridian" / "facts.md"
+    facts.write_text(
+        facts.read_text(encoding="utf-8")
+        + "\nThe hearing is set for January 13, 2026. {#b:deadbeef}\n",
+        encoding="utf-8",
+    )
+
+    report = run_validator(data, matter="m99", strict=True)
+
+    assert report.day_zero_offset_enforcement is True
+    assert report.identifier_base_enforcement is True
+    assert any(f.check == "F30" and f.severity == vs.ERROR
+               and "remains absolute" in f.message
+               for f in report.for_scope("m99"))
+    assert any(f.check == "F31" and f.severity == vs.ERROR
+               and "old JSON-LD base" in f.message
+               for f in report.for_scope("GLOBAL"))
 
 
 def test_identifier_enforcement_rejects_manifest_mismatch_without_old_base(tmp_path):
