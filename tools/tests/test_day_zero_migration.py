@@ -18,6 +18,14 @@ SHA_OLD = "a" * 40
 SHA_NEW = "b" * 40
 PRIOR = migration.ProductionPair(SHA_OLD, "pages-old", "worker-old")
 NEW = migration.ProductionPair(SHA_NEW, "pages-new", "worker-new")
+EXPECTED_WINDOW_ACTORS = {
+    "canonical-writers",
+    "canonical-merges",
+    "apply-daemon",
+    "production-release-daemon",
+    "direct-deployments",
+    "provider-deployment-actors",
+}
 
 
 class FakePhases:
@@ -33,7 +41,10 @@ class FakePhases:
 
 class FakeProduction:
     def __init__(self, *, captured=PRIOR, deployed=NEW, fail=None,
-                 apply_state=migration.TimerState(enabled=True, active=True)):
+                 apply_state=migration.TimerState(enabled=True, active=True),
+                 excluded_actors=None, canonical_sha=SHA_NEW,
+                 fence_proof="proved", prior_proof="proved",
+                 window_exit_failure=False):
         self.captured = captured
         self.deployed = deployed
         self.fail = fail
@@ -45,6 +56,16 @@ class FakeProduction:
         self.calls = []
         self.production_calls = 0
         self.read_mismatch_remaining = 1 if fail == "read-live" else 0
+        self.excluded_actors = set(
+            migration.REQUIRED_CHANGE_WINDOW_ACTORS
+            if excluded_actors is None else excluded_actors
+        )
+        self.window_fenced = False
+        self.canonical_sha = canonical_sha
+        self.editor_dev_sha = SHA_OLD
+        self.fence_proof = fence_proof
+        self.prior_proof = prior_proof
+        self.window_exit_failure = window_exit_failure
 
     def assert_queue_empty(self):
         self.calls.append("queue-empty")
@@ -67,6 +88,8 @@ class FakeProduction:
 
     def assert_no_activity(self):
         self.calls.append("no-activity")
+        if self.fail == "no-activity":
+            raise RuntimeError("activity detail")
 
     @contextlib.contextmanager
     def daemon_lock(self):
@@ -76,9 +99,80 @@ class FakeProduction:
         finally:
             self.calls.append("lock-exit")
 
+    @contextlib.contextmanager
+    def exclusive_change_window(self, required_actors):
+        self.calls.append("window-enter")
+        if set(required_actors) != self.excluded_actors:
+            raise RuntimeError("unexcluded actor detail")
+        try:
+            yield
+        finally:
+            self.calls.append("window-exit-fenced" if self.window_fenced else "window-exit")
+            if self.fail == "window-exit" or self.window_exit_failure:
+                raise RuntimeError("window release detail")
+
+    def assert_candidate_commit(self, candidate_sha, prior_sha):
+        self.calls.append("candidate-commit")
+        if self.fail == "candidate-tree":
+            raise RuntimeError("dirty tree detail")
+        if candidate_sha != self.canonical_sha or prior_sha != SHA_OLD:
+            raise RuntimeError("divergent tree detail")
+
+    def deploy_editor_dev(self, candidate_sha):
+        self.calls.append("editor-dev:" + candidate_sha)
+        if self.fail == "editor-dev" and candidate_sha == SHA_NEW:
+            raise RuntimeError("editor deploy detail")
+        if self.fail == "compensation-editor" and candidate_sha == SHA_OLD:
+            raise RuntimeError("editor restore detail")
+        self.editor_dev_sha = candidate_sha
+
+    def restore_canonical_ref_exact(self, candidate_sha, prior_sha):
+        self.calls.append("restore-canonical-exact")
+        if self.fail == "compensation-canonical":
+            raise RuntimeError("protected ref detail")
+        if self.canonical_sha != candidate_sha:
+            raise RuntimeError("unexpected canonical state")
+        self.canonical_sha = prior_sha
+        if self.fail == "compensation-canonical-readback":
+            return candidate_sha
+        return self.canonical_sha
+
+    def prove_prior_state(self, prior_sha, prior_pair):
+        self.calls.append("prove-prior-state")
+        if self.prior_proof == "raise":
+            raise RuntimeError("prior proof detail")
+        if self.prior_proof == "unproved":
+            return False
+        if (self.live != prior_pair or self.canonical_sha != prior_sha or
+                self.editor_dev_sha != prior_sha):
+            raise RuntimeError("prior state mismatch detail")
+        return True
+
+    def prove_all_surfaces(self, expected_sha, expected_pair):
+        self.calls.append("prove-all:" + expected_sha)
+        if self.fail == "candidate-proof" and expected_sha == SHA_NEW:
+            raise RuntimeError("candidate surface detail")
+        if self.fail == "compensation-proof" and expected_sha == SHA_OLD:
+            raise RuntimeError("surface detail")
+        if self.live != expected_pair or self.editor_dev_sha != expected_sha:
+            raise RuntimeError("surface mismatch detail")
+        if expected_sha == SHA_OLD and self.canonical_sha != SHA_OLD:
+            raise RuntimeError("canonical mismatch detail")
+
+    def keep_change_window_fenced(self):
+        self.calls.append("keep-fenced")
+        if self.fence_proof == "raise":
+            raise RuntimeError("fence detail")
+        if self.fence_proof == "unproved":
+            return False
+        self.window_fenced = True
+        return True
+
     def capture_live_pair(self):
         self.production_calls += 1
         self.calls.append("capture")
+        if self.fail == "capture":
+            raise RuntimeError("capture detail")
         return self.captured
 
     def deploy_candidate(self, candidate_sha):
@@ -207,13 +301,13 @@ def test_rehearsal_runs_every_phase_in_an_isolated_copy_without_production_calls
 
     assert receipt["mode"] == "rehearsal"
     assert receipt["production_mutations"] == 0
-    assert [name for name, _ in phases.calls] == list(migration.MIGRATION_PHASES)
+    assert [name for name, _ in phases.calls] == list(migration.MATERIALIZATION_PHASES)
     assert all(candidate == SHA_NEW for _, candidate in phases.calls)
     assert copies == [(repo, SHA_NEW, tmp_path / "isolated")]
     assert production.production_calls == 0
 
 
-@pytest.mark.parametrize("phase", migration.MIGRATION_PHASES)
+@pytest.mark.parametrize("phase", migration.MATERIALIZATION_PHASES)
 def test_rehearsal_aborts_at_each_failed_phase_without_continuing(tmp_path, phase):
     phases = FakePhases(fail_at=phase)
 
@@ -225,7 +319,38 @@ def test_rehearsal_aborts_at_each_failed_phase_without_continuing(tmp_path, phas
         migration.rehearse(tmp_path, SHA_NEW, phases, isolated_copy=isolated_copy)
     names = [name for name, _ in phases.calls]
     assert names[-1] == phase
-    assert names == list(migration.MIGRATION_PHASES[: names.index(phase) + 1])
+    assert names == list(migration.MATERIALIZATION_PHASES[: names.index(phase) + 1])
+
+
+def test_materialized_candidate_verification_never_reruns_governed_write(tmp_path):
+    phases = FakePhases()
+
+    @contextlib.contextmanager
+    def isolated_copy(source, candidate_sha):
+        yield tmp_path
+
+    receipt = migration.verify_materialized(
+        tmp_path, SHA_NEW, phases, isolated_copy=isolated_copy,
+    )
+
+    names = [name for name, _ in phases.calls]
+    assert names == list(migration.VERIFY_ONLY_PHASES)
+    assert "governed-write" not in names
+    assert receipt["mode"] == "verify-only"
+    assert receipt["candidate_sha"] == SHA_NEW
+    assert receipt["production_mutations"] == 0
+
+
+def test_candidate_cleanliness_phase_requires_exact_head_and_no_changes(tmp_path):
+    repo = git_repo(tmp_path)
+    candidate_sha = git(repo, "rev-parse", "HEAD")
+    runner = migration.LocalRehearsalPhases(repo)
+
+    runner.run("candidate-commit", candidate_sha)
+    (repo / "untracked.txt").write_text("not materialized\n", encoding="utf-8")
+
+    with pytest.raises(migration.MigrationError, match="dirty or differs"):
+        runner.run("final-tree-cleanliness", candidate_sha)
 
 
 def test_strict_rehearsal_requires_date_and_identifier_evidence(tmp_path, monkeypatch):
@@ -333,22 +458,27 @@ def test_execute_stops_timers_holds_lock_records_pair_and_proves_restore_and_ret
         "new_pair": NEW.redacted(),
         "restoration_proved": True,
         "returned_to_candidate": True,
+        "editor_dev_synced": True,
+        "change_window_released": True,
         "apply_timer_restored": True,
     }
-    assert [name for name, _ in phases.calls] == list(migration.MIGRATION_PHASES)
+    assert [name for name, _ in phases.calls] == list(migration.VERIFY_ONLY_PHASES)
     assert production.live == NEW
+    assert production.calls.index("window-enter") < production.calls.index("capture")
     assert production.calls.index("stop:" + migration.APPLY_TIMER) < production.calls.index("lock-enter")
     assert production.calls.index("lock-enter") < production.calls.index("deploy")
+    assert "editor-dev:" + SHA_NEW in production.calls
+    assert "prove-all:" + SHA_NEW in production.calls
     assert production.calls.index("activate:" + SHA_OLD) < production.calls.index("activate:" + SHA_NEW)
-    assert production.calls.index("lock-exit") < production.calls.index("restore:" + migration.APPLY_TIMER)
+    assert production.calls.index("window-exit") < production.calls.index("restore:" + migration.APPLY_TIMER)
 
 
-@pytest.mark.parametrize("phase", migration.MIGRATION_PHASES)
+@pytest.mark.parametrize("phase", migration.VERIFY_ONLY_PHASES)
 def test_each_migration_phase_failure_unwinds_lock_and_apply_timer(tmp_path, phase):
     production = FakeProduction()
     with pytest.raises(migration.MigrationError, match="migration phase failed"):
         migration.execute(request(tmp_path), FakePhases(fail_at=phase), production)
-    assert production.calls[-3:] == ["lock-exit", "restore:" + migration.APPLY_TIMER,
+    assert production.calls[-4:] == ["window-exit", "lock-exit", "restore:" + migration.APPLY_TIMER,
                                     "timer-state:" + migration.APPLY_TIMER]
     assert "deploy" not in production.calls
 
@@ -363,7 +493,7 @@ def test_catchable_signal_during_a_phase_uses_the_same_unwind_path(tmp_path):
 
     with pytest.raises(migration.MigrationInterrupted):
         migration.execute(request(tmp_path), InterruptedPhases(), production)
-    assert production.calls[-3:] == ["lock-exit", "restore:" + migration.APPLY_TIMER,
+    assert production.calls[-4:] == ["window-exit", "lock-exit", "restore:" + migration.APPLY_TIMER,
                                     "timer-state:" + migration.APPLY_TIMER]
     assert "deploy" not in production.calls
 
@@ -375,15 +505,19 @@ def test_provider_failure_is_redacted_and_restores_prior_pair_before_unwind(tmp_
     assert "registry path detail" not in str(failure.value)
     assert production.live == PRIOR
     assert "activate:" + SHA_OLD in production.calls
-    assert production.calls[-3:] == ["lock-exit", "restore:" + migration.APPLY_TIMER,
+    assert production.calls[-4:] == ["window-exit", "lock-exit", "restore:" + migration.APPLY_TIMER,
                                     "timer-state:" + migration.APPLY_TIMER]
 
 
-def test_exact_prior_pair_mismatch_aborts_before_freeze(tmp_path):
+def test_exact_prior_pair_mismatch_fences_when_complete_prior_state_is_unproved(tmp_path):
     production = FakeProduction(captured=migration.ProductionPair(SHA_OLD, "pages-other", "worker-old"))
-    with pytest.raises(migration.MigrationError, match="prior live pair mismatch"):
+    with pytest.raises(migration.MigrationFenced, match="prior state could not be proved"):
         migration.execute(request(tmp_path), FakePhases(), production)
-    assert "stop:" + migration.APPLY_TIMER not in production.calls
+    assert "window-enter" in production.calls
+    assert production.calls.index("window-enter") < production.calls.index("capture")
+    assert "prove-prior-state" in production.calls
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
     assert "deploy" not in production.calls
 
 
@@ -399,6 +533,174 @@ def test_apply_timer_prior_disabled_state_is_preserved(tmp_path):
     production = FakeProduction(apply_state=migration.TimerState(enabled=False, active=False))
     migration.execute(request(tmp_path), FakePhases(), production)
     assert "restore:" + migration.APPLY_TIMER not in production.calls
+
+
+@pytest.mark.parametrize("omitted_actor", sorted(EXPECTED_WINDOW_ACTORS))
+def test_each_unexcluded_writer_aborts_before_prior_pair_capture(tmp_path, omitted_actor):
+    actors = EXPECTED_WINDOW_ACTORS - {omitted_actor}
+    production = FakeProduction(excluded_actors=actors)
+
+    with pytest.raises(migration.MigrationFenced, match="persistent fence proved"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "capture" not in production.calls
+    assert "deploy" not in production.calls
+    assert production.window_fenced is True
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+    assert production.states[migration.APPLY_TIMER] == migration.TimerState(False, False)
+
+
+@pytest.mark.parametrize("failure", ["no-activity", "capture", "candidate-tree"])
+def test_pre_candidate_failure_fences_when_complete_prior_state_is_unproved(tmp_path, failure):
+    production = FakeProduction(fail=failure)
+
+    with pytest.raises(migration.MigrationFenced, match="prior state could not be proved"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "prove-prior-state" in production.calls
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+    assert "deploy" not in production.calls
+
+
+def test_pre_candidate_failure_releases_only_after_complete_prior_state_proof(tmp_path):
+    production = FakeProduction(fail="candidate-tree", canonical_sha=SHA_OLD)
+
+    with pytest.raises(migration.MigrationError, match="exact clean committed migration"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "prove-prior-state" in production.calls
+    assert "keep-fenced" not in production.calls
+    assert "restore:" + migration.APPLY_TIMER in production.calls
+
+
+@pytest.mark.parametrize("prior_proof", ["raise", "unproved"])
+def test_pre_candidate_requires_affirmative_prior_state_proof(tmp_path, prior_proof):
+    production = FakeProduction(
+        fail="no-activity", canonical_sha=SHA_OLD, prior_proof=prior_proof,
+    )
+
+    with pytest.raises(migration.MigrationFenced, match="prior state could not be proved"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+
+
+def test_dirty_or_divergent_candidate_never_invokes_compensation_or_provider_deploy(tmp_path):
+    production = FakeProduction(fail="candidate-tree")
+
+    with pytest.raises(migration.MigrationFenced):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "candidate-commit" in production.calls
+    assert "deploy" not in production.calls
+    assert "restore-canonical-exact" not in production.calls
+
+
+def test_editor_dev_sync_failure_restores_provider_canonical_and_editor_surfaces(tmp_path):
+    production = FakeProduction(fail="editor-dev")
+
+    with pytest.raises(migration.MigrationError, match="synchronization failed"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert production.live == PRIOR
+    assert production.canonical_sha == SHA_OLD
+    assert production.editor_dev_sha == SHA_OLD
+    assert "restore-canonical-exact" in production.calls
+    assert "editor-dev:" + SHA_OLD in production.calls
+    assert "prove-all:" + SHA_OLD in production.calls
+    assert production.window_fenced is False
+    assert "restore:" + migration.APPLY_TIMER in production.calls
+
+
+@pytest.mark.parametrize(
+    ("failure", "later_actions"),
+    [
+        ("restore", ["read-live", "restore-canonical-exact", "editor-dev:" + SHA_OLD,
+                     "prove-all:" + SHA_OLD]),
+        ("compensation-canonical", ["editor-dev:" + SHA_OLD, "prove-all:" + SHA_OLD]),
+        ("compensation-canonical-readback",
+         ["editor-dev:" + SHA_OLD, "prove-all:" + SHA_OLD]),
+        ("compensation-editor", ["prove-all:" + SHA_OLD]),
+        ("compensation-proof", []),
+    ],
+)
+def test_failed_full_compensation_attempts_later_actions_and_keeps_fenced(
+        tmp_path, failure, later_actions):
+    production = FakeProduction(fail=failure)
+    phases = FakePhases(fail_at=migration.VERIFY_ONLY_PHASES[-1])
+
+    with pytest.raises(migration.MigrationFenced, match="persistent fence proved"):
+        migration.execute(request(tmp_path), phases, production)
+
+    for action in later_actions:
+        assert action in production.calls
+    assert production.window_fenced is True
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+    assert production.states[migration.APPLY_TIMER] == migration.TimerState(False, False)
+
+
+def test_failed_window_close_compensates_under_lock_and_keeps_apply_timer_fenced(tmp_path):
+    production = FakeProduction(fail="window-exit")
+
+    with pytest.raises(migration.MigrationFenced, match="control boundary"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert production.live == PRIOR
+    assert production.canonical_sha == SHA_OLD
+    assert production.editor_dev_sha == SHA_OLD
+    assert production.calls.index("window-exit") < production.calls.index("restore-canonical-exact")
+    assert production.calls.index("restore-canonical-exact") < production.calls.index("lock-exit")
+    assert production.window_fenced is True
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+
+
+def test_failed_window_close_error_precedes_earlier_body_error_without_double_compensation(tmp_path):
+    production = FakeProduction(fail="record", window_exit_failure=True)
+
+    with pytest.raises(migration.MigrationFenced, match="control boundary") as failure:
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert "registry" not in str(failure.value)
+    assert production.calls.count("restore-canonical-exact") == 1
+    assert production.calls.index("restore-canonical-exact") < production.calls.index("lock-exit")
+
+
+@pytest.mark.parametrize("fence_proof", ["raise", "unproved"])
+def test_unproved_persistent_fence_has_distinct_error_and_never_restores_timer(
+        tmp_path, fence_proof):
+    production = FakeProduction(
+        excluded_actors=EXPECTED_WINDOW_ACTORS - {"canonical-merges"},
+        fence_proof=fence_proof,
+    )
+
+    with pytest.raises(
+            migration.MigrationFenced, match="persistent fencing could not be proved"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert production.window_fenced is False
+    assert "keep-fenced" in production.calls
+    assert "restore:" + migration.APPLY_TIMER not in production.calls
+
+
+def test_final_candidate_surface_proof_failure_runs_complete_prior_compensation(tmp_path):
+    production = FakeProduction(fail="candidate-proof")
+
+    with pytest.raises(migration.MigrationError, match="every deployed surface"):
+        migration.execute(request(tmp_path), FakePhases(), production)
+
+    assert production.live == PRIOR
+    assert production.canonical_sha == SHA_OLD
+    assert production.editor_dev_sha == SHA_OLD
+    assert "activate:" + SHA_OLD in production.calls
+    assert "restore-canonical-exact" in production.calls
+    assert "editor-dev:" + SHA_OLD in production.calls
+    assert "prove-all:" + SHA_OLD in production.calls
+    assert "restore:" + migration.APPLY_TIMER in production.calls
 
 
 def test_release_timer_must_already_be_disabled_and_inactive(tmp_path):
@@ -435,3 +737,9 @@ def test_operator_plan_contains_exact_inputs_and_supervised_boundary(tmp_path):
     assert "SONSTENG_PROD_RELEASE_ENABLED=false" in plan
     assert "deploy/deploy-prod.sh" in plan
     assert "never" in plan.lower()
+    assert "candidate SHA already exists" in plan
+    assert "canonical, and clean commit" in plan
+    assert "same exclusive change window remains held" in plan
+    assert "governed write" not in plan
+    assert "commit the complete" not in plan
+    assert "Merge only" not in plan

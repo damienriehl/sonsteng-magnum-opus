@@ -1,11 +1,12 @@
-# Day Zero migration rehearsal and supervised boundary
+# Day Zero migration materialization, verification, and supervised boundary
 
-`tools/day_zero_migration.py` closes the executable rehearsal gap in U15 without
-creating a new production bypass. Its default mode checks out one exact Git
-commit in a temporary standalone local clone, runs all migration gates there,
-deletes the clone, and makes no production call.
+`tools/day_zero_migration.py` prepares U15 without creating a production
+bypass. It has two intentionally different paths: a write-bearing
+materialization rehearsal and a write-free verification of the exact committed
+candidate. The dependency-injected production state machine consumes only the
+second path. No CLI production adapter exists.
 
-## Safe default: exact-SHA rehearsal
+## Phase 1: rehearse the one-time materialization
 
 Run this from the dedicated daemon checkout or another clean trusted checkout:
 
@@ -13,79 +14,131 @@ Run this from the dedicated daemon checkout or another clean trusted checkout:
 python3 tools/day_zero_migration.py --candidate-sha <40-character-lowercase-SHA>
 ```
 
-Omitting `--candidate-sha` uses the exact current `HEAD`. The command creates a
+Omitting `--candidate-sha` uses exact current `HEAD`. The command creates a
 standalone clone with no local hardlinks or object alternates and checks out
-that exact commit detached; uncommitted files and the source checkout are never
-rewritten. Retaining Git metadata is intentional because preflight's tracked-file
-and history checks must run under their real repository contract. The command
-removes credential-like environment variables from every child process, forces
-both production controls false, suppresses child output, and runs these bounded
-phases in order:
+that exact commit detached; uncommitted source files are never copied. It
+removes credential-like environment variables, forces both production controls
+false, suppresses child output, and runs these write-bearing phases:
 
-1. governed combined date-offset/JSON-LD verification (dry run and round-trip proof);
+1. governed combined date-offset/JSON-LD verification;
 2. one atomic date-offset and JSON-LD-base write in the disposable copy;
 3. site, Worker-persona, instructor, history, and editor-map builds;
 4. generated-bundle parity;
-5. strict spine validation with Day Zero and Legal Practicum identifier enforcement,
-   including nonzero `checked_dates`, `offset_dates_checked`, and
-   `identifier_files_checked` and `identifier_base_values_checked` evidence,
-   complete manifest/matters/curriculum/jurisdictions/firm/taxonomy/schemas scope, plus zero
-   `old_identifier_base_occurrences`;
-6. repository preflight in headless/no-browser mode.
+5. strict Day Zero and Legal Practicum identifier enforcement with nonzero
+   scope evidence and zero old-base occurrences; and
+6. headless repository preflight.
 
-Any failed phase aborts the rehearsal. A passing JSON receipt reports the exact
-candidate SHA, the six phase names, and `production_mutations: 0`. The temporary
-copy is removed on normal exit and catchable signals. As always, SIGKILL or
-machine power loss cannot run process cleanup, but the source checkout was never
-the write target.
+Any failure aborts. The receipt reports the exact source SHA, phase names, and
+`production_mutations: 0`. The temporary copy is removed on normal exit and
+catchable signals. SIGKILL and power loss cannot run process cleanup, but the
+source checkout was never the write target.
+
+This receipt does **not** identify deployable migrated artifacts. Under the
+exclusive production change window, repeat the governed write exactly once in
+the controlled migration worktree, run the generators, review the complete
+diff, and commit source, date-offset sidecars, identifier base, and generated
+artifacts together. The resulting commit—not the pre-write source SHA—is the
+only candidate that may proceed.
+
+## Phase 2: verify the committed candidate without rewriting it
+
+The repository-side helper `verify_materialized(repo, candidate_sha)` runs in a
+fresh standalone exact-SHA clone. The injected production state machine uses
+the same verification-only phase contract. That phase list never contains
+`governed-write`. It performs:
+
+1. exact detached `HEAD` and clean-tree proof;
+2. governed dry-run verification;
+3. deterministic generated builds followed by clean-tree proof, proving the
+   committed artifacts match their generators;
+4. generated-bundle parity;
+5. strict Day Zero and `legalpracticum.org` identifier enforcement;
+6. full headless preflight; and
+7. a final exact-HEAD/clean-tree proof.
+
+Thus a disposable rewrite cannot be deployed while claiming the unchanged
+source commit, and verifying a materialized commit cannot repeat the governed
+corpus write.
 
 ## Production remains fail closed
 
-`--execute` is intentionally not connected to Cloudflare, systemd, the editor
-queue, or the recovery registry. Even with every flag and
-`SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true`, it exits `78` before any production
-adapter call. `deploy/deploy-prod.sh` remains a disabled tripwire and is never a
-fallback.
+`--execute` is intentionally not connected to Cloudflare, systemd, Git, the
+editor queue, or the recovery registry. Even with every flag and
+`SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true`, it exits `78` before a production
+adapter call. `deploy/deploy-prod.sh` remains a disabled tripwire.
 
-This boundary is deliberate. The existing low-level release adapters can upload,
-activate, restore, and verify SHA provenance, but they do not safely read and bind
-the *currently active exact* Pages deployment ID and Worker version ID as one
-pair. Trusting ambient CLI output or reusing the normal Publisher-ledger executor
-would either weaken U15's compensating control or blur its one-off waiver.
-
-The module includes a dependency-injected production state machine so this
-workflow is executable against fakes and ready for a future bounded provider
-reader. Its tested contract requires, before mutation:
+The dependency-injected production contract requires, before provider mutation:
 
 - an exact lowercase candidate SHA;
-- the exact prior Pages ID, Worker ID, and shared live provenance SHA;
+- an exact prior Pages ID, Worker ID, and shared live provenance SHA;
 - an absolute non-symlink recovery-registry path;
 - explicit acknowledgements that John was notified and the queue was empty;
 - `SONSTENG_PROD_RELEASE_ENABLED=false`;
-- the production release timer already disabled and inactive;
+- the production release timer disabled and inactive;
 - the apply timer stopped and disabled with readback;
-- no relevant service/process/lease; and
-- the shared daemon lock held through verification, deployment, recovery-pair
-  recording, restoration proof, and return-to-candidate proof.
+- no relevant service, process, or lease;
+- the candidate commit clean, canonical, and based on the declared prior SHA;
+  and
+- one exclusive window excluding canonical writers and merges, apply and
+  production-release daemons, direct deployments, and every provider deployment
+  actor before the prior pair is captured.
 
-Provider failures are reduced to bounded categories. Provider stdout/stderr,
-credentials, and authored content are never included in a receipt or exception.
-The exact prior apply-timer enabled/active policy is restored and read back on
-every exception and catchable signal. If candidate activation may have started,
-failure compensation occurs while the daemon lock is still held and must prove
-the exact prior pair before the lock is released.
+The daemon lock and exclusive window remain held through exact-candidate
+verification, production deployment, recovery-pair recording, DEV/editor
+synchronization, prior-pair restoration proof, return-to-candidate proof, and
+final all-surface proof. The prior apply-timer policy is restored and read back
+only after that proof. Provider failures are reduced to bounded categories;
+provider output, credentials, and authored text never enter receipts or errors.
+
+If an error occurs after window entry but before the candidate is proved, the
+adapter must explicitly prove production, canonical `main`, DEV, and editor are
+all still on the complete prior state. An assumption that "nothing changed" is
+not enough. Failed prior-state proof persists the fence and leaves the apply
+timer off.
+
+## Mandatory compensation
+
+Any failure after the canonical candidate is proved triggers the complete
+compensation sequence while the window remains held:
+
+1. reactivate and read back the exact prior Pages/Worker pair;
+2. atomically compare-and-swap canonical `main` from the exact candidate SHA to
+   the exact prior SHA, then read back that exact prior SHA;
+3. rebuild and redeploy DEV/editor from that prior tree; and
+4. prove production, canonical `main`, DEV, and editor all name the prior SHA.
+
+`restore_canonical_ref_exact` is not a general-purpose Git writer or a history
+rewrite. Its protected-ref authority is bounded to that one candidate-to-prior
+compare-and-swap while the six-actor fence is held. A mismatched current ref,
+failed atomic update, or non-exact readback fails compensation.
+
+The adapter attempts every compensation surface even if an earlier step fails.
+If the complete prior state cannot be proved, it requires the persistent-freeze
+hook to return an affirmative proof, leaves the apply timer stopped, leaves the
+production timer off, and exits with a bounded fenced result. If that hook
+raises or returns anything other than exactly `true`, the result instead states
+that persistent fencing could not be proved; it never claims the fence exists.
+Partial compensation is never reported as success.
+
+An exclusive-window close failure is handled before releasing the daemon lock.
+If the candidate had been proved and compensation has not already run, full
+prior compensation runs there. The close/control-boundary failure takes
+precedence over any earlier body error, and timers remain off even when that
+compensation succeeds.
 
 ## Generate the exact operator sheet
 
-Once a trusted read-only provider inspection has supplied the exact prior pair,
-generate the non-secret supervised checklist:
+After the controlled worktree has produced and merged the exact migration
+commit, generate the non-secret checklist while the same exclusive window
+remains held. The generated sheet is strictly post-materialization: its supplied
+candidate must already be canonical, clean, and based on the prior SHA.
 
 ```bash
 SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
 SONSTENG_PROD_RELEASE_ENABLED=false \
 python3 tools/day_zero_migration.py \
   --print-operator-plan \
-  --candidate-sha <candidate-SHA> \
+  --candidate-sha <committed-migration-SHA> \
   --prior-sha <prior-live-SHA> \
   --prior-pages-deployment-id <exact-Pages-deployment-ID> \
   --prior-worker-version-id <exact-Worker-version-ID> \
@@ -94,26 +147,30 @@ python3 tools/day_zero_migration.py \
   --ack-queue-empty
 ```
 
-Do not put credentials in these arguments. The provider IDs are non-secret
-recovery coordinates; credentials remain in the protected process environment.
-Generating the sheet does not authorize or execute production work.
+Do not put credentials in these arguments. Provider IDs are non-secret recovery
+coordinates; credentials stay in protected process state. Generating the sheet
+does not authorize or execute production work.
 
 ## Remaining supervised U15 act
 
-Damien must still perform the production window at the keyboard under the
-Cloudflare PROD principal described in `docs/prod-release-operations.md`:
+Damien must perform the production window at the keyboard under the Cloudflare
+PROD principal described in `docs/prod-release-operations.md`:
 
-1. notify John and independently prove the queue is empty;
-2. capture and verify the exact prior provider pair and both live SHA headers;
-3. stop the apply timer, prove both services quiescent, and take the daemon lock;
-4. run the exact-SHA rehearsal and repeat its single combined date-offset and
-   JSON-LD-base write sequence in an isolated candidate checkout;
-5. upload only the Pages artifact and named production Worker version;
-6. read back the exact new pair and SHA, then atomically record the complete pair;
-7. reactivate and prove the exact prior pair;
-8. reactivate and prove the exact intended new pair; and
-9. release the lock, restore the apply timer's exact prior policy, and read it back.
+1. notify John and independently prove the queue empty;
+2. stop the apply timer, prove both services quiescent, take the daemon lock,
+   and establish the six-actor exclusive change window;
+3. capture and verify the exact prior pair and both live SHA headers;
+4. rehearse, then materialize and commit the combined rewrite plus generated
+   artifacts exactly once; merge only that commit;
+5. verify the exact committed tree with the write-free phase list;
+6. upload only the Pages artifact and named production Worker version;
+7. read back and atomically record the exact new provider pair;
+8. deploy/rebuild DEV/editor from the same SHA;
+9. reactivate and prove the prior pair, then the intended new pair;
+10. prove canonical `main`, production, DEV, and editor all name the candidate;
+    only then release the window and restore the apply timer's prior policy.
 
-If any step is ambiguous, stop with production on the exact prior pair. Do not
-infer a provider ID, fall forward to `HEAD`, alter DNS or Access, touch DEV, or
-substitute normal Publisher authorization for this migration-only KTD6 waiver.
+If any step is ambiguous, run complete compensation and keep the window fenced
+until the prior state is proved. Do not infer a provider ID, fall forward to
+`HEAD`, alter DNS or Access, or substitute normal Publisher authorization for
+this migration-only KTD6 waiver.

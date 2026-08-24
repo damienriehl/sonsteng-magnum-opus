@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Rehearse the one-off U15 Day Zero migration without touching production.
+"""Materialize, verify, and model the one-off U15 Day Zero migration safely.
 
-The command's default path checks out an exact candidate commit into a temporary
-standalone clone and runs the complete corpus/write/build/validation/preflight
-sequence there. The production state machine is dependency-injected and tested,
-but no CLI production adapter exists: U15 remains a supervised
-Damien-at-the-keyboard act until an exact-current-provider-ID reader can be
-added without bypassing the Publisher release authority.
+The default CLI rehearses the one-time rewrite in a disposable exact-commit
+clone. ``verify_materialized`` separately proves an already committed candidate
+without rerunning that governed write. The production state machine is fully
+dependency-injected and tested, but no CLI production adapter exists: U15
+remains a supervised act behind the Publisher release authority.
 """
 
 from __future__ import annotations
@@ -28,13 +27,34 @@ from collections.abc import Callable, Iterator
 
 APPLY_TIMER = "sonsteng-apply.timer"
 RELEASE_TIMER = "sonsteng-prod-release.timer"
-MIGRATION_PHASES = (
+MATERIALIZATION_PHASES = (
     "governed-verification",
     "governed-write",
     "generated-build",
     "build-parity",
     "strict-day-zero-enforcement",
     "preflight",
+)
+VERIFY_ONLY_PHASES = (
+    "candidate-commit",
+    "governed-verification",
+    "generated-build",
+    "generated-artifact-cleanliness",
+    "build-parity",
+    "strict-day-zero-enforcement",
+    "preflight",
+    "final-tree-cleanliness",
+)
+# Compatibility for callers which treat the write-bearing rehearsal as the
+# migration phase list. Production execution deliberately uses VERIFY_ONLY_PHASES.
+MIGRATION_PHASES = MATERIALIZATION_PHASES
+REQUIRED_CHANGE_WINDOW_ACTORS = (
+    "canonical-writers",
+    "canonical-merges",
+    "apply-daemon",
+    "production-release-daemon",
+    "direct-deployments",
+    "provider-deployment-actors",
 )
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 PROVIDER_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
@@ -47,6 +67,10 @@ class MigrationError(RuntimeError):
 
 class MigrationInterrupted(MigrationError):
     """Raised for SIGINT/SIGTERM so normal unwind logic runs."""
+
+
+class MigrationFenced(MigrationError):
+    """A control boundary could not close, so automatic unfreezing is unsafe."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -138,8 +162,8 @@ def signal_unwind_guard() -> Iterator[None]:
             signal.signal(signum, handler)
 
 
-def _run_phases(phases, candidate_sha: str, *, context: str) -> None:
-    for phase in MIGRATION_PHASES:
+def _run_phases(phases, candidate_sha: str, *, context: str, phase_names) -> None:
+    for phase in phase_names:
         try:
             phases.run(phase, candidate_sha)
         except MigrationInterrupted:
@@ -244,9 +268,26 @@ class LocalRehearsalPhases:
         except (OSError, subprocess.SubprocessError):
             raise MigrationError("bounded rehearsal command failed") from None
 
+    def _assert_exact_clean_tree(self, candidate_sha: str) -> None:
+        from prod_release_executor import GitRefAdapter, ReleaseError
+
+        try:
+            GitRefAdapter(self.checkout, timeout=30).require_clean_candidate(candidate_sha)
+        except ReleaseError as exc:
+            if str(exc) == "candidate checkout is not the clean frozen commit":
+                raise MigrationError(
+                    "candidate tree is dirty or differs from the exact commit"
+                ) from None
+            raise MigrationError("could not prove the exact committed candidate tree") from None
+        except (OSError, subprocess.SubprocessError):
+            raise MigrationError("could not prove the exact committed candidate tree") from None
+
     def run(self, phase: str, candidate_sha: str) -> None:
         print(f"rehearsal-phase:start:{phase}", file=sys.stderr, flush=True)
-        if phase == "governed-verification":
+        if phase in {"candidate-commit", "generated-artifact-cleanliness",
+                     "final-tree-cleanliness"}:
+            self._assert_exact_clean_tree(candidate_sha)
+        elif phase == "governed-verification":
             self._command(["python3", "tools/day_zero.py", "--repo", str(self.checkout)])
         elif phase == "governed-write":
             self._command(["python3", "tools/day_zero.py", "--repo", str(self.checkout), "--write"])
@@ -305,11 +346,39 @@ def rehearse(
     repo = pathlib.Path(repo).resolve()
     with isolated_copy(repo, candidate_sha) as checkout:
         runner = phases or LocalRehearsalPhases(checkout)
-        _run_phases(runner, candidate_sha, context="rehearsal")
+        _run_phases(
+            runner, candidate_sha, context="rehearsal",
+            phase_names=MATERIALIZATION_PHASES,
+        )
     return {
         "mode": "rehearsal",
         "candidate_sha": candidate_sha,
-        "phases": list(MIGRATION_PHASES),
+        "phases": list(MATERIALIZATION_PHASES),
+        "production_mutations": 0,
+    }
+
+
+def verify_materialized(
+    repo: pathlib.Path,
+    candidate_sha: str,
+    phases=None,
+    *,
+    isolated_copy: Callable = isolated_git_copy,
+) -> dict:
+    """Verify an already committed migration candidate without governed writes."""
+    if not SHA_RE.fullmatch(candidate_sha or ""):
+        raise MigrationError("an exact lowercase candidate SHA is required")
+    repo = pathlib.Path(repo).resolve()
+    with isolated_copy(repo, candidate_sha) as checkout:
+        runner = phases or LocalRehearsalPhases(checkout)
+        _run_phases(
+            runner, candidate_sha, context="verify-only",
+            phase_names=VERIFY_ONLY_PHASES,
+        )
+    return {
+        "mode": "verify-only",
+        "candidate_sha": candidate_sha,
+        "phases": list(VERIFY_ONLY_PHASES),
         "production_mutations": 0,
     }
 
@@ -318,6 +387,92 @@ def _assert_live_pair(production, expected: ProductionPair, failure: str) -> Non
     observed = _safe_operator_call(production.read_live_pair, failure)
     if observed != expected:
         raise MigrationError(failure)
+
+
+class ChangeWindowCloseError(MigrationError):
+    """The exclusive writer boundary failed while its daemon lock was held."""
+
+
+def _prove_persistent_fence(production) -> None:
+    """Require an affirmative adapter proof; stopped timers are not a proof."""
+    try:
+        proved = production.keep_change_window_fenced()
+    except BaseException:
+        raise MigrationFenced(
+            "persistent fencing could not be proved; timers remain stopped"
+        ) from None
+    if proved is not True:
+        raise MigrationFenced(
+            "persistent fencing could not be proved; timers remain stopped"
+        )
+
+
+def _persistent_fence_error(production, proved_message: str) -> MigrationFenced:
+    """Return the bounded fenced result, or the stronger unproved-fence error."""
+    _prove_persistent_fence(production)
+    return MigrationFenced(f"{proved_message}; persistent fence proved and timers remain stopped")
+
+
+@contextlib.contextmanager
+def _exclusive_change_window(production) -> Iterator[None]:
+    """Enter the all-writer freeze without laundering body failures as entry failures."""
+    try:
+        manager = production.exclusive_change_window(REQUIRED_CHANGE_WINDOW_ACTORS)
+        manager.__enter__()
+    except MigrationInterrupted:
+        raise
+    except BaseException:
+        raise _persistent_fence_error(
+            production, "could not prove the exclusive change window",
+        ) from None
+    try:
+        yield
+    finally:
+        failure = sys.exc_info()
+        try:
+            manager.__exit__(*failure)
+        except BaseException:
+            raise ChangeWindowCloseError(
+                "exclusive change-window control boundary failed"
+            ) from None
+
+
+def _prove_complete_prior_state(production, request: MigrationRequest) -> None:
+    proved = _safe_operator_call(
+        lambda: production.prove_prior_state(request.prior_pair.sha, request.prior_pair),
+        "complete prior state could not be proved",
+    )
+    if proved is not True:
+        raise MigrationError("complete prior state could not be proved")
+
+
+def _compensate_to_prior(production, request: MigrationRequest) -> bool:
+    """Attempt every rollback surface; return true only for complete proof."""
+    failed = False
+    actions = (
+        lambda: production.activate_pair(request.prior_pair),
+        lambda: _assert_live_pair(
+            production, request.prior_pair,
+            "compensation prior provider-pair readback mismatch",
+        ),
+        lambda: _restore_canonical_ref_exact(production, request),
+        lambda: production.deploy_editor_dev(request.prior_pair.sha),
+        lambda: production.prove_all_surfaces(request.prior_pair.sha, request.prior_pair),
+    )
+    for action in actions:
+        try:
+            _safe_operator_call(action, "migration compensation step failed")
+        except BaseException:
+            failed = True
+    return not failed
+
+
+def _restore_canonical_ref_exact(production, request: MigrationRequest) -> None:
+    observed = production.restore_canonical_ref_exact(
+        request.candidate_sha, request.prior_pair.sha,
+    )
+    if observed != request.prior_pair.sha:
+        raise MigrationError("canonical ref restoration readback mismatch")
 
 
 def execute(request: MigrationRequest, phases, production) -> dict:
@@ -337,22 +492,17 @@ def execute(request: MigrationRequest, phases, production) -> dict:
     if release_state.enabled or release_state.active:
         raise MigrationError("production release timer must already be disabled and inactive")
 
-    captured = _safe_operator_call(
-        production.capture_live_pair,
-        "could not capture the exact prior live pair",
-    )
-    if captured != request.prior_pair:
-        raise MigrationError("prior live pair mismatch")
-
     apply_state = _safe_operator_call(
         lambda: production.timer_state(APPLY_TIMER),
         "could not read the apply timer state",
     )
     primary_failure: BaseException | None = None
-    candidate_may_be_live = False
+    candidate_commit_proved = False
     new_pair: ProductionPair | None = None
     restored = False
     returned = False
+    keep_fenced = False
+    compensation_attempted = False
 
     try:
         _safe_operator_call(
@@ -368,61 +518,114 @@ def execute(request: MigrationRequest, phases, production) -> dict:
 
         with production.daemon_lock():
             try:
-                _safe_operator_call(
-                    production.assert_no_activity,
-                    "relevant release/apply activity remains after timer stop",
-                )
-                _run_phases(phases, request.candidate_sha, context="migration")
-
-                candidate_may_be_live = True
-                new_pair = _safe_operator_call(
-                    lambda: production.deploy_candidate(request.candidate_sha),
-                    "candidate deployment failed",
-                )
-                if not _valid_pair(new_pair) or new_pair.sha != request.candidate_sha:
-                    raise MigrationError("candidate deploy did not return an exact provider pair")
-                _assert_live_pair(production, new_pair, "candidate live pair mismatch")
-
-                _safe_operator_call(
-                    lambda: production.record_pair(new_pair, request.recovery_registry),
-                    "could not atomically record the candidate recovery pair",
-                )
-
-                _safe_operator_call(
-                    lambda: production.activate_pair(request.prior_pair),
-                    "exact prior-pair restoration failed",
-                )
-                _assert_live_pair(production, request.prior_pair, "exact prior-pair readback mismatch")
-                restored = True
-
-                _safe_operator_call(
-                    lambda: production.activate_pair(new_pair),
-                    "return to intended candidate pair failed",
-                )
-                _assert_live_pair(production, new_pair, "returned candidate pair readback mismatch")
-                returned = True
-            except BaseException as exc:
-                primary_failure = exc
-                if candidate_may_be_live:
+                with _exclusive_change_window(production):
                     try:
                         _safe_operator_call(
+                            production.assert_no_activity,
+                            "relevant release/apply activity remains after timer stop",
+                        )
+                        captured = _safe_operator_call(
+                            production.capture_live_pair,
+                            "could not capture the exact prior live pair",
+                        )
+                        if captured != request.prior_pair:
+                            raise MigrationError("prior live pair mismatch")
+
+                        _safe_operator_call(
+                            lambda: production.assert_candidate_commit(
+                                request.candidate_sha, request.prior_pair.sha,
+                            ),
+                            "candidate tree is not the exact clean committed migration",
+                        )
+                        candidate_commit_proved = True
+                        _run_phases(
+                            phases, request.candidate_sha, context="migration",
+                            phase_names=VERIFY_ONLY_PHASES,
+                        )
+
+                        new_pair = _safe_operator_call(
+                            lambda: production.deploy_candidate(request.candidate_sha),
+                            "candidate deployment failed",
+                        )
+                        if not _valid_pair(new_pair) or new_pair.sha != request.candidate_sha:
+                            raise MigrationError(
+                                "candidate deploy did not return an exact provider pair"
+                            )
+                        _assert_live_pair(production, new_pair, "candidate live pair mismatch")
+
+                        _safe_operator_call(
+                            lambda: production.record_pair(new_pair, request.recovery_registry),
+                            "could not atomically record the candidate recovery pair",
+                        )
+                        _safe_operator_call(
+                            lambda: production.deploy_editor_dev(request.candidate_sha),
+                            "editor/DEV candidate synchronization failed",
+                        )
+
+                        _safe_operator_call(
                             lambda: production.activate_pair(request.prior_pair),
-                            "emergency prior-pair restoration failed",
+                            "exact prior-pair restoration failed",
                         )
                         _assert_live_pair(
-                            production,
-                            request.prior_pair,
-                            "emergency prior-pair readback mismatch",
+                            production, request.prior_pair,
+                            "exact prior-pair readback mismatch",
                         )
-                    except BaseException:
-                        primary_failure = MigrationError(
-                            "migration failed and exact prior-pair restoration could not be proved"
+                        restored = True
+
+                        _safe_operator_call(
+                            lambda: production.activate_pair(new_pair),
+                            "return to intended candidate pair failed",
                         )
+                        _assert_live_pair(
+                            production, new_pair,
+                            "returned candidate pair readback mismatch",
+                        )
+                        _safe_operator_call(
+                            lambda: production.prove_all_surfaces(
+                                request.candidate_sha, new_pair,
+                            ),
+                            "candidate was not proved across every deployed surface",
+                        )
+                        returned = True
+                    except BaseException as exc:
+                        primary_failure = exc
+                        if candidate_commit_proved:
+                            compensation_attempted = True
+                            if not _compensate_to_prior(production, request):
+                                keep_fenced = True
+                                primary_failure = _persistent_fence_error(
+                                    production,
+                                    "migration failed and full compensation could not be proved",
+                                )
+                        else:
+                            try:
+                                _prove_complete_prior_state(production, request)
+                            except BaseException:
+                                keep_fenced = True
+                                primary_failure = _persistent_fence_error(
+                                    production,
+                                    "failure before candidate proof and complete prior state "
+                                    "could not be proved",
+                                )
+            except ChangeWindowCloseError:
+                # This handler is deliberately inside daemon_lock. A close failure
+                # outranks any earlier body error and can never auto-unfreeze.
+                keep_fenced = True
+                compensation_ok = True
+                if candidate_commit_proved and not compensation_attempted:
+                    compensation_attempted = True
+                    compensation_ok = _compensate_to_prior(production, request)
+                message = "exclusive change-window control boundary failed"
+                if not compensation_ok:
+                    message += " and full compensation could not be proved"
+                primary_failure = _persistent_fence_error(production, message)
     except BaseException as exc:
-        if primary_failure is None:
+        if isinstance(exc, MigrationFenced):
+            keep_fenced = True
+        if primary_failure is None or isinstance(exc, MigrationFenced):
             primary_failure = exc
     finally:
-        if apply_state.enabled or apply_state.active:
+        if not keep_fenced and (apply_state.enabled or apply_state.active):
             try:
                 _safe_operator_call(
                     lambda: production.restore_timer(APPLY_TIMER, apply_state),
@@ -450,6 +653,8 @@ def execute(request: MigrationRequest, phases, production) -> dict:
         "new_pair": new_pair.redacted(),
         "restoration_proved": restored,
         "returned_to_candidate": returned,
+        "editor_dev_synced": True,
+        "change_window_released": True,
         "apply_timer_restored": True,
     }
 
@@ -469,26 +674,39 @@ This remains a **Damien at the keyboard** production act. Keep
 disabled and inactive. Never use `deploy/deploy-prod.sh`, which is the disabled
 Publisher-bypass tripwire.
 
-1. Confirm John has been notified and independently prove the editor/apply queue is empty.
-2. Read the exact active Pages deployment ID, Worker version ID, and both live
-   `x-release-sha` values. They must equal the prior identifiers above.
-3. Stop and disable `sonsteng-apply.timer`; prove both release/apply services
-   have no process or lease; acquire the dedicated checkout's `.locks/daemon.lock`.
-4. Run this command without `--execute` at the exact candidate SHA. Require all
-   six rehearsal phases to pass in its isolated copy.
-5. In a separate isolated candidate checkout, run the same combined date-offset
-   and JSON-LD-base write, generators, parity, strict Day Zero/identifier gate,
-   and preflight. Stop on any failure.
-6. Using only the bounded Cloudflare PROD principal, upload the Pages artifact
+This sheet is strictly post-materialization. The supplied candidate SHA already exists as a
+materialized, reviewed, canonical, and clean commit; its parent is the prior SHA above.
+
+1. Prove the supplied candidate is the exact clean canonical `main` commit and
+   has the prior SHA above as its parent. Stop on any difference.
+2. Confirm John has been notified and independently prove the editor/apply queue is empty.
+3. Confirm `sonsteng-apply.timer` remains stopped and disabled, both
+   release/apply services still have no process or lease, and the dedicated
+   checkout's `.locks/daemon.lock` remains held.
+4. Confirm the same exclusive change window remains held and still blocks
+   canonical writers and merges, both apply and release daemons, direct deploy
+   commands, and every provider deployment actor. Do not capture the prior pair
+   unless all six actor classes remain excluded.
+5. Inside that window, read the exact active Pages deployment ID, Worker version
+   ID, and both live `x-release-sha` values. They must equal the prior identifiers above.
+6. Run the write-free `verify_materialized` path against a fresh isolated copy
+   of that exact commit. It must prove exact clean HEAD before and after builds,
+   generated parity, strict Day Zero/identifier validation, and preflight.
+7. Using only the bounded Cloudflare PROD principal, upload the Pages artifact
    and named production Worker version. Do not mutate DNS, Access, DEV, or account policy.
-7. Read back the exact new provider IDs and both live SHA values. Atomically
+8. Read back the exact new provider IDs and both live SHA values. Atomically
    record the complete new pair in the recovery registry before proceeding.
-8. Reactivate the exact prior IDs above and prove both live SHA values; then
-   reactivate the exact new pair and prove it again.
-9. On every exit or signal, restore the prior pair if the intended pair is not
-   fully proved, release `.locks/daemon.lock`, restore the apply timer's prior
-   enable/active policy, and read it back. SIGKILL/power loss requires the same
-   recovery sheet before any retry.
+9. Deploy/rebuild the editor and DEV surfaces from the same candidate SHA.
+   Reactivate the exact prior IDs above and prove both live SHA values; then
+   reactivate the exact new pair and prove production, DEV, editor, and canonical
+   `main` all name the candidate SHA.
+10. On failure, restore the exact prior provider pair, atomically compare-and-swap
+    canonical `main` from the candidate SHA to the prior SHA with exact readback,
+    rebuild/redeploy DEV and editor from the prior tree, and prove every surface
+    is back on that prior SHA. If any compensation or persistent-fence proof
+    fails, leave both timers stopped for supervised recovery. Release the window
+    and restore the apply timer's exact prior policy only after final candidate
+    proof or complete prior-state recovery.
 
 Do not copy credentials, provider stdout/stderr, or authored corpus text into
 the registry, receipts, terminal transcript, screenshots, or issue comments.
