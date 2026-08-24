@@ -323,6 +323,18 @@ test("loads credentials from protected environment variables", async () => {
   assert.deepEqual(credentials, { apiKey: API_KEY, bypassToken: BYPASS });
 });
 
+test("callers may require protected file or stdin and reject direct environment credentials", async () => {
+  await assert.rejects(
+    loadCredentials({
+      provider: "openai",
+      env: { OPENAI_API_KEY: API_KEY, DEMO_BYPASS_TOKEN: BYPASS },
+      allowDirectEnvironment: false,
+    }),
+    (error) => error.code === "credentials" &&
+      !error.message.includes(API_KEY) && !error.message.includes(BYPASS),
+  );
+});
+
 test("loads a credential JSON object from stdin without echoing it", async () => {
   const stdin = Readable.from([JSON.stringify({ api_key: API_KEY, demo_bypass_token: BYPASS })]);
   const credentials = await loadCredentials({
