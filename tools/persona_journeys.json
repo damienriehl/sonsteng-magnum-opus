@@ -1,0 +1,751 @@
+{
+  "schema_version": 1,
+  "journeys": [
+    {
+      "id": "pitch-home-load",
+      "story": "US-1-01",
+      "persona": "A1",
+      "viewports": ["desktop", "phone", "zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Training the next generation", "check": 1},
+        {"op": "assert", "kind": "a11yName", "selector": "h1", "expected": "Training the next generation of lawyers.", "check": 1},
+        {"op": "assert", "kind": "a11yRole", "selector": "h1", "expected": "heading", "check": 1}
+      ]
+    },
+    {
+      "id": "pitch-first-proof",
+      "story": "US-1-02",
+      "persona": "A1",
+      "viewports": ["desktop", "phone", "zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "click", "selector": "details.proof summary"},
+        {"op": "assert", "kind": "attr", "selector": "details.proof", "attr": "open", "value": "", "check": 1},
+        {"op": "assert", "kind": "text", "selector": "details.proof[open] .reveal", "text": "19,077 Minnesota attorneys", "check": 2}
+      ]
+    },
+    {
+      "id": "platform-to-matter-library",
+      "story": "US-2-01",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "click", "selector": "a[href=\"matters/index.html\"]"},
+        {"op": "waitFor", "url": "/platform/matters/"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Simulated matters", "check": 1}
+      ]
+    },
+    {
+      "id": "student-matter-packet",
+      "story": "US-2-03",
+      "persona": "A2",
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/matters/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"]", "visible": true, "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "visible": true, "check": 2},
+        {"op": "expectDownload", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "pattern": "m05-dwi-meridian-student-materials.zip"},
+        {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "State of Meridian v. Devon R. Halvard", "check": 1}
+      ]
+    },
+    {
+      "id": "student-hours-load",
+      "story": "US-2-08",
+      "persona": "A2",
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/hours/"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Weekly hours log", "check": 1}
+      ]
+    },
+    {
+      "id": "cost-per-credit-load",
+      "story": "US-1-05",
+      "persona": "A1",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/cost-per-credit.html"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Cost per credit, on your terms.", "check": 1}
+      ]
+    },
+    {
+      "id": "student-sample-interview",
+      "story": "US-2-05",
+      "persona": "A2",
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/chat/index.html?matter=m05&persona=m05.per.halvard&title=State%20of%20Meridian%20v.%20Devon%20R.%20Halvard&client=Devon%20Halvard&role=Client%20%28criminal%20defendant%29&sample=1"},
+        {"op": "waitFor", "text": "SCRIPTED SAMPLE"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "State of Meridian v. Devon R. Halvard", "check": 1},
+        {"op": "assert", "kind": "liveRegion", "selector": ".sample-banner__status", "text": "READY", "check": 2}
+      ]
+    },
+    {
+      "id": "a1-deliberate-canary",
+      "story": "US-1-CANARY",
+      "persona": "A1",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A1-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "a2-deliberate-canary",
+      "story": "US-2-CANARY",
+      "persona": "A2",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A2-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "a7-deliberate-canary",
+      "story": "US-7-CANARY",
+      "persona": "A7",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A7-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "pitch-expand-collapse-all",
+      "story": "US-1-03",
+      "persona": "A1",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "attr", "selector": "#proofToggle", "attr": "aria-expanded", "value": "false", "check": 1},
+        {"op": "click", "selector": "#proofToggle"},
+        {"op": "assert", "kind": "selector", "selector": "details.proof[open]", "count": 9, "check": 2},
+        {"op": "assert", "kind": "text", "selector": "#proofToggle", "text": "Collapse all sections", "check": 2},
+        {"op": "click", "selector": "#proofToggle"},
+        {"op": "assert", "kind": "attr", "selector": "#proofToggle", "attr": "aria-expanded", "value": "false", "check": 3},
+        {"op": "click", "selector": "details.proof summary"},
+        {"op": "assert", "kind": "attr", "selector": "#proofToggle", "attr": "aria-expanded", "value": "false", "check": 4}
+      ]
+    },
+    {
+      "id": "pitch-public-navigation",
+      "story": "US-1-04",
+      "persona": "A1",
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "selector", "selector": "nav .navlinks a", "count": 9, "check": 1},
+        {"op": "click", "name": "The Evidence"},
+        {"op": "waitFor", "url": "#skills"},
+        {"op": "assert", "kind": "url", "url": "#skills", "check": 2},
+        {"op": "assert", "kind": "text", "selector": "#skills", "text": "The empirical proof", "check": 2},
+        {"op": "click", "name": "Open"},
+        {"op": "waitFor", "url": "#where"},
+        {"op": "assert", "kind": "text", "selector": "#where", "text": "Given away, so it outlives us.", "check": 3},
+        {"op": "focus", "name": "Open"},
+        {"op": "assert", "kind": "focusOn", "name": "Open", "check": 4}
+      ]
+    },
+    {
+      "id": "pitch-phone-nav-hidden",
+      "story": "US-1-04",
+      "persona": "A1",
+      "viewports": ["phone", "zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "selector", "selector": "nav .navlinks", "visible": false, "check": 5},
+        {"op": "assert", "kind": "selector", "selector": ".hero-cta", "visible": true, "check": 5}
+      ]
+    },
+    {
+      "id": "pitch-phone-reflow",
+      "story": "US-1-06",
+      "persona": "A1",
+      "viewports": ["phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "selector", "selector": "html", "noHorizontalOverflow": true, "check": 1},
+        {"op": "assert", "kind": "selector", "selector": ".hero-cta", "visible": true, "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "details.proof summary", "count": 9, "check": 2},
+        {"op": "click", "selector": "#cOpen"},
+        {"op": "assert", "kind": "selector", "selector": "#cClose", "visible": true, "check": 3},
+        {"op": "assert", "kind": "selector", "selector": "#cActiveText", "check": 3}
+      ]
+    },
+    {
+      "id": "pitch-keyboard-zoom",
+      "story": "US-1-07",
+      "persona": "A1",
+      "viewports": ["zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "focus", "selector": "#proofToggle"},
+        {"op": "assert", "kind": "focusOn", "selector": "#proofToggle", "check": 1},
+        {"op": "press", "key": "Enter"},
+        {"op": "assert", "kind": "attr", "selector": "#proofToggle", "attr": "aria-expanded", "value": "true", "check": 3},
+        {"op": "focus", "selector": "details.proof summary"},
+        {"op": "assert", "kind": "focusOn", "selector": "details.proof summary", "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "html", "noHorizontalOverflow": true, "check": 4}
+      ]
+    },
+    {
+      "id": "pitch-empty-reactions",
+      "story": "US-1-08",
+      "persona": "A1",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/#react"},
+        {"op": "click", "selector": "#react details.proof > summary"},
+        {"op": "assert", "kind": "attr", "selector": "#react details.proof", "attr": "open", "value": "", "check": 2},
+        {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"},
+        {"op": "assert", "kind": "text", "selector": "#cCount", "text": "1", "check": 2},
+        {"op": "click", "selector": "#cOpen"},
+        {"op": "assert", "kind": "text", "selector": "#cList", "text": "No comments yet", "check": 1},
+        {"op": "click", "selector": "#cCopy"},
+        {"op": "assert", "kind": "selector", "selector": "#cCopied", "check": 3},
+        {"op": "click", "selector": "#cClose"},
+        {"op": "assert", "kind": "focusOn", "selector": "#cOpen", "check": 4}
+      ]
+    },
+    {
+      "id": "student-filter-matters",
+      "story": "US-2-02",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_catalog_client.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "student-download-packet",
+      "story": "US-2-04",
+      "persona": "A2",
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/matters/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"]", "visible": true, "check": 1},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "visible": true, "check": 1},
+        {"op": "expectDownload", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "pattern": "m05-dwi-meridian-student-materials.zip"},
+        {"op": "assert", "kind": "attr", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "attr": "href", "includes": "m05-dwi-meridian-student-materials.zip", "check": 2},
+        {"op": "assert", "kind": "text", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "text": "student materials", "check": 3},
+        {"op": "focus", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]"},
+        {"op": "assert", "kind": "focusOn", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "check": 4}
+      ]
+    },
+    {
+      "id": "student-valid-critique",
+      "story": "US-2-06",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_chat_critique.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "student-critique-recovery",
+      "story": "US-2-07",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_chat_critique.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "student-hours-recovery",
+      "story": "US-2-09",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node app/hours/verify-hours.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "student-firm-and-templates",
+      "story": "US-2-10",
+      "persona": "A2",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/firm/"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Ellingboe & Ravndal LLP", "check": 1},
+        {"op": "click", "selector": "button[data-target=\"viz1-tbl\"]"},
+        {"op": "assert", "kind": "attr", "selector": "button[data-target=\"viz1-tbl\"]", "attr": "aria-expanded", "value": "true", "check": 2},
+        {"op": "goto", "path": "/platform/templates/"},
+        {"op": "assert", "kind": "selector", "selector": ".template-doc", "count": 6, "check": 3},
+        {"op": "assert", "kind": "text", "selector": "#tpl-time-sheet", "text": "Weekly Time Sheet", "check": 3},
+        {"op": "assert", "kind": "selector", "selector": ".breadcrumb a", "check": 4}
+      ]
+    },
+    {
+      "id": "instructor-skill-to-rubric",
+      "story": "US-3-01",
+      "persona": "A3",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/modules/m1.html"},
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "Module 1 — Foundational", "check": 1},
+        {"op": "click", "name": "Fact gathering"},
+        {"op": "waitFor", "url": "#SK-LP-07"},
+        {"op": "click", "selector": "#SK-LP-07 > summary"},
+        {"op": "assert", "kind": "text", "selector": "#SK-LP-07", "text": "Conduct a client intake interview", "check": 2},
+        {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/"},
+        {"op": "assert", "kind": "text", "text": "Client interview and fact development", "check": 3},
+        {"op": "assert", "kind": "selector", "selector": ".breadcrumb a", "check": 4}
+      ]
+    },
+    {
+      "id": "instructor-print-library",
+      "story": "US-3-02",
+      "persona": "A3",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_platform_layout.js --print", "story_checks": [1, 2, 3]}
+    },
+    {
+      "id": "instructor-private-bundle",
+      "story": "US-3-03",
+      "persona": "A3",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "python3 tools/build_instructor_bundle.py && node --test app/worker/test/editor-map.test.js app/worker/test/offline-redteam-redaction.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "instructor-assessment-override",
+      "story": "US-3-04",
+      "persona": "A3",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/assessment-review.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "instructor-calibration-boundary",
+      "story": "US-3-05",
+      "persona": "A3",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/platform-language-contract.test.js", "story_checks": [1, 2, 3]}
+    },
+    {
+      "id": "a3-deliberate-canary",
+      "story": "US-3-CANARY",
+      "persona": "A3",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/modules/m1.html"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A3-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "john-editor-door-history",
+      "story": "US-4-01",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4, 5]}
+    },
+    {
+      "id": "john-edit-dev-status",
+      "story": "US-4-02",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-comment",
+      "story": "US-4-03",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-draft-recovery",
+      "story": "US-4-04",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-apply-state-recovery",
+      "story": "US-4-05",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js && node --test app/worker/test/editor-direct-apply.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-request-revert",
+      "story": "US-4-06",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-revert.test.js && python3 -m pytest tools/tests/test_build_history.py -q", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-structural-review",
+      "story": "US-4-07",
+      "persona": "A4",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "john-keyboard-large-type",
+      "story": "US-4-08",
+      "persona": "A4",
+      "viewports": ["desktop", "phone", "zoom200"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js && node app/editor/verify-rail-placement.js", "story_checks": [1, 2, 3, 4, 5]}
+    },
+    {
+      "id": "a4-deliberate-canary",
+      "story": "US-4-CANARY",
+      "persona": "A4",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A4-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "roger-attributed-edit",
+      "story": "US-5-01",
+      "persona": "A5",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-roger.test.js && node app/editor/verify-editor.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "roger-slot-isolation",
+      "story": "US-5-02",
+      "persona": "A5",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-roger.test.js app/worker/test/editor-access-door.test.js", "story_checks": [1, 2, 3]}
+    },
+    {
+      "id": "roger-request-revert",
+      "story": "US-5-03",
+      "persona": "A5",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-revert.test.js", "story_checks": [1, 2, 3]}
+    },
+    {
+      "id": "a5-deliberate-canary",
+      "story": "US-5-CANARY",
+      "persona": "A5",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A5-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "publisher-immutable-authorization",
+      "story": "US-6-01",
+      "persona": "A6",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_publisher_client.mjs", "story_checks": [1, 2, 3, 4, 5]}
+    },
+    {
+      "id": "publisher-client-accessibility",
+      "story": "US-6-02",
+      "persona": "A6",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_publisher_client.mjs", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "publisher-authorization-boundary",
+      "story": "US-6-03",
+      "persona": "A6",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-publisher-release.test.js app/worker/test/editor-publisher-review.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "publisher-release-pair",
+      "story": "US-6-04",
+      "persona": "A6",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "python3 -m pytest tools/tests/test_prod_release_readiness.py tools/tests/test_prod_release_operations.py tools/tests/test_publication_boundary.py -q", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "a6-deliberate-canary",
+      "story": "US-6-CANARY",
+      "persona": "A6",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A6-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "adopter-clone-serve",
+      "story": "US-7-01",
+      "persona": "A7",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "bash tools/uat_adopter_journey.sh clone-serve", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:<port>/platform/", "account_boundary": "No Cloudflare or provider account"}
+    },
+    {
+      "id": "adopter-worker-tests",
+      "story": "US-7-02",
+      "persona": "A7",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "bash tools/uat_adopter_journey.sh worker-tests", "story_checks": [1, 2, 3, 4], "local_target": "app/worker/test", "account_boundary": "No provider key, Wrangler login, or live Worker"}
+    },
+    {
+      "id": "adopter-byok-boundary",
+      "story": "US-7-03",
+      "persona": "A7",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "bash tools/uat_adopter_journey.sh byok-boundary", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:<port>/platform/chat/index.html?matter=m05&persona=m05.per.halvard", "account_boundary": "Stops before entering or sending a credential"}
+    },
+    {
+      "id": "adopter-worker-dry-run",
+      "story": "US-7-04",
+      "persona": "A7",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "bash tools/uat_adopter_journey.sh worker-dry-run", "story_checks": [1, 2, 3, 4], "local_target": "Wrangler dry-run bundle", "account_boundary": "No login or deployment"}
+    },
+    {
+      "id": "adopter-validate-build",
+      "story": "US-7-05",
+      "persona": "A7",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "bash tools/uat_adopter_journey.sh validate-build", "story_checks": [1, 2, 3], "local_target": "data/ and site/platform/", "account_boundary": "No external account or model credential"}
+    },
+    {
+      "id": "student-live-provider-dev",
+      "story": "US-2-11",
+      "persona": "A2",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "cd app/worker && CREDENTIALS_FILE=$SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE PROVIDER=google WORKER_URL={{WORKER_URL}} node test/live-stream-smoke.mjs", "story_checks": [1, 2, 3, 4, 5], "environments": ["dev"], "credential_gate": "SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE"}
+    },
+    {
+      "id": "school-cost-comparison",
+      "story": "US-8-01",
+      "persona": "A8",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_cost_per_credit.js", "story_checks": [1, 2, 3, 4, 5]}
+    },
+    {
+      "id": "school-cost-recovery",
+      "story": "US-8-02",
+      "persona": "A8",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_cost_per_credit.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "school-competency-credit",
+      "story": "US-8-03",
+      "persona": "A8",
+      "viewports": ["desktop"],
+      "binding": "command",
+      "command": {"command": "python3 -m pytest tools/tests/test_competency_credit_proposal.py", "story_checks": [1, 2, 3, 4], "local_target": "docs/proposals/competency-based-credit.md", "account_boundary": "No learner data, institutional approval, or external account"}
+    },
+    {
+      "id": "school-license-boundary",
+      "story": "US-8-04",
+      "persona": "A8",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/about/content-license.html"},
+        {"op": "assert", "kind": "text", "text": "CC BY 4.0", "check": 1},
+        {"op": "assert", "kind": "text", "text": "Creative Commons", "check": 2},
+        {"op": "goto", "path": "/platform/about/code-license.html"},
+        {"op": "assert", "kind": "text", "text": "MIT", "check": 2},
+        {"op": "goto", "path": "/platform/about/third-party.html"},
+        {"op": "assert", "kind": "text", "text": "Third-party", "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "a[href=\"../index.html\"]", "check": 3}
+      ]
+    },
+    {
+      "id": "a8-deliberate-canary",
+      "story": "US-8-CANARY",
+      "persona": "A8",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/cost-per-credit.html"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A8-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "accessibility-keyboard-packet",
+      "story": "US-9-01",
+      "persona": "A9",
+      "viewports": ["desktop", "phone", "zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "focus", "selector": ".skip-link"},
+        {"op": "press", "key": "Enter"},
+        {"op": "assert", "kind": "focusOn", "selector": "#main", "check": 1},
+        {"op": "assert", "kind": "a11yName", "selector": "a[href=\"matters/index.html\"]", "expected": "MATTER LIBRARY 20 simulated matters", "contains": true, "check": 2},
+        {"op": "goto", "path": "/platform/matters/"},
+        {"op": "assert", "kind": "liveRegion", "selector": "[data-catalog-status]", "text": "20 matters", "check": 3},
+        {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/facts/"},
+        {"op": "assert", "kind": "readingOrder", "selectors": [".breadcrumb", "h1"], "check": 4}
+      ]
+    },
+    {
+      "id": "accessibility-zoom-controls",
+      "story": "US-9-02",
+      "persona": "A9",
+      "viewports": ["zoom200"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_platform_layout.js && node tools/verify_chat_critique.js && node app/editor/verify-rail-placement.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "accessibility-live-states",
+      "story": "US-9-03",
+      "persona": "A9",
+      "viewports": ["desktop", "zoom200"],
+      "binding": "harness",
+      "harness": {"command": "node tools/a11y_audit.js && node tools/verify_chat_critique.js && node app/hours/verify-hours.js", "story_checks": [1, 2, 3, 4, 5]}
+    },
+    {
+      "id": "accessibility-large-type-motion",
+      "story": "US-9-04",
+      "persona": "A9",
+      "viewports": ["desktop", "phone"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "attr", "selector": "#type-toggle", "attr": "aria-pressed", "value": "false", "check": 1},
+        {"op": "click", "selector": "#type-toggle"},
+        {"op": "assert", "kind": "attr", "selector": "#type-toggle", "attr": "aria-pressed", "value": "true", "check": 1},
+        {"op": "click", "name": "Skills browser"},
+        {"op": "waitFor", "url": "/platform/skills/"},
+        {"op": "assert", "kind": "attr", "selector": "#type-toggle", "attr": "aria-pressed", "value": "true", "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "main", "visible": true, "check": 3},
+        {"op": "click", "selector": "#type-toggle"},
+        {"op": "assert", "kind": "attr", "selector": "#type-toggle", "attr": "aria-pressed", "value": "false", "check": 4}
+      ]
+    },
+    {
+      "id": "accessibility-download-hours",
+      "story": "US-9-05",
+      "persona": "A9",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node app/hours/verify-hours.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "a9-deliberate-canary",
+      "story": "US-9-CANARY",
+      "persona": "A9",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A9-never\"]", "check": 1}
+      ]
+    },
+    {
+      "id": "hostile-bot-gate",
+      "story": "US-10-01",
+      "persona": "A10",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_bot_gate.js --base {{WORKER_URL}}", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "hostile-offline-redteam",
+      "story": "US-10-02",
+      "persona": "A10",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node tools/offline_redteam_probe.mjs", "story_checks": [1, 2, 3]}
+    },
+    {
+      "id": "hostile-live-redteam-dev",
+      "story": "US-10-03",
+      "persona": "A10",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "cd app/worker && CREDENTIALS_FILE=$SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE PROVIDER=google WORKER_URL={{WORKER_URL}} node test/redteam.mjs", "story_checks": [1, 2, 3, 4], "environments": ["dev"], "credential_gate": "SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE"}
+    },
+    {
+      "id": "hostile-forged-edit",
+      "story": "US-10-04",
+      "persona": "A10",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node app/editor/verify-editor.js && node --test app/worker/test/editor-security.test.js && python3 -m pytest tools/tests/test_editor_consistency.py -q", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "hostile-origin-edit-routes",
+      "story": "US-10-05",
+      "persona": "A10",
+      "viewports": ["desktop"],
+      "binding": "harness",
+      "harness": {"command": "node --test app/worker/test/editor-security.test.js app/worker/test/access-jwt.test.js app/worker/test/editor-map.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "hostile-byok-telemetry",
+      "story": "US-10-06",
+      "persona": "A10",
+      "viewports": ["desktop", "phone"],
+      "binding": "harness",
+      "harness": {"command": "node tools/verify_chat_critique.js && node --test app/worker/test/*security*.test.js", "story_checks": [1, 2, 3, 4]}
+    },
+    {
+      "id": "a10-deliberate-canary",
+      "story": "US-10-CANARY",
+      "persona": "A10",
+      "canary": true,
+      "viewports": ["desktop"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/platform/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-uat-canary=\"A10-never\"]", "check": 1}
+      ]
+    }
+  ]
+}
