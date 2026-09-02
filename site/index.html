@@ -639,7 +639,7 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
   Comments <span class="cnt" id="cCount"></span>
 </button>
-<aside class="drawer" id="cDrawer" role="dialog" aria-label="Comments" aria-hidden="true">
+<aside class="drawer" id="cDrawer" role="dialog" aria-label="Comments" aria-hidden="true" inert>
   <header><h3>Comments &amp; reactions</h3><button class="x" id="cClose" aria-label="Close comments">×</button></header>
   <div class="dbody">
     <div class="active-cmt" id="cActive" hidden>
@@ -735,13 +735,34 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
       activeId=document.getElementById('cActiveId'),
       activeLabel=document.getElementById('cActiveLabel'),
       activeText=document.getElementById('cActiveText'),
-      curCid=null;
+      curCid=null,
+      drawerOpener=null,
+      activeFocusTimer=null;
 
-  function openDrawer(){drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');}
-  function closeDrawer(){drawer.classList.remove('open');drawer.setAttribute('aria-hidden','true');}
+  function openDrawer(){
+    if(!drawer.classList.contains('open')){
+      drawerOpener=document.activeElement;
+      if(!drawerOpener||drawerOpener===document.body){drawerOpener=document.getElementById('cOpen');}
+    }
+    drawer.inert=false;
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden','false');
+    document.getElementById('cClose').focus();
+  }
+  function closeDrawer(){
+    if(activeFocusTimer!==null){clearTimeout(activeFocusTimer);activeFocusTimer=null;}
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+    drawer.inert=true;
+    var fallbackOpener=document.getElementById('cOpen'),
+        opener=drawerOpener&&document.contains(drawerOpener)?drawerOpener:fallbackOpener;
+    if(opener) opener.focus();
+    if(document.activeElement!==opener&&fallbackOpener) fallbackOpener.focus();
+    drawerOpener=null;
+  }
   document.getElementById('cOpen').onclick=function(){renderList();openDrawer();};
   document.getElementById('cClose').onclick=closeDrawer;
-  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawer.classList.contains('open'))closeDrawer();});
 
   function openFor(cid){
     var t=byId[cid]; if(!t) return;
@@ -752,7 +773,11 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
     activeText.value=(store[cid]&&store[cid].text)||'';
     renderList(); openDrawer();
     if(t.host){t.host.classList.remove('cmt-flash');void t.host.offsetWidth;t.host.classList.add('cmt-flash');}
-    setTimeout(function(){activeText.focus();},340);
+    if(activeFocusTimer!==null) clearTimeout(activeFocusTimer);
+    activeFocusTimer=setTimeout(function(){
+      activeFocusTimer=null;
+      if(drawer.classList.contains('open')&&curCid===cid) activeText.focus();
+    },340);
   }
   activeText.addEventListener('input',function(){
     if(!curCid) return;
