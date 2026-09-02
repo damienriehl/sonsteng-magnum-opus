@@ -13,3 +13,14 @@ Pages provenance: 200 + sha on / and /platform/
 DEV/production parity: SAME except build stamp (/, /platform/, /platform/matters/, /platform/skills/)
 Operator: orchestrating agent under Damien's 2026-09-02 authority
 ```
+
+```
+Date (UTC): 2026-09-02 17:55–18:00
+Candidate SHA: 0643a54924b3fdd082f74944d131753de0dc4c06 (main after PR #34)
+Previous Worker version / Pages deployment: c788b114-f643-479c-989b-a65a7f2119a5 / 3fe768ba
+New Worker version / Pages deployment: cb2e029d-5e75-4cfe-83f7-62687581ee98 / dbff9a7b (https://dbff9a7b.sonsteng.pages.dev)
+Worker provenance: 204 + sha (after propagation)
+Pages provenance: 200 + sha on / and /platform/
+DEV/production parity: DEV redeployed from origin/main by deploy/deploy-dev.sh in the same window
+Operator: orchestrating agent under Damien's 2026-09-02 authority
+```
