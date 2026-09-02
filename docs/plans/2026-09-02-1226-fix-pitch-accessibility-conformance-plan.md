@@ -4,7 +4,7 @@ type: fix
 date: 2026-09-02
 topic: pitch-accessibility-conformance
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: requirements-only
+artifact_readiness: implementation-ready
 product_contract_source: ce-brainstorm
 execution: code
 ---
@@ -19,7 +19,7 @@ execution: code
 
 **Product authority.** Persona UAT finding, September 2, 2026: `node tools/a11y_audit.js https://legalpracticum.org/` reported 29 text-contrast failures on the pitch page while every generated platform page passed. The evidence is `docs/uat/persona-uat-record.md` (A9 rows) and the audit transcript recorded there. Bounded items from the same audit (`lang`, navigation target sizes, close-button size, viewport meta) shipped separately under the UAT program; this plan owns the remaining design-level items.
 
-**Open blockers.** The pitch palette is Damien's and John's taste. Resolve Before Planning: which of the two remedies below Damien prefers.
+**Open blockers.** None. Damien chose Remedy A on September 2, 2026 (inline answer to the orchestrating session; recorded in `docs/handoffs/2026-09-02-persona-uat-closeout.md`).
 
 ## Product Contract
 

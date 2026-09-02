@@ -49,6 +49,7 @@ const REPO = path.resolve(__dirname, '..');
 const SITE = path.join(REPO, 'site', 'platform');
 const MATRIX = JSON.parse(fs.readFileSync(path.join(__dirname, 'platform_browser_matrix.json'), 'utf8'));
 const DEFAULT_PAGES = MATRIX.pages.filter((p) => !p.interactive).map((p) => p.path);
+const PITCH = 'file://' + path.join(REPO, 'site', 'index.html');
 const EDITOR_HARNESS = 'file://' + path.join(REPO, 'app', 'editor', 'test-harness.html');
 
 const AUDIT = function () {
@@ -58,9 +59,11 @@ const AUDIT = function () {
     if (!m) return null;
     return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] };
   }
-  function over(fg, bg) { // alpha-composite fg over opaque bg
-    const a = fg.a;
-    return { r: a * fg.r + (1 - a) * bg.r, g: a * fg.g + (1 - a) * bg.g, b: a * fg.b + (1 - a) * bg.b, a: 1 };
+  function over(fg, bg) { // alpha-composite fg over bg, preserving partial alpha
+    const a = fg.a + bg.a * (1 - fg.a);
+    if (a === 0) return { r: 0, g: 0, b: 0, a: 0 };
+    const channel = (name) => (fg[name] * fg.a + bg[name] * bg.a * (1 - fg.a)) / a;
+    return { r: channel('r'), g: channel('g'), b: channel('b'), a };
   }
   function lum(c) {
     const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -224,7 +227,7 @@ const AUDIT = function () {
   const args = process.argv.slice(2);
   const explicitTargets = args.length > 0;
   const targets = explicitTargets ? args
-    : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p)).concat([EDITOR_HARNESS]);
+    : DEFAULT_PAGES.map((p) => 'file://' + path.join(SITE, p)).concat([PITCH, EDITOR_HARNESS]);
   const browser = await puppeteer.launch({
     headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0', args: ['--no-sandbox', '--window-size=1280,900'],
     executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium', defaultViewport: { width: 1280, height: 900 },
@@ -232,10 +235,14 @@ const AUDIT = function () {
   });
   let fails = 0, warns = 0;
   const report = [];
-  const cases = targets.flatMap((url) => explicitTargets ? [{url, mode:'baseline'}] : MATRIX.typeModes.map((mode) => ({url, mode})));
+  const cases = targets.flatMap((url) => {
+    if (explicitTargets || url === PITCH) return [{url, mode:'baseline'}];
+    return MATRIX.typeModes.map((mode) => ({url, mode}));
+  });
   for (const {url, mode} of cases) {
     const page = await browser.newPage();
     try {
+      await page.emulateMediaFeatures([{name: 'prefers-reduced-motion', value: 'reduce'}]);
       await page.evaluateOnNewDocument((large) => localStorage.setItem('sonsteng-type-lg', large ? '1' : '0'), mode === 'large');
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
       await page.evaluate(() => document.fonts ? document.fonts.ready : Promise.resolve());

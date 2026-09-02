@@ -229,6 +229,72 @@ def test_pitch_has_nine_closed_unique_direct_child_proofs_with_exact_summaries()
     assert proof_contract_errors(ROOT / "site/index.html") == []
 
 
+def test_pitch_has_keyboard_skip_link_and_focusable_main_landmark():
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    mains = [element for element in parser.elements if element.tag == "main"]
+    skip_links = [
+        element
+        for element in parser.elements
+        if element.tag == "a"
+        and "skip-link" in element.attrs.get("class", "").split()
+    ]
+
+    assert len(mains) == 1
+    assert mains[0].attrs.get("id") == "main"
+    assert mains[0].attrs.get("tabindex") == "-1"
+    assert len(skip_links) == 1
+    assert skip_links[0].attrs.get("href") == "#main"
+    assert " ".join(verify_pitch._descendant_text(skip_links[0]).split()) == "Skip to content"
+    assert parser.elements.index(skip_links[0]) < parser.elements.index(mains[0])
+
+
+def test_pitch_decorative_layer_numerals_are_hidden_from_assistive_technology():
+    parser = verify_pitch._parse(ROOT / "site/index.html")
+    numerals = [
+        element
+        for element in parser.elements
+        if element.tag == "div" and "n" in element.attrs.get("class", "").split()
+    ]
+
+    assert len(numerals) == 3
+    assert all(element.attrs.get("aria-hidden") == "true" for element in numerals)
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "expected_error"),
+    [
+        (
+            '<a class="skip-link" href="#main">Skip to content</a>',
+            "",
+            "pitch requires one Skip to content link targeting #main",
+        ),
+        (
+            '<main id="main" tabindex="-1">',
+            '<main id="main">',
+            "pitch main landmark must be programmatically focusable",
+        ),
+        (
+            '<div class="n" aria-hidden="true">I</div>',
+            '<div class="n">I</div>',
+            "decorative layer numeral must be aria-hidden",
+        ),
+    ],
+)
+def test_pitch_accessibility_contract_mutations_are_caught(
+    tmp_path: Path,
+    original: str,
+    replacement: str,
+    expected_error: str,
+):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    mutated = source.replace(original, replacement, 1)
+    assert mutated != source
+    path = tmp_path / "pitch-accessibility-mutation.html"
+    path.write_text(mutated, encoding="utf-8")
+
+    assert expected_error in "\n".join(verify_pitch.verify_page(path))
+
+
 def test_pitch_authored_prose_retains_55_to_65_percent_of_baseline():
     count = content_word_count(verify_pitch._parse(ROOT / "site/index.html"))
     assert 1_808 <= count <= 2_137
