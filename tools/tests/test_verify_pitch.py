@@ -290,6 +290,109 @@ def test_missing_expand_all_control_cannot_disable_pitch_contract(tmp_path: Path
     assert not any("author surname" in error for error in errors)
 
 
+@pytest.mark.parametrize(
+    ("original", "replacement", "expected_error"),
+    [
+        (
+            "document.getElementById('cClose').focus();",
+            "",
+            "openDrawer() must move focus into the comments dialog",
+        ),
+        (
+            "if(opener) opener.focus();",
+            "if(opener) document.body.focus();",
+            "closeDrawer() must restore focus to the invoking element",
+        ),
+        (
+            'aria-label="Comments" aria-hidden="true" inert>',
+            'aria-label="Comments" aria-hidden="true">',
+            "closed comments drawer must be inert",
+        ),
+        (
+            "drawerOpener=document.activeElement;",
+            "document.activeElement;",
+            "openDrawer() must remember the invoking element",
+        ),
+        (
+            "drawer.inert=false;",
+            "",
+            "openDrawer() must make the comments drawer interactive",
+        ),
+        (
+            "fallbackOpener=document.getElementById('cOpen')",
+            "fallbackOpener=document.getElementById('notCommentsOpen')",
+            "closeDrawer() must fall back to the comments opener",
+        ),
+        (
+            "drawer.inert=true;",
+            "",
+            "closeDrawer() must make the comments drawer inert",
+        ),
+    ],
+)
+def test_missing_comments_drawer_focus_management_is_caught(
+    tmp_path: Path,
+    original: str,
+    replacement: str,
+    expected_error: str,
+):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    mutated = source.replace(original, replacement, 1)
+    assert mutated != source
+    path = tmp_path / "missing-drawer-focus.html"
+    path.write_text(mutated, encoding="utf-8")
+
+    assert expected_error in verify_pitch.verify_page(path)
+
+
+def test_comments_drawer_focus_management_allows_javascript_whitespace(tmp_path: Path):
+    source = (ROOT / "site/index.html").read_text(encoding="utf-8")
+    replacements = (
+        (
+            "drawerOpener=document.activeElement;",
+            "drawerOpener = document\n        . activeElement ;",
+        ),
+        (
+            "drawer.inert=false;",
+            "drawer\n      . inert = false ;",
+        ),
+        (
+            "document.getElementById('cClose').focus();",
+            'document . getElementById ( "cClose" )\n      . focus ( ) ;',
+        ),
+        (
+            "fallbackOpener=document.getElementById('cOpen')",
+            'fallbackOpener = document . getElementById ( "cOpen" )',
+        ),
+        (
+            "opener=drawerOpener&&document.contains(drawerOpener)?drawerOpener:fallbackOpener;",
+            "opener = drawerOpener && document . contains ( drawerOpener )\n"
+            "          ? drawerOpener : fallbackOpener ;",
+        ),
+        (
+            "if(opener) opener.focus();",
+            "if (opener) opener . focus ( ) ;",
+        ),
+        (
+            "drawer.inert=true;",
+            "drawer . inert = true ;",
+        ),
+    )
+    reformatted = source
+    for original, replacement in replacements:
+        updated = reformatted.replace(original, replacement, 1)
+        assert updated != reformatted
+        reformatted = updated
+
+    path = tmp_path / "reformatted-drawer-focus.html"
+    path.write_text(reformatted, encoding="utf-8")
+
+    assert verify_pitch._drawer_focus_errors(
+        verify_pitch._parse(path),
+        reformatted,
+    ) == []
+
+
 def test_pitch_opens_problem_then_midstate_demonstration():
     parser = verify_pitch._parse(ROOT / "site/index.html")
     section_ids = [

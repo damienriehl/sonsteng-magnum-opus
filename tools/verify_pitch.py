@@ -368,6 +368,110 @@ def _content_errors(parser: PageParser) -> list[str]:
     return errors
 
 
+def _javascript_function_body(source: str, name: str) -> str | None:
+    """Return a named function body, allowing formatting and nested blocks."""
+    match = re.search(
+        rf"\bfunction\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+        source,
+    )
+    if match is None:
+        return None
+
+    body_start = match.end()
+    depth = 1
+    for index in range(body_start, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[body_start:index]
+    return None
+
+
+def _drawer_focus_errors(parser: PageParser, source: str) -> list[str]:
+    """Verify the comments dialog's keyboard-focus lifecycle."""
+    identifier = r"[A-Za-z_$][A-Za-z0-9_$]*"
+    errors: list[str] = []
+    drawer = next(
+        (
+            element
+            for element in parser.elements
+            if element.attrs.get("id") == "cDrawer"
+        ),
+        None,
+    )
+    if drawer is None or "inert" not in drawer.attrs:
+        errors.append("closed comments drawer must be inert")
+
+    active_element_capture: re.Match[str] | None = None
+    open_body = _javascript_function_body(source, "openDrawer")
+    if open_body is None:
+        errors.append("pitch comments drawer requires openDrawer()")
+    else:
+        active_element_capture = re.search(
+            rf"(?<![A-Za-z0-9_$])(?P<target>{identifier})\s*=\s*"
+            r"document\s*\.\s*activeElement\b",
+            open_body,
+        )
+        if active_element_capture is None:
+            errors.append("openDrawer() must remember the invoking element")
+        if not re.search(
+            r"document\s*\.\s*getElementById\s*\(\s*['\"]cClose['\"]\s*\)"
+            r"\s*\.\s*focus\s*\(\s*\)",
+            open_body,
+        ):
+            errors.append("openDrawer() must move focus into the comments dialog")
+        if not re.search(r"\bdrawer\s*\.\s*inert\s*=\s*false\b", open_body):
+            errors.append("openDrawer() must make the comments drawer interactive")
+
+    close_body = _javascript_function_body(source, "closeDrawer")
+    if close_body is None:
+        errors.append("pitch comments drawer requires closeDrawer()")
+    else:
+        fallback_lookup = re.search(
+            rf"(?<![A-Za-z0-9_$])(?P<target>{identifier})\s*=\s*"
+            r"document\s*\.\s*getElementById\s*\(\s*['\"]cOpen['\"]\s*\)",
+            close_body,
+        )
+        computed_opener = re.search(
+            rf"(?<![A-Za-z0-9_$])(?P<target>{identifier})\s*=\s*"
+            rf"(?P<remembered>{identifier})\s*&&\s*"
+            r"document\s*\.\s*contains\s*\(\s*(?P=remembered)\s*\)\s*"
+            r"\?\s*(?P=remembered)\s*:\s*"
+            rf"(?P<fallback>{identifier})(?![A-Za-z0-9_$])",
+            close_body,
+        )
+        if (
+            fallback_lookup is None
+            or computed_opener is None
+            or fallback_lookup.group("target") != computed_opener.group("fallback")
+        ):
+            errors.append("closeDrawer() must fall back to the comments opener")
+
+        if computed_opener is None:
+            errors.append("closeDrawer() must restore focus to the invoking element")
+        else:
+            focus_target = re.escape(computed_opener.group("target"))
+            if not re.search(
+                rf"(?<![A-Za-z0-9_$]){focus_target}\s*\.\s*focus\s*\(\s*\)",
+                close_body,
+            ):
+                errors.append("closeDrawer() must restore focus to the invoking element")
+
+            if (
+                open_body is not None
+                and active_element_capture is not None
+                and active_element_capture.group("target")
+                != computed_opener.group("remembered")
+            ):
+                errors.append("openDrawer() must remember the invoking element")
+
+        if not re.search(r"\bdrawer\s*\.\s*inert\s*=\s*true\b", close_body):
+            errors.append("closeDrawer() must make the comments drawer inert")
+    return errors
+
+
 def _pitch_contract_errors(parser: PageParser, source: str) -> list[str]:
     """Verify the structure unique to the main Legal Practicum pitch."""
     errors: list[str] = []
@@ -420,6 +524,8 @@ def _pitch_contract_errors(parser: PageParser, source: str) -> list[str]:
     for fragment in required_fragments:
         if fragment not in source:
             errors.append(f"pitch missing disclosure contract fragment: {fragment}")
+
+    errors.extend(_drawer_focus_errors(parser, source))
 
     if len(sections) >= 2:
         first_ids = [section.attrs.get("id") for section in sections[:2]]
