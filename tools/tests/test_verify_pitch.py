@@ -48,6 +48,7 @@ VALID_PAGE = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>body { background-image: url(data:image/png;base64,AA//AA); }</style>
   <title>Legal Practicum</title>
 </head>
@@ -84,6 +85,27 @@ def messages(path: Path) -> str:
 
 def test_valid_self_contained_page_passes(page: Path):
     assert verify_pitch.verify_page(page) == []
+
+
+def test_missing_english_document_language_fails(page: Path):
+    page.write_text(
+        VALID_PAGE.replace('<html lang="en">', "<html>"),
+        encoding="utf-8",
+    )
+
+    assert 'html element with lang="en"' in messages(page)
+
+
+def test_missing_viewport_meta_fails(page: Path):
+    page.write_text(
+        VALID_PAGE.replace(
+            '  <meta name="viewport" content="width=device-width, initial-scale=1">\n',
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    assert "viewport meta" in messages(page)
 
 
 def test_broken_internal_anchor_fails(page: Path):
