@@ -4,10 +4,25 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
+  collapseWhitespace,
   controlNameMatches,
+  filenameMatches,
   normalizeControlName,
   selectControlCandidate,
 } = require('../verify_persona_journeys.js');
+
+test('whitespace collapse normalizes text assertion content', () => {
+  assert.equal(collapseWhitespace('  19,077\n\tMinnesota   attorneys  '), '19,077 Minnesota attorneys');
+  assert.equal(collapseWhitespace(null), '');
+});
+
+test('download filename patterns support glob wildcards literally', () => {
+  assert.equal(filenameMatches('m05-*.zip', 'm05-dwi-meridian-student-materials.zip'), true);
+  assert.equal(filenameMatches('packet-?.zip', 'packet-1.zip'), true);
+  assert.equal(filenameMatches('packet-?.zip', 'packet-10.zip'), false);
+  assert.equal(filenameMatches('matter[1].zip', 'matter[1].zip'), true);
+  assert.equal(filenameMatches('matter[1].zip', 'matter1.zip'), false);
+});
 
 test('control names collapse whitespace and compare case-insensitively', () => {
   assert.equal(normalizeControlName('  The\n  Evidence  '), 'the evidence');

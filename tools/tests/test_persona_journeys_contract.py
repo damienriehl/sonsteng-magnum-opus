@@ -123,6 +123,10 @@ def test_viewport_contract_and_portable_puppeteer_resolution_are_pinned() -> Non
     assert source.index("process.env.PUP_DIR") < source.index("'puppeteer'")
     assert "process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium'" in source
     assert "process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0'" in source
+    assert "page.emulateMediaFeatures([{name: 'prefers-reduced-motion', value: 'reduce'}])" in source
+    assert "client.send('Browser.setDownloadBehavior'" in source
+    assert "behavior: 'allowAndName'" in source
+    assert "eventsEnabled: true" in source
 
 
 def test_repaired_browser_journey_contracts_are_pinned() -> None:
@@ -152,6 +156,11 @@ def test_repaired_browser_journey_contracts_are_pinned() -> None:
     )
 
     assert {"op": "click", "selector": "#SK-LP-07 > summary"} in journeys["instructor-skill-to-rubric"]["steps"]
+    reaction_steps = journeys["pitch-empty-reactions"]["steps"]
+    vote_index = reaction_steps.index(
+        {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"}
+    )
+    assert reaction_steps[vote_index + 1] == {"op": "waitFor", "text": "1"}
     a11y_name = next(
         step for step in journeys["accessibility-keyboard-packet"]["steps"]
         if step.get("kind") == "a11yName"

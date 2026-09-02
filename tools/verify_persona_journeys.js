@@ -37,6 +37,7 @@ const DEFAULT_JOURNEYS = path.join(__dirname, 'persona_journeys.json');
 const DEFAULT_RUN_DIR = path.join(ROOT, 'build', 'uat', 'runs');
 const DEFAULT_SHOTS_DIR = path.join(ROOT, 'build', 'uat', 'shots');
 const NAVIGATION_TIMEOUT = 30000;
+const ASSERTION_VISIBILITY_TIMEOUT = 2500;
 const DEFAULT_BINDING_TIMEOUT = 1800000;
 const BINDING_EXECUTABLES = new Set(['node', 'python3', 'python', 'npx', 'bash', 'sh', 'cd', 'git', 'pytest', 'curl']);
 const WORKER_URLS = {
@@ -172,13 +173,12 @@ function selectControlCandidate(candidates, expected) {
   return matches.find((candidate) => candidate.visible) || matches[0] || null;
 }
 
-function elementIsVisible(element) {
-  if (typeof element.checkVisibility === 'function') {
-    return element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true});
-  }
-  const style = getComputedStyle(element);
-  const box = element.getBoundingClientRect();
-  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0;
+function elementIsVisible(element, expected = true) {
+  if (!element || !element.isConnected) return false;
+  const visible = typeof element.checkVisibility === 'function'
+    ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+    : (() => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0; })();
+  return visible === expected;
 }
 
 async function elementByName(page, name) {
@@ -206,27 +206,74 @@ async function resolveElement(page, step) {
   return {handle: null, visible: false};
 }
 
-async function requireElement(page, step) {
+async function requireElement(page, step, {allowHidden = false} = {}) {
   const resolved = await resolveElement(page, step);
   if (!resolved.handle) stepFailure(step, `control not found (${step.selector || step.name || 'no selector or name'})`);
-  if (step.name && !resolved.visible) {
+  if (step.name && !resolved.visible && !allowHidden) {
     await resolved.handle.dispose();
     stepFailure(step, `control not visible (${step.name})`);
   }
   return resolved.handle;
 }
 
+async function waitForElementVisibility(page, handle, expected = true, timeout = ASSERTION_VISIBILITY_TIMEOUT) {
+  await handle.evaluate((element) => {
+    if (element.isConnected) element.scrollIntoView({block: 'center'});
+  });
+  try {
+    await page.waitForFunction(
+      elementIsVisible,
+      {timeout, polling: 50},
+      handle,
+      expected,
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function waitForVisibleText(page, selector, text, timeout) {
+  const expected = collapseWhitespace(text);
+  const search = {selector: selector || null, expected};
+  await page.evaluate(({selector: targetSelector, expected: targetText}) => {
+    const collapse = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const elements = targetSelector
+      ? [...document.querySelectorAll(targetSelector)]
+      : [...document.querySelectorAll('body *')];
+    const matching = elements.filter((element) => collapse(element.textContent).includes(targetText));
+    const target = matching.find((element) => ![...element.children].some((child) => collapse(child.textContent).includes(targetText))) || matching[0] || elements[0];
+    if (target && target.isConnected) target.scrollIntoView({block: 'center'});
+  }, search);
+  try {
+    await page.waitForFunction(
+      ({selector: targetSelector, expected: targetText}) => {
+        const collapse = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+        const elements = targetSelector
+          ? [...document.querySelectorAll(targetSelector)]
+          : [...document.querySelectorAll('body *')];
+        return elements.some((element) => {
+          if (!element.isConnected) return false;
+          if (!collapse(element.textContent).includes(targetText)) return false;
+          const box = element.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) return false;
+          const visible = typeof element.checkVisibility === 'function'
+            ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+            : (() => { const style = getComputedStyle(element); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'; })();
+          return visible;
+        });
+      },
+      {timeout, polling: 50},
+      search,
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function waitForText(page, text, timeout) {
-  await page.waitForFunction(
-    (expected) => [...document.querySelectorAll('body *')].some((element) => {
-      const visible = typeof element.checkVisibility === 'function'
-        ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
-        : (() => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0; })();
-      return visible && (element.innerText || element.textContent || '').includes(expected);
-    }),
-    {timeout},
-    text,
-  );
+  return waitForVisibleText(page, null, text, timeout);
 }
 
 function globRegex(pattern) {
@@ -234,11 +281,14 @@ function globRegex(pattern) {
   return new RegExp(`^${escaped}$`);
 }
 
-async function waitForDownload(downloadDir, pattern, timeout) {
-  const matcher = globRegex(pattern);
+function filenameMatches(pattern, filename) {
+  return globRegex(pattern).test(String(filename));
+}
+
+async function waitForDownloadDirectory(downloadDir, pattern, timeout) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const found = fs.readdirSync(downloadDir).find((name) => matcher.test(name) && !name.endsWith('.crdownload'));
+    const found = fs.readdirSync(downloadDir).find((name) => filenameMatches(pattern, name) && !name.endsWith('.crdownload'));
     if (found) {
       const source = path.join(downloadDir, found);
       return {filename: found, size: fs.statSync(source).size};
@@ -248,9 +298,106 @@ async function waitForDownload(downloadDir, pattern, timeout) {
   throw new JourneyFailure(`expectDownload: no file matching ${pattern} within ${timeout}ms`);
 }
 
-async function accessibilityNode(page, step) {
-  const handle = await requireElement(page, step);
+async function configureDownloads(page, downloadDir) {
+  const client = typeof page.createCDPSession === 'function'
+    ? await page.createCDPSession()
+    : await page.target().createCDPSession();
   try {
+    const target = await client.send('Target.getTargetInfo').catch(() => null);
+    await client.send('Browser.setDownloadBehavior', {
+      behavior: 'allowAndName',
+      downloadPath: downloadDir,
+      eventsEnabled: true,
+      ...(target && target.targetInfo.browserContextId ? {browserContextId: target.targetInfo.browserContextId} : {}),
+    });
+    return {client, eventsEnabled: true};
+  } catch (browserError) {
+    try {
+      await client.send('Page.setDownloadBehavior', {behavior: 'allow', downloadPath: downloadDir});
+      return {client, eventsEnabled: false};
+    } catch (pageError) {
+      throw new InfrastructureFailure(`download setup failed: ${errorText(browserError)}; fallback failed: ${errorText(pageError)}`);
+    }
+  }
+}
+
+function createDownloadEventWaiter(client, downloadDir, pattern, timeout) {
+  const matching = new Map();
+  const completed = new Set();
+  let settled = false;
+  let timer;
+  let diskPoll;
+  let resolvePromise;
+  let rejectPromise;
+
+  const cleanup = () => {
+    clearTimeout(timer);
+    clearInterval(diskPoll);
+    client.off('Browser.downloadWillBegin', onBegin);
+    client.off('Browser.downloadProgress', onProgress);
+  };
+  const complete = (value) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    resolvePromise(value);
+  };
+  const fail = (error) => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    rejectPromise(error);
+  };
+  const resultOnDisk = (guid, filename) => {
+    for (const storedName of [guid, filename]) {
+      const source = path.join(downloadDir, storedName);
+      try {
+        if (storedName.endsWith('.crdownload')) continue;
+        return {filename, size: fs.statSync(source).size};
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    return null;
+  };
+  function onBegin(event) {
+    if (filenameMatches(pattern, event.suggestedFilename)) matching.set(event.guid, event.suggestedFilename);
+  }
+  function onProgress(event) {
+    if (event.state === 'completed') completed.add(event.guid);
+    const filename = matching.get(event.guid);
+    if (!filename) return;
+    if (event.state === 'canceled') {
+      fail(new JourneyFailure(`expectDownload: download canceled for ${filename}`));
+      return;
+    }
+    if (event.state === 'completed') {
+      const result = resultOnDisk(event.guid, filename);
+      if (result) complete(result);
+    }
+  }
+
+  const promise = new Promise((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+    client.on('Browser.downloadWillBegin', onBegin);
+    client.on('Browser.downloadProgress', onProgress);
+    diskPoll = setInterval(() => {
+      for (const [guid, filename] of matching) {
+        if (!completed.has(guid)) continue;
+        const result = resultOnDisk(guid, filename);
+        if (result) { complete(result); break; }
+      }
+    }, 100);
+    timer = setTimeout(() => fail(new JourneyFailure(`expectDownload: no completed download matching ${pattern} within ${timeout}ms`)), timeout);
+  });
+  return {promise, cancel: () => complete(null)};
+}
+
+async function accessibilityNode(page, step) {
+  const handle = await requireElement(page, step, {allowHidden: true});
+  try {
+    if (!await waitForElementVisibility(page, handle)) stepFailure(step, `control not visible (${step.selector || step.name})`);
     const node = await page.accessibility.snapshot({root: handle, interestingOnly: false});
     if (!node) stepFailure(step, 'control is absent from the accessibility tree');
     return node;
@@ -269,6 +416,7 @@ async function runAssertion(page, step, state) {
       if (count !== step.count) stepFailure(step, `selector count was ${count}, expected ${step.count}: ${step.selector}`);
     }
     if (step.visible !== undefined) {
+      await waitForElementVisibility(page, handle, step.visible);
       const visible = await handle.evaluate(elementIsVisible);
       if (visible !== step.visible) stepFailure(step, `selector is ${visible ? 'visible' : 'not visible'}, expected ${step.visible ? 'visible' : 'not visible'}: ${step.selector}`);
     }
@@ -285,15 +433,7 @@ async function runAssertion(page, step, state) {
   }
   if (step.kind === 'text') {
     const text = step.text;
-    const found = await page.evaluate(({selector, expected}) => {
-      const elements = selector ? [...document.querySelectorAll(selector)] : [document.body];
-      return elements.some((element) => {
-        const visible = typeof element.checkVisibility === 'function'
-          ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
-          : (() => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0; })();
-        return visible && (element.innerText || element.textContent || '').includes(expected);
-      });
-    }, {selector: step.selector, expected: text});
+    const found = await waitForVisibleText(page, step.selector, text, ASSERTION_VISIBILITY_TIMEOUT);
     if (!found) stepFailure(step, `visible text absent${step.selector ? ` in ${step.selector}` : ''}: ${text}`);
     return;
   }
@@ -318,9 +458,14 @@ async function runAssertion(page, step, state) {
     return;
   }
   if (step.kind === 'focusOn') {
-    const handle = await requireElement(page, step);
-    const focused = await page.evaluate((element) => document.activeElement === element, handle);
-    await handle.dispose();
+    const handle = await requireElement(page, step, {allowHidden: true});
+    let focused;
+    try {
+      if (!await waitForElementVisibility(page, handle)) stepFailure(step, `control not visible (${step.selector || step.name})`);
+      focused = await page.evaluate((element) => document.activeElement === element, handle);
+    } finally {
+      await handle.dispose();
+    }
     if (!focused) stepFailure(step, `focus is not on ${step.selector || step.name}`);
     return;
   }
@@ -378,17 +523,35 @@ async function performStep(page, step, state) {
   }
   if (step.op === 'waitFor') {
     if (step.selector) await page.waitForSelector(step.selector, {visible: step.visible !== false, timeout});
-    else if (step.text) await waitForText(page, step.text, timeout);
+    else if (step.text) {
+      const found = await waitForText(page, step.text, timeout);
+      if (!found) stepFailure(step, `visible text absent: ${step.text}`);
+    }
     else if (step.url) await page.waitForFunction((expected) => location.href.includes(expected), {timeout}, step.url);
     else stepFailure(step, 'waitFor needs selector, text, or url');
     return;
   }
   if (step.op === 'expectDownload') {
-    if (step.selector || step.name) {
-      const handle = await requireElement(page, step);
-      await handle.click(); await handle.dispose();
+    if (!state.downloadClient) {
+      const download = await configureDownloads(page, state.downloadDir);
+      state.downloadClient = download.client;
+      state.downloadEventsEnabled = download.eventsEnabled;
     }
-    state.downloads.push(await waitForDownload(state.downloadDir, step.pattern, timeout));
+    const waiter = state.downloadEventsEnabled
+      ? createDownloadEventWaiter(state.downloadClient, state.downloadDir, step.pattern, timeout)
+      : null;
+    try {
+      if (step.selector || step.name) {
+        const handle = await requireElement(page, step);
+        await handle.click(); await handle.dispose();
+      }
+    } catch (error) {
+      if (waiter) waiter.cancel();
+      throw error;
+    }
+    state.downloads.push(waiter
+      ? await waiter.promise
+      : await waitForDownloadDirectory(state.downloadDir, step.pattern, timeout));
     return;
   }
   if (step.op === 'assert') { await runAssertion(page, step, state); return; }
@@ -410,9 +573,15 @@ async function runSteps(browser, journey, viewportName, context) {
   const state = {base: context.base, consoleErrors: [], downloads: [], downloadDir};
   page.on('console', (message) => { if (message.type() === 'error') state.consoleErrors.push(`console: ${message.text()}`); });
   page.on('pageerror', (error) => state.consoleErrors.push(`pageerror: ${errorText(error)}`));
-  await page.setViewport(VIEWPORTS[viewportName]);
-  const client = await page.target().createCDPSession();
-  await client.send('Page.setDownloadBehavior', {behavior: 'allow', downloadPath: downloadDir});
+  try {
+    await page.setViewport(VIEWPORTS[viewportName]);
+    await page.emulateMediaFeatures([{name: 'prefers-reduced-motion', value: 'reduce'}]);
+  } catch (error) {
+    await page.close().catch(() => {});
+    await browserContext.close().catch(() => {});
+    fs.rmSync(downloadDir, {recursive: true, force: true});
+    throw error;
+  }
   const shotPath = path.join(context.shotRoot, `${safeName(journey.id)}-${safeName(viewportName)}-${context.retry}.png`);
   let verdict = 'PASS'; let firstFailure = null; let digest = null;
   try {
@@ -429,6 +598,7 @@ async function runSteps(browser, journey, viewportName, context) {
   }
   const retained = verdict === 'PASS' || !fs.existsSync(shotPath) ? null : relativeArtifact(shotPath);
   if (verdict === 'PASS' && fs.existsSync(shotPath)) fs.unlinkSync(shotPath);
+  if (state.downloadClient) await state.downloadClient.detach().catch(() => {});
   await page.close().catch(() => {});
   await browserContext.close().catch(() => {});
   fs.rmSync(downloadDir, {recursive: true, force: true});
@@ -699,6 +869,7 @@ if (require.main === module) {
 module.exports = {
   collapseWhitespace,
   controlNameMatches,
+  filenameMatches,
   normalizeControlName,
   selectControlCandidate,
 };

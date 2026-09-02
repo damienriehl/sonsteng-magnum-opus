@@ -220,6 +220,7 @@
         {"op": "click", "selector": "#cOpen"},
         {"op": "assert", "kind": "text", "selector": "#cList", "text": "No comments yet", "check": 1},
         {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"},
+        {"op": "waitFor", "text": "1"},
         {"op": "assert", "kind": "text", "selector": "#cCount", "text": "1", "check": 2},
         {"op": "click", "selector": "#cCopy"},
         {"op": "assert", "kind": "selector", "selector": "#cCopied", "check": 3},

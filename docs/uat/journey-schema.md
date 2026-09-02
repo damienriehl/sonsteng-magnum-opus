@@ -26,10 +26,14 @@ A `steps` binding is an ordered list. Supported operations are:
 | `press` | `key` | Sends a Puppeteer keyboard key such as `Tab` or `Enter`. |
 | `type` | `selector` or `name`, plus `text` | Types into a control. |
 | `waitFor` | one of `selector`, `text`, or `url` | Waits for visible content or a URL substring. |
-| `expectDownload` | `pattern`, optionally `selector` or `name` | Optionally clicks, then records the downloaded filename and byte size; the downloaded file stays temporary. |
+| `expectDownload` | `pattern`, optionally `selector` or `name` | Enables the browser download before the optional click, waits for a completed filename matching the glob pattern, and records its filename and byte size; the downloaded file stays temporary. |
 | `assert` | `kind`, `check`, and kind-specific data | Proves the named 1-based acceptance-check index from the story. |
 
 Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`, `a11yName`, `a11yRole`, `a11yState`, `readingOrder`, and `liveRegion`. A `selector` assertion may set `visible` to `true` or `false`; visibility uses `checkVisibility()` when the browser supports it. An `a11yName` assertion matches exactly by default and may set `contains: true` for a whitespace-collapsed substring match. Accessibility assertions use Puppeteer’s accessibility snapshot, so name, role, value, and state come from the browser accessibility tree rather than DOM text alone.
+
+Before a `text`, selector-visibility, `focusOn`, or accessibility assertion is evaluated, the runner scrolls its target to the center of the viewport and polls for as long as 2,500 ms for the target’s resting visibility. Text matching uses whitespace-collapsed `textContent` on an attached element with a non-zero bounding rectangle. Each browser page also emulates `prefers-reduced-motion: reduce`, making reveal and transition effects immediate. These are deliberate resting-state measurements: persona UAT evaluates the usable content after motion settles, not a transient animation frame or an element that has not yet crossed an intersection threshold.
+
+Downloads use the Chrome DevTools Protocol Browser domain with `allowAndName` and completion events. The event’s suggested filename is matched against `pattern`; after completion the runner records that filename and the stored file’s byte size. If Browser-domain events are unavailable, the runner falls back to Page-domain download allowance and polls the temporary download directory.
 
 ## Harness and command bindings
 
