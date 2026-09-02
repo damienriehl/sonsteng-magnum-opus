@@ -29,7 +29,7 @@ A `steps` binding is an ordered list. Supported operations are:
 | `expectDownload` | `pattern`, optionally `selector` or `name` | Optionally clicks, then records the downloaded filename and byte size; the downloaded file stays temporary. |
 | `assert` | `kind`, `check`, and kind-specific data | Proves the named 1-based acceptance-check index from the story. |
 
-Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`, `a11yName`, `a11yRole`, `a11yState`, `readingOrder`, and `liveRegion`. Accessibility assertions use Puppeteer’s accessibility snapshot, so name, role, value, and state come from the browser accessibility tree rather than DOM text alone.
+Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`, `a11yName`, `a11yRole`, `a11yState`, `readingOrder`, and `liveRegion`. A `selector` assertion may set `visible` to `true` or `false`; visibility uses `checkVisibility()` when the browser supports it. An `a11yName` assertion matches exactly by default and may set `contains: true` for a whitespace-collapsed substring match. Accessibility assertions use Puppeteer’s accessibility snapshot, so name, role, value, and state come from the browser accessibility tree rather than DOM text alone.
 
 ## Harness and command bindings
 

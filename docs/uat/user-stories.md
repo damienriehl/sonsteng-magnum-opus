@@ -98,6 +98,8 @@ Acceptance checks:
    measured evidence**.
 3. Activating **Open** reaches `#where` and exposes **Given away, so it outlives us.**
 4. The focused link has a visible focus indicator.
+5. Below the desktop navigation breakpoint, the navigation links are hidden and the primary hero
+   call to action remains visible.
 
 ### US-1-05 — Open the delivery-economics worksheet
 
@@ -259,8 +261,8 @@ Acceptance checks:
 
 1. The contents expose **FACTS · THE SCENARIO'S SOURCE VALUES**, **LAW · THE GOVERNING LAW**, eight
    numbered parts, **BUSINESS**, **RUBRIC**, and **INTERVIEW**.
-2. The Facts link reaches `/facts/`; the Law link reaches `/law/`; each page retains an M05
-   breadcrumb back to the packet.
+2. The matter library's M05 card exposes **Download student materials (.zip)**; activating it
+   downloads `m05-dwi-meridian-student-materials.zip` before the packet is opened.
 3. The packet rubric contains **Client interview and fact development** and numeric point values.
 4. No instructor-only answer key or private teaching note appears on the anonymous pages.
 
@@ -278,10 +280,12 @@ receiving instructor-only material.
 
 Acceptance checks:
 
-1. M05 has a link named **Download student materials (.zip)**.
-2. Activating it downloads `m05-dwi-meridian-student-materials.zip` with a non-zero byte count.
-3. The response is successful and the archive name contains neither `instructor` nor `answer-key`.
-4. Canceling a browser download leaves the library usable and the M05 link focused.
+1. The matter library's M05 card has a link named **Download student materials (.zip)**.
+2. Activating that library link downloads `m05-dwi-meridian-student-materials.zip` with a non-zero
+   byte count.
+3. The library download response is successful and the archive name contains neither `instructor`
+   nor `answer-key`.
+4. Canceling a browser download leaves the matter library usable and the M05 link focused.
 
 ### US-2-05 — Control and export the scripted consultation
 

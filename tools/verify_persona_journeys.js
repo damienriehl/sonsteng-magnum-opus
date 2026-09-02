@@ -20,6 +20,10 @@ Step operations:
 Assertion kinds: selector, text, attr, url, consoleClean, focusOn, a11yName,
 a11yRole, a11yState, readingOrder, and liveRegion. Every assertion carries the
 1-based acceptance-check index it proves. See docs/uat/journey-schema.md.
+
+Name-based controls compare aria-label (or textContent when absent) after
+collapsing whitespace, case-insensitively. Visible matches take precedence;
+when only hidden matches exist the step reports "control not visible".
 */
 'use strict';
 
@@ -149,39 +153,76 @@ function stepFailure(step, detail) {
   throw new JourneyFailure(`${step.op}${step.kind ? ` ${step.kind}` : ''}${check}: ${detail}`);
 }
 
+function collapseWhitespace(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeControlName(value) {
+  return collapseWhitespace(value).toLowerCase();
+}
+
+function controlNameMatches(actual, expected) {
+  const candidate = normalizeControlName(actual);
+  const requested = normalizeControlName(expected);
+  return Boolean(requested) && (candidate === requested || candidate.includes(requested));
+}
+
+function selectControlCandidate(candidates, expected) {
+  const matches = candidates.filter((candidate) => controlNameMatches(candidate.name, expected));
+  return matches.find((candidate) => candidate.visible) || matches[0] || null;
+}
+
+function elementIsVisible(element) {
+  if (typeof element.checkVisibility === 'function') {
+    return element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true});
+  }
+  const style = getComputedStyle(element);
+  const box = element.getBoundingClientRect();
+  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0;
+}
+
 async function elementByName(page, name) {
   const handles = await page.$$('a[href],button,input,textarea,select,summary,[role="button"],[tabindex]');
-  for (const handle of handles) {
-    const matched = await handle.evaluate((element, expected) => {
-      const labelled = element.getAttribute('aria-labelledby');
-      const labelledText = labelled ? labelled.split(/\s+/).map((id) => document.getElementById(id)?.textContent || '').join(' ') : '';
-      const label = element.getAttribute('aria-label') || labelledText || element.getAttribute('title') || element.getAttribute('alt') || element.innerText || element.value || '';
-      return label.trim() === expected || label.trim().includes(expected);
-    }, name);
-    if (matched) return handle;
-    await handle.dispose();
+  const candidates = [];
+  for (let index = 0; index < handles.length; index++) {
+    const handle = handles[index];
+    const candidate = await handle.evaluate((element, candidateIndex) => ({
+      index: candidateIndex,
+      name: element.getAttribute('aria-label') || element.textContent || '',
+    }), index);
+    candidate.visible = await handle.evaluate(elementIsVisible);
+    candidates.push(candidate);
   }
-  return null;
+  const selected = selectControlCandidate(candidates, name);
+  for (let index = 0; index < handles.length; index++) {
+    if (!selected || index !== selected.index) await handles[index].dispose();
+  }
+  return selected ? {handle: handles[selected.index], visible: selected.visible} : {handle: null, visible: false};
 }
 
 async function resolveElement(page, step) {
-  if (step.selector) return page.$(step.selector);
+  if (step.selector) return {handle: await page.$(step.selector), visible: null};
   if (step.name) return elementByName(page, step.name);
-  return null;
+  return {handle: null, visible: false};
 }
 
 async function requireElement(page, step) {
-  const handle = await resolveElement(page, step);
-  if (!handle) stepFailure(step, `control not found (${step.selector || step.name || 'no selector or name'})`);
-  return handle;
+  const resolved = await resolveElement(page, step);
+  if (!resolved.handle) stepFailure(step, `control not found (${step.selector || step.name || 'no selector or name'})`);
+  if (step.name && !resolved.visible) {
+    await resolved.handle.dispose();
+    stepFailure(step, `control not visible (${step.name})`);
+  }
+  return resolved.handle;
 }
 
 async function waitForText(page, text, timeout) {
   await page.waitForFunction(
     (expected) => [...document.querySelectorAll('body *')].some((element) => {
-      const style = getComputedStyle(element);
-      const box = element.getBoundingClientRect();
-      return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0 && (element.innerText || '').includes(expected);
+      const visible = typeof element.checkVisibility === 'function'
+        ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+        : (() => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0; })();
+      return visible && (element.innerText || element.textContent || '').includes(expected);
     }),
     {timeout},
     text,
@@ -227,9 +268,9 @@ async function runAssertion(page, step, state) {
       const count = await page.$$eval(step.selector, (elements) => elements.length);
       if (count !== step.count) stepFailure(step, `selector count was ${count}, expected ${step.count}: ${step.selector}`);
     }
-    if (step.visible) {
-      const visible = await handle.evaluate((element) => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0; });
-      if (!visible) stepFailure(step, `selector is not visible: ${step.selector}`);
+    if (step.visible !== undefined) {
+      const visible = await handle.evaluate(elementIsVisible);
+      if (visible !== step.visible) stepFailure(step, `selector is ${visible ? 'visible' : 'not visible'}, expected ${step.visible ? 'visible' : 'not visible'}: ${step.selector}`);
     }
     if (step.withinViewport) {
       const inside = await handle.evaluate((element) => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight; });
@@ -247,8 +288,10 @@ async function runAssertion(page, step, state) {
     const found = await page.evaluate(({selector, expected}) => {
       const elements = selector ? [...document.querySelectorAll(selector)] : [document.body];
       return elements.some((element) => {
-        const style = getComputedStyle(element); const box = element.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && box.width > 0 && box.height > 0 && (element.innerText || '').includes(expected);
+        const visible = typeof element.checkVisibility === 'function'
+          ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+          : (() => { const style = getComputedStyle(element); const box = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && box.width > 0 && box.height > 0; })();
+        return visible && (element.innerText || element.textContent || '').includes(expected);
       });
     }, {selector: step.selector, expected: text});
     if (!found) stepFailure(step, `visible text absent${step.selector ? ` in ${step.selector}` : ''}: ${text}`);
@@ -283,7 +326,12 @@ async function runAssertion(page, step, state) {
   }
   if (step.kind === 'a11yName' || step.kind === 'a11yRole' || step.kind === 'a11yState') {
     const node = await accessibilityNode(page, step);
-    if (step.kind === 'a11yName' && node.name !== step.expected) stepFailure(step, `accessible name was ${JSON.stringify(node.name)}, expected ${JSON.stringify(step.expected)}`);
+    if (step.kind === 'a11yName') {
+      const actual = collapseWhitespace(node.name);
+      const expected = collapseWhitespace(step.expected);
+      const matches = step.contains ? actual.includes(expected) : actual === expected;
+      if (!matches) stepFailure(step, `accessible name was ${JSON.stringify(node.name)}, expected ${step.contains ? 'to contain ' : ''}${JSON.stringify(step.expected)}`);
+    }
     if (step.kind === 'a11yRole' && node.role !== step.expected) stepFailure(step, `accessible role was ${JSON.stringify(node.role)}, expected ${JSON.stringify(step.expected)}`);
     if (step.kind === 'a11yState') {
       for (const [name, expected] of Object.entries(step.state || {})) if (node[name] !== expected) stepFailure(step, `accessibility state ${name} was ${JSON.stringify(node[name])}, expected ${JSON.stringify(expected)}`);
@@ -644,4 +692,13 @@ async function main(argv) {
   return failures ? 1 : 0;
 }
 
-main(process.argv.slice(2)).then((code) => process.exit(code)).catch((error) => { console.error('PERSONA JOURNEY ERROR:', errorText(error)); process.exit(2); });
+if (require.main === module) {
+  main(process.argv.slice(2)).then((code) => process.exit(code)).catch((error) => { console.error('PERSONA JOURNEY ERROR:', errorText(error)); process.exit(2); });
+}
+
+module.exports = {
+  collapseWhitespace,
+  controlNameMatches,
+  normalizeControlName,
+  selectControlCandidate,
+};

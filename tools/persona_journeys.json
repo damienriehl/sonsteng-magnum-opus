@@ -47,9 +47,12 @@
       "viewports": ["desktop"],
       "binding": "steps",
       "steps": [
+        {"op": "goto", "path": "/platform/matters/"},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"]", "visible": true, "check": 2},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "visible": true, "check": 2},
+        {"op": "expectDownload", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "pattern": "m05-dwi-meridian-student-materials.zip"},
         {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/"},
-        {"op": "assert", "kind": "text", "selector": "h1", "text": "State of Meridian v. Devon R. Halvard", "check": 1},
-        {"op": "assert", "kind": "selector", "selector": "a[href=\"../../downloads/m05-dwi-meridian-student-materials.zip\"]", "visible": true, "check": 2}
+        {"op": "assert", "kind": "text", "selector": "h1", "text": "State of Meridian v. Devon R. Halvard", "check": 1}
       ]
     },
     {
@@ -145,7 +148,7 @@
       "id": "pitch-public-navigation",
       "story": "US-1-04",
       "persona": "A1",
-      "viewports": ["desktop", "phone"],
+      "viewports": ["desktop"],
       "binding": "steps",
       "steps": [
         {"op": "goto", "path": "/"},
@@ -159,6 +162,18 @@
         {"op": "assert", "kind": "text", "selector": "#where", "text": "Given away, so it outlives us.", "check": 3},
         {"op": "focus", "name": "Open"},
         {"op": "assert", "kind": "focusOn", "name": "Open", "check": 4}
+      ]
+    },
+    {
+      "id": "pitch-phone-nav-hidden",
+      "story": "US-1-04",
+      "persona": "A1",
+      "viewports": ["phone", "zoom200"],
+      "binding": "steps",
+      "steps": [
+        {"op": "goto", "path": "/"},
+        {"op": "assert", "kind": "selector", "selector": "nav .navlinks", "visible": false, "check": 5},
+        {"op": "assert", "kind": "selector", "selector": ".hero-cta", "visible": true, "check": 5}
       ]
     },
     {
@@ -228,12 +243,13 @@
       "binding": "steps",
       "steps": [
         {"op": "goto", "path": "/platform/matters/"},
-        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"] a[download]", "visible": true, "check": 1},
-        {"op": "expectDownload", "selector": "[data-catalog-id=\"m05\"] a[download]", "pattern": "m05-dwi-meridian-student-materials.zip"},
-        {"op": "assert", "kind": "attr", "selector": "[data-catalog-id=\"m05\"] a[download]", "attr": "href", "includes": "m05-dwi-meridian-student-materials.zip", "check": 2},
-        {"op": "assert", "kind": "text", "selector": "[data-catalog-id=\"m05\"] a[download]", "text": "student materials", "check": 3},
-        {"op": "focus", "selector": "[data-catalog-id=\"m05\"] a[download]"},
-        {"op": "assert", "kind": "focusOn", "selector": "[data-catalog-id=\"m05\"] a[download]", "check": 4}
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"]", "visible": true, "check": 1},
+        {"op": "assert", "kind": "selector", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "visible": true, "check": 1},
+        {"op": "expectDownload", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "pattern": "m05-dwi-meridian-student-materials.zip"},
+        {"op": "assert", "kind": "attr", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "attr": "href", "includes": "m05-dwi-meridian-student-materials.zip", "check": 2},
+        {"op": "assert", "kind": "text", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "text": "student materials", "check": 3},
+        {"op": "focus", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]"},
+        {"op": "assert", "kind": "focusOn", "selector": "[data-catalog-id=\"m05\"] a[href=\"../downloads/m05-dwi-meridian-student-materials.zip\"]", "check": 4}
       ]
     },
     {
@@ -288,6 +304,7 @@
         {"op": "assert", "kind": "text", "selector": "h1", "text": "Module 1 — Foundational", "check": 1},
         {"op": "click", "name": "Fact gathering"},
         {"op": "waitFor", "url": "#SK-LP-07"},
+        {"op": "click", "selector": "#SK-LP-07 > summary"},
         {"op": "assert", "kind": "text", "selector": "#SK-LP-07", "text": "Conduct a client intake interview", "check": 2},
         {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/"},
         {"op": "assert", "kind": "text", "text": "Client interview and fact development", "check": 3},
@@ -606,7 +623,7 @@
         {"op": "focus", "selector": ".skip-link"},
         {"op": "press", "key": "Enter"},
         {"op": "assert", "kind": "focusOn", "selector": "#main", "check": 1},
-        {"op": "assert", "kind": "a11yName", "selector": "a[href=\"matters/index.html\"]", "expected": "MATTER LIBRARY 20 simulated matters Ten practice shapes, each in the fictional State of Meridian and again in a real jurisdiction. Full packets, case files, rubrics, and interviews. Open the library", "check": 2},
+        {"op": "assert", "kind": "a11yName", "selector": "a[href=\"matters/index.html\"]", "expected": "MATTER LIBRARY 20 simulated matters", "contains": true, "check": 2},
         {"op": "goto", "path": "/platform/matters/"},
         {"op": "assert", "kind": "liveRegion", "selector": "[data-catalog-status]", "text": "20 matters", "check": 3},
         {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/facts/"},

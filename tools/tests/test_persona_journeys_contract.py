@@ -125,6 +125,41 @@ def test_viewport_contract_and_portable_puppeteer_resolution_are_pinned() -> Non
     assert "process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0'" in source
 
 
+def test_repaired_browser_journey_contracts_are_pinned() -> None:
+    journeys = {journey["id"]: journey for journey in catalog()}
+    download_selector = (
+        '[data-catalog-id="m05"] '
+        'a[href="../downloads/m05-dwi-meridian-student-materials.zip"]'
+    )
+
+    assert journeys["pitch-public-navigation"]["viewports"] == ["desktop"]
+    phone_nav = journeys["pitch-phone-nav-hidden"]
+    assert phone_nav["story"] == journeys["pitch-public-navigation"]["story"]
+    assert phone_nav["viewports"] == ["phone", "zoom200"]
+    assert {step["selector"]: step.get("visible") for step in phone_nav["steps"] if step["op"] == "assert"} == {
+        "nav .navlinks": False,
+        ".hero-cta": True,
+    }
+
+    for journey_id in ("student-matter-packet", "student-download-packet"):
+        steps = journeys[journey_id]["steps"]
+        assert steps[0] == {"op": "goto", "path": "/platform/matters/"}
+        assert any(step.get("selector") == download_selector and step.get("visible") is True for step in steps)
+        assert any(step["op"] == "expectDownload" and step.get("selector") == download_selector for step in steps)
+    assert any(
+        step == {"op": "goto", "path": "/platform/matters/m05-dwi-meridian/"}
+        for step in journeys["student-matter-packet"]["steps"]
+    )
+
+    assert {"op": "click", "selector": "#SK-LP-07 > summary"} in journeys["instructor-skill-to-rubric"]["steps"]
+    a11y_name = next(
+        step for step in journeys["accessibility-keyboard-packet"]["steps"]
+        if step.get("kind") == "a11yName"
+    )
+    assert a11y_name["expected"] == "MATTER LIBRARY 20 simulated matters"
+    assert a11y_name["contains"] is True
+
+
 def test_story_and_journey_coverage_is_two_way_when_u1_exists() -> None:
     if not STORIES_PATH.exists():
         pytest.skip("U1 docs/uat/user-stories.md has not landed; two-way story coverage is deferred explicitly")
