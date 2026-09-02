@@ -66,7 +66,10 @@ async function main(argv) {
     usage(process.stdout);
     return 0;
   }
-  const results = await Promise.all(PROBES.map(([name, pathname]) => runProbe(options.worker, name, pathname)));
+  const results = [];
+  for (const [name, pathname] of PROBES) {
+    results.push(await runProbe(options.worker, name, pathname));
+  }
   for (const result of results) console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.name} — ${result.detail}`);
   const passed = results.filter((result) => result.ok).length;
   console.log(`BOT GATE SUMMARY ${passed}/${results.length}`);
