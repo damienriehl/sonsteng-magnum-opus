@@ -13,6 +13,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 MODULE_PATH = REPO / "tools" / "apply_day_zero_review.py"
 PROPOSAL_PATH = REPO / "docs" / "evidence" / "2026-08-17-day-zero-review-proposal.json"
+sys.path.insert(0, str(MODULE_PATH.parent))
 
 
 def load_module():
