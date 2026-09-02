@@ -2,11 +2,13 @@ import importlib.util
 import json
 import pathlib
 import stat
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 TOOLS = pathlib.Path(__file__).parents[1]
+sys.path.insert(0, str(TOOLS))
 spec = importlib.util.spec_from_file_location("prod_release_readiness",TOOLS / "prod_release_readiness.py")
 readiness = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(readiness)
