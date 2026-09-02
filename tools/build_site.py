@@ -602,7 +602,7 @@ def page_shell(relpath, title, docket, crumbs, body, body_class=""):
   </div>
 </header>
 {crumb}
-<main id="main" class="wrap">
+<main id="main" class="wrap" tabindex="-1">
 {body}
 </main>
 <footer class="site-footer">
@@ -950,6 +950,7 @@ PLATFORM_CSS = r"""/* platform.css — layout helpers for generated pages.
 .skip-link{position:absolute;left:-9999px;top:0;background:var(--paper);color:var(--ink);
   padding:.6em 1em;border:var(--rule-bold) solid var(--claret);z-index:100}
 .skip-link:focus{left:.5rem;top:.5rem}
+main[tabindex]:focus{outline:none}
 
 .masthead__inner{gap:var(--sp-6)}
 .masthead__brand{font-family:var(--font-display);font-size:var(--fs-md);font-weight:900;
