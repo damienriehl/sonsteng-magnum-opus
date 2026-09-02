@@ -17,6 +17,7 @@ DEFAULT_STORIES = ROOT / "docs" / "uat" / "user-stories.md"
 DEFAULT_JOURNEYS = ROOT / "tools" / "persona_journeys.json"
 DEFAULT_OUT = ROOT / "docs" / "uat" / "persona-uat-record.md"
 STORY_HEADING_RE = re.compile(r"^#{1,6}\s+(US-\d+-(?:\d+|CANARY))\b", re.MULTILINE)
+VERDICTS = ("PASS", "FAIL", "OPEN", "BLOCKED", "NOT RUN", "ERROR")
 
 
 def story_ids(text: str) -> set[str]:
@@ -51,6 +52,9 @@ def flatten_attempts(runs: list[dict[str, object]]) -> list[dict[str, object]]:
         for attempt_order, raw in enumerate(run.get("attempts", [])):
             if not isinstance(raw, dict):
                 continue
+            verdict = raw.get("verdict")
+            if verdict not in VERDICTS:
+                raise ValueError(f"invalid verdict {verdict!r} in {run.get('_source', 'run data')}")
             attempt = dict(raw)
             attempt.update(
                 {
@@ -190,16 +194,16 @@ def render(runs: list[dict[str, object]], journeys: list[dict[str, object]] | No
             "",
             "Deliberate canaries are excluded.",
             "",
-            "| Persona | Current rows | PASS | Other verdicts |",
-            "|---|---:|---:|---:|",
+            "| Persona | Current rows | PASS | FAIL | OPEN | BLOCKED | NOT RUN | ERROR |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for persona in sorted(counts):
         total = counts[persona]["total"]
-        passed = counts[persona]["PASS"]
-        lines.append(f"| {clean_cell(persona)} | {total} | {passed} | {total - passed} |")
+        verdict_counts = " | ".join(str(counts[persona][verdict]) for verdict in VERDICTS)
+        lines.append(f"| {clean_cell(persona)} | {total} | {verdict_counts} |")
     if not counts:
-        lines.append("| — | 0 | 0 | 0 |")
+        lines.append("| — | 0 | 0 | 0 | 0 | 0 | 0 | 0 |")
 
     retained = [item for item in attempts if item.get("shot_path")]
     lines.extend(

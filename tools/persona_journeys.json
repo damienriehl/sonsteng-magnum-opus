@@ -500,7 +500,7 @@
       "persona": "A7",
       "viewports": ["desktop"],
       "binding": "command",
-      "command": {"command": "git clone <repository-url> sonsteng-magnum-opus && cd sonsteng-magnum-opus/site && python3 -m http.server 8791", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:8791/platform/", "account_boundary": "No Cloudflare or provider account"}
+      "command": {"command": "bash tools/uat_adopter_journey.sh clone-serve", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:<port>/platform/", "account_boundary": "No Cloudflare or provider account"}
     },
     {
       "id": "adopter-worker-tests",
@@ -508,7 +508,7 @@
       "persona": "A7",
       "viewports": ["desktop"],
       "binding": "command",
-      "command": {"command": "cd app/worker && node --test test/*.test.js", "story_checks": [1, 2, 3, 4], "local_target": "app/worker/test", "account_boundary": "No provider key, Wrangler login, or live Worker"}
+      "command": {"command": "bash tools/uat_adopter_journey.sh worker-tests", "story_checks": [1, 2, 3, 4], "local_target": "app/worker/test", "account_boundary": "No provider key, Wrangler login, or live Worker"}
     },
     {
       "id": "adopter-byok-boundary",
@@ -516,7 +516,7 @@
       "persona": "A7",
       "viewports": ["desktop"],
       "binding": "command",
-      "command": {"command": "python3 -m http.server 8791 --directory site", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:8791/platform/chat/index.html?matter=m05&persona=m05.per.halvard", "account_boundary": "Stops before entering or sending a credential"}
+      "command": {"command": "bash tools/uat_adopter_journey.sh byok-boundary", "story_checks": [1, 2, 3, 4], "local_target": "http://localhost:<port>/platform/chat/index.html?matter=m05&persona=m05.per.halvard", "account_boundary": "Stops before entering or sending a credential"}
     },
     {
       "id": "adopter-worker-dry-run",
@@ -524,7 +524,7 @@
       "persona": "A7",
       "viewports": ["desktop"],
       "binding": "command",
-      "command": {"command": "cd app/worker && npx wrangler@4 deploy --dry-run", "story_checks": [1, 2, 3, 4], "local_target": "Wrangler dry-run bundle", "account_boundary": "No login or deployment"}
+      "command": {"command": "bash tools/uat_adopter_journey.sh worker-dry-run", "story_checks": [1, 2, 3, 4], "local_target": "Wrangler dry-run bundle", "account_boundary": "No login or deployment"}
     },
     {
       "id": "adopter-validate-build",
@@ -532,7 +532,7 @@
       "persona": "A7",
       "viewports": ["desktop"],
       "binding": "command",
-      "command": {"command": "python3 tools/validate_spine.py && python3 tools/build_site.py --check", "story_checks": [1, 2, 3], "local_target": "data/ and site/platform/", "account_boundary": "No external account or model credential"}
+      "command": {"command": "bash tools/uat_adopter_journey.sh validate-build", "story_checks": [1, 2, 3], "local_target": "data/ and site/platform/", "account_boundary": "No external account or model credential"}
     },
     {
       "id": "student-live-provider-dev",
@@ -540,7 +540,7 @@
       "persona": "A2",
       "viewports": ["desktop"],
       "binding": "harness",
-      "harness": {"command": "node app/worker/test/live-stream-smoke.mjs", "story_checks": [1, 2, 3, 4, 5]}
+      "harness": {"command": "cd app/worker && CREDENTIALS_FILE=$SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE PROVIDER=google WORKER_URL={{WORKER_URL}} node test/live-stream-smoke.mjs", "story_checks": [1, 2, 3, 4, 5], "environments": ["dev"], "credential_gate": "SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE"}
     },
     {
       "id": "school-cost-comparison",
@@ -674,7 +674,7 @@
       "persona": "A10",
       "viewports": ["desktop"],
       "binding": "harness",
-      "harness": {"command": "credential-free bot-gate probe against the selected environment", "story_checks": [1, 2, 3, 4]}
+      "harness": {"command": "node tools/verify_bot_gate.js --base {{WORKER_URL}}", "story_checks": [1, 2, 3, 4]}
     },
     {
       "id": "hostile-offline-redteam",
@@ -690,7 +690,7 @@
       "persona": "A10",
       "viewports": ["desktop"],
       "binding": "harness",
-      "harness": {"command": "node app/worker/test/redteam.mjs", "story_checks": [1, 2, 3, 4]}
+      "harness": {"command": "cd app/worker && CREDENTIALS_FILE=$SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE PROVIDER=google WORKER_URL={{WORKER_URL}} node test/redteam.mjs", "story_checks": [1, 2, 3, 4], "environments": ["dev"], "credential_gate": "SONSTENG_UAT_GOOGLE_CREDENTIALS_FILE"}
     },
     {
       "id": "hostile-forged-edit",

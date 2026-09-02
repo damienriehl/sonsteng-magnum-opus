@@ -166,7 +166,7 @@ def test_canaries_are_excluded_from_persona_counts_and_retained_shots_are_listed
     assert "story coverage check skipped" in result.stdout.lower()
     record = result.record_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
     counts = record.split("## Per-persona counts", 1)[1].split("## Retained screenshots", 1)[0]
-    assert "| A1 | 1 | 1 | 0 |" in counts
+    assert "| A1 | 1 | 1 | 0 | 0 | 0 | 0 | 0 |" in counts
     assert "a1-canary-desktop.png" in record
     assert "4" * 64 in record
 
@@ -210,3 +210,24 @@ def test_unrun_catalog_stories_are_rendered_as_not_run(tmp_path: Path) -> None:
     record = result.record_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
     assert "| US-3-01 | A3 | unrun | n/a | NOT RUN |" in record
     assert "node test.js" in record
+
+
+def test_blocked_is_an_accepted_verdict_and_has_its_own_persona_count(tmp_path: Path) -> None:
+    blocked = attempt(verdict="BLOCKED")
+    blocked["first_failure"] = "credential TEST_UAT_CREDENTIAL unavailable"
+    write_json(
+        tmp_path / "runs" / "run.json",
+        run_file("run", "2026-09-02T12:00:00Z", [blocked]),
+    )
+
+    result = invoke(
+        tmp_path,
+        stories="## US-1-01 — Read the pitch\n\n1. See the proposition.\n",
+        journeys=[{"id": "pitch-home", "story": "US-1-01", "persona": "A1", "binding": "harness"}],
+    )
+
+    assert result.returncode == 0, result.stderr
+    record = result.record_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    assert "| US-1-01 | A1 | local | desktop | BLOCKED |" in record
+    counts = record.split("## Per-persona counts", 1)[1].split("## Retained screenshots", 1)[0]
+    assert "| A1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |" in counts

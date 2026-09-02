@@ -1,6 +1,6 @@
 # Persona Journey Schema
 
-`tools/persona_journeys.json` is the coverage authority for persona UAT. Browser journeys, existing harnesses, and adopter commands all use the same catalog; only browser journeys are executed by `tools/verify_persona_journeys.js`.
+`tools/persona_journeys.json` is the coverage authority for persona UAT. Browser journeys, existing harnesses, and adopter commands all use the same catalog. `tools/verify_persona_journeys.js` runs browser steps in its default mode and harness/command bindings in `--bindings` mode; the two modes never execute each other's entries.
 
 ## Journey
 
@@ -33,10 +33,19 @@ Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`
 
 ## Harness and command bindings
 
-A `harness` binding records `command` and `story_checks`. A `command` binding records those fields and may also name its `local_target` and `account_boundary`. The browser runner records these bindings as `NOT RUN`; their owning UAT unit writes the actual harness or command result into a run file.
+A `harness` binding records `command` and `story_checks`. A `command` binding records those fields and may also name its `local_target` and `account_boundary`. Either binding may add:
+
+- `environments`: a non-empty list of environment labels where the binding may run. A mismatch records `NOT RUN` and names the allowed labels.
+- `credential_gate`: the name of an environment variable that must be set before execution. An unavailable credential records `BLOCKED` without starting the command.
+
+Run bindings with `node tools/verify_persona_journeys.js --bindings --env-label <label>`. `--bindings` and the browser mode's `--base` are mutually exclusive. `--only` filters journey IDs within the selected mode, and `--binding-timeout <ms>` sets the per-command timeout (default 1,800,000 ms). A binding command runs from the repository root through `sh -c` with `HEADLESS=1` and `EDITOR_HEADLESS=1`.
+
+Commands must begin with `node`, `python3`, `python`, `npx`, `bash`, `sh`, `cd`, `git`, `pytest`, or `curl`. A command containing an angle-bracket placeholder such as `<repository-url>`, or one that begins with descriptive prose, records `NOT RUN` as non-executable and is never passed to the shell. `{{WORKER_URL}}` is a supported runner substitution: `dev` selects `https://sonsteng-chat.damienriehl.workers.dev`, `prod` selects `https://sonsteng-chat-production.damienriehl.workers.dev`, and `local` records `NOT RUN`.
+
+Exit zero records `PASS`; a non-zero exit records `FAIL`; and a timeout or spawn failure records `ERROR` and is retried once. Every process attempt uses viewport `n/a`. The complete combined stdout/stderr is retained as `build/uat/shots/<run>/<journey>-binding.log`, its SHA-256 is the attempt digest, and only the last 40 output lines appear in `first_failure` for `FAIL` or `ERROR`. The runner does not print or prepend its environment to command logs.
 
 ## Evidence and retries
 
-Each invocation writes `build/uat/runs/<UTC>-<environment>.json`. Every browser attempt contains its journey, story, persona, viewport, verdict, first failure, SHA-256 screenshot digest, duration, canary flag, and retry number. PASS screenshots are deleted after hashing. FAIL and ERROR screenshots remain below `build/uat/shots/<run>/` until triage. Infrastructure errors are `ERROR`, retried once, and both attempts remain in history; an HTTP error response is `FAIL` because the browser reached the surface.
+Each invocation writes `build/uat/runs/<UTC>-<environment>.json`. Verdicts are `PASS`, `FAIL`, `OPEN`, `BLOCKED`, `NOT RUN`, and `ERROR`. Every browser attempt contains its journey, story, persona, viewport, verdict, first failure, SHA-256 screenshot digest, duration, canary flag, and retry number. PASS screenshots are deleted after hashing. FAIL and ERROR screenshots remain below `build/uat/shots/<run>/` until triage. Infrastructure errors are `ERROR`, retried once, and both attempts remain in history; an HTTP error response is `FAIL` because the browser reached the surface.
 
 The runner reads `/platform/data/.build-stamp.json` and the `x-release-sha` header on `/platform/` once per invocation. The renderer selects the latest attempt per story, environment, and viewport on the latest observed build for each environment, retains all attempts in history, and excludes canaries from persona counts.

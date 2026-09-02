@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -27,6 +29,8 @@ VALID_ASSERTIONS = {
     "readingOrder",
     "liveRegion",
 }
+EXECUTABLES = {"node", "python3", "python", "npx", "bash", "sh", "cd", "git", "pytest", "curl"}
+ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 STORY_HEADING_RE = re.compile(r"^#{1,6}\s+(US-\d+-(?:\d+|CANARY))\b", re.MULTILINE)
 CHECK_RE = re.compile(r"^\s*(\d+)\.\s+", re.MULTILINE)
 
@@ -71,8 +75,18 @@ def test_catalog_has_unique_ids_valid_bindings_and_valid_steps() -> None:
         bindings = [name for name in ("steps", "harness", "command") if name in journey]
         assert bindings == [journey["binding"]]
         if journey["binding"] != "steps":
-            assert journey[journey["binding"]]["command"]
-            assert journey[journey["binding"]]["story_checks"]
+            binding = journey[journey["binding"]]
+            command = binding["command"]
+            assert command
+            assert binding["story_checks"]
+            assert not re.search(r"<[^>]+>", command), f"{journey['id']}: placeholder in binding command"
+            assert command.split(maxsplit=1)[0] in EXECUTABLES, f"{journey['id']}: binding command starts with prose"
+            if "environments" in binding:
+                assert isinstance(binding["environments"], list) and binding["environments"]
+                assert all(isinstance(value, str) and value for value in binding["environments"])
+            if "credential_gate" in binding:
+                assert isinstance(binding["credential_gate"], str)
+                assert ENV_NAME_RE.fullmatch(binding["credential_gate"])
             continue
         assert journey["steps"]
         for step in journey["steps"]:
@@ -134,3 +148,173 @@ def test_assertion_check_indices_exist_on_their_story_when_u1_exists() -> None:
             f"{journey['id']} cites nonexistent checks {sorted(cited - checks[journey['story']])} "
             f"on {journey['story']}"
         )
+
+
+def invoke_bindings(
+    tmp_path: Path,
+    journeys: list[dict[str, object]],
+    *,
+    only: str | None = None,
+    env_label: str = "dev",
+    timeout_ms: int = 1000,
+    extra_env: dict[str, str] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object], Path]:
+    catalog_path = tmp_path / "journeys.json"
+    run_dir = tmp_path / "runs"
+    shots_dir = tmp_path / "shots"
+    catalog_path.write_text(json.dumps({"journeys": journeys}), encoding="utf-8")
+    command = [
+        "node",
+        str(RUNNER_PATH),
+        "--bindings",
+        "--env-label",
+        env_label,
+        "--binding-timeout",
+        str(timeout_ms),
+        "--run-dir",
+        str(run_dir),
+        "--shots-dir",
+        str(shots_dir),
+        "--journeys",
+        str(catalog_path),
+    ]
+    if only:
+        command.extend(["--only", only])
+    process_env = os.environ.copy()
+    process_env.pop("TEST_UAT_CREDENTIAL", None)
+    process_env.update(extra_env or {})
+    result = subprocess.run(command, cwd=ROOT, env=process_env, text=True, capture_output=True, check=False)
+    run_files = list(run_dir.glob("*.json"))
+    assert len(run_files) == 1, result.stderr
+    run = json.loads(run_files[0].read_text(encoding="utf-8"))
+    return result, run, shots_dir
+
+
+def bound_journey(journey_id: str, command: str, **binding_fields: object) -> dict[str, object]:
+    return {
+        "id": journey_id,
+        "story": "US-1-01",
+        "persona": "A1",
+        "viewports": ["desktop"],
+        "binding": "harness",
+        "harness": {"command": command, "story_checks": [1], **binding_fields},
+    }
+
+
+def test_bindings_mode_executes_only_selected_bindings_and_records_log_digest(tmp_path: Path) -> None:
+    journeys = [
+        {
+            "id": "browser-step",
+            "story": "US-1-01",
+            "persona": "A1",
+            "viewports": ["desktop"],
+            "binding": "steps",
+            "steps": [{"op": "goto", "path": "/"}],
+        },
+        bound_journey("binding-pass", "sh -c 'printf \"binding ok\\n\"'"),
+        bound_journey("binding-filtered", "node -e \"process.exit(9)\""),
+    ]
+
+    result, run, shots_dir = invoke_bindings(tmp_path, journeys, only="binding-pass")
+
+    assert result.returncode == 0, result.stderr
+    assert len(run["attempts"]) == 1
+    attempt = run["attempts"][0]
+    assert attempt["journey"] == "binding-pass"
+    assert attempt["viewport"] == "n/a"
+    assert attempt["verdict"] == "PASS"
+    assert re.fullmatch(r"[0-9a-f]{64}", attempt["digest"])
+    log_path = next(shots_dir.glob("*/binding-pass-binding.log"))
+    assert log_path.read_text(encoding="utf-8") == "binding ok\n"
+
+
+def test_binding_failures_keep_only_the_last_40_output_lines_in_first_failure(tmp_path: Path) -> None:
+    command = "sh -c 'i=1; while [ $i -le 45 ]; do echo line-$i; i=$((i+1)); done; exit 7'"
+
+    result, run, shots_dir = invoke_bindings(tmp_path, [bound_journey("binding-fail", command)])
+
+    assert result.returncode == 1
+    attempt = run["attempts"][0]
+    assert attempt["verdict"] == "FAIL"
+    assert "line-6" in attempt["first_failure"]
+    assert "line-45" in attempt["first_failure"]
+    assert "line-5\n" not in attempt["first_failure"]
+    assert len((attempt["first_failure"] or "").splitlines()) == 40
+    assert len(next(shots_dir.glob("*/binding-fail-binding.log")).read_text(encoding="utf-8").splitlines()) == 45
+
+
+def test_binding_timeout_is_error_and_retries_once(tmp_path: Path) -> None:
+    result, run, _ = invoke_bindings(
+        tmp_path,
+        [bound_journey("binding-timeout", "sh -c 'sleep 1'")],
+        timeout_ms=20,
+    )
+
+    assert result.returncode == 1
+    assert [attempt["verdict"] for attempt in run["attempts"]] == ["ERROR", "ERROR"]
+    assert [attempt["retry"] for attempt in run["attempts"]] == [0, 1]
+    assert all("timed out after 20ms" in attempt["first_failure"] for attempt in run["attempts"])
+
+
+def test_non_executable_restricted_and_credential_gated_bindings_do_not_run(tmp_path: Path) -> None:
+    journeys = [
+        bound_journey("placeholder", "node script.js <repository-url>"),
+        bound_journey("prose", "credential-free probe against the target"),
+        bound_journey("restricted", "node -e \"process.exit(9)\"", environments=["prod"]),
+        bound_journey("credential", "node -e \"process.exit(9)\"", credential_gate="TEST_UAT_CREDENTIAL"),
+    ]
+
+    result, run, _ = invoke_bindings(tmp_path, journeys)
+
+    assert result.returncode == 0, result.stderr
+    attempts = {attempt["journey"]: attempt for attempt in run["attempts"]}
+    assert attempts["placeholder"]["verdict"] == "NOT RUN"
+    assert attempts["placeholder"]["first_failure"].startswith("binding is not executable:")
+    assert attempts["prose"]["verdict"] == "NOT RUN"
+    assert attempts["prose"]["first_failure"].startswith("binding is not executable:")
+    assert attempts["restricted"]["first_failure"] == "binding restricted to prod"
+    assert attempts["credential"]["verdict"] == "BLOCKED"
+    assert attempts["credential"]["first_failure"] == "credential TEST_UAT_CREDENTIAL unavailable"
+
+
+def test_cli_rejects_mixed_modes_and_only_ids_from_the_other_mode(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "journeys.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "journeys": [
+                    {
+                        "id": "browser-step",
+                        "story": "US-1-01",
+                        "persona": "A1",
+                        "viewports": ["desktop"],
+                        "binding": "steps",
+                        "steps": [{"op": "goto", "path": "/"}],
+                    },
+                    bound_journey("binding-pass", "sh -c 'exit 0'"),
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    common = ["--env-label", "local", "--journeys", str(catalog_path)]
+
+    mixed = subprocess.run(
+        ["node", str(RUNNER_PATH), "--bindings", "--base", "http://127.0.0.1:9999", *common],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    wrong_mode = subprocess.run(
+        ["node", str(RUNNER_PATH), "--bindings", "--only", "browser-step", *common],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert mixed.returncode == 2
+    assert "mutually exclusive" in mixed.stderr
+    assert wrong_mode.returncode == 2
+    assert "unavailable in bindings mode" in wrong_mode.stderr

@@ -4,8 +4,9 @@ Persona journey schema (tools/persona_journeys.json)
 Each journey has {id, story, persona, viewports, binding}. A binding is exactly
 one of:
   steps   -> ordered steps in `steps`
-  harness -> {command, story_checks}
-  command -> {command, story_checks, local_target?, account_boundary?}
+  harness -> {command, story_checks, environments?, credential_gate?}
+  command -> {command, story_checks, local_target?, account_boundary?,
+              environments?, credential_gate?}
 
 Step operations:
   goto {path}
@@ -23,6 +24,7 @@ a11yRole, a11yState, readingOrder, and liveRegion. Every assertion carries the
 'use strict';
 
 const crypto = require('crypto');
+const {spawn} = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -31,6 +33,12 @@ const DEFAULT_JOURNEYS = path.join(__dirname, 'persona_journeys.json');
 const DEFAULT_RUN_DIR = path.join(ROOT, 'build', 'uat', 'runs');
 const DEFAULT_SHOTS_DIR = path.join(ROOT, 'build', 'uat', 'shots');
 const NAVIGATION_TIMEOUT = 30000;
+const DEFAULT_BINDING_TIMEOUT = 1800000;
+const BINDING_EXECUTABLES = new Set(['node', 'python3', 'python', 'npx', 'bash', 'sh', 'cd', 'git', 'pytest', 'curl']);
+const WORKER_URLS = {
+  dev: 'https://sonsteng-chat.damienriehl.workers.dev',
+  prod: 'https://sonsteng-chat-production.damienriehl.workers.dev',
+};
 const VIEWPORTS = {
   desktop: {width: 1280, height: 900, deviceScaleFactor: 1},
   phone: {width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true},
@@ -48,15 +56,24 @@ function loadPuppeteer() {
 
 function usage(message) {
   if (message) console.error(message);
-  console.error('Usage: node tools/verify_persona_journeys.js --base <url> [--only id,id] --env-label <label> [--run-dir path] [--shots-dir path]');
+  console.error('Usage: node tools/verify_persona_journeys.js (--base <url> | --bindings) [--only id,id] --env-label <label> [--binding-timeout ms] [--run-dir path] [--shots-dir path]');
   return 2;
 }
 
 function parseArgs(argv) {
-  const result = {runDir: DEFAULT_RUN_DIR, shotsDir: DEFAULT_SHOTS_DIR, journeys: DEFAULT_JOURNEYS, only: null};
+  const result = {
+    runDir: DEFAULT_RUN_DIR,
+    shotsDir: DEFAULT_SHOTS_DIR,
+    journeys: DEFAULT_JOURNEYS,
+    only: null,
+    bindings: false,
+    bindingTimeout: DEFAULT_BINDING_TIMEOUT,
+    bindingTimeoutProvided: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
-    if (!['--base', '--only', '--env-label', '--run-dir', '--shots-dir', '--journeys'].includes(flag)) throw new Error(`unknown argument: ${flag}`);
+    if (flag === '--bindings') { result.bindings = true; continue; }
+    if (!['--base', '--only', '--env-label', '--run-dir', '--shots-dir', '--journeys', '--binding-timeout'].includes(flag)) throw new Error(`unknown argument: ${flag}`);
     if (!argv[i + 1]) throw new Error(`${flag} requires a value`);
     const value = argv[++i];
     if (flag === '--base') result.base = value;
@@ -65,9 +82,17 @@ function parseArgs(argv) {
     if (flag === '--run-dir') result.runDir = path.resolve(value);
     if (flag === '--shots-dir') result.shotsDir = path.resolve(value);
     if (flag === '--journeys') result.journeys = path.resolve(value);
+    if (flag === '--binding-timeout') {
+      result.bindingTimeout = Number(value);
+      result.bindingTimeoutProvided = true;
+      if (!Number.isSafeInteger(result.bindingTimeout) || result.bindingTimeout <= 0) throw new Error('--binding-timeout must be a positive integer');
+    }
   }
-  if (!result.base || !result.env) throw new Error('--base and --env-label are required');
-  result.base = new URL(result.base).href;
+  if (!result.env) throw new Error('--env-label is required');
+  if (result.bindings && result.base) throw new Error('--bindings and --base are mutually exclusive');
+  if (!result.bindings && !result.base) throw new Error('--base is required unless --bindings is used');
+  if (!result.bindings && result.bindingTimeoutProvided) throw new Error('--binding-timeout requires --bindings');
+  if (result.base) result.base = new URL(result.base).href;
   return result;
 }
 
@@ -387,42 +412,187 @@ async function fetchBuild(browser, base) {
   return result;
 }
 
-function bindingAttempt(journey) {
+function bindingAttempt(journey, verdict, firstFailure, overrides = {}) {
   const binding = journey[journey.binding] || {};
   return {
-    journey: journey.id, story: journey.story, persona: journey.persona, viewport: 'n/a', verdict: 'NOT RUN',
-    first_failure: `${journey.binding} binding: ${binding.command || 'no command recorded'}`,
+    journey: journey.id, story: journey.story, persona: journey.persona, viewport: 'n/a', verdict,
+    first_failure: firstFailure,
     digest: null, duration_ms: 0, canary: Boolean(journey.canary), retry: 0,
     artifact: binding.command || null,
+    ...overrides,
   };
+}
+
+function executableBinding(command, envLabel) {
+  if (typeof command !== 'string' || !command.trim()) return {reason: 'command is empty'};
+  const placeholder = command.match(/<[^>]+>/);
+  if (placeholder) return {reason: `unresolved placeholder ${placeholder[0]}`};
+  const executable = command.trim().split(/\s+/, 1)[0];
+  if (!BINDING_EXECUTABLES.has(executable)) return {reason: `unrecognized executable ${executable}`};
+  if (command.includes('{{WORKER_URL}}')) {
+    const workerUrl = WORKER_URLS[envLabel];
+    if (!workerUrl) return {reason: `{{WORKER_URL}} is unavailable for ${envLabel}`};
+    return {command: command.replaceAll('{{WORKER_URL}}', workerUrl)};
+  }
+  return {command};
+}
+
+function lastOutputLines(output, limit = 40) {
+  const normalized = String(output).replace(/\r\n/g, '\n').replace(/\n$/, '');
+  if (!normalized) return '';
+  return normalized.split('\n').slice(-limit).join('\n');
+}
+
+function terminateChild(child) {
+  if (!child.pid) return;
+  try {
+    if (process.platform === 'win32') child.kill('SIGKILL');
+    else process.kill(-child.pid, 'SIGKILL');
+  } catch (_) {
+    try { child.kill('SIGKILL'); } catch (_) {}
+  }
+}
+
+function rollingOutputTail(previous, chunk) {
+  const lines = (previous + chunk).replace(/\r\n/g, '\n').split('\n');
+  return lines.length > 41 ? lines.slice(-41).join('\n') : lines.join('\n');
+}
+
+function executeBindingCommand(command, timeoutMs, logFd, digest) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    let tail = '';
+    let settled = false;
+    let timedOut = false;
+    let logError = null;
+    const child = spawn('sh', ['-c', command], {
+      cwd: ROOT,
+      env: {...process.env, HEADLESS: '1', EDITOR_HEADLESS: '1'},
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const capture = (chunk) => {
+      if (logError) return;
+      try {
+        fs.writeSync(logFd, chunk);
+        digest.update(chunk);
+        tail = rollingOutputTail(tail, chunk.toString());
+      } catch (error) {
+        logError = error;
+        terminateChild(child);
+      }
+    };
+    child.stdout.on('data', capture);
+    child.stderr.on('data', capture);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateChild(child);
+    }, timeoutMs);
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({verdict: 'ERROR', reason: `binding spawn failed: ${errorText(error)}`, tail, duration: Date.now() - started});
+    });
+    child.on('close', (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (logError) {
+        resolve({verdict: 'ERROR', reason: `binding log failed: ${errorText(logError)}`, tail, duration: Date.now() - started});
+      } else if (timedOut) {
+        resolve({verdict: 'ERROR', reason: `binding timed out after ${timeoutMs}ms`, tail, duration: Date.now() - started});
+      } else if (code === 0) {
+        resolve({verdict: 'PASS', reason: null, tail, duration: Date.now() - started});
+      } else {
+        resolve({verdict: 'FAIL', reason: tail ? null : `binding exited ${code === null ? `on signal ${signal}` : `with code ${code}`}`, tail, duration: Date.now() - started});
+      }
+    });
+  });
+}
+
+async function runBinding(journey, command, timeout, retry, logFd, digest) {
+  const binding = journey[journey.binding] || {};
+  const result = await executeBindingCommand(command, timeout, logFd, digest);
+  const tail = lastOutputLines(result.tail);
+  const firstFailure = result.verdict === 'PASS' ? null : (result.reason && tail ? `${result.reason}: ${tail}` : result.reason || tail);
+  const attempt = bindingAttempt(journey, result.verdict, firstFailure, {
+    duration_ms: result.duration,
+    retry,
+    binding_command: binding.command,
+  });
+  return attempt;
+}
+
+function bindingPrecondition(journey, envLabel) {
+  const binding = journey[journey.binding] || {};
+  if (Array.isArray(binding.environments) && !binding.environments.includes(envLabel)) {
+    return bindingAttempt(journey, 'NOT RUN', `binding restricted to ${binding.environments.join(', ')}`);
+  }
+  if (binding.credential_gate && !process.env[binding.credential_gate]) {
+    return bindingAttempt(journey, 'BLOCKED', `credential ${binding.credential_gate} unavailable`);
+  }
+  const executable = executableBinding(binding.command, envLabel);
+  if (executable.reason) return bindingAttempt(journey, 'NOT RUN', `binding is not executable: ${executable.reason}`);
+  return executable.command;
 }
 
 async function main(argv) {
   let options;
   try { options = parseArgs(argv); } catch (error) { return usage(errorText(error)); }
   const journeys = loadCatalog(options.journeys);
-  const selected = options.only ? journeys.filter((item) => options.only.has(item.id)) : journeys;
+  const available = journeys.filter((item) => options.bindings ? item.binding !== 'steps' : item.binding === 'steps');
+  const selected = options.only ? available.filter((item) => options.only.has(item.id)) : available;
   if (options.only) {
     const found = new Set(selected.map((item) => item.id));
     const missing = [...options.only].filter((id) => !found.has(id));
-    if (missing.length) return usage(`unknown journey id(s): ${missing.join(', ')}`);
+    if (missing.length) return usage(`journey id(s) unavailable in ${options.bindings ? 'bindings' : 'steps'} mode: ${missing.join(', ')}`);
   }
   fs.mkdirSync(options.runDir, {recursive: true});
   fs.mkdirSync(options.shotsDir, {recursive: true});
   const started = new Date(); const stamp = utcStamp(started); const runId = `${stamp}-${safeName(options.env)}`;
   const shotRoot = path.join(options.shotsDir, runId); fs.mkdirSync(shotRoot, {recursive: true});
-  const puppeteer = loadPuppeteer(); let browser = null; const launchErrors = [];
-  for (let retry = 0; retry < 2 && !browser; retry++) {
-    try { browser = await launchBrowser(puppeteer); }
-    catch (error) { launchErrors.push(`browser launch: ${errorText(error)}`); }
+  let browser = null; const launchErrors = [];
+  if (!options.bindings && selected.length) {
+    const puppeteer = loadPuppeteer();
+    for (let retry = 0; retry < 2 && !browser; retry++) {
+      try { browser = await launchBrowser(puppeteer); }
+      catch (error) { launchErrors.push(`browser launch: ${errorText(error)}`); }
+    }
   }
   const build = browser ? await fetchBuild(browser, options.base) : {spine_build_id: null, git_base_sha: null, release_sha: null};
   const attempts = []; const finalByKey = new Map();
   try {
     for (const journey of selected) {
-      if (journey.binding !== 'steps') {
-        const attempt = bindingAttempt(journey); attempts.push(attempt); finalByKey.set(`${journey.id}|n/a`, attempt);
-        console.log(`NOT RUN ${journey.id} n/a — ${attempt.first_failure}`); continue;
+      if (options.bindings) {
+        const precondition = bindingPrecondition(journey, options.env);
+        if (typeof precondition !== 'string') {
+          attempts.push(precondition); finalByKey.set(`${journey.id}|n/a`, precondition);
+          console.log(`${precondition.verdict} ${journey.id} n/a — ${precondition.first_failure}`);
+          continue;
+        }
+        let final;
+        const bindingAttempts = [];
+        const logPath = path.join(shotRoot, `${safeName(journey.id)}-binding.log`);
+        const logFd = fs.openSync(logPath, 'w'); const digest = crypto.createHash('sha256');
+        try {
+          for (let retry = 0; retry < 2; retry++) {
+            if (retry) {
+              const marker = Buffer.from(`\n--- retry ${retry} ---\n`);
+              fs.writeSync(logFd, marker); digest.update(marker);
+            }
+            const attempt = await runBinding(journey, precondition, options.bindingTimeout, retry, logFd, digest);
+            bindingAttempts.push(attempt); attempts.push(attempt); final = attempt;
+            console.log(`${attempt.verdict} ${journey.id} n/a${attempt.first_failure ? ` — ${attempt.first_failure}` : ''}`);
+            if (attempt.verdict !== 'ERROR') break;
+          }
+        } finally {
+          fs.closeSync(logFd);
+        }
+        const logDigest = digest.digest('hex'); const artifact = relativeArtifact(logPath);
+        for (const attempt of bindingAttempts) { attempt.digest = logDigest; attempt.artifact = artifact; }
+        finalByKey.set(`${journey.id}|n/a`, final);
+        continue;
       }
       for (const viewport of journey.viewports) {
         if (!browser) {
@@ -461,7 +631,7 @@ async function main(argv) {
   } finally { if (browser) await browser.close().catch(() => {}); }
 
   if (fs.existsSync(shotRoot) && fs.readdirSync(shotRoot).length === 0) fs.rmdirSync(shotRoot);
-  const run = {run_id: runId, env: options.env, base: options.base, started: started.toISOString(), build, attempts};
+  const run = {run_id: runId, env: options.env, base: options.base || null, started: started.toISOString(), build, attempts};
   const runPath = path.join(options.runDir, `${runId}.json`);
   fs.writeFileSync(runPath, JSON.stringify(run, null, 2) + '\n');
   let failures = 0;
