@@ -33,6 +33,7 @@ EXPECTED_PROOF_SUMMARIES = (
     "THE PROOF · 8 decision prompts captured in one place",
 )
 EXPECTED_LENGTH_LABELS = ("One week", "Three weeks", "Full semester")
+EXPECTED_VIEWPORT_CONTENT = "width=device-width, initial-scale=1"
 
 _AUTHOR_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(name) for name in AUTHOR_SURNAMES) + r")\b",
@@ -294,6 +295,29 @@ def _asset_errors(parser: PageParser) -> list[str]:
     return errors
 
 
+def _viewport_errors(parser: PageParser) -> list[str]:
+    viewport_metas = [
+        element
+        for element in parser.elements
+        if element.tag == "meta"
+        and element.attrs.get("name", "").casefold() == "viewport"
+    ]
+    if not viewport_metas:
+        return [
+            "missing viewport meta with "
+            f'content="{EXPECTED_VIEWPORT_CONTENT}"'
+        ]
+    if not any(
+        element.attrs.get("content") == EXPECTED_VIEWPORT_CONTENT
+        for element in viewport_metas
+    ):
+        return [
+            "viewport meta must use "
+            f'content="{EXPECTED_VIEWPORT_CONTENT}"'
+        ]
+    return []
+
+
 def _content_errors(parser: PageParser) -> list[str]:
     errors: list[str] = []
     has_main = any(element.tag == "main" for element in parser.elements)
@@ -469,6 +493,7 @@ def verify_page(path: str | Path) -> list[str]:
         return errors
 
     source = page.read_text(encoding="utf-8")
+    errors.extend(_viewport_errors(parser))
     errors.extend(_link_errors(page, parser))
     errors.extend(_asset_errors(parser))
     errors.extend(_content_errors(parser))

@@ -1,5 +1,6 @@
 """Contract checks for the shared Radical Casebook visual vocabulary."""
 
+import re
 from pathlib import Path
 
 
@@ -58,6 +59,22 @@ def test_accessibility_and_output_modes_remain_first_class():
         "@media print",
     ):
         assert contract in theme
+
+
+def test_skip_links_target_programmatically_focusable_main_content():
+    pages_with_skip_links = []
+    for page in sorted((ROOT / "site/platform").rglob("*.html")):
+        source = page.read_text(encoding="utf-8")
+        if '<a class="skip-link" href="#main">' not in source:
+            continue
+        pages_with_skip_links.append(page)
+        main = re.search(r'<main\b[^>]*\bid="main"[^>]*>', source)
+        assert main is not None, f"{page} has a skip link without main#main"
+        assert 'tabindex="-1"' in main.group(0), (
+            f"{page} main#main is not programmatically focusable"
+        )
+
+    assert pages_with_skip_links, "expected generated pages with skip links"
 
 
 def test_preview_uses_only_local_stylesheets_and_exercises_hierarchy():

@@ -4,6 +4,7 @@
 .skip-link{position:absolute;left:-9999px;top:0;background:var(--paper);color:var(--ink);
   padding:.6em 1em;border:var(--rule-bold) solid var(--claret);z-index:100}
 .skip-link:focus{left:.5rem;top:.5rem}
+main[tabindex]:focus{outline:none}
 
 .masthead__inner{gap:var(--sp-6)}
 .masthead__brand{font-family:var(--font-display);font-size:var(--fs-md);font-weight:900;
