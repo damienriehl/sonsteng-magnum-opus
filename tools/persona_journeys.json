@@ -156,7 +156,7 @@
         {"op": "click", "name": "The Evidence"},
         {"op": "waitFor", "url": "#skills"},
         {"op": "assert", "kind": "url", "url": "#skills", "check": 2},
-        {"op": "assert", "kind": "text", "selector": "#skills", "text": "The measured evidence", "check": 2},
+        {"op": "assert", "kind": "text", "selector": "#skills", "text": "The empirical proof", "check": 2},
         {"op": "click", "name": "Open"},
         {"op": "waitFor", "url": "#where"},
         {"op": "assert", "kind": "text", "selector": "#where", "text": "Given away, so it outlives us.", "check": 3},
@@ -217,11 +217,12 @@
       "binding": "steps",
       "steps": [
         {"op": "goto", "path": "/#react"},
+        {"op": "click", "selector": "#react details.proof > summary"},
+        {"op": "assert", "kind": "attr", "selector": "#react details.proof", "attr": "open", "value": "", "check": 2},
+        {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"},
+        {"op": "assert", "kind": "text", "selector": "#cCount", "text": "1", "check": 2},
         {"op": "click", "selector": "#cOpen"},
         {"op": "assert", "kind": "text", "selector": "#cList", "text": "No comments yet", "check": 1},
-        {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"},
-        {"op": "waitFor", "text": "1"},
-        {"op": "assert", "kind": "text", "selector": "#cCount", "text": "1", "check": 2},
         {"op": "click", "selector": "#cCopy"},
         {"op": "assert", "kind": "selector", "selector": "#cCopied", "check": 3},
         {"op": "click", "selector": "#cClose"},
@@ -326,7 +327,7 @@
       "persona": "A3",
       "viewports": ["desktop"],
       "binding": "harness",
-      "harness": {"command": "python3 tools/build_instructor_bundle.py && node --test app/worker/test/editor-instructor.test.js", "story_checks": [1, 2, 3, 4]}
+      "harness": {"command": "python3 tools/build_instructor_bundle.py && node --test app/worker/test/editor-map.test.js app/worker/test/offline-redteam-redaction.test.js", "story_checks": [1, 2, 3, 4]}
     },
     {
       "id": "instructor-assessment-override",
@@ -394,7 +395,7 @@
       "persona": "A4",
       "viewports": ["desktop"],
       "binding": "harness",
-      "harness": {"command": "node app/editor/verify-editor.js && node --test app/worker/test/editor-apply-status.test.js", "story_checks": [1, 2, 3, 4]}
+      "harness": {"command": "node app/editor/verify-editor.js && node --test app/worker/test/editor-direct-apply.test.js", "story_checks": [1, 2, 3, 4]}
     },
     {
       "id": "john-request-revert",

@@ -1,14 +1,17 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
   collapseWhitespace,
   controlNameMatches,
   filenameMatches,
+  liveRegionTextMatches,
   normalizeControlName,
   selectControlCandidate,
+  uatWorkspacePath,
 } = require('../verify_persona_journeys.js');
 
 test('whitespace collapse normalizes text assertion content', () => {
@@ -45,4 +48,44 @@ test('name lookup distinguishes a hidden match from no match', () => {
 
   assert.deepEqual(selectControlCandidate([hidden], 'the evidence'), hidden);
   assert.equal(selectControlCandidate([hidden], 'Open'), null);
+});
+
+test('name lookup ranks an exact link above an earlier visible containing container', () => {
+  const candidates = [
+    {index: 0, name: 'Module 1 — Foundational Fact gathering Client counseling', visible: true, interactive: false, tabIndex: 0},
+    {index: 1, name: 'Fact gathering', visible: true, interactive: true, tabIndex: 0},
+  ];
+
+  assert.deepEqual(selectControlCandidate(candidates, 'Fact gathering'), candidates[1]);
+});
+
+test('name lookup excludes a non-interactive tabindex minus-one main', () => {
+  const main = {index: 0, name: 'Module 1 — Foundational Fact gathering', visible: true, interactive: false, tabIndex: -1};
+  const link = {index: 1, name: 'Fact gathering', visible: true, interactive: true, tabIndex: 0};
+
+  assert.deepEqual(selectControlCandidate([main, link], 'Fact gathering'), link);
+  assert.equal(selectControlCandidate([main], 'Fact gathering'), null);
+});
+
+test('name lookup prefers the shortest visible name among substring-only matches', () => {
+  const candidates = [
+    {index: 0, name: 'Taxonomy Skills browser 26 surveyed skills across the curriculum', visible: true},
+    {index: 1, name: 'Skills browser 26 surveyed', visible: true},
+  ];
+
+  assert.deepEqual(selectControlCandidate(candidates, 'Skills browser'), candidates[1]);
+});
+
+test('live-region text comparison uses collapsed case-sensitive DOM text', () => {
+  assert.equal(liveRegionTextMatches(['20 matters', 'page 1 of 1'], '20 matters'), true);
+  assert.equal(liveRegionTextMatches(['20 MATTERS', 'PAGE 1 OF 1'], '20 matters'), false);
+});
+
+test('UAT workspace paths stay under the repository build tree and sanitize components', () => {
+  const expected = path.resolve(__dirname, '..', '..', 'build', 'uat', 'downloads', 'run-01', 'journey-phone-0');
+
+  assert.equal(uatWorkspacePath('downloads', 'run 01', 'journey/phone/0'), expected);
+  assert.throws(() => uatWorkspacePath('screenshots', 'run-01'), /unsupported UAT workspace kind/);
+  assert.throws(() => uatWorkspacePath('downloads', '..', '..', 'escaped'), /unsafe UAT workspace component/);
+  assert.throws(() => uatWorkspacePath('profiles', '.'), /unsafe UAT workspace component/);
 });

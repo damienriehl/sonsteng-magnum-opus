@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import html
 import os
 import re
+import shlex
 import subprocess
+from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import pytest
 
@@ -33,6 +36,74 @@ EXECUTABLES = {"node", "python3", "python", "npx", "bash", "sh", "cd", "git", "p
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 STORY_HEADING_RE = re.compile(r"^#{1,6}\s+(US-\d+-(?:\d+|CANARY))\b", re.MULTILINE)
 CHECK_RE = re.compile(r"^\s*(\d+)\.\s+", re.MULTILINE)
+REPOSITORY_FILE_TOKEN_RE = re.compile(r"^(?:app|tools|docs|site)/.+\.[A-Za-z0-9]+$")
+ANCHOR_SELECTOR_HREF_RE = re.compile(r'^a\[href=["\']([^"\']+)["\']\]$')
+JS_RENDERED_TEXT_PATHS = {
+    Path("platform/chat/index.html"),
+}
+JS_RENDERED_TEXT_ASSERTIONS = {
+    (Path("index.html"), "Collapse all sections"),
+}
+
+
+class StaticPageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.hidden_depth = 0
+        self.text_parts: list[str] = []
+        self.anchor_stack: list[dict[str, object]] = []
+        self.anchors: list[tuple[str, str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "template"}:
+            self.hidden_depth += 1
+        if tag == "a" and not self.hidden_depth:
+            href = dict(attrs).get("href")
+            self.anchor_stack.append({"href": href, "text": []})
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self.anchor_stack and not self.hidden_depth:
+            anchor = self.anchor_stack.pop()
+            href = anchor["href"]
+            if isinstance(href, str):
+                self.anchors.append((collapse_text(" ".join(anchor["text"])), href))
+        if tag in {"script", "style", "template"} and self.hidden_depth:
+            self.hidden_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self.hidden_depth:
+            return
+        self.text_parts.append(data)
+        for anchor in self.anchor_stack:
+            anchor["text"].append(data)
+
+
+def collapse_text(value: str) -> str:
+    return " ".join(html.unescape(value).split())
+
+
+def parse_static_page(target: Path) -> StaticPageParser:
+    parser = StaticPageParser()
+    parser.feed(target.read_text(encoding="utf-8"))
+    return parser
+
+
+def clicked_href(step: dict[str, object], page: StaticPageParser) -> str | None:
+    selector = step.get("selector")
+    if isinstance(selector, str):
+        match = ANCHOR_SELECTOR_HREF_RE.fullmatch(selector)
+        if match:
+            return match.group(1)
+    name = step.get("name")
+    if isinstance(name, str):
+        requested = collapse_text(name).lower()
+        matches = [anchor for anchor in page.anchors if requested in anchor[0].lower()]
+        exact = [anchor for anchor in matches if anchor[0].lower() == requested]
+        if exact:
+            return exact[0][1]
+        if matches:
+            return min(matches, key=lambda anchor: len(anchor[0]))[1]
+    return None
 
 
 def catalog() -> list[dict[str, object]]:
@@ -137,6 +208,10 @@ def test_repaired_browser_journey_contracts_are_pinned() -> None:
     )
 
     assert journeys["pitch-public-navigation"]["viewports"] == ["desktop"]
+    assert any(
+        step.get("kind") == "text" and step.get("selector") == "#skills" and step.get("text") == "The empirical proof"
+        for step in journeys["pitch-public-navigation"]["steps"]
+    )
     phone_nav = journeys["pitch-phone-nav-hidden"]
     assert phone_nav["story"] == journeys["pitch-public-navigation"]["story"]
     assert phone_nav["viewports"] == ["phone", "zoom200"]
@@ -157,16 +232,90 @@ def test_repaired_browser_journey_contracts_are_pinned() -> None:
 
     assert {"op": "click", "selector": "#SK-LP-07 > summary"} in journeys["instructor-skill-to-rubric"]["steps"]
     reaction_steps = journeys["pitch-empty-reactions"]["steps"]
+    disclosure_click = {"op": "click", "selector": "#react details.proof > summary"}
+    disclosure_open = {
+        "op": "assert",
+        "kind": "attr",
+        "selector": "#react details.proof",
+        "attr": "open",
+        "value": "",
+        "check": 2,
+    }
     vote_index = reaction_steps.index(
         {"op": "click", "selector": "#fb .fbrow:first-child .opts button:first-child"}
     )
-    assert reaction_steps[vote_index + 1] == {"op": "waitFor", "text": "1"}
+    assert reaction_steps.index(disclosure_click) < reaction_steps.index(disclosure_open) < vote_index
+    assert not any(step["op"] == "waitFor" and step.get("text") == "1" for step in reaction_steps)
+    assert reaction_steps[vote_index + 1] == {
+        "op": "assert", "kind": "text", "selector": "#cCount", "text": "1", "check": 2
+    }
     a11y_name = next(
         step for step in journeys["accessibility-keyboard-packet"]["steps"]
         if step.get("kind") == "a11yName"
     )
     assert a11y_name["expected"] == "MATTER LIBRARY 20 simulated matters"
     assert a11y_name["contains"] is True
+
+
+def test_literal_text_assertions_exist_in_their_static_page() -> None:
+    site_root = (ROOT / "site").resolve()
+    for journey in catalog():
+        current_url: str | None = None
+        current_target: Path | None = None
+        current_page: StaticPageParser | None = None
+        for step in journey.get("steps", []):
+            if step["op"] == "goto":
+                current_url = str(step["path"])
+                current_target = site_path(current_url)
+                current_page = parse_static_page(current_target)
+                continue
+            if step["op"] == "click" and current_url and current_page:
+                href = clicked_href(step, current_page)
+                if href:
+                    current_url = urljoin(current_url, href)
+                    target = site_path(current_url)
+                    if target.is_file():
+                        current_target = target
+                        current_page = parse_static_page(target)
+                continue
+            if step["op"] != "assert" or step.get("kind") != "text" or not isinstance(step.get("text"), str):
+                continue
+            assert current_target is not None and current_page is not None
+            relative = current_target.resolve().relative_to(site_root)
+            if relative in JS_RENDERED_TEXT_PATHS:
+                # The chat title is populated from the goto query string by client JS,
+                # so it has no literal static-file representation to validate here.
+                continue
+            expected = collapse_text(step["text"])
+            if (relative, expected) in JS_RENDERED_TEXT_ASSERTIONS:
+                # The proof-toggle label changes from "Expand" to "Collapse" only
+                # after its client-side click handler opens every disclosure.
+                continue
+            visible_text = collapse_text(" ".join(current_page.text_parts))
+            assert expected in visible_text, f"{journey['id']}: {expected!r} absent from site/{relative}"
+
+
+def test_binding_repository_file_tokens_exist() -> None:
+    for journey in catalog():
+        if journey["binding"] == "steps":
+            continue
+        command = journey[journey["binding"]]["command"]
+        for token in shlex.split(command):
+            if any(character in token for character in "*?[]{}"):
+                continue
+            if REPOSITORY_FILE_TOKEN_RE.fullmatch(token):
+                assert (ROOT / token).is_file(), f"{journey['id']}: binding path does not exist: {token}"
+
+
+def test_repaired_harness_bindings_name_existing_story_proofs() -> None:
+    journeys = {journey["id"]: journey for journey in catalog()}
+    assert journeys["instructor-private-bundle"]["harness"]["command"] == (
+        "python3 tools/build_instructor_bundle.py && "
+        "node --test app/worker/test/editor-map.test.js app/worker/test/offline-redteam-redaction.test.js"
+    )
+    assert journeys["john-apply-state-recovery"]["harness"]["command"] == (
+        "node app/editor/verify-editor.js && node --test app/worker/test/editor-direct-apply.test.js"
+    )
 
 
 def test_story_and_journey_coverage_is_two_way_when_u1_exists() -> None:

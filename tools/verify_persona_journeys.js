@@ -22,8 +22,10 @@ a11yRole, a11yState, readingOrder, and liveRegion. Every assertion carries the
 1-based acceptance-check index it proves. See docs/uat/journey-schema.md.
 
 Name-based controls compare aria-label (or textContent when absent) after
-collapsing whitespace, case-insensitively. Visible matches take precedence;
-when only hidden matches exist the step reports "control not visible".
+collapsing whitespace, case-insensitively. Exact names rank above substring
+matches; visibility ranks within each tier, and the shortest substring match is
+preferred. Non-interactive tabindex=-1 containers are excluded. When only
+hidden matches exist the step reports "control not visible".
 */
 'use strict';
 
@@ -40,6 +42,8 @@ const NAVIGATION_TIMEOUT = 30000;
 const ASSERTION_VISIBILITY_TIMEOUT = 2500;
 const DEFAULT_BINDING_TIMEOUT = 1800000;
 const BINDING_EXECUTABLES = new Set(['node', 'python3', 'python', 'npx', 'bash', 'sh', 'cd', 'git', 'pytest', 'curl']);
+const NATIVE_INTERACTIVE_SELECTOR = 'a[href],button,input,textarea,select,summary,[role="button"]';
+const UAT_WORKSPACE_KINDS = new Set(['downloads', 'profiles']);
 const WORKER_URLS = {
   dev: 'https://sonsteng-chat.damienriehl.workers.dev',
   prod: 'https://sonsteng-chat-production.damienriehl.workers.dev',
@@ -116,6 +120,15 @@ function safeName(value) {
   return String(value).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'journey';
 }
 
+function uatWorkspacePath(kind, ...components) {
+  if (!UAT_WORKSPACE_KINDS.has(kind)) throw new Error(`unsupported UAT workspace kind: ${kind}`);
+  const safeComponents = components.map(safeName);
+  if (safeComponents.some((component) => component === '.' || component === '..')) {
+    throw new Error('unsafe UAT workspace component');
+  }
+  return path.join(ROOT, 'build', 'uat', kind, ...safeComponents);
+}
+
 function sha256File(source) {
   return crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
 }
@@ -125,13 +138,19 @@ function relativeArtifact(source) {
   return relative.startsWith('..') ? source : relative.replaceAll(path.sep, '/');
 }
 
-function launchBrowser(puppeteer) {
-  return puppeteer.launch({
-    executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium',
-    headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0',
-    userDataDir: path.join('/tmp', `sonsteng-persona-uat-${process.pid}-${Date.now()}`),
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-crash-reporter', '--disable-breakpad'],
-  });
+async function launchBrowser(puppeteer, userDataDir) {
+  fs.mkdirSync(userDataDir, {recursive: true});
+  try {
+    return await puppeteer.launch({
+      executablePath: process.env.CHROME_BIN || process.env.CHROMIUM_PATH || '/snap/bin/chromium',
+      headless: process.env.HEADFUL !== '1' && process.env.HEADLESS !== '0',
+      userDataDir,
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-crash-reporter', '--disable-breakpad'],
+    });
+  } catch (error) {
+    fs.rmSync(userDataDir, {recursive: true, force: true});
+    throw error;
+  }
 }
 
 function targetUrl(base, targetPath) {
@@ -168,9 +187,29 @@ function controlNameMatches(actual, expected) {
   return Boolean(requested) && (candidate === requested || candidate.includes(requested));
 }
 
+function compareControlRanks(left, right) {
+  if (left.exact !== right.exact) return Number(left.exact) - Number(right.exact);
+  if (left.visible !== right.visible) return Number(left.visible) - Number(right.visible);
+  return right.nameLength - left.nameLength;
+}
+
 function selectControlCandidate(candidates, expected) {
-  const matches = candidates.filter((candidate) => controlNameMatches(candidate.name, expected));
-  return matches.find((candidate) => candidate.visible) || matches[0] || null;
+  const requested = normalizeControlName(expected);
+  if (!requested) return null;
+  let selected = null;
+  let selectedRank = null;
+  for (const candidate of candidates) {
+    if (candidate.tabIndex === -1 && candidate.interactive === false) continue;
+    const normalizedName = normalizeControlName(candidate.name);
+    const exact = normalizedName === requested;
+    if (!exact && !normalizedName.includes(requested)) continue;
+    const rank = {exact, visible: Boolean(candidate.visible), nameLength: normalizedName.length};
+    if (!selectedRank || compareControlRanks(rank, selectedRank) > 0) {
+      selected = candidate;
+      selectedRank = rank;
+    }
+  }
+  return selected;
 }
 
 function elementIsVisible(element, expected = true) {
@@ -182,14 +221,16 @@ function elementIsVisible(element, expected = true) {
 }
 
 async function elementByName(page, name) {
-  const handles = await page.$$('a[href],button,input,textarea,select,summary,[role="button"],[tabindex]');
+  const handles = await page.$$(`${NATIVE_INTERACTIVE_SELECTOR},[tabindex]`);
   const candidates = [];
   for (let index = 0; index < handles.length; index++) {
     const handle = handles[index];
-    const candidate = await handle.evaluate((element, candidateIndex) => ({
+    const candidate = await handle.evaluate((element, candidateIndex, nativeSelector) => ({
       index: candidateIndex,
       name: element.getAttribute('aria-label') || element.textContent || '',
-    }), index);
+      interactive: element.matches(nativeSelector),
+      tabIndex: element.tabIndex,
+    }), index, NATIVE_INTERACTIVE_SELECTOR);
     candidate.visible = await handle.evaluate(elementIsVisible);
     candidates.push(candidate);
   }
@@ -274,6 +315,12 @@ async function waitForVisibleText(page, selector, text, timeout) {
 
 async function waitForText(page, text, timeout) {
   return waitForVisibleText(page, null, text, timeout);
+}
+
+function liveRegionTextMatches(values, expected) {
+  const actual = collapseWhitespace(Array.isArray(values) ? values.join(' ') : values);
+  const requested = collapseWhitespace(expected);
+  return Boolean(requested) && actual.includes(requested);
 }
 
 function globRegex(pattern) {
@@ -491,8 +538,8 @@ async function runAssertion(page, step, state) {
   }
   if (step.kind === 'liveRegion') {
     const selector = step.selector || '[aria-live]';
-    const actual = await page.$$eval(selector, (elements) => elements.map((element) => element.innerText || '').join(' '));
-    if (!actual.includes(step.text)) stepFailure(step, `live region lacks text: ${step.text}`);
+    const actual = await page.$$eval(selector, (elements) => elements.map((element) => element.textContent || ''));
+    if (!liveRegionTextMatches(actual, step.text)) stepFailure(step, `live region lacks text: ${step.text}`);
     return;
   }
   stepFailure(step, `unknown assertion kind: ${step.kind}`);
@@ -568,7 +615,11 @@ async function runSteps(browser, journey, viewportName, context) {
   const started = Date.now();
   const browserContext = await browser.createBrowserContext();
   const page = await browserContext.newPage();
-  const downloadDir = path.join('/tmp', `sonsteng-uat-download-${process.pid}-${safeName(journey.id)}-${safeName(viewportName)}-${context.retry}`);
+  const downloadDir = uatWorkspacePath(
+    'downloads',
+    context.runId,
+    `${journey.id}-${viewportName}-${context.retry}`,
+  );
   fs.mkdirSync(downloadDir, {recursive: true});
   const state = {base: context.base, consoleErrors: [], downloads: [], downloadDir};
   page.on('console', (message) => { if (message.type() === 'error') state.consoleErrors.push(`console: ${message.text()}`); });
@@ -770,17 +821,24 @@ async function main(argv) {
   fs.mkdirSync(options.shotsDir, {recursive: true});
   const started = new Date(); const stamp = utcStamp(started); const runId = `${stamp}-${safeName(options.env)}`;
   const shotRoot = path.join(options.shotsDir, runId); fs.mkdirSync(shotRoot, {recursive: true});
-  let browser = null; const launchErrors = [];
+  let browser = null; let puppeteer = null; let browserLaunch = 0; const launchErrors = [];
+  const profileRoot = uatWorkspacePath('profiles', runId);
+  const downloadRoot = uatWorkspacePath('downloads', runId);
+  const openBrowser = async () => {
+    if (!puppeteer) puppeteer = loadPuppeteer();
+    const profileDir = uatWorkspacePath('profiles', runId, `browser-${process.pid}-${browserLaunch++}`);
+    return launchBrowser(puppeteer, profileDir);
+  };
   if (!options.bindings && selected.length) {
-    const puppeteer = loadPuppeteer();
     for (let retry = 0; retry < 2 && !browser; retry++) {
-      try { browser = await launchBrowser(puppeteer); }
+      try { browser = await openBrowser(); }
       catch (error) { launchErrors.push(`browser launch: ${errorText(error)}`); }
     }
   }
-  const build = browser ? await fetchBuild(browser, options.base) : {spine_build_id: null, git_base_sha: null, release_sha: null};
+  let build = {spine_build_id: null, git_base_sha: null, release_sha: null};
   const attempts = []; const finalByKey = new Map();
   try {
+    if (browser) build = await fetchBuild(browser, options.base);
     for (const journey of selected) {
       if (options.bindings) {
         const precondition = bindingPrecondition(journey, options.env);
@@ -829,8 +887,8 @@ async function main(argv) {
         for (let retry = 0; retry < 2; retry++) {
           let attempt;
           try {
-            if (!browser || !browser.isConnected()) browser = await launchBrowser(puppeteer);
-            attempt = await runSteps(browser, journey, viewport, {base: options.base, shotRoot, retry});
+            if (!browser || !browser.isConnected()) browser = await openBrowser();
+            attempt = await runSteps(browser, journey, viewport, {base: options.base, shotRoot, runId, retry});
           } catch (error) {
             attempt = {
               journey: journey.id, story: journey.story, persona: journey.persona, viewport,
@@ -846,7 +904,11 @@ async function main(argv) {
         finalByKey.set(`${journey.id}|${viewport}`, final);
       }
     }
-  } finally { if (browser) await browser.close().catch(() => {}); }
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    fs.rmSync(profileRoot, {recursive: true, force: true});
+    fs.rmSync(downloadRoot, {recursive: true, force: true});
+  }
 
   if (fs.existsSync(shotRoot) && fs.readdirSync(shotRoot).length === 0) fs.rmdirSync(shotRoot);
   const run = {run_id: runId, env: options.env, base: options.base || null, started: started.toISOString(), build, attempts};
@@ -870,6 +932,8 @@ module.exports = {
   collapseWhitespace,
   controlNameMatches,
   filenameMatches,
+  liveRegionTextMatches,
   normalizeControlName,
   selectControlCandidate,
+  uatWorkspacePath,
 };

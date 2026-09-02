@@ -33,7 +33,11 @@ Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`
 
 Before a `text`, selector-visibility, `focusOn`, or accessibility assertion is evaluated, the runner scrolls its target to the center of the viewport and polls for as long as 2,500 ms for the target’s resting visibility. Text matching uses whitespace-collapsed `textContent` on an attached element with a non-zero bounding rectangle. Each browser page also emulates `prefers-reduced-motion: reduce`, making reveal and transition effects immediate. These are deliberate resting-state measurements: persona UAT evaluates the usable content after motion settles, not a transient animation frame or an element that has not yet crossed an intersection threshold.
 
+Name-based control lookup ignores non-interactive containers whose only candidacy is `tabindex="-1"`, such as skip-link focus targets. Exact normalized names rank above substring matches; visible controls rank above hidden controls within each tier; and substring-only matches prefer the shortest normalized name. This keeps broad containers from shadowing the specific link or button named by a journey.
+
 Downloads use the Chrome DevTools Protocol Browser domain with `allowAndName` and completion events. The event’s suggested filename is matched against `pattern`; after completion the runner records that filename and the stored file’s byte size. If Browser-domain events are unavailable, the runner falls back to Page-domain download allowance and polls the temporary download directory.
+
+Browser profiles and per-attempt downloads live under `build/uat/profiles/<run-id>/` and `build/uat/downloads/<run-id>/`. They deliberately do not use `/tmp`: snap-packaged Chromium sees a private, confinement-specific `/tmp` namespace that the host-side runner cannot inspect or remove. The repository-local `build/` tree is gitignored, available through snap's home interface, and each run's profile and download directories are removed after the browser closes.
 
 ## Harness and command bindings
 
