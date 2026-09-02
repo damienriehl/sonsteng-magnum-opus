@@ -475,6 +475,37 @@ def _drawer_focus_errors(parser: PageParser, source: str) -> list[str]:
 def _pitch_contract_errors(parser: PageParser, source: str) -> list[str]:
     """Verify the structure unique to the main Legal Practicum pitch."""
     errors: list[str] = []
+    mains = [element for element in parser.elements if element.tag == "main"]
+    if len(mains) != 1 or mains[0].attrs.get("id") != "main":
+        errors.append('pitch requires one main landmark with id="main"')
+    elif mains[0].attrs.get("tabindex") != "-1":
+        errors.append("pitch main landmark must be programmatically focusable")
+
+    skip_links = [
+        element
+        for element in parser.elements
+        if element.tag == "a"
+        and "skip-link" in element.attrs.get("class", "").split()
+        and element.attrs.get("href") == "#main"
+        and " ".join(_descendant_text(element).split()) == "Skip to content"
+    ]
+    if len(skip_links) != 1:
+        errors.append("pitch requires one Skip to content link targeting #main")
+    elif mains and parser.elements.index(skip_links[0]) > parser.elements.index(mains[0]):
+        errors.append("pitch Skip to content link must precede the main landmark")
+
+    decorative_numerals = [
+        element
+        for element in parser.elements
+        if element.tag == "div"
+        and "n" in element.attrs.get("class", "").split()
+    ]
+    for numeral in decorative_numerals:
+        if numeral.attrs.get("aria-hidden") != "true":
+            errors.append(
+                f"line {numeral.line}: decorative layer numeral must be aria-hidden"
+            )
+
     sections = [element for element in parser.elements if element.tag == "section"]
     summaries: list[str] = []
     if len(sections) != 9:
