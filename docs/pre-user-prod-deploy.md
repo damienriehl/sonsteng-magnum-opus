@@ -50,9 +50,9 @@ newer site may call an endpoint an older Worker lacks.
    Capture the `Worker Version ID` from the output.
 2. **Worker activate.** `npx wrangler@4 versions deploy <version-id> --env production --yes`.
 3. **Worker verify.** After a few seconds,
-   `curl -sI https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance` must
-   return `204` with `x-release-sha: <sha>`. A `503` means `RELEASE_SHA` did not reach the version;
-   a `404` seen immediately after activation is propagation and clears within a minute.
+   `curl -s -D - -o /dev/null https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance`
+   must return `204` with `x-release-sha: <sha>`. Use GET, not HEAD: the route answers only GET, so
+   `curl -I` reports a misleading `404`. A `503` means `RELEASE_SHA` did not reach the version.
    `curl -s -o /dev/null -w '%{http_code}' .../v1/session` returns `403` (the Turnstile gate; expected).
 4. **Pages stage.** Copy `site/` to a temporary directory and append a `_headers` file:
    ```
