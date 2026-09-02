@@ -99,8 +99,9 @@ Options:
   `main` is pushed explicitly.
 - UAT failures are fixed through `ce-debug`; a failure large enough to need design goes to a new
   `ce-plan` document rather than an ad-hoc patch.
-- No production publication, credential use, Day Zero corpus mutation, repository rename, or
-  Cockpit repository write occurs during this trip.
+- No credential change, Day Zero corpus mutation, repository rename, or Cockpit repository write
+  occurs during this trip. Production deployment of merged `main` is permitted under the Q1 answer
+  below, for the pre-user stage only.
 - Nothing in this sheet or its answers should contain a credential, one-time code, roster data, or
   private authored content.
 
