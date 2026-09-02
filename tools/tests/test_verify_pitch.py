@@ -87,6 +87,15 @@ def test_valid_self_contained_page_passes(page: Path):
     assert verify_pitch.verify_page(page) == []
 
 
+def test_missing_english_document_language_fails(page: Path):
+    page.write_text(
+        VALID_PAGE.replace('<html lang="en">', "<html>"),
+        encoding="utf-8",
+    )
+
+    assert 'html element with lang="en"' in messages(page)
+
+
 def test_missing_viewport_meta_fails(page: Path):
     page.write_text(
         VALID_PAGE.replace(

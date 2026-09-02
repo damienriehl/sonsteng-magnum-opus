@@ -318,6 +318,18 @@ def _viewport_errors(parser: PageParser) -> list[str]:
     return []
 
 
+def _document_language_errors(parser: PageParser) -> list[str]:
+    html_elements = [
+        element for element in parser.elements if element.tag == "html"
+    ]
+    if not any(
+        element.attrs.get("lang", "").casefold() == "en"
+        for element in html_elements
+    ):
+        return ['missing html element with lang="en"']
+    return []
+
+
 def _content_errors(parser: PageParser) -> list[str]:
     errors: list[str] = []
     has_main = any(element.tag == "main" for element in parser.elements)
@@ -493,6 +505,7 @@ def verify_page(path: str | Path) -> list[str]:
         return errors
 
     source = page.read_text(encoding="utf-8")
+    errors.extend(_document_language_errors(parser))
     errors.extend(_viewport_errors(parser))
     errors.extend(_link_errors(page, parser))
     errors.extend(_asset_errors(parser))

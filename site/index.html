@@ -1,4 +1,5 @@
 <!-- Legal Practicum — walkthrough site. Self-contained; embedded fonts (no external requests). -->
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Legal Practicum</title>
@@ -47,7 +48,7 @@ nav .wrap{display:flex;align-items:center;justify-content:space-between;height:6
 .brand{font-family:'Fraunces',serif;font-weight:900;letter-spacing:-.02em;font-size:1.06rem;white-space:nowrap;flex:none}
 .brand small{display:block;font-family:'Spectral',serif;font-weight:500;font-size:.58rem;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-faint);margin-top:1px}
 .navlinks{display:flex;gap:15px;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;font-family:'Fraunces',serif;font-weight:600}
-.navlinks a{color:var(--ink-soft);text-decoration:none;white-space:nowrap;transition:color .2s}
+.navlinks a{display:inline-block;color:var(--ink-soft);text-decoration:none;white-space:nowrap;line-height:1.2;padding:.35rem 0;transition:color .2s}
 .navlinks a:hover{color:var(--claret)}
 @media(max-width:960px){.navlinks{display:none}}
 
@@ -616,7 +617,7 @@ details.proof>.wrap{padding-left:0;padding-right:0;margin-top:28px}
 .drawer.open{transform:none}
 .drawer header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line)}
 .drawer header h3{font-size:1.24rem}
-.drawer .x{background:0;border:0;font-size:1.7rem;cursor:pointer;color:var(--ink-soft);line-height:1;padding:0 4px}
+.drawer .x{min-width:28px;min-height:28px;background:0;border:0;font-size:1.7rem;cursor:pointer;color:var(--ink-soft);line-height:1;padding:0 4px}
 .drawer .dbody{padding:18px 22px;overflow:auto;flex:1}
 .active-cmt{background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:6px;padding:15px;margin-bottom:20px}
 .chipid{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:.68rem;background:var(--claret);color:#f5ece0;border-radius:4px;padding:3px 8px;margin-bottom:9px;word-break:break-all}
