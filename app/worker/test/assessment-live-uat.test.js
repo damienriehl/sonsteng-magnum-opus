@@ -228,8 +228,17 @@ test("rejects malformed assessment JSON without surfacing its body", async () =>
 });
 
 test("maps a request timeout to a bounded error without exposing the thrown error", async () => {
+  let abortObserved = false;
   const fetchImpl = async (_url, init) => new Promise((resolve, reject) => {
-    init.signal.addEventListener("abort", () => reject(new Error(`timeout ${API_KEY}`)), { once: true });
+    // AbortSignal.timeout() does not keep the event loop alive. A ref'ed fallback
+    // makes the test deterministic across supported Node versions and also fails
+    // the assertion below if the real abort signal never fires.
+    const fallback = setTimeout(() => reject(new Error("timeout signal did not fire")), 1_000);
+    init.signal.addEventListener("abort", () => {
+      abortObserved = true;
+      clearTimeout(fallback);
+      reject(new Error(`timeout ${API_KEY}`));
+    }, { once: true });
   });
   await assert.rejects(
     runAssessmentAuditPreparation({
@@ -243,6 +252,7 @@ test("maps a request timeout to a bounded error without exposing the thrown erro
     }),
     (error) => error.code === "session_network" && !containsSecret(error.message),
   );
+  assert.equal(abortObserved, true);
 });
 
 for (const reflected of [API_KEY, BYPASS, SESSION]) {

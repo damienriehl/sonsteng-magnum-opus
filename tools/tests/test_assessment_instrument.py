@@ -6,14 +6,17 @@ import copy
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 import jsonschema
 
-from tools import validate_spine as spine
-
-
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "tools"))
+
+from tools import validate_spine as spine  # noqa: E402
+
+
 SCHEMA_PATH = REPO / "data" / "schemas" / "assessment-instrument.schema.json"
 INSTRUMENT_PATH = REPO / "data" / "curriculum" / "assessment-instrument.json"
 MANIFEST_PATH = REPO / "data" / "spine-manifest.json"

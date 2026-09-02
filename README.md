@@ -57,14 +57,38 @@ simulator you need an API backend — either:
    matter → "Interview the client" → **ADD YOUR KEY** → pick your provider, paste a
    (low-limit!) key. It is stored only in your browser and sent per-request; never stored
    server-side.
-2. **Self-host the Worker** (recommended for courses): `cd app/worker`, set
-   `wrangler secret put SESSION_SIGNING_KEY` (random) and optionally
-   `ANTHROPIC_API_KEY` (enables the keyless hosted pool with a $10/day cap), then
-   `npx wrangler@4 deploy`; point the site at it via the `sonsteng-api` meta tag.
+2. **Self-host the Worker** (recommended for courses): from the repository root,
+   generate the Worker's local editor data first:
 
-The Worker unit tests need no `npm install` (Node's built-in runner, Node ≥ 20):
+   <!-- adopter-worker-generators -->
+   ```bash
+   python3 tools/build_site.py --check
+   python3 tools/build_instructor_bundle.py
+   node app/worker/scripts/bundle-editor-data.mjs
+   ```
+
+   These preparation commands use only repository data and local Git history; they
+   need no network access or credentials. Then `cd app/worker`, set
+   `wrangler secret put SESSION_SIGNING_KEY` (random) and optionally
+   `ANTHROPIC_API_KEY` (enables the keyless hosted pool with a $10/day cap), and run
+   `npx wrangler@4 deploy` (or `npx wrangler@4 deploy --dry-run`); point the site at
+   it via the `sonsteng-api` meta tag.
+
+The Worker unit tests need no `npm install` (Node's built-in runner, Node ≥ 20).
+From the repository root, generate the ignored Worker data, then run the tests:
+
+<!-- adopter-worker-generators -->
 ```bash
-cd app/worker && node --test test/*.test.js        # 56 tests
+python3 tools/build_site.py --check
+python3 tools/build_instructor_bundle.py
+node app/worker/scripts/bundle-editor-data.mjs
+```
+
+Then run:
+
+```bash
+cd app/worker
+node --test test/*.test.js
 ```
 (`test/redteam.mjs` is an adversarial probe, not a unit test — it needs a live
 Worker URL + API key; run it separately, not via the glob.)
