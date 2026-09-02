@@ -661,8 +661,41 @@ async function runSteps(browser, journey, viewportName, context) {
   };
 }
 
-async function fetchBuild(browser, base) {
+async function fetchBuild(browser, base, envLabel = null, bindings = false) {
   const result = {spine_build_id: null, git_base_sha: null, release_sha: null};
+  if (bindings) {
+    if (envLabel === 'local') {
+      const stampPath = path.join(ROOT, 'site', 'platform', 'data', '.build-stamp.json');
+      try {
+        const parsed = JSON.parse(fs.readFileSync(stampPath, 'utf8'));
+        result.spine_build_id = parsed.spine_build_id || null;
+        result.git_base_sha = parsed.git_base_sha || null;
+      } catch (error) {
+        console.warn(`Binding build provenance unavailable for local: ${errorText(error)}; recording nulls`);
+      }
+      return result;
+    }
+    const workerUrl = WORKER_URLS[envLabel];
+    if (!workerUrl) {
+      console.warn(`Binding release provenance unavailable for ${envLabel}: no Worker URL; recording nulls`);
+      return result;
+    }
+    try {
+      const response = await fetch(new URL('/edit/release-provenance', workerUrl), {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(15000),
+      });
+      result.release_sha = response.headers.get('x-release-sha') || null;
+      if (!result.release_sha) {
+        console.warn(`Binding release provenance unavailable for ${envLabel}: HTTP ${response.status} had no x-release-sha; recording null`);
+      }
+    } catch (error) {
+      console.warn(`Binding release provenance unavailable for ${envLabel}: ${errorText(error)}; recording null`);
+    }
+    return result;
+  }
+  if (!browser) return result;
   const page = await browser.newPage();
   try {
     try {
@@ -838,7 +871,7 @@ async function main(argv) {
   let build = {spine_build_id: null, git_base_sha: null, release_sha: null};
   const attempts = []; const finalByKey = new Map();
   try {
-    if (browser) build = await fetchBuild(browser, options.base);
+    build = await fetchBuild(browser, options.base, options.env, options.bindings);
     for (const journey of selected) {
       if (options.bindings) {
         const precondition = bindingPrecondition(journey, options.env);
@@ -931,6 +964,7 @@ if (require.main === module) {
 module.exports = {
   collapseWhitespace,
   controlNameMatches,
+  fetchBuild,
   filenameMatches,
   liveRegionTextMatches,
   normalizeControlName,

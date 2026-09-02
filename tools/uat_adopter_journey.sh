@@ -85,6 +85,21 @@ stop_static_server() {
   fi
 }
 
+run_clone_command() {
+  (
+    cd "$CLONE_ROOT"
+    env -i HOME="$TEMP_HOME" PATH="$MINIMAL_PATH" "$@"
+  )
+}
+
+prepare_worker_data() {
+  # adopter-worker-generators:start
+  run_clone_command python3 tools/build_site.py --check
+  run_clone_command python3 tools/build_instructor_bundle.py
+  run_clone_command node app/worker/scripts/bundle-editor-data.mjs
+  # adopter-worker-generators:end
+}
+
 run_clone_serve() {
   local port page
   port="$(choose_port)"
@@ -97,6 +112,7 @@ run_clone_serve() {
 }
 
 run_worker_tests() {
+  prepare_worker_data
   local major
   major="$(env -i HOME="$TEMP_HOME" PATH="$MINIMAL_PATH" node -p 'Number(process.versions.node.split(".")[0])')"
   if (( major < 20 )); then
@@ -127,15 +143,57 @@ run_byok_boundary() {
   printf '%s\n' 'BYOK controls and no-server-storage boundary verified without entering a credential'
 }
 
-run_worker_dry_run() {
-  (
-    cd "$CLONE_ROOT/app/worker"
-    env -i HOME="$TEMP_HOME" PATH="$MINIMAL_PATH" npx wrangler@4 deploy --dry-run
-  )
-  if [[ -e "$TEMP_HOME/.wrangler" || -e "$TEMP_HOME/.config/.wrangler" ]]; then
-    printf '%s\n' 'Wrangler wrote account configuration into the temporary HOME' >&2
+check_wrangler_home() {
+  local root file auth_file
+  local -a wrangler_files=()
+  local -a auth_files=()
+  local -A auth_seen=()
+
+  for root in "$TEMP_HOME/.config/.wrangler" "$TEMP_HOME/.wrangler"; do
+    if [[ -d "$root" ]]; then
+      while IFS= read -r -d '' file; do
+        wrangler_files+=("$file")
+      done < <(find "$root" -type f -print0 | sort -z)
+    fi
+  done
+
+  printf '%s\n' 'Wrangler temporary HOME files checked:'
+  if (( ${#wrangler_files[@]} == 0 )); then
+    printf '%s\n' '  (none)'
+  else
+    printf '  %s\n' "${wrangler_files[@]}"
+  fi
+
+  for auth_file in \
+    "$TEMP_HOME/.config/.wrangler/config/default.toml" \
+    "$TEMP_HOME/.wrangler/config/default.toml"; do
+    if [[ -f "$auth_file" && -z "${auth_seen[$auth_file]:-}" ]]; then
+      auth_files+=("$auth_file")
+      auth_seen["$auth_file"]=1
+    fi
+  done
+  for file in "${wrangler_files[@]}"; do
+    if grep -Eiq 'oauth_token|refresh_token|api_token' "$file" && [[ -z "${auth_seen[$file]:-}" ]]; then
+      auth_files+=("$file")
+      auth_seen["$file"]=1
+    fi
+  done
+
+  if (( ${#auth_files[@]} > 0 )); then
+    printf '%s\n' 'Wrangler authentication material detected in the temporary HOME:' >&2
+    printf '  %s\n' "${auth_files[@]}" >&2
     return 1
   fi
+}
+
+run_worker_dry_run() {
+  prepare_worker_data
+  (
+    cd "$CLONE_ROOT/app/worker"
+    env -i HOME="$TEMP_HOME" PATH="$MINIMAL_PATH" WRANGLER_SEND_METRICS=false \
+      npx wrangler@4 deploy --dry-run
+  )
+  check_wrangler_home
   printf '%s\n' 'Worker dry-run completed without login or deployment'
 }
 

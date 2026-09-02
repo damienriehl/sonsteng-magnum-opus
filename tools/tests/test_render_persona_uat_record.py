@@ -110,7 +110,48 @@ def test_latest_attempt_is_current_and_every_attempt_stays_in_history(tmp_path: 
     assert "| second |" in history and "| PASS |" in history
 
 
-def test_latest_build_replaces_older_build_for_an_environment(tmp_path: Path) -> None:
+def test_browser_and_later_binding_runs_for_one_environment_both_remain_current(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    browser = run_file(
+        "browser",
+        "2026-09-02T12:00:00Z",
+        [attempt(verdict="PASS", story="US-1-01", journey="pitch-home", viewport="desktop")],
+    )
+    binding = run_file(
+        "binding",
+        "2026-09-02T12:05:00Z",
+        [attempt(verdict="FAIL", story="US-2-01", journey="worker-check", viewport="n/a")],
+    )
+    binding["build"] = {"spine_build_id": None, "git_base_sha": None, "release_sha": None}
+    write_json(runs / "browser.json", browser)
+    write_json(runs / "binding.json", binding)
+
+    result = invoke(
+        tmp_path,
+        stories=(
+            "## US-1-01 — Read the pitch\n\n1. See the proposition.\n\n"
+            "## US-2-01 — Check the Worker\n\n1. Run the binding.\n"
+        ),
+        journeys=[
+            {"id": "pitch-home", "story": "US-1-01", "persona": "A1", "binding": "steps"},
+            {
+                "id": "worker-check",
+                "story": "US-2-01",
+                "persona": "A1",
+                "binding": "harness",
+                "harness": {"command": "node test.js"},
+            },
+        ],
+    )
+
+    assert result.returncode == 0, result.stderr
+    record = result.record_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    current = record.split("## Current verdicts", 1)[1].split("## Per-persona counts", 1)[0]
+    assert "| US-1-01 | A1 | local | desktop | PASS |" in current
+    assert "| US-2-01 | A1 | local | n/a | FAIL |" in current
+
+
+def test_newer_browser_build_evicts_older_browser_build(tmp_path: Path) -> None:
     runs = tmp_path / "runs"
     older = run_file("older", "2026-09-02T12:00:00Z", [attempt(verdict="PASS")])
     newer = run_file("newer", "2026-09-02T12:05:00Z", [attempt(verdict="FAIL", digest="3" * 64)])

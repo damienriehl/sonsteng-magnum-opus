@@ -30,7 +30,7 @@ function parseArgs(argv) {
 }
 
 async function runProbe(worker, name, pathname) {
-  const url = new URL(`${worker.pathname}${pathname}`, worker);
+  const url = buildProbeUrl(worker, pathname);
   let response;
   try {
     response = await fetch(url, {
@@ -47,6 +47,14 @@ async function runProbe(worker, name, pathname) {
   const code = payload && payload.error && payload.error.code;
   const ok = response.status === 403 && code === 'turnstile_failed';
   return {name, ok, detail: `HTTP ${response.status} ${code || 'missing-error-code'}`};
+}
+
+function buildProbeUrl(worker, pathname) {
+  const base = new URL(worker);
+  base.pathname = `${base.pathname.replace(/\/+$/, '')}/`;
+  base.search = '';
+  base.hash = '';
+  return new URL(String(pathname).replace(/^\/+/, ''), base);
 }
 
 async function main(argv) {
@@ -68,7 +76,11 @@ async function main(argv) {
   return passed === results.length ? 0 : 1;
 }
 
-main(process.argv.slice(2)).then((code) => process.exit(code)).catch((error) => {
-  console.error(`BOT GATE ERROR: ${error && error.message ? error.message : String(error)}`);
-  process.exit(2);
-});
+if (require.main === module) {
+  main(process.argv.slice(2)).then((code) => process.exit(code)).catch((error) => {
+    console.error(`BOT GATE ERROR: ${error && error.message ? error.message : String(error)}`);
+    process.exit(2);
+  });
+}
+
+module.exports = {buildProbeUrl};

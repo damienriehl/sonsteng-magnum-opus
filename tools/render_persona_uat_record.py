@@ -71,24 +71,28 @@ def flatten_attempts(runs: list[dict[str, object]]) -> list[dict[str, object]]:
 
 
 def current_attempts(attempts: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Select the latest attempt per story/env/viewport on each env's latest build."""
-    latest_run_by_env: dict[str, dict[str, object]] = {}
+    """Select current rows on each environment and attempt kind's latest build."""
+    latest_run_by_env_kind: dict[tuple[str, str], dict[str, object]] = {}
     for attempt in attempts:
         env = str(attempt.get("env") or "")
-        if env not in latest_run_by_env or attempt["_order"] > latest_run_by_env[env]["_order"]:
-            latest_run_by_env[env] = attempt
-    latest_build_by_env = {
-        env: build_key(value.get("build") if isinstance(value.get("build"), dict) else {})
-        for env, value in latest_run_by_env.items()
+        kind = "binding" if str(attempt.get("viewport") or "") == "n/a" else "browser"
+        env_kind = (env, kind)
+        if env_kind not in latest_run_by_env_kind or attempt["_order"] > latest_run_by_env_kind[env_kind]["_order"]:
+            latest_run_by_env_kind[env_kind] = attempt
+    latest_build_by_env_kind = {
+        env_kind: build_key(value.get("build") if isinstance(value.get("build"), dict) else {})
+        for env_kind, value in latest_run_by_env_kind.items()
     }
 
-    latest: dict[tuple[str, str, str], dict[str, object]] = {}
+    latest: dict[tuple[str, str, str, str], dict[str, object]] = {}
     for attempt in attempts:
         env = str(attempt.get("env") or "")
+        viewport = str(attempt.get("viewport") or "")
+        kind = "binding" if viewport == "n/a" else "browser"
         build = attempt.get("build") if isinstance(attempt.get("build"), dict) else {}
-        if build_key(build) != latest_build_by_env.get(env):
+        if build_key(build) != latest_build_by_env_kind.get((env, kind)):
             continue
-        key = (str(attempt.get("story") or ""), env, str(attempt.get("viewport") or ""))
+        key = (str(attempt.get("story") or ""), env, viewport, kind)
         if key not in latest or attempt["_order"] > latest[key]["_order"]:
             latest[key] = attempt
     return sorted(latest.values(), key=lambda item: (str(item.get("story")), str(item.get("env")), str(item.get("viewport"))))

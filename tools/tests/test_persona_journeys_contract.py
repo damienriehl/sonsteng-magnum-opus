@@ -348,7 +348,7 @@ def invoke_bindings(
     journeys: list[dict[str, object]],
     *,
     only: str | None = None,
-    env_label: str = "dev",
+    env_label: str = "local",
     timeout_ms: int = 1000,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, object], Path]:
@@ -419,6 +419,22 @@ def test_bindings_mode_executes_only_selected_bindings_and_records_log_digest(tm
     assert re.fullmatch(r"[0-9a-f]{64}", attempt["digest"])
     log_path = next(shots_dir.glob("*/binding-pass-binding.log"))
     assert log_path.read_text(encoding="utf-8") == "binding ok\n"
+
+
+def test_local_bindings_record_the_local_tree_build_stamp(tmp_path: Path) -> None:
+    result, run, _ = invoke_bindings(
+        tmp_path,
+        [bound_journey("binding-pass", "sh -c 'exit 0'")],
+        env_label="local",
+    )
+    stamp = json.loads((ROOT / "site" / "platform" / "data" / ".build-stamp.json").read_text(encoding="utf-8"))
+
+    assert result.returncode == 0, result.stderr
+    assert run["build"] == {
+        "spine_build_id": stamp["spine_build_id"],
+        "git_base_sha": stamp["git_base_sha"],
+        "release_sha": None,
+    }
 
 
 def test_binding_failures_keep_only_the_last_40_output_lines_in_first_failure(tmp_path: Path) -> None:

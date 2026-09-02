@@ -7,6 +7,7 @@ const test = require('node:test');
 const {
   collapseWhitespace,
   controlNameMatches,
+  fetchBuild,
   filenameMatches,
   liveRegionTextMatches,
   normalizeControlName,
@@ -88,4 +89,32 @@ test('UAT workspace paths stay under the repository build tree and sanitize comp
   assert.throws(() => uatWorkspacePath('screenshots', 'run-01'), /unsupported UAT workspace kind/);
   assert.throws(() => uatWorkspacePath('downloads', '..', '..', 'escaped'), /unsafe UAT workspace component/);
   assert.throws(() => uatWorkspacePath('profiles', '.'), /unsafe UAT workspace component/);
+});
+
+test('binding provenance records a Worker release header', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  global.fetch = async () => new Response('', {headers: {'x-release-sha': 'release-123'}});
+
+  assert.deepEqual(await fetchBuild(null, null, 'dev', true), {
+    spine_build_id: null,
+    git_base_sha: null,
+    release_sha: 'release-123',
+  });
+});
+
+test('unreachable binding provenance records nulls and reports the reason', async (t) => {
+  const originalFetch = global.fetch;
+  const originalWarn = console.warn;
+  const warnings = [];
+  t.after(() => { global.fetch = originalFetch; console.warn = originalWarn; });
+  global.fetch = async () => { throw new Error('offline fixture'); };
+  console.warn = (message) => warnings.push(message);
+
+  assert.deepEqual(await fetchBuild(null, null, 'prod', true), {
+    spine_build_id: null,
+    git_base_sha: null,
+    release_sha: null,
+  });
+  assert.match(warnings.join('\n'), /release provenance unavailable.*offline fixture/i);
 });
