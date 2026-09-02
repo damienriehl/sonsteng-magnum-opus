@@ -170,6 +170,18 @@ def test_statistic_outside_the_proof_block_fails(page: Path):
     assert "statistic outside a THE PROOF block" in messages(page)
 
 
+def test_empty_ui_counters_do_not_create_statistics_violations(page: Path):
+    page.write_text(
+        VALID_PAGE.replace(
+            "</body>",
+            '<button>Comments <span id="count"></span></button></body>',
+        ),
+        encoding="utf-8",
+    )
+
+    assert verify_pitch.verify_page(page) == []
+
+
 def test_command_exits_nonzero_and_reports_failure(page: Path):
     page.write_text(VALID_PAGE.replace('href="#case-study"', 'href="#missing"'),
                     encoding="utf-8")
