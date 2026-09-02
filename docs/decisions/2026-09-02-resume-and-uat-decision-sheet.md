@@ -112,3 +112,15 @@ Q2 packet change: A | B [OpenAI CREDIT ADDED / WAIVE; Anthropic path only] | C [
 Q3 cleanup authority: A | B | C
 Q4 personas: A | B | C [exclusions or emphasis]
 ```
+
+## Answers — recorded September 2, 2026 (inline, Claude Q&A)
+
+- **Q1 prod meaning: C.** Damien: "We're still building this — no users yet — so until we have
+  our first user, please feel free to push to prod (legalpracticum.org) throughout this 'pre-user'
+  stage." This is a dated standing authorization for agent-operated production deployment of merged
+  `main` during the pre-user stage. It ends at the first real user, when the Publisher lane
+  (Packet C) becomes the only path again. Credential values are never printed or moved; the
+  existing protected Cloudflare credential location is used as-is.
+- **Q2 packet change: A.** Nothing changed. Packets A–F stay queued and are not re-asked.
+- **Q3 cleanup authority: A.** Full cleanup with recorded supersession evidence.
+- **Q4 personas: A.** All ten, weighted student, author-editor, and prospective reader first.
