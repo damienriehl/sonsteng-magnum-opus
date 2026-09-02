@@ -18,6 +18,7 @@ DEFAULT_JOURNEYS = ROOT / "tools" / "persona_journeys.json"
 DEFAULT_OUT = ROOT / "docs" / "uat" / "persona-uat-record.md"
 STORY_HEADING_RE = re.compile(r"^#{1,6}\s+(US-\d+-(?:\d+|CANARY))\b", re.MULTILINE)
 VERDICTS = ("PASS", "FAIL", "OPEN", "BLOCKED", "NOT RUN", "ERROR")
+BINDING_VIEWPORT = "n/a"
 
 
 def story_ids(text: str) -> set[str]:
@@ -27,6 +28,10 @@ def story_ids(text: str) -> set[str]:
 
 def build_key(build: dict[str, object]) -> tuple[str, str, str]:
     return tuple(str(build.get(name) or "") for name in ("spine_build_id", "git_base_sha", "release_sha"))
+
+
+def attempt_kind(attempt: dict[str, object]) -> str:
+    return "binding" if str(attempt.get("viewport") or "") == BINDING_VIEWPORT else "browser"
 
 
 def load_runs(run_dir: Path) -> list[dict[str, object]]:
@@ -75,7 +80,7 @@ def current_attempts(attempts: list[dict[str, object]]) -> list[dict[str, object
     latest_run_by_env_kind: dict[tuple[str, str], dict[str, object]] = {}
     for attempt in attempts:
         env = str(attempt.get("env") or "")
-        kind = "binding" if str(attempt.get("viewport") or "") == "n/a" else "browser"
+        kind = attempt_kind(attempt)
         env_kind = (env, kind)
         if env_kind not in latest_run_by_env_kind or attempt["_order"] > latest_run_by_env_kind[env_kind]["_order"]:
             latest_run_by_env_kind[env_kind] = attempt
@@ -88,7 +93,7 @@ def current_attempts(attempts: list[dict[str, object]]) -> list[dict[str, object
     for attempt in attempts:
         env = str(attempt.get("env") or "")
         viewport = str(attempt.get("viewport") or "")
-        kind = "binding" if viewport == "n/a" else "browser"
+        kind = attempt_kind(attempt)
         build = attempt.get("build") if isinstance(attempt.get("build"), dict) else {}
         if build_key(build) != latest_build_by_env_kind.get((env, kind)):
             continue

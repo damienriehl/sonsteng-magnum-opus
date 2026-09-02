@@ -40,6 +40,7 @@ const DEFAULT_RUN_DIR = path.join(ROOT, 'build', 'uat', 'runs');
 const DEFAULT_SHOTS_DIR = path.join(ROOT, 'build', 'uat', 'shots');
 const NAVIGATION_TIMEOUT = 30000;
 const ASSERTION_VISIBILITY_TIMEOUT = 2500;
+const ASSERTION_POLL_INTERVAL = 50;
 const DEFAULT_BINDING_TIMEOUT = 1800000;
 const BINDING_EXECUTABLES = new Set(['node', 'python3', 'python', 'npx', 'bash', 'sh', 'cd', 'git', 'pytest', 'curl']);
 const NATIVE_INTERACTIVE_SELECTOR = 'a[href],button,input,textarea,select,summary,[role="button"]';
@@ -187,6 +188,18 @@ function controlNameMatches(actual, expected) {
   return Boolean(requested) && (candidate === requested || candidate.includes(requested));
 }
 
+function navigationIsReady(expected, actualUrl, readyState) {
+  const href = actualUrl === undefined ? globalThis.location.href : actualUrl;
+  const documentState = readyState === undefined ? globalThis.document.readyState : readyState;
+  return href.includes(expected) && documentState === 'complete';
+}
+
+function attributeMatches(actual, expectedValue, expectedIncludes) {
+  if (expectedIncludes !== undefined) return String(actual || '').includes(String(expectedIncludes));
+  const expected = expectedValue === null ? null : String(expectedValue);
+  return actual === expected;
+}
+
 function compareControlRanks(left, right) {
   if (left.exact !== right.exact) return Number(left.exact) - Number(right.exact);
   if (left.visible !== right.visible) return Number(left.visible) - Number(right.visible);
@@ -247,14 +260,22 @@ async function resolveElement(page, step) {
   return {handle: null, visible: false};
 }
 
-async function requireElement(page, step, {allowHidden = false} = {}) {
-  const resolved = await resolveElement(page, step);
-  if (!resolved.handle) stepFailure(step, `control not found (${step.selector || step.name || 'no selector or name'})`);
-  if (step.name && !resolved.visible && !allowHidden) {
-    await resolved.handle.dispose();
-    stepFailure(step, `control not visible (${step.name})`);
+async function requireElement(page, step, {allowHidden = false, timeout = 0} = {}) {
+  const deadline = Date.now() + timeout;
+  let sawHidden = false;
+  while (true) {
+    const resolved = await resolveElement(page, step);
+    if (resolved.handle) {
+      if (!step.name || resolved.visible || allowHidden) return resolved.handle;
+      sawHidden = true;
+      await resolved.handle.dispose();
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(ASSERTION_POLL_INTERVAL, remaining)));
   }
-  return resolved.handle;
+  if (sawHidden) stepFailure(step, `control not visible (${step.name})`);
+  stepFailure(step, `control not found (${step.selector || step.name || 'no selector or name'})`);
 }
 
 async function waitForElementVisibility(page, handle, expected = true, timeout = ASSERTION_VISIBILITY_TIMEOUT) {
@@ -315,6 +336,18 @@ async function waitForVisibleText(page, selector, text, timeout) {
 
 async function waitForText(page, text, timeout) {
   return waitForVisibleText(page, null, text, timeout);
+}
+
+async function waitForAttribute(handle, attribute, expectedValue, expectedIncludes, timeout) {
+  const deadline = Date.now() + timeout;
+  let actual = null;
+  while (true) {
+    actual = await handle.evaluate((element, name) => element.getAttribute(name), attribute);
+    if (attributeMatches(actual, expectedValue, expectedIncludes)) return {matched: true, actual};
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) return {matched: false, actual};
+    await new Promise((resolve) => setTimeout(resolve, Math.min(ASSERTION_POLL_INTERVAL, remaining)));
+  }
 }
 
 function liveRegionTextMatches(values, expected) {
@@ -486,11 +519,19 @@ async function runAssertion(page, step, state) {
   }
   if (step.kind === 'attr') {
     const handle = await requireElement(page, step);
-    const actual = await handle.evaluate((element, attribute) => element.getAttribute(attribute), step.attr);
-    await handle.dispose();
-    const expected = step.value === null ? null : String(step.value);
-    const ok = step.includes === undefined ? actual === expected : String(actual || '').includes(String(step.includes));
-    if (!ok) stepFailure(step, `${step.selector || step.name} ${step.attr} was ${JSON.stringify(actual)}`);
+    let result;
+    try {
+      result = await waitForAttribute(
+        handle,
+        step.attr,
+        step.value,
+        step.includes,
+        ASSERTION_VISIBILITY_TIMEOUT,
+      );
+    } finally {
+      await handle.dispose();
+    }
+    if (!result.matched) stepFailure(step, `${step.selector || step.name} ${step.attr} was ${JSON.stringify(result.actual)}`);
     return;
   }
   if (step.kind === 'url') {
@@ -556,7 +597,7 @@ async function performStep(page, step, state) {
     return;
   }
   if (step.op === 'click' || step.op === 'focus') {
-    const handle = await requireElement(page, step);
+    const handle = await requireElement(page, step, {timeout: ASSERTION_VISIBILITY_TIMEOUT});
     if (step.op === 'click') await handle.click(); else await handle.focus();
     await handle.dispose();
     return;
@@ -574,7 +615,7 @@ async function performStep(page, step, state) {
       const found = await waitForText(page, step.text, timeout);
       if (!found) stepFailure(step, `visible text absent: ${step.text}`);
     }
-    else if (step.url) await page.waitForFunction((expected) => location.href.includes(expected), {timeout}, step.url);
+    else if (step.url) await page.waitForFunction(navigationIsReady, {timeout, polling: ASSERTION_POLL_INTERVAL}, step.url);
     else stepFailure(step, 'waitFor needs selector, text, or url');
     return;
   }
@@ -681,7 +722,7 @@ async function fetchBuild(browser, base, envLabel = null, bindings = false) {
       return result;
     }
     try {
-      const response = await fetch(new URL('/edit/release-provenance', workerUrl), {
+      const response = await fetch(targetUrl(workerUrl, '/edit/release-provenance'), {
         method: 'GET',
         redirect: 'manual',
         signal: AbortSignal.timeout(15000),
@@ -962,12 +1003,16 @@ if (require.main === module) {
 }
 
 module.exports = {
+  attributeMatches,
   collapseWhitespace,
   controlNameMatches,
   fetchBuild,
   filenameMatches,
   liveRegionTextMatches,
+  navigationIsReady,
   normalizeControlName,
+  requireElement,
   selectControlCandidate,
   uatWorkspacePath,
+  waitForAttribute,
 };

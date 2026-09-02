@@ -11,19 +11,23 @@ ROOT = Path(__file__).resolve().parents[2]
 JOURNEY = ROOT / "tools" / "uat_adopter_journey.sh"
 
 
-def invoke_check(home: Path) -> subprocess.CompletedProcess[str]:
+def shell_function(name: str) -> str:
     source = JOURNEY.read_text(encoding="utf-8")
     match = re.search(
-        r"^check_wrangler_home\(\) \{\n.*?^\}\n",
+        rf"^{name}\(\) \{{\n.*?^\}}\n",
         source,
         flags=re.DOTALL | re.MULTILINE,
     )
-    assert match, "missing check_wrangler_home shell function"
+    assert match, f"missing {name} shell function"
+    return match.group(0)
+
+
+def invoke_check(home: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             "bash",
             "-c",
-            'set -euo pipefail\nTEMP_HOME="$1"\n' + match.group(0) + "\ncheck_wrangler_home",
+            'set -euo pipefail\nTEMP_HOME="$1"\n' + shell_function("check_wrangler_home") + "\ncheck_wrangler_home",
             "bash",
             str(home),
         ],
@@ -32,6 +36,45 @@ def invoke_check(home: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
     )
+
+
+def test_worker_dry_run_disables_wrangler_metrics_in_the_clean_environment(tmp_path: Path) -> None:
+    worker = tmp_path / "clone" / "app" / "worker"
+    bin_dir = tmp_path / "bin"
+    worker.mkdir(parents=True)
+    bin_dir.mkdir()
+    fake_npx = bin_dir / "npx"
+    fake_npx.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        '[[ "${WRANGLER_SEND_METRICS:-}" == "false" ]]\n'
+        '[[ "$*" == "wrangler@4 deploy --dry-run" ]]\n',
+        encoding="utf-8",
+    )
+    fake_npx.chmod(0o755)
+    command = "\n".join(
+        [
+            "set -euo pipefail",
+            'CLONE_ROOT="$1/clone"',
+            'TEMP_HOME="$1/home"',
+            'MINIMAL_PATH="$1/bin:/usr/bin:/bin"',
+            "prepare_worker_data() { :; }",
+            "check_wrangler_home() { :; }",
+            shell_function("run_worker_dry_run"),
+            "run_worker_dry_run",
+        ]
+    )
+
+    result = subprocess.run(
+        ["bash", "-c", command, "bash", str(tmp_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Worker dry-run completed without login or deployment" in result.stdout
 
 
 def test_metrics_and_logs_are_listed_but_not_treated_as_auth(tmp_path: Path) -> None:

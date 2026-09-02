@@ -23,9 +23,6 @@ function parseArgs(argv) {
   try { worker = new URL(argv[1]); }
   catch (_) { throw new Error('--worker must be an absolute HTTP or HTTPS URL'); }
   if (!['http:', 'https:'].includes(worker.protocol)) throw new Error('--worker must be an absolute HTTP or HTTPS URL');
-  worker.pathname = worker.pathname.replace(/\/+$/, '');
-  worker.search = '';
-  worker.hash = '';
   return {worker};
 }
 

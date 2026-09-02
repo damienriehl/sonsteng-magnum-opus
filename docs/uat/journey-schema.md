@@ -21,17 +21,17 @@ A `steps` binding is an ordered list. Supported operations are:
 
 | Operation | Required data | Effect |
 |---|---|---|
-| `goto` | `path` | Opens a path relative to `--base`; HTTP 4xx and 5xx are journey failures. |
-| `click`, `focus` | `selector` or accessible `name` | Finds and activates or focuses one control. |
+| `goto` | `path` | Opens a path relative to `--base`, waiting through network idle; HTTP 4xx and 5xx are journey failures. |
+| `click`, `focus` | `selector` or accessible `name` | Polls for up to 2,500 ms to find one control, then activates or focuses it. |
 | `press` | `key` | Sends a Puppeteer keyboard key such as `Tab` or `Enter`. |
 | `type` | `selector` or `name`, plus `text` | Types into a control. |
-| `waitFor` | one of `selector`, `text`, or `url` | Waits for visible content or a URL substring. |
+| `waitFor` | one of `selector`, `text`, or `url` | Waits for visible content or, for a URL substring, both the matching location and `document.readyState === "complete"`. |
 | `expectDownload` | `pattern`, optionally `selector` or `name` | Enables the browser download before the optional click, waits for a completed filename matching the glob pattern, and records its filename and byte size; the downloaded file stays temporary. |
 | `assert` | `kind`, `check`, and kind-specific data | Proves the named 1-based acceptance-check index from the story. |
 
 Assertion kinds are `selector`, `text`, `attr`, `url`, `consoleClean`, `focusOn`, `a11yName`, `a11yRole`, `a11yState`, `readingOrder`, and `liveRegion`. A `selector` assertion may set `visible` to `true` or `false`; visibility uses `checkVisibility()` when the browser supports it. An `a11yName` assertion matches exactly by default and may set `contains: true` for a whitespace-collapsed substring match. Accessibility assertions use Puppeteer’s accessibility snapshot, so name, role, value, and state come from the browser accessibility tree rather than DOM text alone.
 
-Before a `text`, selector-visibility, `focusOn`, or accessibility assertion is evaluated, the runner scrolls its target to the center of the viewport and polls for as long as 2,500 ms for the target’s resting visibility. Text matching uses whitespace-collapsed `textContent` on an attached element with a non-zero bounding rectangle. Each browser page also emulates `prefers-reduced-motion: reduce`, making reveal and transition effects immediate. These are deliberate resting-state measurements: persona UAT evaluates the usable content after motion settles, not a transient animation frame or an element that has not yet crossed an intersection threshold.
+Before a `text`, selector-visibility, `focusOn`, or accessibility assertion is evaluated, the runner scrolls its target to the center of the viewport and polls for as long as 2,500 ms for the target’s resting visibility. An `attr` assertion polls every 50 ms for the same period until its exact `value` or `includes` expectation matches; a failure reports the last observed attribute value. Text matching uses whitespace-collapsed `textContent` on an attached element with a non-zero bounding rectangle. Each browser page also emulates `prefers-reduced-motion: reduce`, making reveal and transition effects immediate. These are deliberate resting-state measurements: persona UAT evaluates the usable content after motion settles, not a transient animation frame or an element that has not yet crossed an intersection threshold.
 
 Name-based control lookup ignores non-interactive containers whose only candidacy is `tabindex="-1"`, such as skip-link focus targets. Exact normalized names rank above substring matches; visible controls rank above hidden controls within each tier; and substring-only matches prefer the shortest normalized name. This keeps broad containers from shadowing the specific link or button named by a journey.
 

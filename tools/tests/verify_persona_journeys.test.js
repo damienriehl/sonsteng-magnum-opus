@@ -5,15 +5,72 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
+  attributeMatches,
   collapseWhitespace,
   controlNameMatches,
   fetchBuild,
   filenameMatches,
   liveRegionTextMatches,
+  navigationIsReady,
   normalizeControlName,
+  requireElement,
   selectControlCandidate,
   uatWorkspacePath,
+  waitForAttribute,
 } = require('../verify_persona_journeys.js');
+
+test('URL waits require both the expected location and a complete document', () => {
+  assert.equal(navigationIsReady('/platform/skills/', 'https://example.test/platform/skills/', 'loading'), false);
+  assert.equal(navigationIsReady('/platform/skills/', 'https://example.test/platform/skills/', 'interactive'), false);
+  assert.equal(navigationIsReady('/platform/skills/', 'https://example.test/platform/skills/', 'complete'), true);
+  assert.equal(navigationIsReady('#SK-LP-07', 'https://example.test/platform/skills/#SK-LP-07', 'complete'), true);
+  assert.equal(navigationIsReady('/platform/skills/', 'https://example.test/platform/', 'complete'), false);
+});
+
+test('attribute matching supports exact values, includes, and absent attributes', () => {
+  assert.equal(attributeMatches('true', 'true', undefined), true);
+  assert.equal(attributeMatches('false', 'true', undefined), false);
+  assert.equal(attributeMatches('/downloads/packet.zip', undefined, 'packet.zip'), true);
+  assert.equal(attributeMatches(null, null, undefined), true);
+  assert.equal(attributeMatches('', null, undefined), false);
+});
+
+test('attribute waits poll until the expected value is observed', async () => {
+  const values = ['false', 'false', 'true'];
+  let attempts = 0;
+  const handle = {
+    evaluate: async (_reader, attribute) => {
+      assert.equal(attribute, 'aria-pressed');
+      const value = values[Math.min(attempts, values.length - 1)];
+      attempts += 1;
+      return value;
+    },
+  };
+
+  assert.deepEqual(
+    await waitForAttribute(handle, 'aria-pressed', 'true', undefined, 1000),
+    {matched: true, actual: 'true'},
+  );
+  assert.equal(attempts, 3);
+});
+
+test('control lookup polls briefly for a selector that appears after navigation', async () => {
+  const handle = {id: 'late-control'};
+  let attempts = 0;
+  const page = {
+    $: async (selector) => {
+      assert.equal(selector, '#SK-LP-07 > summary');
+      attempts += 1;
+      return attempts < 3 ? null : handle;
+    },
+  };
+
+  assert.equal(
+    await requireElement(page, {op: 'click', selector: '#SK-LP-07 > summary'}, {timeout: 1000}),
+    handle,
+  );
+  assert.equal(attempts, 3);
+});
 
 test('whitespace collapse normalizes text assertion content', () => {
   assert.equal(collapseWhitespace('  19,077\n\tMinnesota   attorneys  '), '19,077 Minnesota attorneys');
@@ -91,16 +148,38 @@ test('UAT workspace paths stay under the repository build tree and sanitize comp
   assert.throws(() => uatWorkspacePath('profiles', '.'), /unsafe UAT workspace component/);
 });
 
-test('binding provenance records a Worker release header', async (t) => {
+test('binding provenance requests the environment Worker release endpoint with GET', async (t) => {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
-  global.fetch = async () => new Response('', {headers: {'x-release-sha': 'release-123'}});
+  const requests = [];
+  global.fetch = async (...args) => {
+    requests.push(args);
+    return new Response('', {headers: {'x-release-sha': 'release-123'}});
+  };
 
   assert.deepEqual(await fetchBuild(null, null, 'dev', true), {
     spine_build_id: null,
     git_base_sha: null,
     release_sha: 'release-123',
   });
+  assert.deepEqual(await fetchBuild(null, null, 'prod', true), {
+    spine_build_id: null,
+    git_base_sha: null,
+    release_sha: 'release-123',
+  });
+  assert.deepEqual(requests.map(([url, options]) => ({url: String(url), method: options.method, redirect: options.redirect})), [
+    {
+      url: 'https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance',
+      method: 'GET',
+      redirect: 'manual',
+    },
+    {
+      url: 'https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance',
+      method: 'GET',
+      redirect: 'manual',
+    },
+  ]);
+  assert.ok(requests.every(([, options]) => options.signal instanceof AbortSignal));
 });
 
 test('unreachable binding provenance records nulls and reports the reason', async (t) => {
