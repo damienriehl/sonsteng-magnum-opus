@@ -98,6 +98,9 @@ Regenerate the site after editing any spine data:
 python3 tools/validate_spine.py && python3 tools/build_site.py --check
 ```
 
+The accessibility gate target, accepted WARN baseline, and reopening conditions are recorded in
+[`docs/uat/accessibility-conformance.md`](docs/uat/accessibility-conformance.md).
+
 ## Deployments
 
 | Env | URL | Host | Deploy |
