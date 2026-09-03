@@ -29,6 +29,26 @@ exact `main` commit being released. They mirror the executor's provider adapters
 5. `npx wrangler@4 deploy --env production --dry-run` from `app/worker/` exits cleanly and reports
    no route for the Access hostname.
 
+## Wrangler top-level vars warning
+
+Wrangler warns that the following top-level vars are absent from `env.production.vars`. This is
+expected. Per Damien's 2026-09-03 D2 decision in
+`docs/handoffs/2026-09-02-next-steps-and-open-decisions.md`, production should contain only values
+its request paths need; do not silence the warning by copying DEV-only host or Access config.
+
+| Var | Read by (file) | Production behavior when unset | Verdict |
+|---|---|---|---|
+| `EDIT_ACCESS_AUD` | `app/worker/src/access-jwt.js` | Access config is incomplete, so JWT verification returns `null` before any network fetch. | deliberately absent |
+| `EDIT_ACCESS_TEAM_DOMAIN` | `app/worker/src/access-jwt.js` | Access config is incomplete, so no JWKS host is selected and verification returns `null`. | deliberately absent |
+| `EDIT_ACCESS_HOST` | `app/worker/src/access-jwt.js`, `editor-auth.js`, `editor.js`, `host-routing.js` | The Access identity branch and bare-host doorway are inert; the legacy redirect also has no target. Token/cookie auth remains unchanged. | deliberately absent |
+| `EDIT_LEGACY_HOST` | `app/worker/src/host-routing.js` | No legacy-editor redirect is attempted. Production has no route for that DEV hostname. | not needed |
+| `PUBLIC_CANONICAL_HOST` | `app/worker/src/host-routing.js` | Public-host redirect handling returns `null`; requests continue to the normal Worker router. | not needed |
+| `PUBLIC_REDIRECT_HOSTS` | `app/worker/src/host-routing.js` | The redirect-source set is empty (and the absent canonical host short-circuits first), so requests continue to the normal Worker router. | not needed |
+
+In particular, a request to `sonsteng-chat-production.damienriehl.workers.dev` is not redirected or
+rejected by these omissions. It proceeds to the normal `/edit` or API routing in `index.js`. The
+three Access vars must remain absent unless production is deliberately given its own Access door.
+
 ## Record the rollback pair first
 
 From `app/worker/`:

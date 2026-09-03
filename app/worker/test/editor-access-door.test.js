@@ -328,6 +328,15 @@ test("the canonical public domain and unrelated hosts are not redirected", () =>
   assert.equal(publicHostRedirect(baseEnv(), new URL(`https://${FALLBACK_HOST}/platform/`)), null);
 });
 
+test("the production workers.dev host falls through when DEV-only host vars are unset", () => {
+  const env = {};
+  const url = new URL("https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance");
+
+  assert.equal(publicHostRedirect(env, url), null, "no public-host redirect");
+  assert.equal(legacyEditorHostRedirect(env, url), null, "no legacy-editor redirect");
+  assert.equal(accessDoorwayRedirect(env, url), null, "no Access-host doorway redirect");
+});
+
 // ---- 6. the scope-aware landing and the admin page -------------------------
 
 // editorFetch is what index.js delegates to; a fake EDITOR stub stands in for the
@@ -492,11 +501,14 @@ test("DEV binds editor and public canonicalization hostnames", () => {
   }
 });
 
-test("PROD carries no Access config, so its door is closed by construction (R7)", () => {
+test("PROD omits Access and DEV-only host routing config by construction (R7)", () => {
   const v = WRANGLER_CONFIG.env.production.vars;
   assert.equal(v.EDIT_ACCESS_AUD, undefined);
   assert.equal(v.EDIT_ACCESS_TEAM_DOMAIN, undefined);
   assert.equal(v.EDIT_ACCESS_HOST, undefined);
+  assert.equal(v.EDIT_LEGACY_HOST, undefined);
+  assert.equal(v.PUBLIC_CANONICAL_HOST, undefined);
+  assert.equal(v.PUBLIC_REDIRECT_HOSTS, undefined);
   assert.ok(!String(v.EDIT_TOKEN_SCOPES).includes("damienadmin"),
     "the combined-scope slot must not exist in PROD");
 });
