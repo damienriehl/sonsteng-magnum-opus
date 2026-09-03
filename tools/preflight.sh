@@ -11,6 +11,8 @@
 # Browser gates run headless by default so routine verification never takes the
 # operator's desktop focus. Set HEADFUL=1 only for an explicitly supervised
 # visual run; that opt-in path uses the real Xwayland display.
+# The local persona-journey browser leg adds about five minutes and requires an
+# installed Chromium or Google Chrome executable (or CHROME_BIN to name one).
 #
 # Usage:
 #   bash tools/preflight.sh              # everything (browser gates included)
@@ -45,6 +47,69 @@ run() {  # run <name> <command…>
   fi
 }
 skip() { results+=("SKIP  $1 — $2"); skipped=$((skipped+1)); printf '\n\033[2m── %s (skipped: %s)\033[0m\n' "$1" "$2"; }
+
+find_chromium() {
+  local candidate resolved
+  for candidate in "${CHROME_BIN:-}" "${CHROMIUM_PATH:-}" /snap/bin/chromium chromium chromium-browser google-chrome google-chrome-stable; do
+    [ -n "$candidate" ] || continue
+    if [[ "$candidate" = /* ]]; then
+      [ -x "$candidate" ] && { printf '%s\n' "$candidate"; return 0; }
+    elif resolved=$(command -v "$candidate" 2>/dev/null); then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
+free_loopback_port() {
+  python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
+}
+
+run_local_persona_journeys() (
+  local browser_bin port server_pid ready status
+  if ! browser_bin=$(find_chromium); then
+    printf 'Chromium/Chrome unavailable. Install Chromium or Google Chrome (or set CHROME_BIN).\n' >&2
+    return 1
+  fi
+  if ! port=$(free_loopback_port); then
+    printf 'Could not allocate a free loopback port for persona journeys.\n' >&2
+    return 1
+  fi
+
+  python3 -m http.server "$port" --bind 127.0.0.1 --directory "$ROOT/site" >/dev/null 2>&1 &
+  server_pid=$!
+  cleanup() {
+    kill "$server_pid" >/dev/null 2>&1 || true
+    wait "$server_pid" >/dev/null 2>&1 || true
+  }
+  trap cleanup EXIT
+
+  ready=0
+  for _ in $(seq 1 50); do
+    if curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1; then
+      ready=1
+      break
+    fi
+    if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+      printf 'Local persona-journey server exited before becoming ready.\n' >&2
+      return 1
+    fi
+    sleep 0.1
+  done
+  if [ "$ready" != "1" ]; then
+    printf 'Local persona-journey server did not become ready.\n' >&2
+    return 1
+  fi
+
+  CHROME_BIN="$browser_bin" node tools/verify_persona_journeys.js \
+      --base "http://127.0.0.1:$port" \
+      --env-label local \
+      --run-dir "$ROOT/build/uat/preflight/runs" \
+      --shots-dir "$ROOT/build/uat/preflight/shots"
+  status=$?
+  return "$status"
+)
 
 # ---- headless gates --------------------------------------------------------
 # Deliberately pass no representation switches: validate_spine derives both
@@ -98,6 +163,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     else
       run "rail placement (harness)"             node app/editor/verify-rail-placement.js
     fi
+    run "persona journeys (local browser leg)"  run_local_persona_journeys
   else
     skip "editor client"        "no reachable X display"
     skip "accessibility audit"  "no reachable X display"
@@ -110,6 +176,7 @@ if [ "$WANT_BROWSER" = "1" ]; then
     skip "interview + critique" "no reachable X display"
     skip "cost-per-credit"     "no reachable X display"
     skip "cost accessibility"  "no reachable X display"
+    skip "persona journeys (local browser leg)" "no reachable X display"
   fi
 else
   skip "editor client"        "--no-browser"
@@ -123,6 +190,7 @@ else
   skip "interview + critique" "--no-browser"
   skip "cost-per-credit"     "--no-browser"
   skip "cost accessibility"  "--no-browser"
+  skip "persona journeys (local browser leg)" "--no-browser"
 fi
 
 # ---- summary ---------------------------------------------------------------

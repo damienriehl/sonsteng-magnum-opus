@@ -39,6 +39,8 @@ Downloads use the Chrome DevTools Protocol Browser domain with `allowAndName` an
 
 Browser profiles and per-attempt downloads live under `build/uat/profiles/<run-id>/` and `build/uat/downloads/<run-id>/`. They deliberately do not use `/tmp`: snap-packaged Chromium sees a private, confinement-specific `/tmp` namespace that the host-side runner cannot inspect or remove. The repository-local `build/` tree is gitignored, available through snap's home interface, and each run's profile and download directories are removed after the browser closes.
 
+Project preflight now runs the journeys' local browser leg after the other browser gates. `bash tools/preflight.sh` starts an HTTP server for `site/` on a free loopback port and writes run records and failure screenshots below `build/uat/preflight/`; the gate adds about five minutes and requires an installed Chromium or Google Chrome executable (or `CHROME_BIN`). `bash tools/preflight.sh --no-browser` skips this leg with the other browser gates.
+
 ## Harness and command bindings
 
 A `harness` binding records `command` and `story_checks`. A `command` binding records those fields and may also name its `local_target` and `account_boundary`. Either binding may add:
