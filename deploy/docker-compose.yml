@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     volumes:
       - ../site:/usr/share/nginx/html:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks: [coolify]
     labels:
       - traefik.enable=true
