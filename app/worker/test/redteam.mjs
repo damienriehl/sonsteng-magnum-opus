@@ -26,7 +26,14 @@
 // Output: a PASS/FAIL/REVIEW table + non-zero exit code on any FAIL.
 // REVIEW = the automated heuristic can't judge safely; read the transcript line.
 
-import { assertCredentialAbsent, credentialValues, loadCredentials } from "./live-stream-smoke.mjs";
+import { pathToFileURL } from "node:url";
+
+import {
+  assertCredentialAbsent,
+  credentialValues,
+  loadCredentials,
+  readSSEFrames,
+} from "./live-stream-smoke.mjs";
 
 const PROVIDER = process.env.PROVIDER || "anthropic";
 const MODEL = process.env.MODEL || undefined;
@@ -72,14 +79,94 @@ function containsAny(text, markers) {
   return markers.find((m) => t.includes(lc(m))) || null;
 }
 
-async function api(runtime, path, opts = {}) {
-  const res = await fetch(runtime.workerUrl + path, {
+export class RedteamError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "RedteamError";
+    this.code = code;
+  }
+}
+
+function redteamFail(code, message) {
+  throw new RedteamError(code, message);
+}
+
+function isStreamResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  return response.headers.get("x-sonsteng-stream") === "1" ||
+    /^text\/event-stream(?:;|$)/i.test(contentType);
+}
+
+function assembleStreamedChat(frames, secrets) {
+  let done = null;
+  let doneCount = 0;
+  let reply = "";
+  let streamError = null;
+
+  for (const { event, payload } of frames) {
+    assertCredentialAbsent(payload, secrets);
+    if (event === "error") {
+      streamError = payload && typeof payload.message === "string" && payload.message
+        ? payload.message
+        : "stream error";
+      continue;
+    }
+    if (event === "delta") {
+      if (!payload || typeof payload.text !== "string") {
+        redteamFail("sse_contract", "Chat stream delta omitted text.");
+      }
+      reply += payload.text;
+      continue;
+    }
+    if (event === "done") {
+      done = payload;
+      doneCount += 1;
+      continue;
+    }
+    redteamFail("sse_contract", "Chat stream contained a non-normalized event type.");
+  }
+
+  if (streamError) redteamFail("stream_error", `Chat stream failed: ${streamError}`);
+  if (doneCount === 0) redteamFail("early_eof", "Chat stream ended before its done event.");
+  if (doneCount !== 1 || !done || Array.isArray(done) || typeof done !== "object") {
+    redteamFail("sse_contract", "Chat stream must contain exactly one valid done event.");
+  }
+  if (typeof done.reply !== "string" || done.reply !== reply) {
+    redteamFail("sse_contract", "Chat stream done reply did not match the assembled deltas.");
+  }
+
+  const data = { ...done, reply };
+  assertCredentialAbsent(data, secrets);
+  return data;
+}
+
+export async function api(runtime, path, opts = {}) {
+  const fetchImpl = runtime.fetchImpl || fetch;
+  const res = await fetchImpl(runtime.workerUrl + path, {
     method: opts.method || "POST",
     headers: { "content-type": "application/json", Origin: runtime.origin },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  let data = null;
-  try { data = await res.json(); } catch {}
+
+  if (isStreamResponse(res)) {
+    const frames = await readSSEFrames(res, runtime.credentialValues);
+    return { status: res.status, data: assembleStreamedChat(frames, runtime.credentialValues) };
+  }
+
+  let text;
+  try {
+    text = await res.text();
+  } catch {
+    redteamFail("response_transport", `Worker response body ended unexpectedly for ${path}.`);
+  }
+  assertCredentialAbsent(text, runtime.credentialValues);
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    redteamFail("response_json", `Worker returned a non-JSON response for ${path} (HTTP ${res.status}).`);
+  }
   assertCredentialAbsent(data, runtime.credentialValues);
   return { status: res.status, data };
 }
@@ -100,7 +187,7 @@ function byok(runtime) {
 }
 
 let turnSeq = 0;
-async function chat(runtime, token, messages) {
+export async function chat(runtime, token, messages) {
   turnSeq += 1;
   const { status, data } = await api(runtime, "/v1/chat", {
     body: {
@@ -109,6 +196,9 @@ async function chat(runtime, token, messages) {
     },
   });
   if (status !== 200) throw new Error("chat failed: HTTP " + status + " " + JSON.stringify(data));
+  if (!data || typeof data !== "object") {
+    redteamFail("chat_contract", "Chat returned no response object.");
+  }
   return data.reply || "";
 }
 
@@ -239,7 +329,10 @@ async function main() {
   process.exit(counts.FAIL > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error("red-team harness error:", err.message);
-  process.exit(2);
-});
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (import.meta.url === invokedPath) {
+  main().catch((err) => {
+    console.error("red-team harness error:", err.message);
+    process.exit(2);
+  });
+}
