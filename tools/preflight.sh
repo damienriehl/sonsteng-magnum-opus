@@ -87,7 +87,10 @@ run_local_persona_journeys() (
 
   ready=0
   for _ in $(seq 1 50); do
-    if curl -fsS "http://127.0.0.1:$port/" >/dev/null 2>&1; then
+    if curl -fsS \
+        --connect-timeout 0.05 \
+        --max-time 0.05 \
+        "http://127.0.0.1:$port/" >/dev/null 2>&1; then
       ready=1
       break
     fi
@@ -95,14 +98,14 @@ run_local_persona_journeys() (
       printf 'Local persona-journey server exited before becoming ready.\n' >&2
       return 1
     fi
-    sleep 0.1
+    sleep 0.05
   done
   if [ "$ready" != "1" ]; then
     printf 'Local persona-journey server did not become ready.\n' >&2
     return 1
   fi
 
-  CHROME_BIN="$browser_bin" node tools/verify_persona_journeys.js \
+  CHROME_BIN="$browser_bin" node "${PERSONA_JOURNEY_RUNNER:-tools/verify_persona_journeys.js}" \
       --base "http://127.0.0.1:$port" \
       --env-label local \
       --run-dir "$ROOT/build/uat/preflight/runs" \
