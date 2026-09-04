@@ -33,7 +33,7 @@ exact `main` commit being released. They mirror the executor's provider adapters
 
 Wrangler warns that the following top-level vars are absent from `env.production.vars`. This is
 expected. Per Damien's 2026-09-03 D2 decision in
-`docs/handoffs/2026-09-02-next-steps-and-open-decisions.md`, production should contain only values
+`docs/decisions/2026-09-03-next-steps-decisions.md`, production should contain only values
 its request paths need; do not silence the warning by copying DEV-only host or Access config.
 
 | Var | Read by (file) | Production behavior when unset | Verdict |
