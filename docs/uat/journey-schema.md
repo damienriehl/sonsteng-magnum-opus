@@ -2,6 +2,8 @@
 
 `tools/persona_journeys.json` is the coverage authority for persona UAT. Browser journeys, existing harnesses, and adopter commands all use the same catalog. `tools/verify_persona_journeys.js` runs browser steps in its default mode and harness/command bindings in `--bindings` mode; the two modes never execute each other's entries.
 
+For a one-command full revalidation, run `bash tools/final_revalidation.sh` from a clean worktree at the exact SHA under test. The approximately 15-minute driver runs the browser journeys on local, DEV, and production; the corresponding binding legs; and the twelve-case DEV/production accessibility audit, writing its UAT run files and logs below `build/uat/`. `LOCAL_PORT`, `DEV_BASE`, and `PROD_BASE` may override the documented defaults when the target environment requires them.
+
 ## Journey
 
 Every journey has:
