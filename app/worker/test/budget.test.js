@@ -15,6 +15,10 @@ test("plain input+output priced and rounded up", () => {
   assert.equal(centsForUsage({}), 0);
 });
 
+test("Google thought tokens use the output rate", () => {
+  assert.equal(centsForUsage({ thought_tokens: 1_000_000 }), 500);
+});
+
 test("cache_creation billed at 125 and cache_read at 10 cents/MTok", () => {
   // Only cache write: 1,000,000 @125 = 125 cents.
   assert.equal(centsForUsage({ cache_creation_input_tokens: 1_000_000 }), 125);

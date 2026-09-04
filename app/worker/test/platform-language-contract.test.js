@@ -59,3 +59,17 @@ test("both learner-result handlers enforce the routing guard before sessions", (
     assert.match(handler, /errorEnvelope\("validation_error", routing\.error, 400\)/);
   }
 });
+
+test("the debrief handler maps validation subtypes and logs metadata only", () => {
+  const source = readFileSync(join(HERE, "..", "src", "index.js"), "utf8");
+  const start = source.indexOf("async function handleDebrief");
+  const end = source.indexOf("// ---- POST /v1/memo-assessment", start);
+  const handler = source.slice(start, end);
+
+  assert.match(handler, /debriefValidationMessage\(outcome\.subtype\)/);
+  assert.match(handler, /provider: up\.provider/);
+  assert.match(handler, /validation_subtype: outcome\.subtype/);
+  for (const logCall of handler.matchAll(/logMeta\(\{[\s\S]*?\}\);/g)) {
+    assert.doesNotMatch(logCall[0], /\b(prompt|reply|api_?key|credential)\b/i);
+  }
+});

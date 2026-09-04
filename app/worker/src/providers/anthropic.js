@@ -10,7 +10,7 @@
 // jsonMode: no request flag exists; the prompt's own OUTPUT CONTRACT already
 // pins JSON-only output. Unchanged by design.
 
-import { completeWithRetry } from "./common.js";
+import { completeWithRetry, normalizeStopReason } from "./common.js";
 
 const URL_ = "https://api.anthropic.com/v1/messages";
 const VERSION = "2023-06-01";
@@ -55,14 +55,17 @@ export function buildStreamingRequest(opts) {
   return request;
 }
 
-// Pure response parser: normalize to { text, usage } (Anthropic field names are
-// already the canonical shape).
+// Pure response parser: Anthropic usage already has the canonical shape.
 export function parseResponse(data) {
   const text = (data.content || [])
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("");
-  return { text, usage: data.usage || {} };
+  return {
+    text,
+    usage: data.usage || {},
+    stop_reason: normalizeStopReason(data.stop_reason),
+  };
 }
 
 export function complete(opts) {

@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 
 import { BudgetCore } from "../src/budget-core.js";
+import { centsForUsage } from "../src/cost.js";
+import { completeBudgetedOneShot, generateDebriefScorecard } from "../src/debrief.js";
 
 // Adapter matching the DO's ctx.storage.sql surface for the queries BudgetCore
 // issues: exec(query, ...binds) -> { toArray() }.
@@ -259,6 +261,53 @@ test("day rollover clears conservative one-shot reservations left by an interrup
     core._one("SELECT COUNT(*) AS count FROM one_shot_reservations WHERE id=?", "interrupted-call").count,
     0
   );
+});
+
+test("a debrief truncation retry settles both provider calls to their actual combined cost", async () => {
+  const core = makeCore();
+  const usages = [
+    { input_tokens: 20_000, output_tokens: 1200, thought_tokens: 300 },
+    { input_tokens: 20_000, output_tokens: 900, thought_tokens: 100 },
+  ];
+  const scorecard = {
+    schema_version: "1.0.0",
+    matter_id: "m00",
+    persona_id: "m00.per.tester",
+    axis_a: {
+      facts_elicited: [], revealed_if_asked_missed: [],
+      rapport_gated_unearned: [], rule_4_2_flags: [],
+    },
+    axis_b: Object.fromEntries([
+      "rapport_opening", "listening_t_funnel", "understanding_goals",
+      "explanation_next_steps", "overall_confidence",
+    ].map((key) => [key, { score: 5, comment: "ok" }])),
+    ethics_score: 0,
+    narrative: "A sound first pass.",
+    self_reflection_prompt: "What would you ask next?",
+  };
+  const responses = [
+    { ok: true, text: "{", stop_reason: "max_tokens", usage: usages[0] },
+    { ok: true, text: JSON.stringify(scorecard), stop_reason: "stop", usage: usages[1] },
+  ];
+  let attempt = 0;
+
+  const result = await generateDebriefScorecard({
+    complete: (maxTokens) => completeBudgetedOneShot({
+      budget: core,
+      reservationId: `debrief-budget-${++attempt}`,
+      pool: "public",
+      caps: { capPublicCents: 700, capDemoCents: 300 },
+      inputTokens: 20_000,
+      maxTokens,
+      complete: async () => responses.shift(),
+    }),
+    persona: { disclosure: {} },
+    factMap: {},
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(spent(core), centsForUsage(usages[0]) + centsForUsage(usages[1]));
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_reservations").count, 0);
 });
 
 test("memo assessment request cap is atomic per session and resets each UTC day", () => {

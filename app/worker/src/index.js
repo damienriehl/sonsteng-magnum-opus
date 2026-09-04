@@ -24,7 +24,8 @@ import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
 import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
-import { validateDebriefScorecard, validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson, redactDebriefOracle, detectDebriefOracleLeak } from "./validate.js";
+import { validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson } from "./validate.js";
+import { completeBudgetedOneShot, debriefValidationMessage, generateDebriefScorecard } from "./debrief.js";
 import { runFormativeMemoPanel, SUMMATIVE_BLOCKERS } from "./panel.js";
 import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
 import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
@@ -46,7 +47,6 @@ const MEMO_ASSESSMENT_MAX_CHARS = 18000;
 const DEBRIEF_MIN_TURNS = 6;         // debrief-oracle guard
 const WARNING_TURN = 15;             // in-character "checks watch"
 const CHAT_MAX_TOKENS = 300;
-const DEBRIEF_MAX_TOKENS = 1200;
 const CRITIQUE_MAX_TOKENS = 1500;
 
 // ---- helpers ----------------------------------------------------------------
@@ -354,49 +354,59 @@ async function handleDebrief(request, env, origin) {
   if (committed < DEBRIEF_MIN_TURNS)
     return errorEnvelope("session_invalid", "No completed interview found for this persona.", 403);
 
-  if (!up.skipBudget) {
-    const gate = await stub.checkPool(session.p, caps.capPublicCents, caps.capDemoCents);
-    if (!gate.ok) return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
-  }
-
   const prompt = buildDebriefPrompt(bundle.debrief_template, {
     matterId, personaId, persona,
     factMap: bundle.fact_map[personaId] || {},
     transcript, interviewerOnOpposingSide: false,
   });
-  const result = await callUpstream(up, {
-    system: null, messages: [{ role: "user", content: prompt }],
-    maxTokens: DEBRIEF_MAX_TOKENS, jsonMode: true,
+  const inputTokens = estTokens(prompt.length);
+  const outcome = await generateDebriefScorecard({
+    complete: (maxTokens) => {
+      const complete = () => callUpstream(up, {
+        system: null,
+        messages: [{ role: "user", content: prompt }],
+        maxTokens,
+        jsonMode: true,
+      });
+      if (up.skipBudget) return complete();
+      return completeBudgetedOneShot({
+        budget: stub,
+        reservationId: `debrief-call-${crypto.randomUUID()}`,
+        pool: session.p,
+        caps,
+        inputTokens,
+        maxTokens,
+        complete,
+      });
+    },
+    persona,
+    factMap: bundle.fact_map[personaId] || {},
   });
-  if (!result.ok) return upstreamFailureResponse(up, result, "debrief_upstream_fail");
-
-  const parsed = parseModelJson(result.text);
-  const check = parsed && validateDebriefScorecard(parsed);
-  if (!parsed || !check.ok) {
-    logMeta({ ev: "debrief_invalid", errors: check ? check.errors.slice(0, 5) : ["unparseable"] });
-    return errorEnvelope("validation_error", "The debrief could not be generated. Please try again.", 502);
+  if (!outcome.ok && outcome.kind === "upstream") {
+    if (outcome.upstreamResult.kind === "cap") {
+      return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
+    }
+    return upstreamFailureResponse(up, outcome.upstreamResult, "debrief_upstream_fail");
+  }
+  if (!outcome.ok) {
+    const metadata = {
+      provider: up.provider,
+      validation_subtype: outcome.subtype,
+    };
+    if (outcome.subtype === "oracle_leak") {
+      logMeta({ ev: "debrief_oracle_leak", ...metadata, field: outcome.leakField });
+    } else {
+      logMeta({
+        ev: "debrief_invalid",
+        ...metadata,
+        errors: (outcome.errors || [outcome.subtype]).slice(0, 5),
+      });
+    }
+    return errorEnvelope("validation_error", debriefValidationMessage(outcome.subtype), 502);
   }
 
-  // DEBRIEF-ORACLE hard guard: rebuild the Axis-A "missed" fields from server
-  // ground truth so no un-elicited fact TEXT can leak to the student, even if the
-  // (possibly BYOK/weak) evaluator model ignored the prompt's own oracle rule.
-  redactDebriefOracle(parsed, persona, bundle.fact_map[personaId] || {});
-
-  // C1 fail-closed scan: redactDebriefOracle rebuilds only the two Axis-A "missed"
-  // fields. If an un-elicited concealed/rapport-gated fact TEXT slipped into a
-  // model-authored FREE-TEXT field (narrative, self_reflection_prompt, an axis_b
-  // comment, or a rule_4_2 flag), REJECT the scorecard rather than ship the answer
-  // key — same retryable validation_error the client already handles for invalid
-  // model output. Never mangle; a leak means the whole scorecard is untrustworthy.
-  const leakField = detectDebriefOracleLeak(parsed, persona, bundle.fact_map[personaId] || {});
-  if (leakField) {
-    logMeta({ ev: "debrief_oracle_leak", field: leakField });
-    return errorEnvelope("validation_error", "The debrief could not be generated. Please try again.", 502);
-  }
-
-  if (!up.skipBudget) await stub.charge(session.p, result.usage);
   logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });
-  return json({ scorecard: parsed });
+  return json({ scorecard: outcome.scorecard });
 }
 
 // ---- POST /v1/memo-assessment ---------------------------------------------

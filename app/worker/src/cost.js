@@ -17,17 +17,19 @@ export const CENTS_PER_MTOK = {
   cache_write: 125,
 };
 
-// Actual cost of one call, in whole cents (rounded up), from an Anthropic usage
-// object. Missing fields count as 0, so non-cached calls still price correctly.
+// Actual cost of one call, in whole cents (rounded up), from normalized usage.
+// Google reports billable thinking separately as thought_tokens; it uses the
+// output rate. Missing fields count as 0, so non-cached calls still price correctly.
 export function centsForUsage(usage) {
   const u = usage || {};
   const input = u.input_tokens || 0;
   const output = u.output_tokens || 0;
+  const thoughts = u.thought_tokens || 0;
   const cacheWrite = u.cache_creation_input_tokens || 0;
   const cacheRead = u.cache_read_input_tokens || 0;
   const micro =
     input * CENTS_PER_MTOK.input +
-    output * CENTS_PER_MTOK.output +
+    (output + thoughts) * CENTS_PER_MTOK.output +
     cacheWrite * CENTS_PER_MTOK.cache_write +
     cacheRead * CENTS_PER_MTOK.cache_read;
   return Math.ceil(micro / 1_000_000);
