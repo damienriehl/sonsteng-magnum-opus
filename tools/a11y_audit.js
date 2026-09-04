@@ -25,6 +25,7 @@
    Run:  DISPLAY=:0 node tools/a11y_audit.js [url ...]
    With no arguments it sweeps the local built site over file://.
    Exit code is 1 if any FAIL-level finding survives, so it can gate a build.
+   Accepted WARN policy is recorded in docs/uat/accessibility-conformance.md.
    ============================================================================ */
 const path = require('path');
 const fs = require('fs');
