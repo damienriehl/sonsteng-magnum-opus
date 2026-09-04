@@ -52,6 +52,44 @@ program. Damien chose the recommended option for each decision.
   - **Chosen option:** "Yes, promote with a contract test"
   - **Authorized:** Promote the revalidation driver into `tools/` with a contract test.
 
-## Status at record time
+## Current status
 
-- **D1 pending:** The DEV Worker redeploy remains unexecuted pending notice to John and Roger.
+**D1 executed.** Both authorization conditions were satisfied before the default DEV Worker
+deploy.
+
+| Evidence | Result |
+|---|---|
+| Diff review | Completed `2026-09-03` against the undeployed Worker surface. |
+| Corrected baseline | The previous DEV Worker deploy was `2026-08-23`, not `2026-08-11` as finding 1 in the September 2 handoff stated. |
+| Undeployed surface | Four files, approximately seventy lines: `app/worker/src/byok.js`, `app/worker/src/editor-auth.js`, `app/worker/src/editor-endpoints.js`, and `app/worker/wrangler.jsonc`. |
+| Migration check | No new Durable Object migration. |
+| Notice | Damien confirmed `2026-09-04` that John and Roger had been told and authorized the deploy. |
+| Activation | Completed `2026-09-04` at commit `20129c07666306a0b9ee614f6c021b6353f1b349`, with `RELEASE_SHA` set. |
+| New version | `d0bfd1c5-7034-4b2a-8f87-107d897ae8dc` |
+| Rollback target | `c4d21de6-ea7d-454f-905a-d0203d800af0`, activated `2026-08-23T15:59:30Z` |
+
+**Post-deploy checks.**
+
+| Check | Result |
+|---|---|
+| Release provenance | HTTP `204` with the deployed SHA. Before deployment it answered HTTP `503` with a null build key. |
+| Access door | Still redirects to Cloudflare Access. |
+| Legacy editor host | Still forwards to the Access door. |
+| Public aliases | Both still redirect to the canonical host. |
+| Session gate | Still answers HTTP `403` to a headless client. |
+| Tokenless routes | `/edit/index.html` and `/edit/pending` still answer HTTP `404`. |
+| DEV browser journey | Passed every attempt, `44` of `44`. |
+| DEV binding legs | Recorded the release SHA where they previously recorded null. |
+
+**D6 executed.** Both previously blocked live legs ran.
+
+| Live leg | Result |
+|---|---|
+| Student live provider | Pass |
+| Hostile live red-team | `13` of `14`; one known defect is tracked separately |
+
+**Other decisions.** This update makes no execution claim for the remaining decisions.
+
+| Decisions | Status |
+|---|---|
+| `D2` through `D5`; `D7` | Not established by this update |
