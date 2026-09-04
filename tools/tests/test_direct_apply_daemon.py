@@ -42,6 +42,7 @@ class Recorder:
         self.calls = []
         self.heartbeats = []
         self.notified = None
+        self.deploy_refusals = []
         self.editorial_batch = None
 
     def fetch(self):
@@ -70,6 +71,10 @@ class Recorder:
         self.calls.append("notify")
         self.notified = list(ids)
 
+    def notify_deploy_refusal(self, status):
+        self.calls.append("notify_deploy_refusal")
+        self.deploy_refusals.append(status)
+
     def editorial(self, batch_id):
         self.calls.append("editorial")
         self.editorial_batch = batch_id
@@ -81,6 +86,8 @@ def _run(rec, **kw):
         now=NOW, fetch=rec.fetch, apply_engine=rec.apply_engine,
         do_rebuild=rec.rebuild, do_deploy=rec.deploy, heartbeat=rec.heartbeat,
         notify=rec.notify, editorial=rec.editorial, out=io.StringIO(),
+        deploy_guard=lambda: dad.DeployCheckoutStatus(0),
+        deploy_refusal_notify=rec.notify_deploy_refusal,
     )
     defaults.update(kw)
     return dad.run(**defaults)
@@ -95,6 +102,96 @@ class TestAcceptedFilter(unittest.TestCase):
 
     def test_skips_rows_without_id(self):
         self.assertEqual(dad.accepted_ids([{"status": "accepted"}]), [])
+
+
+class TestDeployCheckoutGuard(unittest.TestCase):
+    def test_current_checkout_deploys_as_before(self):
+        status = dad.checkout_deploy_status(
+            "/repo", git=lambda _args: (0, "0\n"))
+        self.assertEqual(status, dad.DeployCheckoutStatus(0))
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       deploy_guard=lambda: status)
+
+        self.assertEqual(res.reason, "applied")
+        self.assertEqual(
+            rec.calls,
+            ["fetch", "apply", "rebuild", "deploy:feat/canonical-docs", "heartbeat"])
+        self.assertEqual(rec.deploy_refusals, [])
+
+    def test_behind_by_n_refuses_and_notifies_without_deploying(self):
+        status = dad.checkout_deploy_status(
+            "/repo", git=lambda _args: (0, "39\n"))
+        self.assertEqual(status, dad.DeployCheckoutStatus(39))
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       deploy_guard=lambda: status)
+
+        self.assertEqual(res.reason, "deploy_refused")
+        self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+        self.assertEqual(rec.heartbeats, [{"ok": False, "applied": 0}])
+        self.assertEqual(rec.deploy_refusals, [status])
+        self.assertIsNone(rec.notified)
+
+    def test_unresolvable_upstream_refuses(self):
+        status = dad.checkout_deploy_status(
+            "/repo", git=lambda _args: (128, "fatal: no upstream configured\n"))
+        self.assertEqual(
+            status, dad.DeployCheckoutStatus())
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       deploy_guard=lambda: status)
+
+        self.assertEqual(res.reason, "deploy_refused")
+        self.assertNotIn("apply", rec.calls)
+        self.assertFalse(any(call.startswith("deploy:") for call in rec.calls))
+        self.assertEqual(rec.deploy_refusals, [status])
+
+    def test_refusal_preserves_state_and_next_run_can_resume(self):
+        initial = {"last_batch_id": "older-batch", "batch_reviewed": False,
+                   "last_applied_ts": "2026-07-19T17:59:00+00:00"}
+        behind = dad.DeployCheckoutStatus(4)
+        current = dad.DeployCheckoutStatus(0)
+        with tempfile.TemporaryDirectory() as d:
+            state_path = os.path.join(d, "state.json")
+            dad.save_state(state_path, initial)
+
+            refused = Recorder(rows=[row("aaaaaaaa")])
+            first = _run(refused, state_path=state_path,
+                         deploy_guard=lambda: behind)
+            self.assertEqual(first.reason, "deploy_refused")
+            self.assertEqual(dad.load_state(state_path), initial)
+
+            resumed = Recorder(rows=[row("aaaaaaaa")])
+            second = _run(resumed, state_path=state_path,
+                          now=NOW + datetime.timedelta(minutes=2),
+                          deploy_guard=lambda: current)
+            state = dad.load_state(state_path)
+
+        self.assertEqual(second.reason, "applied")
+        self.assertEqual(resumed.calls.count("apply"), 1)
+        self.assertEqual(state["last_batch_id"], second.batch_id)
+        self.assertFalse(state["batch_reviewed"])
+
+    def test_refusal_notification_contains_only_checkout_metadata(self):
+        published = []
+        status = dad.DeployCheckoutStatus(39)
+        dad.notify_deploy_refusal(
+            status, topic_resolver=lambda: "topic",
+            publish=lambda *args, **kwargs: published.append((args, kwargs)))
+
+        args, kwargs = published[0]
+        self.assertEqual(args[0], "topic")
+        self.assertIn("refused to deploy", args[2])
+        self.assertIn("behind its recorded upstream by 39 commits", args[2])
+        self.assertNotIn("data/", args[2])
+        self.assertEqual(kwargs["priority"], "high")
 
 
 class TestRevertJournalTransport(unittest.TestCase):

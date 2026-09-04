@@ -35,10 +35,19 @@ The engine's reconcile-first + DO in_flight-lease + append-only apply_batches
 journal + git-worktree isolation own this; the daemon adds a host-local flock so
 two timer firings never overlap. See docs/direct-apply-daemon.md.
 
+STALE-CHECKOUT DEPLOY GUARD: before entering either deployment-bearing path
+(accepted-edit apply or approved revert), the daemon compares HEAD with its
+recorded upstream using `git rev-list --count HEAD..@{upstream}`. A positive
+count, a missing/unresolvable upstream, or an invalid result refuses the whole
+transaction before mutation. The refusal heartbeats unhealthy, sends a
+metadata-only ntfy alert, and leaves accepted rows / revert journal state intact
+for a later tick. The check reads local refs only: it never fetches or advances
+the checkout, so updating the daemon checkout remains a deliberate operator act.
+
 Python 3, stdlib only. Every side effect (review fetch, engine run, rebuild,
-deploy, heartbeat, notify, clock) is injectable so the orchestration is unit-
-testable with no network, no subprocess, and no live model (see
-tools/tests/test_direct_apply_daemon.py). `--dry-run` plans without mutating.
+deploy, deploy guard, heartbeat, notify, clock) is injectable so the
+orchestration is unit-testable with no network, no subprocess, and no live model
+(see tools/tests/test_direct_apply_daemon.py). `--dry-run` plans without mutating.
 """
 
 from __future__ import annotations
@@ -321,6 +330,53 @@ def _git(args, repo_root=REPO_ROOT, timeout=300):
     return proc.returncode, (proc.stdout or "")
 
 
+@dataclasses.dataclass(frozen=True)
+class DeployCheckoutStatus:
+    """Safe, content-free result of the local upstream comparison."""
+
+    behind: int | None = None
+
+    def __post_init__(self):
+        if (self.behind is not None and
+                (not isinstance(self.behind, int) or
+                 isinstance(self.behind, bool) or self.behind < 0)):
+            raise ValueError("behind must be a nonnegative integer or None")
+
+    @property
+    def deployable(self):
+        return self.behind == 0
+
+    @property
+    def reason(self):
+        if self.behind is None:
+            return "upstream_unresolvable"
+        return "current" if self.behind == 0 else "behind"
+
+    def metadata(self):
+        return {"deployable": self.deployable, "reason": self.reason,
+                "behind": self.behind}
+
+
+def checkout_deploy_status(repo_root=REPO_ROOT, *, git=None):
+    """Return whether HEAD is safe to deploy relative to its recorded upstream.
+
+    This deliberately does not fetch: `HEAD..@{upstream}` reads only the local
+    remote-tracking ref. Any inability to prove that the behind count is zero is
+    a fail-closed refusal. `git` is injectable for hermetic unit tests.
+    """
+    git = git or (lambda args: _git(args, repo_root))
+    try:
+        rc, output = git(["rev-list", "--count", "HEAD..@{upstream}"])
+        if rc != 0:
+            return DeployCheckoutStatus()
+        behind = int(output.strip())
+        if behind < 0:
+            raise ValueError("negative behind count")
+    except Exception:
+        return DeployCheckoutStatus()
+    return DeployCheckoutStatus(behind)
+
+
 def fetch_revert_requests(api_base, token, timeout=30):
     """GET {api_base}/revert-requests?status=approved (admin) -> list of rows.
     Best-effort: a missing endpoint or unreachable worker degrades to [] (a revert
@@ -557,6 +613,31 @@ def notify_failure(failed_ids, *, topic_resolver=None, publish=None):
         publish(topic, title, body, None, priority="high", tags="rotating_light")
 
 
+def notify_deploy_refusal(status, *, topic_resolver=None, publish=None):
+    """Best-effort ntfy alert containing checkout metadata only.
+
+    Never include suggestion content, file content, paths, credentials, or raw
+    git output. The behind count and comparison outcome are sufficient for the
+    operator to distinguish a stale checkout from an unresolvable upstream.
+    """
+    topic_resolver = topic_resolver or digest_push.resolve_topic
+    publish = publish or digest_push.publish_ntfy
+    title = "Sonsteng apply deploy REFUSED"
+    if status.reason == "behind" and status.behind is not None:
+        body = ("The home-box apply daemon refused to deploy because its checkout "
+                "is behind its recorded upstream by %d commit%s. No deploy ran. "
+                "Refresh the daemon checkout deliberately, then let a later tick retry."
+                % (status.behind, "" if status.behind == 1 else "s"))
+    else:
+        body = ("The home-box apply daemon refused to deploy because it could not "
+                "prove that its checkout is not behind its recorded upstream. "
+                "No deploy ran. Repair or refresh the upstream tracking state, "
+                "then let a later tick retry.")
+    with contextlib.suppress(Exception):
+        publish(topic_resolver(), title, body, None, priority="high",
+                tags="rotating_light,warning")
+
+
 def notify_consistency(status, batch_id, *, topic_resolver=None, publish=None):
     """Best-effort, text-free U18 alert. Clean results need no interruption."""
     if status == "clean":
@@ -678,7 +759,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
         revert_record=None,
         clean_site=None, do_deploy_worker=None, do_scoped=None,
-        legacy_u18=None):
+        legacy_u18=None, deploy_guard=None, deploy_refusal_notify=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -699,10 +780,35 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     heartbeat = heartbeat or (
         lambda ok, applied: post_heartbeat(api_base, token, ok=ok, applied=applied, ts=ts))
     notify = notify or notify_failure
+    deploy_guard = deploy_guard or checkout_deploy_status
+    deploy_refusal_notify = deploy_refusal_notify or notify_deploy_refusal
     editorial = editorial or (lambda bid: dispatch_editorial(bid))
 
     steps = []
     state = load_state(state_path)
+
+    def deploy_refusal(batch_id=""):
+        """Fail closed without changing retry-critical apply/revert state."""
+        try:
+            status = deploy_guard()
+        except Exception:
+            status = DeployCheckoutStatus()
+        if not isinstance(status, DeployCheckoutStatus):
+            status = DeployCheckoutStatus()
+        steps.append(("deploy_guard", status.metadata()))
+        if status.deployable:
+            return None
+        hb = heartbeat(False, 0)
+        steps.append(("heartbeat", {"ok": False, "applied": 0}))
+        deploy_refusal_notify(status)
+        steps.append(("notify_deploy_refusal", status.metadata()))
+        if status.reason == "behind":
+            detail = "checkout is behind upstream by %d commit(s)" % status.behind
+        else:
+            detail = "checkout upstream comparison is unresolvable"
+        print("[daemon] deploy REFUSED: %s. No mutation or deploy ran; retry state preserved."
+              % detail, file=out)
+        return DaemonResult(0, batch_id, "deploy_refused", hb, False, steps)
 
     # ---- approved revert requests (History browser, SL8) — execute FIRST -----
     # A quiet or busy tick both drain approved reverts. Each revert is an
@@ -715,6 +821,9 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
             reqs = []
         for req in reqs or []:
             rid = req.get("id")
+            refused = deploy_refusal(req.get("batch_id") or "")
+            if refused is not None:
+                return refused
             if req.get("mutation_phase") == "merged":
                 detail = {"id":rid,"batch_id":req["batch_id"],
                     "actor":req["mutation_actor"],"source_ref":req["source_ref"],
@@ -801,6 +910,14 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         print("[daemon] DRY-RUN: would run apply engine, rebuild, deploy %s, heartbeat"
               % branch, file=out)
         return DaemonResult(len(accepted), batch_id, "dry_run", {}, False, steps)
+
+    # The apply engine itself performs a DEV deployment under APPLY_DEPLOY=1,
+    # followed by this daemon's authoritative deploy_dev call. Authorize the
+    # whole deployment-bearing transaction before touching the checkout so a
+    # refusal leaves the accepted rows available for the next tick.
+    refused = deploy_refusal(batch_id)
+    if refused is not None:
+        return refused
 
     # 0) Clear benign GENERATED-output churn (site/.build-stamp.json carries the
     #    HEAD sha, so the last tick's rebuild left it dirty). The engine's
@@ -945,8 +1062,8 @@ def main(argv=None):
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2
 
-    # Non-zero only on a genuine apply/rebuild/deploy failure (so systemd marks the
-    # unit failed and the alert already fired). No-op + applied are both success.
+    # Non-zero on a genuine apply/rebuild/deploy failure or a fail-closed stale-
+    # checkout refusal (the alert already fired). No-op + applied are successes.
     return 0 if result.reason in ("no_accepted", "applied", "dry_run") else 1
 
 
