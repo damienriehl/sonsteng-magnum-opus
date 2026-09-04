@@ -86,10 +86,11 @@ run_local_persona_journeys() (
   trap cleanup EXIT
 
   ready=0
-  for _ in $(seq 1 50); do
+  # Six attempts × (0.75s request ceiling + 0.10s sleep) = a 5.1s probe budget.
+  for _ in $(seq 1 6); do
     if curl -fsS \
-        --connect-timeout 0.05 \
-        --max-time 0.05 \
+        --connect-timeout 0.5 \
+        --max-time 0.75 \
         "http://127.0.0.1:$port/" >/dev/null 2>&1; then
       ready=1
       break
@@ -98,14 +99,14 @@ run_local_persona_journeys() (
       printf 'Local persona-journey server exited before becoming ready.\n' >&2
       return 1
     fi
-    sleep 0.05
+    sleep 0.10
   done
   if [ "$ready" != "1" ]; then
     printf 'Local persona-journey server did not become ready.\n' >&2
     return 1
   fi
 
-  CHROME_BIN="$browser_bin" node "${PERSONA_JOURNEY_RUNNER:-tools/verify_persona_journeys.js}" \
+  CHROME_BIN="$browser_bin" node tools/verify_persona_journeys.js \
       --base "http://127.0.0.1:$port" \
       --env-label local \
       --run-dir "$ROOT/build/uat/preflight/runs" \

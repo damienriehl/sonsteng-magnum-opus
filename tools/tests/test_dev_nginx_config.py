@@ -242,6 +242,7 @@ def _write_executable(path: Path, source: str) -> None:
 def _run_persona_gate(
     tmp_path: Path,
     runner_exit: int,
+    inherited_runner_override: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
     source = PREFLIGHT.read_text(encoding="utf-8")
     functions = source[
@@ -256,14 +257,17 @@ def _run_persona_gate(
     curl_args_file = tmp_path / "curl.args"
     runner_args_file = tmp_path / "runner.args"
     browser = tmp_path / "browser"
-    runner = tmp_path / "verify_persona_journeys.js"
 
     _write_executable(browser, "#!/usr/bin/env bash\nexit 0\n")
-    runner.write_text(
-        "require('node:fs').writeFileSync(process.env.RUNNER_ARGS_FILE, "
-        "process.argv.slice(2).join('\\n'));\n"
-        "process.exit(Number(process.env.STUB_RUNNER_EXIT));\n",
-        encoding="utf-8",
+    _write_executable(
+        bin_dir / "node",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            printf '%s\n' "$@" > "$RUNNER_ARGS_FILE"
+            exit "$STUB_RUNNER_EXIT"
+            """
+        ),
     )
     _write_executable(
         bin_dir / "python3",
@@ -298,12 +302,12 @@ def _run_persona_gate(
     )
 
     env = os.environ.copy()
+    env.pop("PERSONA_JOURNEY_RUNNER", None)
     env.update(
         {
             "CHROME_BIN": str(browser),
             "CURL_ARGS_FILE": str(curl_args_file),
             "PATH": f"{bin_dir}:{env['PATH']}",
-            "PERSONA_JOURNEY_RUNNER": str(runner),
             "PREFLIGHT_FUNCTIONS": str(definitions),
             "REPO_ROOT": str(ROOT),
             "RUNNER_ARGS_FILE": str(runner_args_file),
@@ -311,6 +315,8 @@ def _run_persona_gate(
             "STUB_RUNNER_EXIT": str(runner_exit),
         }
     )
+    if inherited_runner_override is not None:
+        env["PERSONA_JOURNEY_RUNNER"] = str(inherited_runner_override)
     harness = textwrap.dedent(
         """\
         source "$PREFLIGHT_FUNCTIONS"
@@ -360,6 +366,7 @@ def test_preflight_persona_gate_propagates_status_and_cleans_up_server(
 
     assert result.returncode == runner_exit, result.stdout + result.stderr
     assert runner_arguments == [
+        "tools/verify_persona_journeys.js",
         "--base",
         "http://127.0.0.1:49152",
         "--env-label",
@@ -371,9 +378,28 @@ def test_preflight_persona_gate_propagates_status_and_cleans_up_server(
     ]
     assert "--connect-timeout" in curl_arguments
     assert "--max-time" in curl_arguments
-    for option in ("--connect-timeout", "--max-time"):
-        timeout = float(curl_arguments[curl_arguments.index(option) + 1])
-        assert 0 < timeout <= 0.1
+    connect_timeout = float(
+        curl_arguments[curl_arguments.index("--connect-timeout") + 1]
+    )
+    request_timeout = float(curl_arguments[curl_arguments.index("--max-time") + 1])
+    assert connect_timeout == 0.5
+    assert request_timeout == 0.75
+
+
+def test_preflight_persona_gate_ignores_inherited_runner_override(
+    tmp_path: Path,
+) -> None:
+    bypass_runner = tmp_path / "bypass-runner.js"
+    bypass_runner.write_text("process.exit(0);\n", encoding="utf-8")
+
+    result, _, runner_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=23,
+        inherited_runner_override=bypass_runner,
+    )
+
+    assert result.returncode == 23, result.stdout + result.stderr
+    assert runner_arguments[0] == "tools/verify_persona_journeys.js"
 
 
 def test_preflight_persona_gate_requires_a_browser_and_is_skippable() -> None:
