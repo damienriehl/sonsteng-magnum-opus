@@ -6,7 +6,7 @@
 // No prompt-caching request control (OpenAI caches automatically; any
 // cached_tokens show up in usage and are normalized to cache_read_input_tokens).
 
-import { completeWithRetry, systemToString } from "./common.js";
+import { completeWithRetry, normalizeStopReason, systemToString } from "./common.js";
 
 const URL_ = "https://api.openai.com/v1/chat/completions";
 
@@ -40,6 +40,7 @@ export function parseResponse(data) {
   const cached = (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || 0;
   return {
     text,
+    stop_reason: normalizeStopReason(choice.finish_reason),
     usage: {
       input_tokens: Math.max(0, (u.prompt_tokens || 0) - cached),
       output_tokens: u.completion_tokens || 0,

@@ -10,7 +10,7 @@
 // URL-shaped surface — load-bearing for the "key never stored or logged" BYOK
 // guarantee.
 
-import { completeWithRetry, systemToString } from "./common.js";
+import { completeWithRetry, normalizeStopReason, systemToString } from "./common.js";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
 
@@ -46,12 +46,17 @@ export function parseResponse(data) {
   const text = parts.map((p) => p.text || "").join("");
   const u = data.usageMetadata || {};
   const cached = u.cachedContentTokenCount || 0;
+  const thoughtTokens = Number.isFinite(u.thoughtsTokenCount)
+    ? Math.max(0, u.thoughtsTokenCount)
+    : null;
   return {
     text,
+    stop_reason: normalizeStopReason(cand.finishReason),
     usage: {
       input_tokens: Math.max(0, (u.promptTokenCount || 0) - cached),
       output_tokens: u.candidatesTokenCount || 0,
       cache_read_input_tokens: cached,
+      ...(thoughtTokens != null ? { thought_tokens: thoughtTokens } : {}),
     },
   };
 }

@@ -21,10 +21,12 @@ function sleep(ms) {
 export const PROVIDER_TIMEOUT_MS = 60_000;
 
 // buildReq: () => { url, headers, body }   (body = plain object, JSON-encoded here)
-// parseResp: (data) => { text, usage }     (usage normalized to the Anthropic
-//                                           field names: input_tokens,
+// parseResp: (data) => { text, usage, stop_reason? } (usage normalized to the
+//                                           Anthropic field names: input_tokens,
 //                                           output_tokens, cache_read_input_tokens,
-//                                           cache_creation_input_tokens)
+//                                           cache_creation_input_tokens; provider
+//                                           stop reasons use the canonical values
+//                                           returned by normalizeStopReason)
 export async function completeWithRetry(buildReq, parseResp) {
   const attempt = async () => {
     const { url, headers, body } = buildReq();
@@ -44,8 +46,13 @@ export async function completeWithRetry(buildReq, parseResp) {
       return { ok: false, kind: "upstream", status: res.status };
     }
     try {
-      const { text, usage } = parseResp(data);
-      return { ok: true, text, usage: usage || {} };
+      const { text, usage, stop_reason } = parseResp(data);
+      return {
+        ok: true,
+        text,
+        usage: usage || {},
+        ...(stop_reason ? { stop_reason } : {}),
+      };
     } catch {
       return { ok: false, kind: "upstream", status: res.status };
     }
@@ -87,6 +94,16 @@ export async function completeWithRetry(buildReq, parseResp) {
     return { ok: false, kind: "config", status: res.status };
   }
   return { ok: false, kind: "upstream", status: res.status };
+}
+
+// Collapse provider-specific output-cap and ordinary-stop spellings without
+// losing less common safety/tool/refusal reasons (which remain lowercase).
+export function normalizeStopReason(reason) {
+  if (typeof reason !== "string" || !reason) return null;
+  const normalized = reason.trim().toLowerCase();
+  if (normalized === "length" || normalized === "max_tokens") return "max_tokens";
+  if (normalized === "end_turn" || normalized === "stop") return "stop";
+  return normalized;
 }
 
 // Join a {prefix, tail} chat system into one string (for providers without
