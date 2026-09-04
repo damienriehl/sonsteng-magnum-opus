@@ -88,6 +88,31 @@ creates the worktree if it is missing, builds the gitignored generated bundles
 is on a branch other than `APPLY_DEPLOY_BRANCH`, and writes the units. Override the
 location with `SONSTENG_DAEMON_ROOT=…`.
 
+### Stale-checkout deploy guard
+
+Before either deployment-bearing transaction, the daemon runs
+`git rev-list --count HEAD..@{upstream}` in its own checkout. Zero permits the
+transaction; a positive count, missing upstream, command failure, or malformed
+result refuses it before the apply engine or revert mutates the repository. This
+guards both publication surfaces: `deploy-dev.sh` can publish stale canonical
+content to DEV, and the revert path's bare Wrangler command deploys the bundled
+editor Worker. The apply engine's own `APPLY_DEPLOY=1` DEV deploy is also downstream
+of the same pre-transaction check.
+
+A refusal posts an unhealthy heartbeat, exits the tick nonzero, and sends a
+metadata-only ntfy alert containing only the comparison outcome and optional
+behind count—never suggestion text, file content, paths, credentials, or raw Git
+output. Accepted suggestions remain accepted, and an approved or already-merged
+revert retains its journal phase, so a later tick can retry after an operator
+deliberately refreshes or repairs the daemon checkout.
+
+The comparison is read-only and has no network access: it uses the recorded
+remote-tracking ref and never fetches or fast-forwards. Consequently, it detects
+only staleness already represented in that local ref. Operators must continue to
+refresh refs and the daemon checkout deliberately; merging this guard into `main`
+does not activate it until `~/.local/share/sonsteng-daemon/checkout` itself is
+updated to code that contains the guard.
+
 **Regenerable-site guard.** `build_site.py` stamps the current HEAD sha into
 `site/platform/data/.build-stamp.json` (traceability only — deliberately not part of
 the parity hash), so the tick's post-apply rebuild always leaves that one tracked

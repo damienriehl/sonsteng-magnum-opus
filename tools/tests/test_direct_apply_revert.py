@@ -32,6 +32,14 @@ def _empty_review():
     return []
 
 
+def _merged_revert_evidence():
+    return {"id":"rq1","batch_id":"revert-rq1","mutation_actor":"slot:john",
+        "source_ref":"data/public.json","original_text":"after","new_text":"before",
+        "original_hash":"after-hash","new_hash":"before-hash",
+        "base_sha":"base","commit_sha":"sha123","generator_id":"generator-v1",
+        "mutation_phase":"merged"}
+
+
 class RevertRecorder:
     """Injected revert side-effects for run() orchestration assertions."""
 
@@ -47,6 +55,7 @@ class RevertRecorder:
         self.resolved = []
         self.heartbeats = []
         self.notified = []
+        self.deploy_refusals = []
 
     def fetch_reverts(self):
         self.calls.append("fetch_reverts")
@@ -85,6 +94,10 @@ class RevertRecorder:
         self.calls.append("notify")
         self.notified.append(list(ids))
 
+    def notify_deploy_refusal(self, status):
+        self.calls.append("notify_deploy_refusal")
+        self.deploy_refusals.append(status)
+
 
 def _run_reverts(rec, **kw):
     with tempfile.TemporaryDirectory() as td:
@@ -95,6 +108,8 @@ def _run_reverts(rec, **kw):
             fetch=_empty_review,                       # no accepted suggestions
             do_rebuild=rec.rebuild, do_deploy=rec.deploy,
             heartbeat=rec.heartbeat, notify=rec.notify,
+            deploy_guard=lambda: dad.DeployCheckoutStatus(0),
+            deploy_refusal_notify=rec.notify_deploy_refusal,
             fetch_reverts=rec.fetch_reverts, revert_exec=rec.revert_exec,
             revert_resolve=rec.revert_resolve, do_deploy_worker=rec.deploy_worker,
             revert_record=rec.revert_record,
@@ -121,16 +136,36 @@ class TestRevertOrchestration(unittest.TestCase):
         self.assertEqual(rec.notified, [])
 
     def test_recorded_merged_revert_resumes_deploy_without_second_git_revert(self):
-        evidence = {"id":"rq1","batch_id":"revert-rq1","mutation_actor":"slot:john",
-            "source_ref":"data/public.json","original_text":"after","new_text":"before",
-            "original_hash":"after-hash","new_hash":"before-hash",
-            "base_sha":"base","commit_sha":"sha123","generator_id":"generator-v1",
-            "mutation_phase":"merged"}
+        evidence = _merged_revert_evidence()
         rec = RevertRecorder([evidence])
         _run_reverts(rec)
         self.assertNotIn(("revert_exec", "rq1"), rec.calls)
         self.assertIn(("record", "rq1", "sha123"), rec.calls)
         self.assertIn(("complete", "rq1", "sha123"), rec.calls)
+
+    def test_guard_refusal_keeps_merged_revert_retryable(self):
+        evidence = _merged_revert_evidence()
+        behind = dad.DeployCheckoutStatus(7)
+        refused = RevertRecorder([evidence])
+
+        first = _run_reverts(refused, deploy_guard=lambda: behind)
+
+        self.assertEqual(first.reason, "deploy_refused")
+        self.assertNotIn(("revert_exec", "rq1"), refused.calls)
+        self.assertFalse(any(call[0] in {"record", "complete", "resolve"}
+                             for call in refused.calls if isinstance(call, tuple)))
+        self.assertFalse(any(isinstance(call, tuple) and call[0] == "deploy"
+                             for call in refused.calls))
+        self.assertNotIn("deploy_worker", refused.calls)
+        self.assertEqual(refused.deploy_refusals, [behind])
+
+        resumed = RevertRecorder([evidence])
+        second = _run_reverts(resumed)
+
+        self.assertEqual(second.reason, "no_accepted")
+        self.assertNotIn(("revert_exec", "rq1"), resumed.calls)
+        self.assertIn(("record", "rq1", "sha123"), resumed.calls)
+        self.assertIn(("complete", "rq1", "sha123"), resumed.calls)
 
     def test_revert_exec_failure_resolves_failed_and_alerts_ids_only(self):
         rec = RevertRecorder([{"id": "rq2", "doc": "d", "run_first": "aa", "run_last": "bb"}],
