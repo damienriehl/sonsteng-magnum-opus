@@ -53,6 +53,31 @@ def run_legs(source: str) -> list[tuple[str, list[str]]]:
     return legs
 
 
+def shell_function(source: str, name: str) -> str:
+    match = re.search(rf"^{re.escape(name)}\(\) \{{\n.*?^\}}", source, re.MULTILINE | re.DOTALL)
+    assert match is not None, f"missing shell function: {name}"
+    return match.group(0)
+
+
+def initialize_git_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "contract@example.test"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Contract Test"], cwd=path, check=True)
+    subprocess.run(["git", "add", "."], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=path, check=True)
+
+
+def run_bash(path: Path, program: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash"],
+        cwd=path,
+        input=program,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_script_has_valid_bash_syntax() -> None:
     result = subprocess.run(
         ["bash", "-n", str(SCRIPT_PATH)],
@@ -118,3 +143,124 @@ def test_every_leg_contributes_to_the_final_exit_status() -> None:
     assert 'record_status "$status"' in source
     assert 'record_status "$a11y_status"' in source
     assert 'exit "$REVALIDATION_STATUS"' in source
+
+
+def test_initial_gate_rejects_non_ignored_untracked_generator_input(tmp_path: Path) -> None:
+    source = script_source()
+    (tmp_path / ".gitignore").write_text("ignored-input.json\n", encoding="utf-8")
+    (tmp_path / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    (tmp_path / "ignored-input.json").write_text("ignored\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [shell_function(source, "die"), shell_function(source, "require_clean_worktree")]
+    )
+    ignored_only = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\nrequire_clean_worktree 'initial gate failed'\n",
+    )
+    assert ignored_only.returncode == 0, ignored_only.stderr
+
+    (tmp_path / "untracked-generator-input.json").write_text("untracked\n", encoding="utf-8")
+    untracked_input = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\nrequire_clean_worktree 'initial gate failed'\n",
+    )
+    assert untracked_input.returncode == 1
+    assert "?? untracked-generator-input.json" in untracked_input.stderr
+    assert "ignored-input.json" not in untracked_input.stderr
+    assert "ERROR: initial gate failed" in untracked_input.stderr
+
+
+def test_post_generator_gate_excludes_only_marker_and_build_stamp(tmp_path: Path) -> None:
+    source = script_source()
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    marker = tmp_path / "site" / ".final-revalidation-server.fixture"
+    marker.write_text("marker\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [shell_function(source, "die"), shell_function(source, "require_clean_worktree")]
+    )
+    post_generator_gate = (
+        "require_clean_worktree 'post-generator gate failed' "
+        "':(top,exclude,literal)site/.final-revalidation-server.fixture' "
+        "':(top,exclude,literal)site/platform/data/.build-stamp.json'"
+    )
+    expected_changes = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\n{post_generator_gate}\n",
+    )
+    assert expected_changes.returncode == 0, expected_changes.stderr
+
+    (tmp_path / "site" / "unexpected-source.json").write_text("unexpected\n", encoding="utf-8")
+    unexpected_change = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\n{post_generator_gate}\n",
+    )
+    assert unexpected_change.returncode == 1
+    assert "?? site/unexpected-source.json" in unexpected_change.stderr
+
+    assert (
+        'require_clean_worktree "generators changed tracked or untracked files; '
+        'revalidation would no longer describe one SHA"'
+    ) in source
+    assert '":(top,exclude,literal)site/$MARKER_NAME"' in source
+    assert '":(top,exclude,literal)site/platform/data/.build-stamp.json"' in source
+
+
+def test_generated_build_stamp_remains_installed_until_cleanup(tmp_path: Path) -> None:
+    source = script_source()
+    after_generators = source.index('run_generator "editor data bundle"')
+    browser_local = source.index("run browser-local")
+    bindings_local = source.index("run bindings-local")
+    bindings_dev = source.index("run bindings-dev")
+    final_cleanup = source.rindex("\ncleanup\n")
+
+    assert "restore_build_stamp" not in source[after_generators:bindings_dev]
+    assert after_generators < browser_local < bindings_local < final_cleanup
+    assert "restore_build_stamp" in shell_function(source, "cleanup")
+
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "restore_build_stamp"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    cleanup_result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "SERVER_PID=''\nMARKER_PATH=''\n"
+            "test \"$(cat site/platform/data/.build-stamp.json)\" = generated\n"
+            "cleanup\n"
+            "test \"$(cat site/platform/data/.build-stamp.json)\" = committed\n"
+        ),
+    )
+    assert cleanup_result.returncode == 0, cleanup_result.stderr
+
+
+def test_evidence_clear_failure_aborts(tmp_path: Path) -> None:
+    source = script_source()
+    functions = "\n\n".join(
+        [shell_function(source, "die"), shell_function(source, "clear_prior_evidence")]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"BUILD_UAT={shlex.quote(str(tmp_path))}/\n"
+            "rm() { return 1; }\n"
+            "clear_prior_evidence\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert result.stderr == "ERROR: could not clear prior UAT evidence\n"

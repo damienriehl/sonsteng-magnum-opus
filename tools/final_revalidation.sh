@@ -18,8 +18,9 @@
 #   PROD_BASE   production origin (default: https://legalpracticum.org)
 #
 # Runtime is approximately 15 minutes. Run from a clean worktree at the exact
-# SHA under test; tracked changes are rejected so every run file describes one
-# repository revision. The script writes logs and run evidence under build/uat/.
+# SHA under test; tracked and non-ignored untracked changes are rejected so
+# every run file describes one repository revision. The script writes logs and
+# run evidence under build/uat/.
 # ============================================================================
 set -uo pipefail
 
@@ -40,22 +41,32 @@ die() {
   exit 1
 }
 
-# build_site.py refreshes this tracked timestamp as a side effect. Restore the
-# committed stamp so local evidence still identifies the single SHA under test.
+# build_site.py refreshes this tracked stamp as a side effect. Keep the freshly
+# generated stamp through the local legs, then restore the committed copy.
 restore_build_stamp() {
   git checkout -q -- site/platform/data/.build-stamp.json 2>/dev/null || true
 }
 
-require_clean_tracked() {
+require_clean_worktree() {
   local context=$1
-  local tracked_changes
-  if ! tracked_changes=$(git status --short --untracked-files=no); then
+  local changes
+  local -a pathspecs=()
+  shift
+  if [ "$#" -gt 0 ]; then
+    pathspecs=(-- . "$@")
+  fi
+  if ! changes=$(git status --short --untracked-files=normal "${pathspecs[@]}"); then
     die "could not inspect worktree status"
   fi
-  if [ -n "$tracked_changes" ]; then
-    printf '%s\n' "$tracked_changes" >&2
+  if [ -n "$changes" ]; then
+    printf '%s\n' "$changes" >&2
     die "$context"
   fi
+}
+
+clear_prior_evidence() {
+  rm -rf -- "${BUILD_UAT}runs" "${BUILD_UAT}shots" || \
+    die "could not clear prior UAT evidence"
 }
 
 record_status() {
@@ -77,7 +88,7 @@ cleanup() {
   return "$status"
 }
 
-require_clean_tracked "tracked changes found; run from a clean worktree at the SHA under test"
+require_clean_worktree "tracked or untracked changes found; run from a clean worktree at the SHA under test"
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
   die "LOCAL_PORT must be an integer from 1 through 65535"
@@ -94,7 +105,7 @@ if [ "$resolved_uat/" != "$BUILD_UAT" ]; then
   die "build/uat/ must resolve to its repository-local path (got $resolved_uat)"
 fi
 mkdir -p "$BUILD_UAT" || die "could not create build/uat/"
-rm -rf -- "${BUILD_UAT}runs" "${BUILD_UAT}shots"
+clear_prior_evidence
 
 SHA=$(git rev-parse HEAD) || die "could not resolve HEAD"
 printf 'revalidation @ %s in %s\n' "$SHA" "$ROOT"
@@ -149,8 +160,9 @@ run_generator() {
 run_generator "site build" python3 tools/build_site.py --check
 run_generator "instructor bundle" python3 tools/build_instructor_bundle.py
 run_generator "editor data bundle" node app/worker/scripts/bundle-editor-data.mjs
-restore_build_stamp
-require_clean_tracked "generators changed tracked files; revalidation would no longer describe one SHA"
+require_clean_worktree "generators changed tracked or untracked files; revalidation would no longer describe one SHA" \
+  ":(top,exclude,literal)site/$MARKER_NAME" \
+  ":(top,exclude,literal)site/platform/data/.build-stamp.json"
 
 run() {
   local label=$1
