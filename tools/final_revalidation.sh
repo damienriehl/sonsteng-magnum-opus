@@ -44,7 +44,46 @@ die() {
 # build_site.py refreshes this tracked stamp as a side effect. Keep the freshly
 # generated stamp through the local legs, then restore the committed copy.
 restore_build_stamp() {
-  git checkout -q -- site/platform/data/.build-stamp.json 2>/dev/null || true
+  if git checkout -q -- site/platform/data/.build-stamp.json 2>/dev/null; then
+    return 0
+  fi
+  printf '%s\n' \
+    'ERROR: could not restore generated build stamp; site/platform/data/.build-stamp.json was left installed:' \
+    >&2
+  git status --short -- site/platform/data/.build-stamp.json >&2 || true
+  return 1
+}
+
+# SIGKILL and host crashes bypass the EXIT trap. Remove only regular markers
+# created by this script whose recorded owner is no longer running; every other
+# untracked path remains visible to the clean-worktree gate below.
+remove_stale_server_markers() {
+  local marker marker_name marker_pid marker_token resolved_site
+  resolved_site=$(realpath -m -- "$ROOT/site") || \
+    die "could not resolve site/ before stale-marker cleanup"
+  if [ "$resolved_site" != "$ROOT/site" ]; then
+    die "site/ must resolve to its repository-local path before stale-marker cleanup (got $resolved_site)"
+  fi
+
+  for marker in "$ROOT"/site/.final-revalidation-server.??????; do
+    if [ ! -f "$marker" ] || [ -L "$marker" ]; then
+      continue
+    fi
+    marker_name=${marker##*/}
+    if ! [[ "$marker_name" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]]; then
+      continue
+    fi
+    marker_token=$(<"$marker")
+    if ! [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):[0-9]+$ ]]; then
+      continue
+    fi
+    marker_pid=${BASH_REMATCH[2]}
+    if kill -0 "$marker_pid" 2>/dev/null; then
+      continue
+    fi
+    rm -f -- "$marker" || die "could not remove stale local-server marker: $marker"
+    printf 'removed stale local-server marker: %s\n' "${marker#"$ROOT"/}"
+  done
 }
 
 require_clean_worktree() {
@@ -76,7 +115,7 @@ record_status() {
 }
 
 cleanup() {
-  local status=$?
+  local status=${1:-0}
   if [ -n "$SERVER_PID" ]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -84,10 +123,20 @@ cleanup() {
   if [ -n "$MARKER_PATH" ]; then
     rm -f -- "$MARKER_PATH"
   fi
-  restore_build_stamp
+  if ! restore_build_stamp; then
+    status=1
+  fi
   return "$status"
 }
 
+cleanup_on_exit() {
+  local status=$?
+  trap - EXIT
+  cleanup "$status"
+  exit $?
+}
+
+remove_stale_server_markers
 require_clean_worktree "tracked or untracked changes found; run from a clean worktree at the SHA under test"
 
 if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
@@ -110,7 +159,7 @@ clear_prior_evidence
 SHA=$(git rev-parse HEAD) || die "could not resolve HEAD"
 printf 'revalidation @ %s in %s\n' "$SHA" "$ROOT"
 
-trap cleanup EXIT
+trap cleanup_on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -208,8 +257,12 @@ record_status "$a11y_status"
 printf 'a11y exit=%s\n' "$a11y_status"
 grep -E '^=== |A11Y AUDIT' "${BUILD_UAT}final-a11y.log" || true
 
-cleanup
+cleanup "$REVALIDATION_STATUS"
+cleanup_status=$?
 trap - EXIT
+if [ "$cleanup_status" -ne 0 ]; then
+  REVALIDATION_STATUS=1
+fi
 git status --short | head -5
 printf 'revalidation done @ %s\n' "$SHA"
 exit "$REVALIDATION_STATUS"

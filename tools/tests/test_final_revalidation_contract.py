@@ -172,6 +172,155 @@ def test_initial_gate_rejects_non_ignored_untracked_generator_input(tmp_path: Pa
     assert "ERROR: initial gate failed" in untracked_input.stderr
 
 
+def test_stale_server_marker_is_removed_without_weakening_initial_gate(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    stale_marker = site / ".final-revalidation-server.ABC123"
+    stale_marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+    )
+    stale_only = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert stale_only.returncode == 0, stale_only.stderr
+    assert not stale_marker.exists()
+
+    stale_marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+    )
+    unrelated = site / "unexpected-source.json"
+    unrelated.write_text("unexpected\n", encoding="utf-8")
+    unrelated_change = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert unrelated_change.returncode == 1
+    assert not stale_marker.exists()
+    assert "?? site/unexpected-source.json" in unrelated_change.stderr
+    assert ".final-revalidation-server" not in unrelated_change.stderr
+    assert "ERROR: initial gate failed" in unrelated_change.stderr
+
+
+def test_malformed_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("not-a-final-revalidation-token\n", encoding="utf-8")
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_live_owner_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:12345\\n' \"$$\" > "
+            f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_symlinked_site_cannot_delete_external_server_marker(tmp_path: Path) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    external_site = tmp_path / "external-site"
+    repository.mkdir()
+    external_site.mkdir()
+    (repository / "site").symlink_to(external_site, target_is_directory=True)
+    (repository / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+
+    marker = external_site / ".final-revalidation-server.ABC123"
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+    )
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "remove_stale_server_markers\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "site/ must resolve to its repository-local path" in result.stderr
+
+
 def test_post_generator_gate_excludes_only_marker_and_build_stamp(tmp_path: Path) -> None:
     source = script_source()
     stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
@@ -218,7 +367,7 @@ def test_generated_build_stamp_remains_installed_until_cleanup(tmp_path: Path) -
     browser_local = source.index("run browser-local")
     bindings_local = source.index("run bindings-local")
     bindings_dev = source.index("run bindings-dev")
-    final_cleanup = source.rindex("\ncleanup\n")
+    final_cleanup = source.rindex('\ncleanup "$REVALIDATION_STATUS"\n')
 
     assert "restore_build_stamp" not in source[after_generators:bindings_dev]
     assert after_generators < browser_local < bindings_local < final_cleanup
@@ -246,6 +395,54 @@ def test_generated_build_stamp_remains_installed_until_cleanup(tmp_path: Path) -
         ),
     )
     assert cleanup_result.returncode == 0, cleanup_result.stderr
+
+
+def test_failed_build_stamp_restoration_is_reported_and_fails_cleanup(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    marker = tmp_path / "site" / ".final-revalidation-server.ABC123"
+    marker.write_text("marker\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "restore_build_stamp"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "git() {\n"
+            "  if [ \"$1\" = checkout ]; then return 1; fi\n"
+            "  command git \"$@\"\n"
+            "}\n"
+            "sleep 30 &\n"
+            "server_pid=$!\n"
+            "SERVER_PID=$server_pid\n"
+            f"MARKER_PATH={shlex.quote(str(marker))}\n"
+            "REVALIDATION_STATUS=0\n"
+            "cleanup\n"
+            "cleanup_status=$?\n"
+            "test \"$cleanup_status\" -eq 1 || exit 80\n"
+            "if [ \"$cleanup_status\" -ne 0 ]; then REVALIDATION_STATUS=1; fi\n"
+            "test \"$REVALIDATION_STATUS\" -eq 1 || exit 81\n"
+            "test ! -e \"$MARKER_PATH\" || exit 82\n"
+            "if kill -0 \"$server_pid\" 2>/dev/null; then exit 83; fi\n"
+            "test \"$(cat site/platform/data/.build-stamp.json)\" = generated || exit 84\n"
+            "exit \"$REVALIDATION_STATUS\"\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert "could not restore generated build stamp" in result.stderr
+    assert "site/platform/data/.build-stamp.json" in result.stderr
+    assert " M site/platform/data/.build-stamp.json" in result.stderr
 
 
 def test_evidence_clear_failure_aborts(tmp_path: Path) -> None:
