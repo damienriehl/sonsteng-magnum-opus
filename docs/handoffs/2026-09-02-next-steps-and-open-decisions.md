@@ -39,12 +39,17 @@ paths is `~/.local/state/ce-handoffs/sonsteng-magnum-opus/2026-09-02-next-steps.
 
 ## Findings this session left for a decision (my observations, not Damien's asks)
 
-1. **The DEV Worker is three weeks stale and carries no release SHA.** The default
-   (non-production) Worker at `sonsteng-chat.damienriehl.workers.dev`, which also serves the
-   editor behind `edit.legalpracticum.org`, was last deployed 2026-08-11T22:58Z, before every
-   Worker change merged since. Its `/edit/release-provenance` answers 503 because `RELEASE_SHA`
-   was never set on that deploy, so the record's DEV binding rows carry a null build key.
-   Redeploying it is a live change for John and Roger's editor, so it is not autonomous.
+1. **Corrected DEV baseline.** The default Worker also serves the editor behind
+   `edit.legalpracticum.org`. A later diff review corrected and narrowed this finding.
+   - **Previous deploy.** `2026-08-23T15:59:30Z`.
+   - **Undeployed surface.** Four files, approximately seventy lines:
+     `app/worker/src/byok.js`, `app/worker/src/editor-auth.js`,
+     `app/worker/src/editor-endpoints.js`, and `app/worker/wrangler.jsonc`.
+   - **Migration check.** No new Durable Object migration.
+   - **Prior provenance.** `/edit/release-provenance` answered HTTP `503` because `RELEASE_SHA`
+     was not set, so the DEV binding rows carried a null build key.
+   - **Live boundary.** Redeploying was a live change for John and Roger's editor, so it was not
+     autonomous.
 2. **Production Worker vars gap (hygiene, not exposure).** `app/worker/wrangler.jsonc` defines
    `EDIT_ACCESS_AUD`, `EDIT_ACCESS_TEAM_DOMAIN`, `EDIT_ACCESS_HOST`, `EDIT_LEGACY_HOST`,
    `PUBLIC_CANONICAL_HOST`, and `PUBLIC_REDIRECT_HOSTS` at the top level but not under
@@ -73,7 +78,7 @@ paths is `~/.local/state/ce-handoffs/sonsteng-magnum-opus/2026-09-02-next-steps.
 
 | # | Decision | Recommendation | Unblocks |
 |---|---|---|---|
-| D1 | Redeploy the default DEV Worker from `main` with `RELEASE_SHA`, at a quiet moment with John and Roger told? | Yes, after checking the Worker diff since 2026-08-11 for anything editor-facing | finding 1; DEV binding provenance |
+| D1 | Redeploy the default DEV Worker from `main` with `RELEASE_SHA`, at a quiet moment with John and Roger told? | Yes, after checking the undeployed Worker diff since the previous `2026-08-23` deploy for anything editor-facing | finding 1; DEV binding provenance |
 | D2 | Add the six missing vars to `env.production.vars` (or record why production does not need them)? | Investigate the code paths first; add only what production reads | finding 2 |
 | D3 | Give DEV a clean-URL nginx config for parity with Pages? | Yes | finding 3; drops the `.html` special case in audits |
 | D4 | Add the persona journeys' local browser leg to `tools/preflight.sh` as a gate? | Yes, local leg only, after the Chromium requirement is documented | finding 4 |
