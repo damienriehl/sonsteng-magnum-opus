@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import select
 import shlex
 import subprocess
 import time
@@ -61,11 +62,67 @@ def shell_function(source: str, name: str) -> str:
     return match.group(0)
 
 
-def shell_tokens(source: str) -> list[str]:
-    lexer = shlex.shlex(source, posix=True, punctuation_chars=True)
+def shell_command_segments(source: str) -> list[list[str]]:
+    lexer = shlex.shlex(
+        source.replace("\\\n", " "),
+        posix=True,
+        punctuation_chars="();<>|&\n",
+    )
+    lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     lexer.commenters = "#"
-    return list(lexer)
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in lexer:
+        if "\n" in token or (token and set(token) <= set(";|&()")):
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]:
+    approved_helper_bodies = (
+        "restore_build_stamp_in_pinned_dir",
+        "with_pinned_dir",
+        "write_server_marker",
+        "open_new_relative_file_fd",
+        "run_with_new_log",
+        "exec_with_new_log",
+        "remove_in_pinned_dir",
+        "write_lock_owner",
+    )
+    inspected = without_shell_functions(source, *approved_helper_bodies)
+    unsafe_commands = {"rm", "mktemp", "mkdir", "mv", "--directory"}
+    output_redirects = {">", ">>", ">|", "&>"}
+    command_prefixes = {"if", "then", "elif", "else", "do", "while", "until", "!"}
+    violations: list[tuple[str, list[str]]] = []
+    for segment in shell_command_segments(inspected):
+        helper_index = next(
+            (
+                index
+                for index, token in enumerate(segment)
+                if token == "with_pinned_dir"
+                and all(
+                    prefix in command_prefixes
+                    or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", prefix)
+                    for prefix in segment[:index]
+                )
+            ),
+            None,
+        )
+        for index, token in enumerate(segment):
+            command_token = token.rsplit("/", 1)[-1]
+            if command_token in unsafe_commands:
+                if helper_index is None or index < helper_index:
+                    violations.append((command_token, segment))
+            elif token in output_redirects:
+                violations.append((token, segment))
+    return violations
 
 
 def without_shell_functions(source: str, *names: str) -> str:
@@ -94,6 +151,75 @@ def run_bash(
         check=False,
         timeout=timeout,
     )
+
+
+def run_synchronized_lock_contenders(
+    path: Path, program_template: str, *, timeout: float = 3
+) -> tuple[int, dict[int, tuple[int, str, str]]]:
+    start_read, start_write = os.pipe()
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        program = (
+            program_template.replace("__START_FD__", str(start_read))
+            .replace("__READY_FD__", str(ready_write))
+            .replace("__RELEASE_FD__", str(release_read))
+        )
+        for _ in range(2):
+            processes.append(
+                subprocess.Popen(
+                    ["bash", "-c", program],
+                    cwd=path,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    pass_fds=(start_read, ready_write, release_read),
+                )
+            )
+        os.close(start_read)
+        start_read = -1
+        os.close(ready_write)
+        ready_write = -1
+        os.close(release_read)
+        release_read = -1
+        os.write(start_write, b"SS")
+        os.close(start_write)
+        start_write = -1
+
+        readable, _, _ = select.select([ready_read], [], [], timeout)
+        assert readable, "neither contender acquired the lock"
+        winner_pid = int(os.read(ready_read, 64).decode("ascii").strip())
+        loser = next(process for process in processes if process.pid != winner_pid)
+        loser_stdout, loser_stderr = loser.communicate(timeout=timeout)
+
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+        winner = next(process for process in processes if process.pid == winner_pid)
+        winner_stdout, winner_stderr = winner.communicate(timeout=timeout)
+        return winner_pid, {
+            winner.pid: (winner.returncode, winner_stdout, winner_stderr),
+            loser.pid: (loser.returncode, loser_stdout, loser_stderr),
+        }
+    finally:
+        for descriptor in (
+            start_read,
+            start_write,
+            ready_read,
+            ready_write,
+            release_read,
+            release_write,
+        ):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
 
 
 def read_process_identity(pid: int) -> tuple[str, str]:
@@ -173,42 +299,20 @@ def test_every_leg_contributes_to_the_final_exit_status() -> None:
 
 def test_all_filesystem_writes_use_pinned_directory_helpers() -> None:
     source = script_source()
-    inspected = without_shell_functions(source, "remove_in_pinned_dir", "with_pinned_dir")
-    assert "rm" not in shell_tokens(inspected)
+    assert unsafe_filesystem_command_tokens(source) == []
 
-    mktemp_lines = [
-        line
-        for line in inspected.splitlines()
-        if re.search(r"(?:^|[\s;|(&])mktemp(?:\s|$)", line)
-    ]
-    assert mktemp_lines
-    assert all(re.search(r"\bwith_pinned_dir\b.*\bmktemp\b", line) for line in mktemp_lines)
-    direct_mktemp_mutant = 'marker=$(mktemp "$ROOT/site/marker.XXXXXX")'
-    assert not re.search(r"\bwith_pinned_dir\b.*\bmktemp\b", direct_mktemp_mutant)
-    pinned_path_redirect = r">{1,2}\s*[\"']?\$\{?(?:ROOT|BUILD_UAT)\}?(?:[/\"]|$)"
-    absolute_directory = r"--directory\s+[\"']?\$\{?ROOT\}?"
-    assert not re.search(pinned_path_redirect, inspected)
-    assert not re.search(absolute_directory, inspected)
-    assert re.search(pinned_path_redirect, 'printf data > "$ROOT/site/marker"')
-    assert re.search(pinned_path_redirect, 'printf data >> "${BUILD_UAT}/final-a11y.log"')
-    assert re.search(absolute_directory, 'python3 -m http.server --directory "$ROOT/site"')
-
-    fixed_log_mutants = [
-        'python3 -m http.server > "$BUILD_UAT/local-server.log"',
-        'node tools/verify_persona_journeys.js >> "${BUILD_UAT}/final-browser-local.log"',
-        'node tools/a11y_audit.js > "$ROOT/build/uat/final-a11y.log"',
-    ]
-    for mutant in fixed_log_mutants:
-        assert re.search(pinned_path_redirect, mutant)
-
-    rm_mutants = [
+    sentinels = [
+        'if false; then mkdir -- "$ROOT/site/mkdir-mutant"; fi',
+        'if false; then mv -- source "$BUILD_UAT/mv-mutant"; fi',
+        "if false; then printf data > site/redirect-mutant; fi",
+        'if false; then with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" true; '
+        'mktemp "$ROOT/site/bypass.XXXXXX"; fi',
         'if rm -rf -- "$ROOT/build/uat/runs"; then :; fi',
-        'value=$(rm -rf -- "$ROOT/build/uat/runs")',
-        '(rm -rf -- "$ROOT/build/uat/runs")',
-        'rm>"$ROOT/build/uat/deletion.log"',
+        'if false; then /bin/rm -rf -- "$ROOT/site/full-path-mutant"; fi',
+        'printf data > "$ROOT/site/redirect-mutant"',
     ]
-    for mutant in rm_mutants:
-        assert "rm" in shell_tokens(inspected + "\n" + mutant + "\n")
+    for mutant in sentinels:
+        assert unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n"), mutant
 
     assert 'remove_in_pinned_dir "$ROOT/site" "$scanner_identity" file' in shell_function(
         source, "remove_stale_server_markers"
@@ -219,6 +323,62 @@ def test_all_filesystem_writes_use_pinned_directory_helpers() -> None:
     assert 'remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree' in shell_function(
         source, "clear_prior_evidence"
     )
+
+
+def test_child_tools_receive_only_the_pinned_repository_root_as_cwd() -> None:
+    source = script_source()
+    root_cd = 'cd "$(dirname "$0")/.." || exit 2'
+    root_capture = "ROOT=$(pwd -P)"
+    assert source.index(root_cd) < source.index(root_capture)
+    assert 'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY"' in shell_function(
+        source, "run_generator"
+    )
+    assert (
+        '"$log_name" "$ROOT" "$ROOT_IDENTITY" node '
+        'tools/verify_persona_journeys.js "$@"'
+    ) in shell_function(source, "run")
+    assert (
+        '"$A11Y_LOG_NAME" "$ROOT" "$ROOT_IDENTITY" node tools/a11y_audit.js'
+    ) in source
+
+    child_invocations = [
+        segment
+        for segment in shell_command_segments(source)
+        if any(
+            child in segment
+            for child in (
+                "tools/build_site.py",
+                "tools/build_instructor_bundle.py",
+                "tools/verify_persona_journeys.js",
+                "tools/a11y_audit.js",
+            )
+        )
+    ]
+    assert len(child_invocations) == 4
+    for segment in child_invocations:
+        child = next(
+            token
+            for token in segment
+            if token
+            in {
+                "tools/build_site.py",
+                "tools/build_instructor_bundle.py",
+                "tools/verify_persona_journeys.js",
+                "tools/a11y_audit.js",
+            }
+        )
+        if child in {"tools/build_site.py", "tools/build_instructor_bundle.py"}:
+            assert "run_generator" in segment
+            assert segment.index("run_generator") < segment.index(child)
+        else:
+            assert "run_with_new_log" in segment
+            command_index = segment.index("run_with_new_log")
+            assert segment[command_index + 2 : command_index + 4] == [
+                "$ROOT",
+                "$ROOT_IDENTITY",
+            ]
+        assert "$ROOT/site" not in segment
+        assert "$ROOT/build/uat" not in segment
 
 
 def test_pinned_helpers_reject_unsafe_names_directory_file_mode_and_empty_identity(
@@ -324,6 +484,12 @@ def test_build_uat_identity_is_captured_before_lock_and_evidence_clear() -> None
     assert main_calls == [clear_position + 1]
     early_clear_mutant = source[:lock_position] + "\nclear_prior_evidence\n" + source[lock_position:]
     assert len(re.findall(r"^clear_prior_evidence$", early_clear_mutant, re.MULTILINE)) == 2
+    lock_helper = shell_function(source, "acquire_revalidation_lock")
+    assert 'open_pinned_directory_fd "$ROOT" "$ROOT_IDENTITY" LOCK_GUARD_FD' in lock_helper
+    assert (
+        'open_pinned_directory_fd "$BUILD_UAT" "$BUILD_UAT_IDENTITY" LOCK_GUARD_FD'
+        not in lock_helper
+    )
 
 
 def test_initial_gate_rejects_non_ignored_untracked_generator_input(tmp_path: Path) -> None:
@@ -1765,6 +1931,7 @@ def test_server_child_does_not_inherit_run_lock_after_owner_crash(tmp_path: Path
     setup = (
         f"set -uo pipefail\n{functions}\n"
         f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
         "BUILD_UAT=\"$ROOT/build/uat\"\n"
         "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
         "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
@@ -1849,66 +2016,113 @@ def test_run_lock_allows_only_one_contender_to_clear_and_enter_legs(
         "clear_prior_evidence",
     ]
     functions = "\n\n".join(shell_function(source, name) for name in function_names)
-    entrants = tmp_path / "entrants"
-    clearers = tmp_path / "clearers"
-    release = tmp_path / "release"
     program = (
         f"set -uo pipefail\n{functions}\n"
         f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
         "BUILD_UAT=\"$ROOT/build/uat\"\n"
         "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
         "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
         "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
         f"SHA={'deadbeef' * 5}\n"
         "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+        "read -r -n 1 <&__START_FD__\n"
         "acquire_revalidation_lock\n"
-        f"printf '%s\\n' \"$$\" >> {shlex.quote(str(clearers))}\n"
         "clear_prior_evidence\n"
-        f"printf '%s\\n' \"$$\" >> {shlex.quote(str(entrants))}\n"
-        f"for _ in {{1..200}}; do [ -e {shlex.quote(str(release))} ] && exit 0; sleep 0.01; done\n"
-        "exit 41\n"
+        "printf '%s\\n' \"$$\" >&__READY_FD__\n"
+        "read -r -n 1 <&__RELEASE_FD__\n"
     )
-
-    processes: list[subprocess.Popen[str]] = []
-    for _ in range(2):
-        process = subprocess.Popen(
-            ["bash"],
-            cwd=tmp_path,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        assert process.stdin is not None
-        process.stdin.write(program)
-        process.stdin.close()
-        processes.append(process)
-
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline and not entrants.exists():
-        time.sleep(0.01)
-    assert entrants.exists(), "neither contender acquired the lock"
-
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline and all(process.poll() is None for process in processes):
-        time.sleep(0.01)
-    release.write_text("release\n", encoding="utf-8")
-    for process in processes:
-        process.wait(timeout=3)
-
-    results = []
-    for process in processes:
-        assert process.stdout is not None
-        assert process.stderr is not None
-        results.append((process.returncode, process.stdout.read(), process.stderr.read()))
+    _, results_by_pid = run_synchronized_lock_contenders(tmp_path, program)
+    results = list(results_by_pid.values())
     assert sorted(result[0] == 0 for result in results) == [False, True]
-    assert len(entrants.read_text(encoding="utf-8").splitlines()) == 1
-    assert len(clearers.read_text(encoding="utf-8").splitlines()) == 1
     loser = next(result for result in results if result[0] != 0)
     assert "another final revalidation run owns build/uat/" in loser[2]
     assert not (build_uat / "runs").exists()
     assert not (build_uat / "shots").exists()
     assert not (build_uat / ".final-revalidation.lock").exists()
+
+
+def test_run_lock_stays_per_worktree_when_build_uat_is_replaced(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    setup = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+    )
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    winner = subprocess.Popen(
+        [
+            "bash",
+            "-c",
+            setup
+            + "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+            + "acquire_revalidation_lock\n"
+            + f"printf '%s\\n' \"$$\" >&{ready_write}\n"
+            + f"read -r -n 1 <&{release_read}\n",
+        ],
+        cwd=tmp_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        pass_fds=(ready_write, release_read),
+    )
+    os.close(ready_write)
+    os.close(release_read)
+    try:
+        readable, _, _ = select.select([ready_read], [], [], 3)
+        assert readable, "winner did not acquire the worktree lock"
+        assert int(os.read(ready_read, 64).decode("ascii").strip()) == winner.pid
+
+        original_uat = tmp_path / "build" / "uat-original"
+        build_uat.rename(original_uat)
+        build_uat.mkdir()
+        contender = run_bash(
+            tmp_path,
+            setup
+            + "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            + "acquire_revalidation_lock\n",
+            timeout=3,
+        )
+        assert contender.returncode != 0
+        assert "another final revalidation run owns build/uat/" in contender.stderr
+
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+        winner_stdout, winner_stderr = winner.communicate(timeout=3)
+        assert winner.returncode == 0, winner_stdout + winner_stderr
+        assert not (build_uat / ".final-revalidation.lock").exists()
+    finally:
+        os.close(ready_read)
+        if release_write >= 0:
+            os.close(release_write)
+        if winner.poll() is None:
+            winner.kill()
+            winner.communicate()
 
 
 def test_dead_run_lock_is_recovered_before_acquisition(tmp_path: Path) -> None:
@@ -1938,6 +2152,8 @@ def test_dead_run_lock_is_recovered_before_acquisition(tmp_path: Path) -> None:
         tmp_path,
         (
             f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
             f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
             "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
             "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
@@ -1981,6 +2197,8 @@ def test_live_lock_is_preserved_but_reused_pid_lock_is_recovered(tmp_path: Path)
     functions = "\n\n".join(shell_function(source, name) for name in function_names)
     setup = (
         f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
         f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
         "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
         "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
@@ -2034,6 +2252,8 @@ def test_malformed_and_uncertain_lock_owners_are_preserved(tmp_path: Path) -> No
             (lock / "owner").write_text(owner_contents, encoding="utf-8")
         setup = (
             f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path / label))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
             f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
             "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
             "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
@@ -2054,6 +2274,8 @@ def test_malformed_and_uncertain_lock_owners_are_preserved(tmp_path: Path) -> No
         "process_identity() {\n"
         "  if [ \"$1\" = \"$$\" ]; then printf 'S 1\\n'; else return 1; fi\n"
         "}\n"
+        f"ROOT={shlex.quote(str(tmp_path / 'uncertain'))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
         f"BUILD_UAT={shlex.quote(str(uncertain_uat))}\n"
         "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
         "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
@@ -2092,6 +2314,8 @@ def test_lock_initialization_failure_removes_partial_owned_lock(tmp_path: Path) 
         (
             f"set -uo pipefail\n{functions}\n"
             "write_lock_owner() { return 1; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
             f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
             "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
             "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
@@ -2129,54 +2353,24 @@ def test_two_contenders_serialize_stale_lock_recovery(tmp_path: Path) -> None:
         "release_revalidation_lock",
     ]
     functions = "\n\n".join(shell_function(source, name) for name in function_names)
-    entrants = tmp_path / "stale-entrants"
-    release = tmp_path / "stale-release"
     program = (
         f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
         f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
         "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
         "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
         "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
         f"SHA={'deadbeef' * 5}\n"
         "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+        "read -r -n 1 <&__START_FD__\n"
         "acquire_revalidation_lock\n"
-        f"printf '%s\\n' \"$$\" >> {shlex.quote(str(entrants))}\n"
-        f"for _ in {{1..200}}; do [ -e {shlex.quote(str(release))} ] && exit 0; sleep 0.01; done\n"
-        "exit 41\n"
+        "printf '%s\\n' \"$$\" >&__READY_FD__\n"
+        "read -r -n 1 <&__RELEASE_FD__\n"
     )
-    processes: list[subprocess.Popen[str]] = []
-    for _ in range(2):
-        process = subprocess.Popen(
-            ["bash"],
-            cwd=tmp_path,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        assert process.stdin is not None
-        process.stdin.write(program)
-        process.stdin.close()
-        processes.append(process)
-
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline and not entrants.exists():
-        time.sleep(0.01)
-    assert entrants.exists(), "neither contender recovered the stale lock"
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline and all(process.poll() is None for process in processes):
-        time.sleep(0.01)
-    release.write_text("release\n", encoding="utf-8")
-    for process in processes:
-        process.wait(timeout=3)
-
-    results = []
-    for process in processes:
-        assert process.stdout is not None
-        assert process.stderr is not None
-        results.append((process.returncode, process.stdout.read(), process.stderr.read()))
+    _, results_by_pid = run_synchronized_lock_contenders(tmp_path, program)
+    results = list(results_by_pid.values())
     assert sorted(result[0] == 0 for result in results) == [False, True]
-    assert len(entrants.read_text(encoding="utf-8").splitlines()) == 1
     assert sum("removed stale final-revalidation lock" in result[1] for result in results) == 1
     loser = next(result for result in results if result[0] != 0)
     assert "another final revalidation run owns build/uat/" in loser[2]

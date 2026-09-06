@@ -21,6 +21,12 @@
 # SHA under test; tracked and non-ignored untracked changes are rejected so
 # every run file describes one repository revision. The script writes logs and
 # run evidence under build/uat/.
+#
+# The script never creates, writes, deletes, or serves outside the physical site/
+# and build/uat/ directories it validated. Child tools it invokes (site generator,
+# instructor bundle, journey runner, and accessibility audit) resolve repository
+# paths themselves and are outside that guarantee, so a same-user directory swap
+# during a child's run is out of scope.
 # ============================================================================
 set -uo pipefail
 
@@ -289,7 +295,7 @@ process_identity() {
   local pid=$1 stat_line stat_tail
   local -a stat_fields
   if ! [[ "$pid" =~ ^[1-9][0-9]*$ ]] || \
-      ! IFS= read -r stat_line 2>/dev/null < "/proc/$pid/stat"; then
+      ! IFS= read -r stat_line 2>&- < "/proc/$pid/stat"; then
     return 1
   fi
   stat_tail=${stat_line##*) }
@@ -352,7 +358,7 @@ remove_stale_server_markers() {
               [ "$current_start_ticks" = "$marker_start_ticks" ]; }; then
           continue
         fi
-      elif kill -0 "$marker_pid" 2>/dev/null || [ -d "/proc/$marker_pid" ]; then
+      elif kill -0 "$marker_pid" 2>&- || [ -d "/proc/$marker_pid" ]; then
         continue
       fi
       remove_in_pinned_dir "$ROOT/site" "$scanner_identity" file "$marker_name" || \
@@ -425,16 +431,17 @@ open_pinned_directory_fd() {
 
 acquire_revalidation_lock() {
   local attempt current_identity current_start_ticks existing_identity
-  local existing_token lock_owner_pid lock_owner_start_ticks process_state
+  local existing_token flock_command lock_owner_pid lock_owner_start_ticks process_state
 
   current_identity=$(process_identity "$$") || \
     die "could not read this revalidation process identity for the run lock"
   read -r _ current_start_ticks <<< "$current_identity"
   LOCK_TOKEN="final-revalidation:$SHA:$$:$current_start_ticks:$RANDOM"
 
-  command -v flock >/dev/null 2>&1 || die "flock is required for the run lock"
-  open_pinned_directory_fd "$BUILD_UAT" "$BUILD_UAT_IDENTITY" LOCK_GUARD_FD || \
-    die "could not pin build/uat/ for the final-revalidation run lock"
+  flock_command=$(command -v flock) || die "flock is required for the run lock"
+  [ -n "$flock_command" ] || die "flock is required for the run lock"
+  open_pinned_directory_fd "$ROOT" "$ROOT_IDENTITY" LOCK_GUARD_FD || \
+    die "could not pin the repository root for the final-revalidation run lock"
   if ! flock -n "$LOCK_GUARD_FD"; then
     exec {LOCK_GUARD_FD}<&-
     LOCK_GUARD_FD=""
@@ -475,7 +482,7 @@ acquire_revalidation_lock() {
           [ "$current_start_ticks" = "$lock_owner_start_ticks" ]; then
         die "another final revalidation run owns build/uat/ (pid $lock_owner_pid)"
       fi
-    elif kill -0 "$lock_owner_pid" 2>/dev/null || [ -d "/proc/$lock_owner_pid" ]; then
+    elif kill -0 "$lock_owner_pid" 2>&- || [ -d "/proc/$lock_owner_pid" ]; then
       die "another final revalidation run owns build/uat/ (pid $lock_owner_pid identity is unreadable)"
     fi
     remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree "$LOCK_NAME" || \
@@ -514,8 +521,8 @@ record_status() {
 cleanup() {
   local marker_name=${MARKER_NAME:-} status=${1:-0}
   if [ -n "$SERVER_PID" ]; then
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    kill "$SERVER_PID" 2>&- || true
+    wait "$SERVER_PID" 2>&- || true
   fi
   if [ -z "$marker_name" ] && [ -n "${MARKER_PATH:-}" ]; then
     marker_name=${MARKER_PATH##*/}
@@ -569,7 +576,7 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
   die "LOCAL_PORT must be an integer from 1 through 65535"
 fi
 PORT=$((10#$PORT))
-if ((PORT < 1 || PORT > 65535)); then
+if ((PORT < 1 || 65535 < PORT)); then
   die "LOCAL_PORT must be an integer from 1 through 65535"
 fi
 
@@ -615,10 +622,11 @@ with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" write_server_marker \
 MARKER_URL="http://127.0.0.1:$PORT/$MARKER_NAME"
 
 server_matches_worktree() {
-  [ "$(curl -fsS --max-time 2 "$MARKER_URL" 2>/dev/null)" = "$MARKER_TOKEN" ]
+  [ "$(curl -fsS --max-time 2 "$MARKER_URL" 2>&-)" = "$MARKER_TOKEN" ]
 }
 
-command -v curl >/dev/null 2>&1 || die "curl is required to verify the local server"
+CURL_COMMAND=$(command -v curl) || die "curl is required to verify the local server"
+[ -n "$CURL_COMMAND" ] || die "curl is required to verify the local server"
 if server_matches_worktree; then
   printf 'reusing this worktree\047s site/ server on port %s\n' "$PORT"
 else
@@ -634,8 +642,8 @@ else
       server_ready=1
       break
     fi
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-      wait "$SERVER_PID" 2>/dev/null || true
+    if ! kill -0 "$SERVER_PID" 2>&-; then
+      wait "$SERVER_PID" 2>&- || true
       die "LOCAL_PORT $PORT is occupied or the local server failed; see build/uat/$SERVER_LOG_NAME"
     fi
     sleep 0.25
@@ -648,7 +656,11 @@ fi
 run_generator() {
   local label=$1
   shift
-  if ! (close_inherited_pinning_fds && exec "$@"); then
+  if ! (
+    enter_pinned_dir "$ROOT" "$ROOT_IDENTITY" &&
+      close_inherited_pinning_fds &&
+      exec "$@"
+  ); then
     die "generator failed: $label"
   fi
 }
