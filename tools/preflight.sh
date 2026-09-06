@@ -26,6 +26,22 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
+resolve_node_binary() {
+  local candidate
+  # Resolve from fixed system toolchain locations so an inherited PATH cannot
+  # replace the interpreter after preflight starts.
+  for candidate in /usr/bin/node /usr/local/bin/node /opt/homebrew/bin/node /bin/node; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+NODE_BIN=$(resolve_node_binary) || NODE_BIN=""
+readonly NODE_BIN
+
 WANT_BROWSER=1
 [ "${1:-}" = "--no-browser" ] && WANT_BROWSER=0
 if [ "${HEADFUL:-0}" = "1" ]; then
@@ -66,8 +82,22 @@ free_loopback_port() {
   python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
 }
 
+monotonic_millis() {
+  local destination="$1" value
+  if ! value=$(python3 -c 'import time; print(time.monotonic_ns() // 1_000_000)'); then
+    return 1
+  fi
+  [[ "$value" =~ ^[0-9]+$ ]] || return 1
+  printf -v "$destination" '%s' "$value"
+}
+
 run_local_persona_journeys() (
-  local browser_bin port server_pid ready status
+  local browser_bin port server_pid ready status now readiness_deadline
+  local remaining_ms probe_budget_ms probe_timeout sleep_budget_ms sleep_delay
+  if [ -z "$NODE_BIN" ]; then
+    printf 'Node unavailable in the trusted system toolchain.\n' >&2
+    return 1
+  fi
   if ! browser_bin=$(find_chromium); then
     printf 'Chromium/Chrome unavailable. Install Chromium or Google Chrome (or set CHROME_BIN).\n' >&2
     return 1
@@ -86,11 +116,28 @@ run_local_persona_journeys() (
   trap cleanup EXIT
 
   ready=0
-  # Six attempts × (0.75s request ceiling + 0.10s sleep) = a 5.1s probe budget.
-  for _ in $(seq 1 6); do
+  if ! monotonic_millis now; then
+    printf 'Could not read the monotonic clock for persona-journey readiness.\n' >&2
+    return 1
+  fi
+  readiness_deadline=$((now + 5000))
+  # Keep the complete readiness operation inside five elapsed seconds. Normal
+  # probes retain the 0.75s request ceiling; the final probe and delay use only
+  # the time that remains before the deadline.
+  while :; do
+    if ! monotonic_millis now; then
+      printf 'Could not read the monotonic clock for persona-journey readiness.\n' >&2
+      return 1
+    fi
+    remaining_ms=$((readiness_deadline - now))
+    ((remaining_ms > 0)) || break
+    probe_budget_ms=$remaining_ms
+    ((probe_budget_ms > 750)) && probe_budget_ms=750
+    printf -v probe_timeout '%d.%03d' \
+      "$((probe_budget_ms / 1000))" "$((probe_budget_ms % 1000))"
     if curl -fsS \
         --connect-timeout 0.5 \
-        --max-time 0.75 \
+        --max-time "$probe_timeout" \
         "http://127.0.0.1:$port/" >/dev/null 2>&1; then
       ready=1
       break
@@ -99,14 +146,25 @@ run_local_persona_journeys() (
       printf 'Local persona-journey server exited before becoming ready.\n' >&2
       return 1
     fi
-    sleep 0.10
+    if ! monotonic_millis now; then
+      printf 'Could not read the monotonic clock for persona-journey readiness.\n' >&2
+      return 1
+    fi
+    remaining_ms=$((readiness_deadline - now))
+    ((remaining_ms > 0)) || break
+    sleep_budget_ms=$remaining_ms
+    ((sleep_budget_ms > 100)) && sleep_budget_ms=100
+    printf -v sleep_delay '%d.%03d' \
+      "$((sleep_budget_ms / 1000))" "$((sleep_budget_ms % 1000))"
+    sleep "$sleep_delay"
   done
   if [ "$ready" != "1" ]; then
     printf 'Local persona-journey server did not become ready.\n' >&2
     return 1
   fi
 
-  CHROME_BIN="$browser_bin" node tools/verify_persona_journeys.js \
+  unset NODE_OPTIONS NODE_PATH
+  CHROME_BIN="$browser_bin" "$NODE_BIN" tools/verify_persona_journeys.js \
       --base "http://127.0.0.1:$port" \
       --env-label local \
       --run-dir "$ROOT/build/uat/preflight/runs" \

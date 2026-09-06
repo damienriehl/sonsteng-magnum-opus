@@ -243,19 +243,56 @@ def _run_persona_gate(
     tmp_path: Path,
     runner_exit: int,
     inherited_runner_override: Path | None = None,
-) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+    *,
+    curl_failures: int = 0,
+    fake_clock_step_ms: int | None = None,
+    fake_clock_fail_after: int | None = None,
+    fake_probe_elapsed_ms: int = 0,
+) -> tuple[
+    subprocess.CompletedProcess[str],
+    list[list[str]],
+    list[str],
+    list[str],
+]:
     source = PREFLIGHT.read_text(encoding="utf-8")
     functions = source[
-        source.index("find_chromium() {") : source.index("# ---- headless gates")
+        source.index("resolve_node_binary() {") : source.index("# ---- headless gates")
     ]
     definitions = tmp_path / "preflight-functions.sh"
     definitions.write_text(functions, encoding="utf-8")
+
+    repo_root = tmp_path / "repo"
+    (repo_root / "site").mkdir(parents=True)
+    (repo_root / "tools").mkdir()
+    (repo_root / "tools" / "verify_persona_journeys.js").write_text(
+        textwrap.dedent(
+            """\
+            const fs = require('node:fs');
+            fs.writeFileSync(
+              process.env.RUNNER_ARGS_FILE,
+              `${process.argv.slice(1).join('\\n')}\\n`,
+            );
+            fs.writeFileSync(
+              process.env.RUNNER_ENV_FILE,
+              `${process.env.NODE_OPTIONS ?? '<unset>'}\\n` +
+                `${process.env.NODE_PATH ?? '<unset>'}\\n`,
+            );
+            process.exit(Number(process.env.STUB_RUNNER_EXIT));
+            """
+        ),
+        encoding="utf-8",
+    )
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     server_pid_file = tmp_path / "server.pid"
     curl_args_file = tmp_path / "curl.args"
+    curl_count_file = tmp_path / "curl.count"
     runner_args_file = tmp_path / "runner.args"
+    runner_env_file = tmp_path / "runner.env"
+    sleep_args_file = tmp_path / "sleep.args"
+    fake_clock_file = tmp_path / "fake-clock.ms"
+    fake_node_marker = tmp_path / "fake-node-ran"
     browser = tmp_path / "browser"
 
     _write_executable(browser, "#!/usr/bin/env bash\nexit 0\n")
@@ -264,8 +301,8 @@ def _run_persona_gate(
         textwrap.dedent(
             """\
             #!/usr/bin/env bash
-            printf '%s\n' "$@" > "$RUNNER_ARGS_FILE"
-            exit "$STUB_RUNNER_EXIT"
+            : > "$FAKE_NODE_MARKER"
+            exit 99
             """
         ),
     )
@@ -276,9 +313,12 @@ def _run_persona_gate(
             #!/usr/bin/env bash
             if [ "${1:-}" = "-m" ] && [ "${2:-}" = "http.server" ]; then
               printf '%s\n' "$$" > "$SERVER_PID_FILE"
-              exec sleep 30
+              exec /bin/sleep 30
             fi
             if [ "${1:-}" = "-c" ]; then
+              if [[ "${2:-}" == *"time.monotonic_ns"* ]]; then
+                exec "$TRUSTED_PYTHON_BIN" "$@"
+              fi
               printf '49152\n'
               exit 0
             fi
@@ -293,9 +333,36 @@ def _run_persona_gate(
             #!/usr/bin/env bash
             for _ in $(seq 1 100); do
               [ -s "$SERVER_PID_FILE" ] && break
-              sleep 0.01
+              /bin/sleep 0.01
             done
-            printf '%s\n' "$@" > "$CURL_ARGS_FILE"
+            count=0
+            [ ! -f "$CURL_COUNT_FILE" ] || count=$(cat "$CURL_COUNT_FILE")
+            count=$((count + 1))
+            printf '%s\n' "$count" > "$CURL_COUNT_FILE"
+            {
+              printf 'CALL\n'
+              printf '%s\n' "$@"
+            } >> "$CURL_ARGS_FILE"
+            if [ "$FAKE_PROBE_ELAPSED_MS" -gt 0 ]; then
+              timeout_seconds=""
+              while [ "$#" -gt 0 ]; do
+                if [ "$1" = "--max-time" ]; then
+                  timeout_seconds="$2"
+                  break
+                fi
+                shift
+              done
+              whole="${timeout_seconds%%.*}"
+              fraction="${timeout_seconds#*.}000"
+              timeout_ms=$((10#$whole * 1000 + 10#${fraction:0:3}))
+              elapsed_ms=$FAKE_PROBE_ELAPSED_MS
+              [ "$elapsed_ms" -le "$timeout_ms" ] || elapsed_ms=$timeout_ms
+              now=$(cat "$FAKE_CLOCK_FILE")
+              printf '%s\n' "$((now + elapsed_ms))" > "$FAKE_CLOCK_FILE"
+            fi
+            if [ "$count" -le "$STUB_CURL_FAILURES" ]; then
+              exit 7
+            fi
             exit 0
             """
         ),
@@ -307,12 +374,29 @@ def _run_persona_gate(
         {
             "CHROME_BIN": str(browser),
             "CURL_ARGS_FILE": str(curl_args_file),
+            "CURL_COUNT_FILE": str(curl_count_file),
+            "FAKE_CLOCK_STEP_MS": (
+                "" if fake_clock_step_ms is None else str(fake_clock_step_ms)
+            ),
+            "FAKE_CLOCK_FILE": str(fake_clock_file),
+            "FAKE_CLOCK_FAIL_AFTER": (
+                "" if fake_clock_fail_after is None else str(fake_clock_fail_after)
+            ),
+            "FAKE_PROBE_ELAPSED_MS": str(fake_probe_elapsed_ms),
+            "FAKE_NODE_MARKER": str(fake_node_marker),
+            "NODE_OPTIONS": "--require=/hostile/path/node-options-shadow.js",
+            "NODE_PATH": "/hostile/path/node-modules-shadow",
             "PATH": f"{bin_dir}:{env['PATH']}",
             "PREFLIGHT_FUNCTIONS": str(definitions),
-            "REPO_ROOT": str(ROOT),
+            "REPO_ROOT": str(repo_root),
             "RUNNER_ARGS_FILE": str(runner_args_file),
+            "RUNNER_ENV_FILE": str(runner_env_file),
             "SERVER_PID_FILE": str(server_pid_file),
+            "SLEEP_ARGS_FILE": str(sleep_args_file),
+            "STUB_CURL_FAILURES": str(curl_failures),
             "STUB_RUNNER_EXIT": str(runner_exit),
+            "TRUSTED_PYTHON_BIN": shutil.which("python3", path=env["PATH"])
+            or "python3",
         }
     )
     if inherited_runner_override is not None:
@@ -321,6 +405,29 @@ def _run_persona_gate(
         """\
         source "$PREFLIGHT_FUNCTIONS"
         ROOT="$REPO_ROOT"
+        if [ -n "$FAKE_CLOCK_STEP_MS" ]; then
+          printf '0\n' > "$FAKE_CLOCK_FILE"
+          fake_clock_calls=0
+          monotonic_millis() {
+            fake_clock_calls=$((fake_clock_calls + 1))
+            if [ -n "$FAKE_CLOCK_FAIL_AFTER" ] && \
+                [ "$fake_clock_calls" -gt "$FAKE_CLOCK_FAIL_AFTER" ]; then
+              return 1
+            fi
+            printf -v "$1" '%d' "$(cat "$FAKE_CLOCK_FILE")"
+          }
+          sleep() {
+            printf '%s\n' "$@" >> "$SLEEP_ARGS_FILE"
+            sleep_seconds="$1"
+            whole="${sleep_seconds%%.*}"
+            fraction="${sleep_seconds#*.}000"
+            requested_ms=$((10#$whole * 1000 + 10#${fraction:0:3}))
+            elapsed_ms=$FAKE_CLOCK_STEP_MS
+            [ "$elapsed_ms" -le "$requested_ms" ] || elapsed_ms=$requested_ms
+            fake_time_ms=$(cat "$FAKE_CLOCK_FILE")
+            printf '%s\n' "$((fake_time_ms + elapsed_ms))" > "$FAKE_CLOCK_FILE"
+          }
+        fi
         if run_local_persona_journeys; then
           gate_status=0
         else
@@ -337,24 +444,29 @@ def _run_persona_gate(
     )
     result = subprocess.run(
         ["bash", "-c", harness],
-        cwd=ROOT,
+        cwd=repo_root,
         env=env,
         check=False,
         capture_output=True,
         text=True,
         timeout=10,
     )
-    curl_arguments = (
-        curl_args_file.read_text(encoding="utf-8").splitlines()
-        if curl_args_file.exists()
-        else []
-    )
+    curl_calls: list[list[str]] = []
+    if curl_args_file.exists():
+        for call in curl_args_file.read_text(encoding="utf-8").split("CALL\n"):
+            if call:
+                curl_calls.append(call.splitlines())
     runner_arguments = (
         runner_args_file.read_text(encoding="utf-8").splitlines()
         if runner_args_file.exists()
         else []
     )
-    return result, curl_arguments, runner_arguments
+    sleep_arguments = (
+        sleep_args_file.read_text(encoding="utf-8").splitlines()
+        if sleep_args_file.exists()
+        else []
+    )
+    return result, curl_calls, runner_arguments, sleep_arguments
 
 
 @pytest.mark.parametrize("runner_exit", [0, 23])
@@ -362,20 +474,24 @@ def test_preflight_persona_gate_propagates_status_and_cleans_up_server(
     tmp_path: Path,
     runner_exit: int,
 ) -> None:
-    result, curl_arguments, runner_arguments = _run_persona_gate(tmp_path, runner_exit)
+    result, curl_calls, runner_arguments, _ = _run_persona_gate(
+        tmp_path, runner_exit
+    )
 
     assert result.returncode == runner_exit, result.stdout + result.stderr
     assert runner_arguments == [
-        "tools/verify_persona_journeys.js",
+        str(tmp_path / "repo" / "tools" / "verify_persona_journeys.js"),
         "--base",
         "http://127.0.0.1:49152",
         "--env-label",
         "local",
         "--run-dir",
-        str(ROOT / "build" / "uat" / "preflight" / "runs"),
+        str(tmp_path / "repo" / "build" / "uat" / "preflight" / "runs"),
         "--shots-dir",
-        str(ROOT / "build" / "uat" / "preflight" / "shots"),
+        str(tmp_path / "repo" / "build" / "uat" / "preflight" / "shots"),
     ]
+    assert len(curl_calls) == 1
+    curl_arguments = curl_calls[0]
     assert "--connect-timeout" in curl_arguments
     assert "--max-time" in curl_arguments
     connect_timeout = float(
@@ -392,14 +508,149 @@ def test_preflight_persona_gate_ignores_inherited_runner_override(
     bypass_runner = tmp_path / "bypass-runner.js"
     bypass_runner.write_text("process.exit(0);\n", encoding="utf-8")
 
-    result, _, runner_arguments = _run_persona_gate(
+    result, _, runner_arguments, _ = _run_persona_gate(
         tmp_path,
         runner_exit=23,
         inherited_runner_override=bypass_runner,
     )
 
     assert result.returncode == 23, result.stdout + result.stderr
-    assert runner_arguments[0] == "tools/verify_persona_journeys.js"
+    assert runner_arguments[0] == str(
+        tmp_path / "repo" / "tools" / "verify_persona_journeys.js"
+    )
+
+
+def test_preflight_persona_gate_uses_pinned_node_when_path_is_shadowed(
+    tmp_path: Path,
+) -> None:
+    result, _, _, _ = _run_persona_gate(tmp_path, runner_exit=23)
+
+    assert result.returncode == 23, result.stdout + result.stderr
+    assert not (tmp_path / "fake-node-ran").exists()
+    assert (tmp_path / "runner.env").read_text(encoding="utf-8") == (
+        "<unset>\n<unset>\n"
+    )
+
+
+def test_preflight_persona_gate_retries_with_delay_until_ready(tmp_path: Path) -> None:
+    result, curl_calls, _, sleep_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        curl_failures=5,
+        fake_clock_step_ms=100,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(curl_calls) == 6
+    assert sleep_arguments == ["0.100"] * 5
+
+
+def test_preflight_persona_gate_stops_probing_at_readiness_deadline(
+    tmp_path: Path,
+) -> None:
+    result, curl_calls, runner_arguments, sleep_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        curl_failures=100,
+        fake_clock_step_ms=1_000,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert len(curl_calls) == 50
+    assert sleep_arguments == ["0.100"] * 50
+    assert not runner_arguments
+
+
+def test_preflight_persona_gate_caps_slow_probe_at_readiness_deadline(
+    tmp_path: Path,
+) -> None:
+    result, curl_calls, runner_arguments, sleep_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        curl_failures=100,
+        fake_clock_step_ms=100,
+        fake_probe_elapsed_ms=700,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert len(curl_calls) == 7
+    assert [call[call.index("--max-time") + 1] for call in curl_calls] == [
+        "0.750",
+        "0.750",
+        "0.750",
+        "0.750",
+        "0.750",
+        "0.750",
+        "0.200",
+    ]
+    assert sleep_arguments == ["0.100"] * 6
+    assert int((tmp_path / "fake-clock.ms").read_text(encoding="utf-8")) == 5000
+    assert not runner_arguments
+
+
+def test_preflight_persona_gate_caps_final_sleep_at_readiness_deadline(
+    tmp_path: Path,
+) -> None:
+    result, _, runner_arguments, sleep_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        curl_failures=100,
+        fake_clock_step_ms=100,
+        fake_probe_elapsed_ms=740,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert sleep_arguments == ["0.100"] * 5 + ["0.060"]
+    assert int((tmp_path / "fake-clock.ms").read_text(encoding="utf-8")) == 5000
+    assert not runner_arguments
+
+
+def test_preflight_persona_gate_cleans_up_when_clock_fails(tmp_path: Path) -> None:
+    result, curl_calls, runner_arguments, sleep_arguments = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        fake_clock_step_ms=100,
+        fake_clock_fail_after=1,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Could not read the monotonic clock" in result.stderr
+    assert not curl_calls
+    assert not runner_arguments
+    assert not sleep_arguments
+
+
+def test_preflight_monotonic_clock_uses_portable_python_runtime(
+    tmp_path: Path,
+) -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    clock_function = source[
+        source.index("monotonic_millis() {") : source.index(
+            "run_local_persona_journeys() ("
+        )
+    ]
+    assert "/proc/" not in clock_function
+    definitions = tmp_path / "monotonic-clock.sh"
+    definitions.write_text(clock_function, encoding="utf-8")
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'source "$CLOCK_FUNCTION"; '
+            "monotonic_millis before; /bin/sleep 0.02; "
+            "monotonic_millis after; "
+            'printf "%s\\n%s\\n" "$before" "$after"',
+        ],
+        env={**os.environ, "CLOCK_FUNCTION": str(definitions)},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    before, after = (int(value) for value in result.stdout.splitlines())
+    assert before >= 0
+    assert after > before
 
 
 def test_preflight_persona_gate_requires_a_browser_and_is_skippable() -> None:
