@@ -24,9 +24,9 @@
 #
 # The script never creates, writes, deletes, or serves outside the physical site/
 # and build/uat/ directories it validated. Child tools it invokes (site generator,
-# instructor bundle, journey runner, and accessibility audit) resolve repository
-# paths themselves and are outside that guarantee, so a same-user directory swap
-# during a child's run is out of scope.
+# instructor bundle, editor-data bundle, journey runner, and accessibility audit)
+# resolve repository paths themselves and are outside that guarantee, so a same-user
+# directory swap during a child's run is out of scope.
 # ============================================================================
 set -uo pipefail
 
@@ -411,6 +411,33 @@ write_lock_owner() {
   return "$status"
 }
 
+initialize_revalidation_lock() {
+  local relative_lock_name=$1 token=$2 expected_parent_identity=$3
+  local created_identity current_identity lock_identity lock_status
+  case "$relative_lock_name" in
+    ""|.|..|/*|*/*) return 2 ;;
+  esac
+  [ -n "$expected_parent_identity" ] || return 2
+  lock_identity=$(
+    mkdir -- "$relative_lock_name" || exit 1
+    cd -P -- "$relative_lock_name" || exit 2
+    [ "$(stat -Lc '%d:%i' -- ..)" = "$expected_parent_identity" ] || exit 2
+    created_identity=$(stat -Lc '%d:%i' -- .) || exit 2
+    if ! write_lock_owner owner "$token"; then
+      cd .. || exit 2
+      current_identity=$(stat -c '%d:%i' -- "$relative_lock_name") || exit 2
+      if [ "$current_identity" = "$created_identity" ]; then
+        rm -rf -- "$relative_lock_name" || true
+      fi
+      exit 2
+    fi
+    stat -Lc '%d:%i' -- .
+  )
+  lock_status=$?
+  [ "$lock_status" -eq 0 ] || return "$lock_status"
+  printf '%s\n' "$lock_identity"
+}
+
 open_pinned_directory_fd() {
   local expected_physical_dir=$1 expected_identity=$2 output_variable=$3
   local actual_identity directory_fd
@@ -431,7 +458,7 @@ open_pinned_directory_fd() {
 
 acquire_revalidation_lock() {
   local attempt current_identity current_start_ticks existing_identity
-  local existing_token flock_command lock_owner_pid lock_owner_start_ticks process_state
+  local existing_token flock_command lock_owner_pid lock_owner_start_ticks lock_status process_state
 
   current_identity=$(process_identity "$$") || \
     die "could not read this revalidation process identity for the run lock"
@@ -449,18 +476,16 @@ acquire_revalidation_lock() {
   fi
 
   for attempt in 1 2; do
-    if with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" mkdir -- "$LOCK_NAME"; then
-      LOCK_IDENTITY=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME") || \
-        die "could not identify the newly acquired final-revalidation lock"
+    LOCK_INITIALIZING=1
+    LOCK_IDENTITY=$(with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" \
+      initialize_revalidation_lock "$LOCK_NAME" "$LOCK_TOKEN" "$BUILD_UAT_IDENTITY")
+    lock_status=$?
+    LOCK_INITIALIZING=0
+    if [ "$lock_status" -eq 0 ]; then
       LOCK_HELD=1
-      LOCK_INITIALIZING=1
-      if ! with_pinned_dir "$BUILD_UAT/$LOCK_NAME" "$LOCK_IDENTITY" \
-          write_lock_owner owner "$LOCK_TOKEN"; then
-        die "could not initialize the final-revalidation run lock"
-      fi
-      LOCK_INITIALIZING=0
       return 0
     fi
+    [ "$lock_status" -eq 1 ] || die "could not initialize the final-revalidation run lock"
 
     existing_identity=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME") || \
       die "another final revalidation run owns build/uat/ (lock is unsafe or initializing)"
