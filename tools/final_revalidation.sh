@@ -31,12 +31,24 @@ DEV_BASE=${DEV_BASE:-https://sonsteng-dev.damienriehl.com}
 PROD_BASE=${PROD_BASE:-https://legalpracticum.org}
 DEV_BASE=${DEV_BASE%/}
 PROD_BASE=${PROD_BASE%/}
-BUILD_UAT="$ROOT/build/uat/"
+BUILD_UAT="$ROOT/build/uat"
+ROOT_IDENTITY=""
+BUILD_IDENTITY=""
 BUILD_UAT_IDENTITY=""
+BUILD_STAMP_DIR="$ROOT/site/platform/data"
+BUILD_STAMP_DIR_IDENTITY=""
+BUILD_STAMP_DIRTY=0
 SERVER_PID=""
 MARKER_PATH=""
 MARKER_NAME=""
+MARKER_FILE_IDENTITY=""
 SITE_IDENTITY=""
+LOCK_NAME=.final-revalidation.lock
+LOCK_IDENTITY=""
+LOCK_TOKEN=""
+LOCK_HELD=0
+LOCK_INITIALIZING=0
+LOCK_GUARD_FD=""
 REVALIDATION_STATUS=0
 
 die() {
@@ -47,7 +59,10 @@ die() {
 # build_site.py refreshes this tracked stamp as a side effect. Keep the freshly
 # generated stamp through the local legs, then restore the committed copy.
 restore_build_stamp() {
-  if git checkout -q -- site/platform/data/.build-stamp.json 2>/dev/null; then
+  [ "${BUILD_STAMP_DIRTY:-0}" -eq 1 ] || return 0
+  if with_pinned_dir "$BUILD_STAMP_DIR" "$BUILD_STAMP_DIR_IDENTITY" \
+      restore_build_stamp_in_pinned_dir .build-stamp.json; then
+    BUILD_STAMP_DIRTY=0
     return 0
   fi
   printf '%s\n' \
@@ -57,16 +72,181 @@ restore_build_stamp() {
   return 1
 }
 
+restore_build_stamp_in_pinned_dir() {
+  local relative_name=$1 restore_fd restore_name status=0
+  case "$relative_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  restore_name=".final-revalidation-build-stamp.$$.$RANDOM.$RANDOM"
+  open_new_relative_file_fd "$restore_name" restore_fd || return 1
+  git show "HEAD:site/platform/data/.build-stamp.json" >&"$restore_fd" || status=$?
+  exec {restore_fd}>&- || status=1
+  if [ "$status" -ne 0 ]; then
+    remove_in_pinned_dir "$BUILD_STAMP_DIR" "$BUILD_STAMP_DIR_IDENTITY" \
+      file "$restore_name" || return 1
+    return "$status"
+  fi
+  if ! mv -T -- "$restore_name" "$relative_name"; then
+    remove_in_pinned_dir "$BUILD_STAMP_DIR" "$BUILD_STAMP_DIR_IDENTITY" \
+      file "$restore_name" || return 1
+    return 1
+  fi
+}
+
 # Return the device:inode identity only after physically entering the expected
 # repository-local directory and proving that no symlink redirected the entry.
 pinned_directory_identity() {
   local expected_physical_dir=$1 resolved_dir
   (
+    trap - EXIT
     cd -P -- "$expected_physical_dir" || return 1
     resolved_dir=$(pwd -P) || return 1
     [ "$resolved_dir" = "$expected_physical_dir" ] || return 1
     stat -Lc '%d:%i' -- .
   )
+}
+
+# Enter an already-captured physical directory, revalidate its device:inode,
+# and run a command from that cwd. The command name itself must be a simple
+# relative name; callers pass only relative filesystem operands.
+with_pinned_dir() {
+  local expected_physical_dir=$1 expected_identity=$2 command_name resolved_dir
+  local pinned_return_fd previous_identity restore_status=0 status=1
+  shift 2
+  [ "$#" -gt 0 ] || return 1
+  command_name=$1
+  case "$command_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  exec {pinned_return_fd}< . || return 1
+  previous_identity=$(stat -Lc '%d:%i' -- "/proc/self/fd/$pinned_return_fd") || {
+    exec {pinned_return_fd}<&-
+    return 1
+  }
+  if [ "$(stat -Lc '%F' -- "/proc/self/fd/$pinned_return_fd")" != directory ] || \
+      ! cd -P -- "$expected_physical_dir" || \
+      ! resolved_dir=$(pwd -P) || \
+      [ "$resolved_dir" != "$expected_physical_dir" ] || \
+      [ -z "$expected_identity" ] || \
+      [ "$(stat -Lc '%d:%i' -- .)" != "$expected_identity" ]; then
+    status=1
+  else
+    "$@"
+    status=$?
+  fi
+  cd -P -- "/proc/self/fd/$pinned_return_fd" || restore_status=1
+  if [ "$restore_status" -eq 0 ] && \
+      [ "$(stat -Lc '%d:%i' -- .)" != "$previous_identity" ]; then
+    restore_status=1
+  fi
+  exec {pinned_return_fd}<&- || restore_status=1
+  [ "$restore_status" -eq 0 ] || return 1
+  return "$status"
+}
+
+write_server_marker() {
+  local relative_name=$1 expected_file_identity=$2 token=$3 marker_fd
+  local actual_file_identity link_count status=0
+  case "$relative_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  [ -n "$expected_file_identity" ] || return 1
+  exec {marker_fd}<> "$relative_name" || return 1
+  actual_file_identity=$(stat -Lc '%d:%i' -- "/proc/self/fd/$marker_fd") || status=1
+  link_count=$(stat -Lc '%h' -- "/proc/self/fd/$marker_fd") || status=1
+  [ "$status" -eq 0 ] && [ "$actual_file_identity" = "$expected_file_identity" ] && \
+    [ "$link_count" = 1 ] || status=1
+  if [ "$status" -eq 0 ]; then
+    printf '%s\n' "$token" >&"$marker_fd" || status=$?
+  fi
+  exec {marker_fd}>&- || status=1
+  return "$status"
+}
+
+relative_regular_file_identity() {
+  local relative_name=$1
+  case "$relative_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  [ -f "$relative_name" ] && [ ! -L "$relative_name" ] && \
+    [ "$(stat -Lc '%h' -- "$relative_name")" = 1 ] || return 1
+  stat -Lc '%d:%i' -- "$relative_name"
+}
+
+# Noclobber makes the relative log creation atomic: an existing regular file,
+# symlink, or hard link is never opened. The caller writes only through the
+# descriptor returned to its caller-selected variable.
+open_new_relative_file_fd() {
+  local relative_name=$1 output_variable=$2 new_fd noclobber_was_set=0
+  case "$relative_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  [[ "$output_variable" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  case $- in *C*) noclobber_was_set=1 ;; esac
+  set -C
+  if ! exec {new_fd}> "$relative_name"; then
+    [ "$noclobber_was_set" -eq 1 ] || set +C
+    return 1
+  fi
+  [ "$noclobber_was_set" -eq 1 ] || set +C
+  printf -v "$output_variable" '%s' "$new_fd"
+}
+
+enter_pinned_dir() {
+  local expected_physical_dir=$1 expected_identity=$2 resolved_dir
+  cd -P -- "$expected_physical_dir" || return 1
+  resolved_dir=$(pwd -P) || return 1
+  [ "$resolved_dir" = "$expected_physical_dir" ] || return 1
+  [ -n "$expected_identity" ] || return 1
+  [ "$(stat -Lc '%d:%i' -- .)" = "$expected_identity" ] || return 1
+}
+
+close_inherited_pinning_fds() {
+  if [ -n "${pinned_return_fd:-}" ]; then
+    exec {pinned_return_fd}<&- || return 1
+    pinned_return_fd=""
+  fi
+  if [ -n "${LOCK_GUARD_FD:-}" ]; then
+    exec {LOCK_GUARD_FD}<&- || return 1
+    LOCK_GUARD_FD=""
+  fi
+}
+
+run_with_new_log() {
+  local relative_name=$1 command_dir=$2 command_identity=$3 log_fd status close_status=0
+  shift 3
+  [ "$#" -gt 0 ] || return 125
+  case "$1" in
+    ""|.|..|/*|*/*) return 125 ;;
+  esac
+  open_new_relative_file_fd "$relative_name" log_fd || return 125
+  enter_pinned_dir "$command_dir" "$command_identity" || status=125
+  if [ "${status:-0}" -eq 0 ]; then
+    (close_inherited_pinning_fds && exec "$@") >&"$log_fd" 2>&1
+    status=$?
+  fi
+  exec {log_fd}>&- || close_status=$?
+  [ "$status" -ne 0 ] || status=$close_status
+  return "$status"
+}
+
+exec_with_new_log() {
+  local relative_name=$1 command_dir=$2 command_identity=$3 log_fd
+  shift 3
+  [ "$#" -gt 0 ] || return 125
+  case "$1" in
+    ""|.|..|/*|*/*) return 125 ;;
+  esac
+  open_new_relative_file_fd "$relative_name" log_fd || return 125
+  enter_pinned_dir "$command_dir" "$command_identity" || return 125
+  close_inherited_pinning_fds || return 125
+  exec "$@" >&"$log_fd" 2>&1
+}
+
+new_log_name() {
+  local label=$1
+  [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 1
+  printf 'final-%s.%s.%s.%s.log\n' "$label" "$$" "$RANDOM" "$RANDOM"
 }
 
 # Every deletion is pinned to a physically entered, path- and identity-validated
@@ -78,6 +258,7 @@ remove_in_pinned_dir() {
   shift 3
   [ "$#" -gt 0 ] || return 0
   (
+    trap - EXIT
     cd -P -- "$expected_physical_dir" || return 1
     resolved_dir=$(pwd -P) || return 1
     [ "$resolved_dir" = "$expected_physical_dir" ] || return 1
@@ -201,8 +382,127 @@ require_clean_worktree() {
 }
 
 clear_prior_evidence() {
-  remove_in_pinned_dir "${BUILD_UAT%/}" "$BUILD_UAT_IDENTITY" tree runs shots || \
+  remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree runs shots || \
     die "could not clear prior UAT evidence"
+}
+
+read_regular_relative_file() {
+  local relative_name=$1 file_size
+  case "$relative_name" in
+    ""|.|..|/*|*/*) return 1 ;;
+  esac
+  [ -f "$relative_name" ] && [ ! -L "$relative_name" ] || return 1
+  file_size=$(stat -Lc '%s' -- "$relative_name") || return 1
+  [ "$file_size" -le 256 ] || return 1
+  cat -- "$relative_name"
+}
+
+write_lock_owner() {
+  local relative_name=$1 token=$2 owner_fd status=0
+  open_new_relative_file_fd "$relative_name" owner_fd || return 1
+  printf '%s\n' "$token" >&"$owner_fd" || status=$?
+  exec {owner_fd}>&- || status=1
+  return "$status"
+}
+
+open_pinned_directory_fd() {
+  local expected_physical_dir=$1 expected_identity=$2 output_variable=$3
+  local actual_identity directory_fd
+  [[ "$output_variable" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  [ -n "$expected_identity" ] || return 1
+  exec {directory_fd}< "$expected_physical_dir" || return 1
+  actual_identity=$(stat -Lc '%d:%i' -- "/proc/self/fd/$directory_fd") || {
+    exec {directory_fd}<&-
+    return 1
+  }
+  if [ "$(stat -Lc '%F' -- "/proc/self/fd/$directory_fd")" != directory ] || \
+      [ "$actual_identity" != "$expected_identity" ]; then
+    exec {directory_fd}<&-
+    return 1
+  fi
+  printf -v "$output_variable" '%s' "$directory_fd"
+}
+
+acquire_revalidation_lock() {
+  local attempt current_identity current_start_ticks existing_identity
+  local existing_token lock_owner_pid lock_owner_start_ticks process_state
+
+  current_identity=$(process_identity "$$") || \
+    die "could not read this revalidation process identity for the run lock"
+  read -r _ current_start_ticks <<< "$current_identity"
+  LOCK_TOKEN="final-revalidation:$SHA:$$:$current_start_ticks:$RANDOM"
+
+  command -v flock >/dev/null 2>&1 || die "flock is required for the run lock"
+  open_pinned_directory_fd "$BUILD_UAT" "$BUILD_UAT_IDENTITY" LOCK_GUARD_FD || \
+    die "could not pin build/uat/ for the final-revalidation run lock"
+  if ! flock -n "$LOCK_GUARD_FD"; then
+    exec {LOCK_GUARD_FD}<&-
+    LOCK_GUARD_FD=""
+    die "another final revalidation run owns build/uat/"
+  fi
+
+  for attempt in 1 2; do
+    if with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" mkdir -- "$LOCK_NAME"; then
+      LOCK_IDENTITY=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME") || \
+        die "could not identify the newly acquired final-revalidation lock"
+      LOCK_HELD=1
+      LOCK_INITIALIZING=1
+      if ! with_pinned_dir "$BUILD_UAT/$LOCK_NAME" "$LOCK_IDENTITY" \
+          write_lock_owner owner "$LOCK_TOKEN"; then
+        die "could not initialize the final-revalidation run lock"
+      fi
+      LOCK_INITIALIZING=0
+      return 0
+    fi
+
+    existing_identity=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME") || \
+      die "another final revalidation run owns build/uat/ (lock is unsafe or initializing)"
+    existing_token=$(with_pinned_dir "$BUILD_UAT/$LOCK_NAME" "$existing_identity" \
+      read_regular_relative_file owner) || \
+      die "another final revalidation run owns build/uat/ (lock owner is missing or malformed)"
+    if ! [[ "$existing_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):([0-9]+):[0-9]+$ ]]; then
+      die "another final revalidation run owns build/uat/ (lock owner is malformed)"
+    fi
+    lock_owner_pid=${BASH_REMATCH[2]}
+    lock_owner_start_ticks=${BASH_REMATCH[3]}
+    if ! [[ "$lock_owner_pid" =~ ^[1-9][0-9]*$ ]]; then
+      die "another final revalidation run owns build/uat/ (lock owner is malformed)"
+    fi
+    if current_identity=$(process_identity "$lock_owner_pid"); then
+      read -r process_state current_start_ticks <<< "$current_identity"
+      if [ "$process_state" != Z ] && [ "$process_state" != X ] && \
+          [ "$process_state" != x ] && \
+          [ "$current_start_ticks" = "$lock_owner_start_ticks" ]; then
+        die "another final revalidation run owns build/uat/ (pid $lock_owner_pid)"
+      fi
+    elif kill -0 "$lock_owner_pid" 2>/dev/null || [ -d "/proc/$lock_owner_pid" ]; then
+      die "another final revalidation run owns build/uat/ (pid $lock_owner_pid identity is unreadable)"
+    fi
+    remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree "$LOCK_NAME" || \
+      die "could not recover the stale final-revalidation lock"
+    printf 'removed stale final-revalidation lock from build/uat/\n'
+  done
+  die "could not acquire the final-revalidation run lock"
+}
+
+release_revalidation_lock() {
+  local current_identity current_token
+  [ "${LOCK_HELD:-0}" -eq 1 ] || return 0
+  current_identity=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME") || return 1
+  [ -n "$LOCK_IDENTITY" ] && [ "$current_identity" = "$LOCK_IDENTITY" ] || return 1
+  if [ "${LOCK_INITIALIZING:-0}" -ne 1 ]; then
+    current_token=$(with_pinned_dir "$BUILD_UAT/$LOCK_NAME" "$LOCK_IDENTITY" \
+      read_regular_relative_file owner) || return 1
+    [ -n "$LOCK_TOKEN" ] && [ "$current_token" = "$LOCK_TOKEN" ] || return 1
+  fi
+  remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree "$LOCK_NAME" || return 1
+  LOCK_HELD=0
+  LOCK_INITIALIZING=0
+  if [ -n "${LOCK_GUARD_FD:-}" ]; then
+    flock -u "$LOCK_GUARD_FD" || return 1
+    exec {LOCK_GUARD_FD}<&- || return 1
+    LOCK_GUARD_FD=""
+  fi
 }
 
 record_status() {
@@ -233,6 +533,10 @@ cleanup() {
     status=1
   fi
   if ! restore_build_stamp; then
+    status=1
+  fi
+  if [ "${LOCK_HELD:-0}" -eq 1 ] && ! release_revalidation_lock; then
+    printf 'ERROR: could not release final-revalidation run lock\n' >&2
     status=1
   fi
   return "$status"
@@ -269,27 +573,32 @@ if ((PORT < 1 || PORT > 65535)); then
   die "LOCAL_PORT must be an integer from 1 through 65535"
 fi
 
-# Refuse symlink escapes before creating or deleting anything. Removal targets
-# are fixed children of this canonical repository-local directory.
-resolved_uat=$(realpath -m "$BUILD_UAT") || die "could not resolve build/uat/"
-if [ "$resolved_uat/" != "$BUILD_UAT" ]; then
-  die "build/uat/ must resolve to its repository-local path (got $resolved_uat)"
-fi
-mkdir -p "$BUILD_UAT" || die "could not create build/uat/"
-BUILD_UAT_IDENTITY=$(pinned_directory_identity "${BUILD_UAT%/}") || \
+# Create each directory from its pinned physical parent, then capture the child
+# identity that protects every later write and deletion.
+ROOT_IDENTITY=$(pinned_directory_identity "$ROOT") || die "could not identify repository root"
+with_pinned_dir "$ROOT" "$ROOT_IDENTITY" mkdir -p -- build || die "could not create build directory"
+BUILD_IDENTITY=$(pinned_directory_identity "$ROOT/build") || \
+  die "the build directory must be physically entered and repository-local"
+with_pinned_dir "$ROOT/build" "$BUILD_IDENTITY" mkdir -p -- uat || \
+  die "could not create build/uat/"
+BUILD_UAT_IDENTITY=$(pinned_directory_identity "$BUILD_UAT") || \
   die "could not identify build/uat/"
-clear_prior_evidence
+BUILD_STAMP_DIR_IDENTITY=$(pinned_directory_identity "$BUILD_STAMP_DIR") || \
+  die "could not identify site/platform/data/"
 
 SHA=$(git rev-parse HEAD) || die "could not resolve HEAD"
-printf 'revalidation @ %s in %s\n' "$SHA" "$ROOT"
 
 trap cleanup_on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-MARKER_PATH=$(mktemp "$ROOT/site/.final-revalidation-server.XXXXXX") || \
+acquire_revalidation_lock
+clear_prior_evidence
+printf 'revalidation @ %s in %s\n' "$SHA" "$ROOT"
+
+MARKER_NAME=$(with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" mktemp .final-revalidation-server.XXXXXX) || \
   die "could not create local-server identity marker"
-MARKER_NAME=${MARKER_PATH##*/}
+MARKER_PATH="$ROOT/site/$MARKER_NAME"
 if ! [[ "$MARKER_NAME" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]]; then
   die "local-server identity marker has an invalid basename"
 fi
@@ -297,7 +606,12 @@ MARKER_IDENTITY=$(process_identity "$$") || \
   die "could not read this revalidation process identity"
 read -r _ MARKER_START_TICKS <<< "$MARKER_IDENTITY"
 MARKER_TOKEN="final-revalidation:$SHA:$$:$MARKER_START_TICKS:$RANDOM"
-printf '%s\n' "$MARKER_TOKEN" > "$MARKER_PATH"
+MARKER_FILE_IDENTITY=$(with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" \
+  relative_regular_file_identity "$MARKER_NAME") || \
+  die "could not identify local-server identity marker"
+with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" write_server_marker \
+  "$MARKER_NAME" "$MARKER_FILE_IDENTITY" "$MARKER_TOKEN" || \
+  die "could not write local-server identity marker"
 MARKER_URL="http://127.0.0.1:$PORT/$MARKER_NAME"
 
 server_matches_worktree() {
@@ -308,9 +622,12 @@ command -v curl >/dev/null 2>&1 || die "curl is required to verify the local ser
 if server_matches_worktree; then
   printf 'reusing this worktree\047s site/ server on port %s\n' "$PORT"
 else
-  (cd "$ROOT/site" && exec python3 -m http.server "$PORT" --bind 127.0.0.1) \
-    > "${BUILD_UAT}local-server.log" 2>&1 &
+  SERVER_LOG_NAME=$(new_log_name local-server) || die "could not choose local-server log name"
+  with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" exec_with_new_log \
+    "$SERVER_LOG_NAME" "$ROOT/site" "$SITE_IDENTITY" \
+    python3 -m http.server "$PORT" --bind 127.0.0.1 --directory . &
   SERVER_PID=$!
+  printf 'local-server log: build/uat/%s\n' "$SERVER_LOG_NAME"
   server_ready=0
   for _ in {1..20}; do
     if server_matches_worktree; then
@@ -319,23 +636,24 @@ else
     fi
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
       wait "$SERVER_PID" 2>/dev/null || true
-      die "LOCAL_PORT $PORT is occupied or the local server failed; see build/uat/local-server.log"
+      die "LOCAL_PORT $PORT is occupied or the local server failed; see build/uat/$SERVER_LOG_NAME"
     fi
     sleep 0.25
   done
   if [ "$server_ready" -ne 1 ]; then
-    die "local static server did not become ready; see build/uat/local-server.log"
+    die "local static server did not become ready; see build/uat/$SERVER_LOG_NAME"
   fi
 fi
 
 run_generator() {
   local label=$1
   shift
-  if ! "$@"; then
+  if ! (close_inherited_pinning_fds && exec "$@"); then
     die "generator failed: $label"
   fi
 }
 
+BUILD_STAMP_DIRTY=1
 run_generator "site build" python3 tools/build_site.py --check
 run_generator "instructor bundle" python3 tools/build_instructor_bundle.py
 run_generator "editor data bundle" node app/worker/scripts/bundle-editor-data.mjs
@@ -345,17 +663,25 @@ require_clean_worktree "generators changed tracked or untracked files; revalidat
 
 run() {
   local label=$1
-  local status
+  local log_name status
   shift
   printf '===== %s =====\n' "$label"
-  node tools/verify_persona_journeys.js "$@" > "${BUILD_UAT}final-$label.log" 2>&1
+  log_name=$(new_log_name "$label") || die "could not choose log name for $label"
+  with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" run_with_new_log \
+    "$log_name" "$ROOT" "$ROOT_IDENTITY" node tools/verify_persona_journeys.js "$@"
   status=$?
+  if [ "$status" -eq 125 ]; then
+    die "could not create fresh log for $label"
+  fi
   record_status "$status"
   printf 'exit=%s\n' "$status"
-  grep -E '^(JOURNEY SUMMARY|RUN FILE)' "${BUILD_UAT}final-$label.log" || true
+  printf 'log=build/uat/%s\n' "$log_name"
+  with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" \
+    grep -E '^(JOURNEY SUMMARY|RUN FILE)' "$log_name" || true
   # Deliberate canaries prove that the runner can fail; omit only their expected
   # noise from this excerpt. See docs/solutions/uat/2026-09-02-browser-journeys-measure-the-wrong-thing.md.
-  grep -E '^(FAIL|ERROR|BLOCKED)' "${BUILD_UAT}final-$label.log" \
+  with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" \
+    grep -E '^(FAIL|ERROR|BLOCKED)' "$log_name" \
     | grep -v deliberate-canary \
     | cut -c1-180 || true
 }
@@ -368,7 +694,9 @@ run bindings-dev --bindings --env-label dev --only hostile-bot-gate,student-live
 run bindings-prod --bindings --env-label prod --only hostile-bot-gate
 
 printf '===== a11y audit (explicit pages, both envs) =====\n'
-node tools/a11y_audit.js \
+A11Y_LOG_NAME=$(new_log_name a11y) || die "could not choose accessibility log name"
+with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" run_with_new_log \
+  "$A11Y_LOG_NAME" "$ROOT" "$ROOT_IDENTITY" node tools/a11y_audit.js \
   "${DEV_BASE}/" \
   "${DEV_BASE}/platform/" \
   "${DEV_BASE}/platform/matters/" \
@@ -380,12 +708,16 @@ node tools/a11y_audit.js \
   "${PROD_BASE}/platform/matters/" \
   "${PROD_BASE}/platform/matters/m05-dwi-meridian/" \
   "${PROD_BASE}/platform/hours/" \
-  "${PROD_BASE}/cost-per-credit.html" \
-  > "${BUILD_UAT}final-a11y.log" 2>&1
+  "${PROD_BASE}/cost-per-credit.html"
 a11y_status=$?
+if [ "$a11y_status" -eq 125 ]; then
+  die "could not create fresh accessibility log"
+fi
 record_status "$a11y_status"
 printf 'a11y exit=%s\n' "$a11y_status"
-grep -E '^=== |A11Y AUDIT' "${BUILD_UAT}final-a11y.log" || true
+printf 'a11y log=build/uat/%s\n' "$A11Y_LOG_NAME"
+with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" \
+  grep -E '^=== |A11Y AUDIT' "$A11Y_LOG_NAME" || true
 
 finalize_revalidation
 exit $?
