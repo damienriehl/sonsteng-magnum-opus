@@ -55,6 +55,32 @@ export const SCHEMA_SQL = `
     pool TEXT NOT NULL,
     reserve_cents INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS one_shot_settlements (
+    id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    pool TEXT NOT NULL,
+    reserve_cents INTEGER NOT NULL,
+    actual_cents INTEGER NOT NULL
+  );
+  CREATE TRIGGER IF NOT EXISTS one_shot_reserve_budget
+  AFTER INSERT ON one_shot_reservations
+  BEGIN
+    UPDATE budget SET
+      public_cents = public_cents + CASE WHEN NEW.pool = 'demo' THEN 0 ELSE NEW.reserve_cents END,
+      demo_cents = demo_cents + CASE WHEN NEW.pool = 'demo' THEN NEW.reserve_cents ELSE 0 END
+    WHERE id = 1;
+  END;
+  CREATE TRIGGER IF NOT EXISTS one_shot_settle_budget
+  AFTER INSERT ON one_shot_settlements
+  BEGIN
+    UPDATE budget SET
+      public_cents = MAX(0, public_cents + CASE
+        WHEN NEW.pool = 'demo' THEN 0 ELSE NEW.actual_cents - NEW.reserve_cents END),
+      demo_cents = MAX(0, demo_cents + CASE
+        WHEN NEW.pool = 'demo' THEN NEW.actual_cents - NEW.reserve_cents ELSE 0 END)
+    WHERE id = 1;
+    DELETE FROM one_shot_reservations WHERE id = NEW.id;
+  END;
   CREATE TABLE IF NOT EXISTS assessment_requests (
     sid TEXT PRIMARY KEY,
     day TEXT NOT NULL,
@@ -87,6 +113,7 @@ export class BudgetCore {
     } else if (row.day !== today) {
       this.sql.exec("UPDATE budget SET day=?, public_cents=0, demo_cents=0 WHERE id=1", today);
       this.sql.exec("DELETE FROM one_shot_reservations WHERE day<>?", today);
+      this.sql.exec("DELETE FROM one_shot_settlements WHERE day<>?", today);
     }
   }
 
@@ -313,7 +340,18 @@ export class BudgetCore {
     if (typeof id !== "string" || !id || !Number.isInteger(reserveCents) || reserveCents < 1) {
       return { ok: false, reason: "validation_error" };
     }
-    if (this._one("SELECT id FROM one_shot_reservations WHERE id=?", id)) {
+    const existing = this._one("SELECT * FROM one_shot_reservations WHERE id=?", id);
+    if (existing) {
+      if (existing.day === today && existing.pool === pool && existing.reserve_cents === reserveCents) {
+        return { ok: true, replay: true };
+      }
+      return { ok: false, reason: "duplicate" };
+    }
+    const settled = this._one("SELECT * FROM one_shot_settlements WHERE id=?", id);
+    if (settled) {
+      if (settled.day === today && settled.pool === pool && settled.reserve_cents === reserveCents) {
+        return { ok: true, replay: true, settled: true };
+      }
       return { ok: false, reason: "duplicate" };
     }
     const budget = this._one("SELECT public_cents,demo_cents FROM budget WHERE id=1");
@@ -324,21 +362,29 @@ export class BudgetCore {
       "INSERT INTO one_shot_reservations (id,day,pool,reserve_cents) VALUES (?,?,?,?)",
       id, today, pool, reserveCents
     );
-    const col = this._poolCol(pool);
-    this.sql.exec(`UPDATE budget SET ${col} = ${col} + ? WHERE id=1`, reserveCents);
     return { ok: true };
   }
 
-  settleOneShot(id, usage) {
+  settleOneShot(id, usage, retainedCents = 0) {
+    const today = this._today();
+    this._rollover(today);
+    if (!Number.isInteger(retainedCents) || retainedCents < 0) {
+      return { ok: false, reason: "validation_error" };
+    }
+    const settled = this._one("SELECT actual_cents FROM one_shot_settlements WHERE id=?", id);
+    if (settled) return { ok: true, replay: true, actualCents: settled.actual_cents };
     const row = this._one("SELECT * FROM one_shot_reservations WHERE id=?", id);
     if (!row) return { ok: true, replay: true };
-    const actual = usage ? centsForUsage(usage) : 0;
-    const col = this._poolCol(row.pool);
+    const actual = (usage ? centsForUsage(usage) : 0) + retainedCents;
     this.sql.exec(
-      `UPDATE budget SET ${col} = MAX(0, ${col} - ? + ?) WHERE id=1`,
-      row.reserve_cents, actual
+      "INSERT INTO one_shot_settlements (id,day,pool,reserve_cents,actual_cents) " +
+        "VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
+      row.id,
+      row.day,
+      row.pool,
+      row.reserve_cents,
+      actual
     );
-    this.sql.exec("DELETE FROM one_shot_reservations WHERE id=?", id);
     return { ok: true, actualCents: actual };
   }
 }

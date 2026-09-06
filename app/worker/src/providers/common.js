@@ -1,4 +1,4 @@
-// providers/common.js — shared retry-once fetch loop for all provider adapters.
+// providers/common.js — shared bounded fetch retry flow for all adapters.
 //
 // Semantics (docs/research/worker-llm-facts.md §6, applied per-provider):
 //   429            -> read retry-after (cap ~2s), retry once.
@@ -19,14 +19,30 @@ function sleep(ms) {
 }
 
 export const PROVIDER_TIMEOUT_MS = 60_000;
+export const PROVIDER_DEFAULT_MAX_ATTEMPTS = 3;
+// Each debrief logical completion gets one initial request plus one retry. The
+// debrief layer itself may run twice, so the end-to-end ceiling is four.
+export const DEBRIEF_PROVIDER_MAX_ATTEMPTS = 2;
 
 // buildReq: () => { url, headers, body }   (body = plain object, JSON-encoded here)
-// parseResp: (data) => { text, usage }     (usage normalized to the Anthropic
-//                                           field names: input_tokens,
+// parseResp: (data) => { text, usage, stop_reason? } (usage normalized to the
+//                                           Anthropic field names: input_tokens,
 //                                           output_tokens, cache_read_input_tokens,
-//                                           cache_creation_input_tokens)
-export async function completeWithRetry(buildReq, parseResp) {
+//                                           cache_creation_input_tokens; provider
+//                                           stop reasons use the canonical values
+//                                           returned by normalizeStopReason)
+export async function completeWithRetry(
+  buildReq,
+  parseResp,
+  maxAttempts = PROVIDER_DEFAULT_MAX_ATTEMPTS,
+) {
+  const attemptLimit = Number.isInteger(maxAttempts) && maxAttempts > 0
+    ? maxAttempts
+    : PROVIDER_DEFAULT_MAX_ATTEMPTS;
+  let attemptCount = 0;
+  let ambiguousAttempts = 0;
   const attempt = async () => {
+    attemptCount += 1;
     const { url, headers, body } = buildReq();
     return fetch(url, {
       method: "POST",
@@ -36,6 +52,10 @@ export async function completeWithRetry(buildReq, parseResp) {
     });
   };
 
+  const withAmbiguousAttempts = (result) => ambiguousAttempts > 0
+    ? { ...result, ambiguous_attempts: ambiguousAttempts }
+    : result;
+
   const finish = async (res) => {
     let data;
     try {
@@ -44,8 +64,13 @@ export async function completeWithRetry(buildReq, parseResp) {
       return { ok: false, kind: "upstream", status: res.status };
     }
     try {
-      const { text, usage } = parseResp(data);
-      return { ok: true, text, usage: usage || {} };
+      const { text, usage, stop_reason } = parseResp(data);
+      return {
+        ok: true,
+        text,
+        usage: usage || {},
+        ...(stop_reason ? { stop_reason } : {}),
+      };
     } catch {
       return { ok: false, kind: "upstream", status: res.status };
     }
@@ -55,38 +80,63 @@ export async function completeWithRetry(buildReq, parseResp) {
   try {
     res = await attempt();
   } catch {
+    ambiguousAttempts += 1;
+    if (attemptCount >= attemptLimit) {
+      return withAmbiguousAttempts({ ok: false, kind: "upstream" });
+    }
     await sleep(600);
     try {
       res = await attempt();
     } catch {
-      return { ok: false, kind: "upstream" };
+      ambiguousAttempts += 1;
+      return withAmbiguousAttempts({ ok: false, kind: "upstream" });
     }
   }
 
-  if (res.ok) return finish(res);
+  if (res.ok) {
+    const result = await finish(res);
+    if (!result.ok) ambiguousAttempts += 1;
+    return withAmbiguousAttempts(result);
+  }
   if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-    return { ok: false, kind: "config", status: res.status };
+    return withAmbiguousAttempts({ ok: false, kind: "config", status: res.status });
+  }
+  if (attemptCount >= attemptLimit) {
+    return withAmbiguousAttempts({ ok: false, kind: "upstream", status: res.status });
   }
 
-  let waitMs;
   if (res.status === 429) {
     const ra = parseInt(res.headers.get("retry-after") || "", 10);
-    waitMs = Number.isFinite(ra) ? Math.min(2000, Math.max(0, ra * 1000)) : 1000;
+    await sleep(Number.isFinite(ra) ? Math.min(2000, Math.max(0, ra * 1000)) : 1000);
   } else {
-    waitMs = 500 + Math.floor(Math.random() * 500);
+    await sleep(500 + Math.floor(Math.random() * 500));
   }
-  await sleep(waitMs);
 
   try {
     res = await attempt();
   } catch {
-    return { ok: false, kind: "upstream" };
+    ambiguousAttempts += 1;
+    return withAmbiguousAttempts({ ok: false, kind: "upstream" });
   }
-  if (res.ok) return finish(res);
+  if (res.ok) {
+    const result = await finish(res);
+    if (!result.ok) ambiguousAttempts += 1;
+    return withAmbiguousAttempts(result);
+  }
   if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-    return { ok: false, kind: "config", status: res.status };
+    return withAmbiguousAttempts({ ok: false, kind: "config", status: res.status });
   }
-  return { ok: false, kind: "upstream", status: res.status };
+  return withAmbiguousAttempts({ ok: false, kind: "upstream", status: res.status });
+}
+
+// Collapse provider-specific output-cap and ordinary-stop spellings without
+// losing less common safety/tool/refusal reasons (which remain lowercase).
+export function normalizeStopReason(reason) {
+  if (typeof reason !== "string" || !reason) return null;
+  const normalized = reason.trim().toLowerCase();
+  if (normalized === "length" || normalized === "max_tokens") return "max_tokens";
+  if (normalized === "end_turn" || normalized === "stop") return "stop";
+  return normalized;
 }
 
 // Join a {prefix, tail} chat system into one string (for providers without

@@ -6,7 +6,13 @@ import * as anthropic from "../src/providers/anthropic.js";
 import * as openai from "../src/providers/openai.js";
 import * as google from "../src/providers/google.js";
 import { getProvider, PROVIDER_NAMES } from "../src/providers/registry.js";
-import { completeWithRetry, PROVIDER_TIMEOUT_MS, systemToString } from "../src/providers/common.js";
+import {
+  completeWithRetry,
+  DEBRIEF_PROVIDER_MAX_ATTEMPTS,
+  PROVIDER_DEFAULT_MAX_ATTEMPTS,
+  PROVIDER_TIMEOUT_MS,
+  systemToString,
+} from "../src/providers/common.js";
 
 const CHAT = {
   system: { prefix: "SEGMENT-A-TEXT", tail: "PERSONA-TAIL" },
@@ -61,14 +67,16 @@ test("anthropic evaluator: no system, no cache_control anywhere (one-shot varies
   assert.ok(!JSON.stringify(body).includes("cache_control"));
 });
 
-test("anthropic parseResponse: canonical usage passthrough", () => {
-  const { text, usage } = anthropic.parseResponse({
+test("anthropic parseResponse: canonical usage and stop reason passthrough", () => {
+  const { text, usage, stop_reason } = anthropic.parseResponse({
     content: [{ type: "text", text: "hi " }, { type: "text", text: "there" }],
     usage: { input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 5000, cache_creation_input_tokens: 7 },
+    stop_reason: "end_turn",
   });
   assert.equal(text, "hi there");
   assert.equal(usage.cache_read_input_tokens, 5000);
   assert.equal(usage.cache_creation_input_tokens, 7);
+  assert.equal(stop_reason, "stop");
 });
 
 // ---- OpenAI ------------------------------------------------------------------
@@ -92,13 +100,14 @@ test("openai jsonMode: response_format json_object", () => {
   assert.equal(body.messages.length, 1); // no system for evaluator
 });
 
-test("openai parseResponse: usage normalized (cached tokens split out)", () => {
-  const { text, usage } = openai.parseResponse({
-    choices: [{ message: { content: "reply" } }],
+test("openai parseResponse: usage and stop reason normalized", () => {
+  const { text, usage, stop_reason } = openai.parseResponse({
+    choices: [{ message: { content: "reply" }, finish_reason: "length" }],
     usage: { prompt_tokens: 1000, completion_tokens: 50, prompt_tokens_details: { cached_tokens: 800 } },
   });
   assert.equal(text, "reply");
   assert.deepEqual(usage, { input_tokens: 200, output_tokens: 50, cache_read_input_tokens: 800 });
+  assert.equal(stop_reason, "max_tokens");
 });
 
 // ---- Google ------------------------------------------------------------------
@@ -122,13 +131,27 @@ test("google jsonMode: responseMimeType application/json", () => {
   assert.equal(body.systemInstruction, undefined);
 });
 
-test("google parseResponse: usageMetadata normalized", () => {
-  const { text, usage } = google.parseResponse({
-    candidates: [{ content: { parts: [{ text: "re" }, { text: "ply" }] } }],
-    usageMetadata: { promptTokenCount: 900, candidatesTokenCount: 40, cachedContentTokenCount: 100 },
+test("google parseResponse: usage, thought tokens, and stop reason normalized", () => {
+  const { text, usage, stop_reason } = google.parseResponse({
+    candidates: [{
+      finishReason: "MAX_TOKENS",
+      content: { parts: [{ text: "re" }, { text: "ply" }] },
+    }],
+    usageMetadata: {
+      promptTokenCount: 900,
+      candidatesTokenCount: 40,
+      cachedContentTokenCount: 100,
+      thoughtsTokenCount: 25,
+    },
   });
   assert.equal(text, "reply");
-  assert.deepEqual(usage, { input_tokens: 800, output_tokens: 40, cache_read_input_tokens: 100 });
+  assert.deepEqual(usage, {
+    input_tokens: 800,
+    output_tokens: 40,
+    cache_read_input_tokens: 100,
+    thought_tokens: 25,
+  });
+  assert.equal(stop_reason, "max_tokens");
 });
 
 // ---- shared ------------------------------------------------------------------
@@ -152,12 +175,79 @@ test("provider completions carry a bounded abort signal", async () => {
   try {
     const result = await completeWithRetry(
       () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
-      (data) => ({ text: data.answer, usage: {} })
+      (data) => ({ text: data.answer, usage: {}, stop_reason: "max_tokens" })
     );
     assert.equal(result.ok, true);
+    assert.equal(result.stop_reason, "max_tokens");
     assert.ok(capturedSignal instanceof AbortSignal);
     assert.equal(PROVIDER_TIMEOUT_MS, 60_000);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("non-debrief completion preserves mixed-failure recovery on a third provider request", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let calls = 0;
+  globalThis.setTimeout = (callback) => {
+    callback();
+    return 0;
+  };
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("network failure");
+    if (calls === 2) return new Response("retry", { status: 500 });
+    return new Response(JSON.stringify({ answer: "unexpected" }), { status: 200 });
+  };
+  try {
+    const result = await completeWithRetry(
+      () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
+      (data) => ({ text: data.answer, usage: {} }),
+    );
+    assert.deepEqual(result, {
+      ok: true,
+      text: "unexpected",
+      usage: {},
+      ambiguous_attempts: 1,
+    });
+    assert.equal(PROVIDER_DEFAULT_MAX_ATTEMPTS, 3);
+    assert.equal(calls, PROVIDER_DEFAULT_MAX_ATTEMPTS);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("a debrief completion stops the mixed failure sequence after two provider requests", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let calls = 0;
+  globalThis.setTimeout = (callback) => {
+    callback();
+    return 0;
+  };
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("ambiguous network failure");
+    if (calls === 2) return new Response("retry", { status: 500 });
+    return new Response(JSON.stringify({ answer: "must not run" }), { status: 200 });
+  };
+  try {
+    const result = await completeWithRetry(
+      () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
+      (data) => ({ text: data.answer, usage: {} }),
+      DEBRIEF_PROVIDER_MAX_ATTEMPTS,
+    );
+    assert.deepEqual(result, {
+      ok: false,
+      kind: "upstream",
+      status: 500,
+      ambiguous_attempts: 1,
+    });
+    assert.equal(calls, DEBRIEF_PROVIDER_MAX_ATTEMPTS);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
   }
 });
