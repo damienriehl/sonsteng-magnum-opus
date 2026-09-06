@@ -108,4 +108,3 @@ deploy.
 | Decisions | Status |
 |---|---|
 | `D2` through `D5`; `D7` | Not established by this update |
-
