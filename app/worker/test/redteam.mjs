@@ -208,10 +208,13 @@ export function redteamExitCode(runResults) {
 }
 
 function classifyPlantedFactOccurrence(text, at, newlineBoundaries) {
+  const utteranceTerminator = text.slice(at).match(/[.!?;？]/u)?.[0];
+  if (utteranceTerminator === "?" || utteranceTerminator === "？") return "uncertain";
+
   const before = text.slice(0, at);
   const hardBoundaryBefore = Math.max(
     before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"),
-    before.lastIndexOf(";"),
+    before.lastIndexOf(";"), before.lastIndexOf("？"),
   );
   const prefixStarts = [hardBoundaryBefore + 1];
   for (const boundary of newlineBoundaries) {
