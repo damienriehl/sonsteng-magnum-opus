@@ -112,33 +112,55 @@ def _parse_nginx(source: str) -> tuple[NginxDirective, ...]:
     return parse_block(expect_closing_brace=False)
 
 
-def _walk_directives(directives: tuple[NginxDirective, ...]):
+def _walk_directives(
+    directives: tuple[NginxDirective, ...],
+    ancestry: tuple[NginxDirective, ...] = (),
+):
     for directive in directives:
-        yield directive
+        yield directive, ancestry
         if directive.children is not None:
-            yield from _walk_directives(directive.children)
+            yield from _walk_directives(
+                directive.children, (*ancestry, directive)
+            )
 
 
 def _assert_clean_url_config(source: str) -> None:
     directives = _parse_nginx(source)
-    root_locations = [
+    walked_directives = tuple(_walk_directives(directives))
+    top_level_servers = [
         directive
-        for directive in _walk_directives(directives)
+        for directive, ancestry in walked_directives
+        if directive.name == "server"
+        and directive.children is not None
+        and not ancestry
+    ]
+    assert len(top_level_servers) == 1, (
+        "exactly one top-level `server` block is required"
+    )
+    intended_server = top_level_servers[0]
+    root_locations = [
+        (directive, ancestry)
+        for directive, ancestry in walked_directives
         if directive.name == "location"
         and directive.arguments == ("/",)
         and directive.children is not None
     ]
-    assert root_locations, "an active `location /` block is required"
+    assert len(root_locations) == 1, (
+        "exactly one active `location /` block is required"
+    )
+    root_location, ancestry = root_locations[0]
+    assert ancestry == (
+        intended_server,
+    ), "`location /` must be a direct child of the top-level `server` block"
     assert any(
         child.name == "try_files"
         and child.arguments == ("$uri", "$uri.html", "$uri/", "=404")
         and child.children is None
-        for location in root_locations
-        for child in location.children or ()
+        for child in root_location.children or ()
     ), "`try_files $uri $uri.html $uri/ =404;` must be active inside `location /`"
     assert not any(
         directive.name == "autoindex" and directive.arguments == ("on",)
-        for directive in _walk_directives(directives)
+        for directive, _ in walked_directives
     ), "no active `autoindex on;` directive is allowed"
 
 
@@ -160,6 +182,31 @@ def test_nginx_contract_rejects_inactive_or_misplaced_directives(
 ) -> None:
     with pytest.raises(AssertionError):
         _assert_clean_url_config(broken_config)
+
+
+def test_nginx_contract_rejects_root_location_directly_under_http() -> None:
+    with pytest.raises(AssertionError, match="must be a direct child"):
+        _assert_clean_url_config(
+            "http { location / { try_files $uri $uri.html $uri/ =404; } } "
+            "server {}"
+        )
+
+
+def test_nginx_contract_rejects_root_location_nested_in_server_child() -> None:
+    with pytest.raises(AssertionError, match="must be a direct child"):
+        _assert_clean_url_config(
+            "server { nested { "
+            "location / { try_files $uri $uri.html $uri/ =404; } "
+            "} }"
+        )
+
+
+def test_nginx_contract_rejects_duplicate_root_locations() -> None:
+    clean_location = "location / { try_files $uri $uri.html $uri/ =404; }"
+    with pytest.raises(
+        AssertionError, match="exactly one active `location /` block"
+    ):
+        _assert_clean_url_config(f"server {{ {clean_location} {clean_location} }}")
 
 
 def test_nginx_parser_rejects_invalid_block_structure() -> None:
@@ -668,6 +715,62 @@ def test_preflight_routes_every_node_gate_through_startup_node() -> None:
     assert "unset NODE_OPTIONS NODE_PATH" in node_wrapper
     assert 'exec "$NODE_BIN" "$@"' in node_wrapper
     assert "NODE_BIN" not in source[source.index("find_chromium()") :]
+
+
+def _assert_single_offline_redteam_registration(source: str) -> None:
+    headless_marker = "# ---- headless gates"
+    browser_marker = "# ---- browser gates"
+    assert source.count(headless_marker) == 1
+    assert source.count(browser_marker) == 1
+    headless_start = source.index(headless_marker)
+    browser_start = source.index(browser_marker, headless_start)
+    registrations = list(
+        re.finditer(
+            r'^run[\t ]+"offline red-team probe"[\t ]+run_offline_redteam_probe[\t ]*$',
+            source,
+            re.MULTILINE,
+        )
+    )
+    assert len(registrations) == 1 and (
+        headless_start < registrations[0].start() < browser_start
+    ), (
+        "preflight must contain exactly one executable top-level "
+        '`run "offline red-team probe" run_offline_redteam_probe` registration'
+    )
+
+
+def test_preflight_registers_offline_redteam_probe_exactly_once() -> None:
+    _assert_single_offline_redteam_registration(PREFLIGHT.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("registration_count", [0, 2])
+def test_offline_redteam_registration_contract_rejects_missing_or_duplicate_lines(
+    registration_count: int,
+) -> None:
+    registration = 'run "offline red-team probe" run_offline_redteam_probe\n'
+    source = (
+        "# ---- headless gates\n"
+        + registration * registration_count
+        + "# ---- browser gates\n"
+    )
+    with pytest.raises(AssertionError, match="exactly one executable top-level"):
+        _assert_single_offline_redteam_registration(source)
+
+
+def test_offline_redteam_registration_contract_rejects_line_in_uncalled_function(
+) -> None:
+    registration = 'run "offline red-team probe" run_offline_redteam_probe\n'
+    source = (
+        "uncalled_probe_registration() {\n"
+        + registration
+        + "}\n"
+        + "# ---- headless gates\n"
+        + "# registration must execute here\n"
+        + "# ---- browser gates\n"
+    )
+
+    with pytest.raises(AssertionError, match="exactly one executable top-level"):
+        _assert_single_offline_redteam_registration(source)
 
 
 @pytest.mark.parametrize(
