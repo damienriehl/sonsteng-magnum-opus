@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 
+import { BudgetCore } from "../src/budget-core.js";
+import { centsForUsage } from "../src/cost.js";
 import {
   DEBRIEF_INITIAL_MAX_TOKENS,
   DEBRIEF_RETRY_MAX_TOKENS,
@@ -13,6 +16,35 @@ import {
   completeWithRetry,
   DEBRIEF_PROVIDER_MAX_ATTEMPTS,
 } from "../src/providers/common.js";
+
+class NodeSql {
+  constructor() {
+    this.db = new DatabaseSync(":memory:");
+  }
+
+  exec(query, ...binds) {
+    if (binds.length === 0 && query.includes(";")) {
+      this.db.exec(query);
+      return { toArray: () => [] };
+    }
+    const statement = this.db.prepare(query);
+    if (/^\s*select/i.test(query)) {
+      return { toArray: () => statement.all(...binds) };
+    }
+    statement.run(...binds);
+    return { toArray: () => [] };
+  }
+}
+
+function makeBudgetCore() {
+  const core = new BudgetCore(new NodeSql());
+  core.initSchema();
+  return core;
+}
+
+function publicSpend(core) {
+  return core._one("SELECT public_cents AS cents FROM budget WHERE id=1")?.cents || 0;
+}
 
 function scorecard(overrides = {}) {
   return {
@@ -253,6 +285,146 @@ test("a lost settle response is retried with the same id and preserves the paid 
     { id: "stable-reservation-id", usage, retainedCents: 0 },
     { id: "stable-reservation-id", usage, retainedCents: 0 },
   ]);
+});
+
+test("a malformed settle acknowledgment replays the same id and preserves the paid completion", async () => {
+  const core = makeBudgetCore();
+  let providerCalls = 0;
+  let settleCalls = 0;
+  const usage = { input_tokens: 1000, output_tokens: 300 };
+  const completion = { ok: true, text: "paid completion", usage };
+  const budget = {
+    reserveOneShot: (id, options) => core.reserveOneShot(id, options),
+    settleOneShot(id, settledUsage, retainedCents) {
+      settleCalls += 1;
+      const result = core.settleOneShot(id, settledUsage, retainedCents);
+      return settleCalls === 1 ? {} : result;
+    },
+  };
+
+  const result = await completeBudgetedOneShot({
+    budget,
+    reservationId: "malformed-settle-ack",
+    pool: "public",
+    caps: { capPublicCents: 5, capDemoCents: 5 },
+    inputTokens: 1000,
+    maxTokens: 1200,
+    complete: async () => {
+      providerCalls += 1;
+      return completion;
+    },
+  });
+
+  assert.deepEqual(result, completion);
+  assert.equal(providerCalls, 1);
+  assert.equal(settleCalls, 2);
+  assert.equal(publicSpend(core), centsForUsage(usage));
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_reservations").count, 0);
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_settlements").count, 1);
+});
+
+test("persistently malformed settle acknowledgments fail closed without stranding the reservation", async () => {
+  const core = makeBudgetCore();
+  let providerCalls = 0;
+  let settleCalls = 0;
+  const usage = { input_tokens: 1000, output_tokens: 300 };
+  const budget = {
+    reserveOneShot: (id, options) => core.reserveOneShot(id, options),
+    settleOneShot(id, settledUsage, retainedCents) {
+      settleCalls += 1;
+      core.settleOneShot(id, settledUsage, retainedCents);
+      return {};
+    },
+  };
+
+  const result = await completeBudgetedOneShot({
+    budget,
+    reservationId: "unconfirmed-settle-ack",
+    pool: "public",
+    caps: { capPublicCents: 5, capDemoCents: 5 },
+    inputTokens: 1000,
+    maxTokens: 1200,
+    complete: async () => {
+      providerCalls += 1;
+      return { ok: true, text: "paid completion", usage };
+    },
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    kind: "upstream",
+    subtype: "settle_unconfirmed",
+  });
+  assert.equal(providerCalls, 1);
+  assert.equal(settleCalls, 2);
+  assert.equal(publicSpend(core), centsForUsage(usage));
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_reservations").count, 0);
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_settlements").count, 1);
+});
+
+test("budget transition replies classify every malformed shape before accepting terminal results", async () => {
+  const malformedReplies = [
+    ["null", null],
+    ["undefined", undefined],
+    ["number", 0],
+    ["string", "ok"],
+    ["array", []],
+    ["missing ok", {}],
+    ["non-boolean ok", { ok: "true" }],
+    ["false without reason", { ok: false }],
+    ["false with empty reason", { ok: false, reason: "" }],
+  ];
+
+  for (const [shape, reply] of malformedReplies) {
+    let providerCalls = 0;
+    let settleCalls = 0;
+    const result = await completeBudgetedOneShot({
+      budget: {
+        reserveOneShot: async () => ({ ok: true }),
+        settleOneShot: async () => {
+          settleCalls += 1;
+          return reply;
+        },
+      },
+      reservationId: `malformed-${shape}`,
+      pool: "public",
+      caps: { capPublicCents: 5, capDemoCents: 5 },
+      inputTokens: 1000,
+      maxTokens: 1200,
+      complete: async () => {
+        providerCalls += 1;
+        return { ok: true, text: "paid completion", usage: {} };
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      kind: "upstream",
+      subtype: "settle_unconfirmed",
+    }, shape);
+    assert.equal(providerCalls, 1, shape);
+    assert.equal(settleCalls, 2, shape);
+  }
+
+  let rejectionCalls = 0;
+  const rejected = await completeBudgetedOneShot({
+    budget: {
+      reserveOneShot: async () => ({ ok: true }),
+      settleOneShot: async () => {
+        rejectionCalls += 1;
+        return { ok: false, reason: "validation_error" };
+      },
+    },
+    reservationId: "confirmed-rejection",
+    pool: "public",
+    caps: { capPublicCents: 5, capDemoCents: 5 },
+    inputTokens: 1000,
+    maxTokens: 1200,
+    complete: async () => ({ ok: true, text: "paid completion", usage: {} }),
+  });
+
+  assert.deepEqual(rejected, { ok: false, kind: "upstream" });
+  assert.equal(rejectionCalls, 1);
 });
 
 test("the debrief reserve bound covers token-dense accepted UTF-16 content", () => {

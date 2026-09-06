@@ -33,16 +33,25 @@ export function debriefInputTokenUpperBound(prompt) {
   return new TextEncoder().encode(framedInput).length;
 }
 
+function isBudgetTransitionResult(result) {
+  if (result === null || typeof result !== "object" || Array.isArray(result)) {
+    return false;
+  }
+  if (result.ok === true) return true;
+  return result.ok === false && typeof result.reason === "string" && result.reason.length > 0;
+}
+
 async function reconcileBudgetTransition(transition) {
-  try {
-    return await transition();
-  } catch {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await transition();
+      const result = await transition();
+      if (isBudgetTransitionResult(result)) return result;
     } catch {
-      return null;
+      // A transition can commit before its RPC acknowledgment is lost. Replay
+      // the same idempotent operation once to confirm its durable result.
     }
   }
+  return null;
 }
 
 export async function completeBudgetedOneShot({
@@ -92,7 +101,10 @@ export async function completeBudgetedOneShot({
       Math.min(completion.ambiguous_attempts || 0, providerMaxAttempts) * perCallReserveCents,
     ),
   );
-  if (!settled?.ok) {
+  if (!settled) {
+    return { ok: false, kind: "upstream", subtype: "settle_unconfirmed" };
+  }
+  if (!settled.ok) {
     return { ok: false, kind: "upstream" };
   }
   return completion;
