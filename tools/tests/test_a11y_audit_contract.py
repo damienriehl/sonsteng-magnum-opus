@@ -101,4 +101,12 @@ def test_accessibility_audit_composites_translucent_background_layers():
 
 def test_preflight_accessibility_gate_uses_default_page_set():
     source = PREFLIGHT.read_text(encoding="utf-8")
-    assert 'run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js' in source
+    executable_run_lines = [
+        line.strip()
+        for line in source.splitlines()
+        if re.match(r"^\s*run(?:\s|$)", line)
+    ]
+    assert (
+        'run "accessibility audit (0 FAIL required)"  run_node tools/a11y_audit.js'
+        in executable_run_lines
+    )

@@ -14,6 +14,7 @@
 # Preflight trusts the PATH snapshot supplied at startup: it resolves Node once
 # from that PATH and uses the same binary with Node environment hooks cleared.
 # Readiness supervision requires Bash 5.1 or newer for wait -n -p.
+# The offline red-team gate requires both a zero probe exit status and a `0/8` output line.
 # The local persona-journey browser leg adds about five minutes and requires an
 # installed Chromium or Google Chrome executable (or CHROME_BIN to name one).
 #
@@ -26,6 +27,11 @@
 # Exit 0 only if every gate that ran passed.
 # ============================================================================
 set -uo pipefail
+
+if ((BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
+  printf 'Bash 5.1 or newer required; running %s.\n' "$BASH_VERSION" >&2
+  exit 1
+fi
 
 NODE_BIN=$(type -P node 2>/dev/null) || {
   printf 'Node unavailable on PATH at preflight start.\n' >&2
@@ -78,8 +84,19 @@ run_worker_unit_tests() (
 )
 
 run_offline_redteam_probe() {
-  run_node tools/offline_redteam_probe.mjs | grep -q "0/8" ||
-    run_node tools/offline_redteam_probe.mjs | tail -3
+  local output status
+  if output=$(run_node tools/offline_redteam_probe.mjs 2>&1); then
+    status=0
+  else
+    status=$?
+  fi
+
+  if [ "$status" -eq 0 ] && grep -qF "0/8" <<<"$output"; then
+    return 0
+  fi
+
+  printf '%s\n' "$output" | tail -n 3
+  return 1
 }
 
 run_editor_client() {
@@ -278,8 +295,6 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # "N/N PASS" summary — trust the exit code, never a hardcoded count (the
     # literal "43/43" grep silently turned every added assertion into a FAIL).
     run "editor client (background)"             run_editor_client
-    # Default-page-set contract (legacy command spelling retained for its
-    # static assertion): run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
     run "accessibility audit (0 FAIL required)"  run_node tools/a11y_audit.js
     run "platform layout matrix"                 run_node tools/verify_platform_layout.js
     run "weekly-hours client behavior"           run_node app/hours/verify-hours.js

@@ -588,6 +588,49 @@ def test_preflight_fails_at_start_when_path_has_no_node(tmp_path: Path) -> None:
     assert result.stderr == "Node unavailable on PATH at preflight start.\n"
 
 
+def test_preflight_rejects_bash_older_than_5_1_before_node_resolution(
+    tmp_path: Path,
+) -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    simulated_source = source.replace(
+        "BASH_VERSINFO", "STUB_BASH_VERSINFO"
+    ).replace("$BASH_VERSION", "$STUB_BASH_VERSION")
+    simulated_preflight = tmp_path / "preflight.sh"
+    simulated_preflight.write_text(simulated_source, encoding="utf-8")
+    node_resolution_marker = tmp_path / "node-resolution-attempted"
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            textwrap.dedent(
+                """\
+                STUB_BASH_VERSINFO=(5 0)
+                STUB_BASH_VERSION=5.0-test
+                type() {
+                  : > "$NODE_RESOLUTION_MARKER"
+                  return 1
+                }
+                source "$SIMULATED_PREFLIGHT"
+                """
+            ),
+        ],
+        env={
+            **os.environ,
+            "NODE_RESOLUTION_MARKER": str(node_resolution_marker),
+            "SIMULATED_PREFLIGHT": str(simulated_preflight),
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Bash 5.1 or newer required; running 5.0-test.\n"
+    assert not node_resolution_marker.exists()
+
+
 def test_preflight_rejects_relative_node_path_at_start(tmp_path: Path) -> None:
     source = PREFLIGHT.read_text(encoding="utf-8")
     definitions = tmp_path / "preflight-functions.sh"
@@ -625,6 +668,68 @@ def test_preflight_routes_every_node_gate_through_startup_node() -> None:
     assert "unset NODE_OPTIONS NODE_PATH" in node_wrapper
     assert 'exec "$NODE_BIN" "$@"' in node_wrapper
     assert "NODE_BIN" not in source[source.index("find_chromium()") :]
+
+
+@pytest.mark.parametrize(
+    ("probe_exit", "probe_summary", "expected_exit", "expected_output"),
+    [
+        (0, "0/8", 0, ""),
+        (0, "1/8", 1, "line one\nline two\n1/8\n"),
+        (23, "0/8", 1, "line one\nline two\n0/8\n"),
+    ],
+)
+def test_preflight_offline_redteam_probe_requires_zero_status_and_clean_summary(
+    tmp_path: Path,
+    probe_exit: int,
+    probe_summary: str,
+    expected_exit: int,
+    expected_output: str,
+) -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    definitions = tmp_path / "preflight-functions.sh"
+    definitions.write_text(_preflight_function_source(source), encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    invocations = tmp_path / "node-invocations"
+    _write_executable(
+        bin_dir / "node",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            printf '%s\n' "$@" >> "$INVOCATIONS_FILE"
+            printf 'discarded diagnostic\n' >&2
+            printf 'line one\nline two\n%s\n' "$STUB_PROBE_SUMMARY"
+            exit "$STUB_PROBE_EXIT"
+            """
+        ),
+    )
+    env = {
+        **os.environ,
+        "INVOCATIONS_FILE": str(invocations),
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "PREFLIGHT_FUNCTIONS": str(definitions),
+        "STUB_PROBE_EXIT": str(probe_exit),
+        "STUB_PROBE_SUMMARY": probe_summary,
+    }
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            'source "$PREFLIGHT_FUNCTIONS"; run_offline_redteam_probe',
+        ],
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == expected_exit
+    assert result.stdout == expected_output
+    assert result.stderr == ""
+    assert invocations.read_text(encoding="utf-8").splitlines() == [
+        "tools/offline_redteam_probe.mjs"
+    ]
 
 
 def test_preflight_persona_gate_handles_immediate_success_repeatedly(
