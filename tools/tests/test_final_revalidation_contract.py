@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -36,6 +37,132 @@ EXPECTED_A11Y_PATHS = {
     "/platform/matters/m05-dwi-meridian/",
     "/platform/hours/",
     "/cost-per-credit.html",
+}
+
+WRITE_REDIRECT_CLASSES = frozenset({">", ">>", ">|", "<>", "&>", "&>>", "{fd}>"})
+
+# These helpers deliberately execute commands or mutate files only after entering
+# and revalidating a pinned directory.  Their grammars are command-specific: an
+# added command, a changed option, or a non-relative filesystem operand is not an
+# approved helper operation.
+APPROVED_HELPER_COMMAND_SHAPES = {
+    "with_pinned_dir": {
+        ("local", "expected_physical_dir=$1", "expected_identity=$2", "command_name", "resolved_dir"),
+        ("local", "pinned_return_fd", "previous_identity", "restore_status=0", "status=1"),
+        ("shift", "2"),
+        ("[", "$#", "-gt", "0", "]"),
+        ("return", "1"),
+        ("exec", "{pinned_return_fd}", "<", "."),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("exec", "{pinned_return_fd}", "<&", "-"),
+        ("[", "$(stat -Lc '%F' -- /proc/self/fd/$pinned_return_fd)", "!=", "directory", "]"),
+        ("cd", "-P", "--", "$expected_physical_dir"),
+        ("pwd", "-P"),
+        ("[", "$resolved_dir", "!=", "$expected_physical_dir", "]"),
+        ("[", "-z", "$expected_identity", "]"),
+        ("[", "$(stat -Lc '%d:%i' -- .)", "!=", "$expected_identity", "]"),
+        ("$@",),
+        ("cd", "-P", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("[", "$restore_status", "-eq", "0", "]"),
+        ("[", "$(stat -Lc '%d:%i' -- .)", "!=", "$previous_identity", "]"),
+        ("return", "$status"),
+    },
+    "remove_in_pinned_dir": {
+        ("local", "expected_physical_dir=$1", "expected_identity=$2", "delete_mode=$3"),
+        ("local", "actual_identity", "relative_name", "resolved_dir"),
+        ("shift", "3"),
+        ("[", "$#", "-gt", "0", "]"),
+        ("return", "0"),
+        ("trap", "-", "EXIT"),
+        ("cd", "-P", "--", "$expected_physical_dir"),
+        ("return", "1"),
+        ("pwd", "-P"),
+        ("[", "$resolved_dir", "=", "$expected_physical_dir", "]"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("[", "-n", "$expected_identity", "]"),
+        ("[", "$actual_identity", "=", "$expected_identity", "]"),
+        ("file",),
+        ("[", "!", "-d", "$relative_name", "]"),
+        ("rm", "-f", "--", "$@"),
+        ("tree",),
+        ("rm", "-rf", "--", "$@"),
+        ("*",),
+    },
+    "initialize_revalidation_lock": {
+        ("local", "relative_lock_name=$1", "token=$2", "expected_parent_identity=$3"),
+        ("local", "created_identity", "current_identity", "lock_identity", "lock_status"),
+        ("return", "2"),
+        ("[", "-n", "$expected_parent_identity", "]"),
+        ("mkdir", "--", "$relative_lock_name"),
+        ("exit", "1"),
+        ("cd", "-P", "--", "$relative_lock_name"),
+        ("exit", "2"),
+        ("[", "$(stat -Lc '%d:%i' -- ..)", "=", "$expected_parent_identity", "]"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("write_lock_owner", "owner", "$token"),
+        ("cd", ".."),
+        ("stat", "-c", "%d:%i", "--", "$relative_lock_name"),
+        ("[", "$current_identity", "=", "$created_identity", "]"),
+        ("rm", "-rf", "--", "$relative_lock_name"),
+        ("true",),
+        ("[", "$lock_status", "-eq", "0", "]"),
+        ("return", "$lock_status"),
+        ("printf", "%s\\n", "$lock_identity"),
+    },
+    "run_generator": {
+        ("local", "label=$1"),
+        ("shift",),
+        ("enter_pinned_dir", "$ROOT", "$ROOT_IDENTITY"),
+        ("close_inherited_pinning_fds",),
+        ("exec", "$@"),
+        ("die", "generator failed: $label"),
+    },
+}
+
+APPROVED_HELPER_COMMAND_ORDER = {
+    "with_pinned_dir": (
+        "local", "local", "shift", "[", "return", "return", "exec", "return",
+        "stat", "exec", "return", "[", "cd", "pwd", "[", "[", "[", "$@",
+        "cd", "[", "[", "exec", "[", "return", "return",
+    ),
+    "remove_in_pinned_dir": (
+        "local", "local", "shift", "[", "return", "trap", "cd", "return", "pwd",
+        "return", "[", "return", "stat", "return", "[", "[", "return", "return",
+        "file", "[", "return", "rm", "tree", "rm", "*", "return",
+    ),
+    "initialize_revalidation_lock": (
+        "local", "local", "return", "[", "return", "mkdir", "exit", "cd", "exit",
+        "[", "exit", "stat", "exit", "write_lock_owner", "cd", "exit", "stat", "exit",
+        "[", "rm", "true", "exit", "stat", "[", "return", "printf",
+    ),
+    "run_generator": (
+        "local", "shift", "enter_pinned_dir", "close_inherited_pinning_fds", "exec", "die",
+    ),
+}
+
+REQUIRED_HELPER_RELATIVE_GUARDS = {
+    "with_pinned_dir": 'case "$command_name" in\n    ""|.|..|/*|*/*) return 1 ;;\n  esac',
+    "remove_in_pinned_dir": 'case "$relative_name" in\n        ""|.|..|/*|*/*) return 1 ;;\n      esac',
+    "initialize_revalidation_lock": (
+        'case "$relative_lock_name" in\n    ""|.|..|/*|*/*) return 2 ;;\n  esac'
+    ),
+}
+
+# The readable command-shape allowlists above make the intended operations easy
+# to audit.  These digests additionally pin every normalized shell token in each
+# security-sensitive helper, including control operators and assignment-only
+# statements that do not have an executable command name.
+APPROVED_HELPER_TOKEN_STREAM_SHA256 = {
+    "with_pinned_dir": "111a2d40c02d54f8ba28c69cf5e012c29ec4479b80adfcac8538dd4b2ecab828",
+    "remove_in_pinned_dir": "733a600a6678684035e2d5bdb92bcd06b14ae3008d997d5bee449178a80c2281",
+    "initialize_revalidation_lock": "91e2906590ade58cccca1be7a9073644d13b189f832103871c244f6205ed5bc6",
+    "run_generator": "0fdd27c5e28de6955a48a5bc872fc24ca2b2be5535b1c2f709f2b4421a6c974d",
+    "restore_build_stamp_in_pinned_dir": "3bd2eb1ed00e95604fb0d833a676cd7f8a406903bbc3242d8251dc14c945399e",
+    "write_server_marker": "71bc9b645fc66812f955d65c990ebefe662dfebc175ca584b4e00faf4c3a641c",
+    "open_new_relative_file_fd": "c8d2376dd1ccb3b925ab7fbb9bb7f04225c6a4cb0dbcf404cc865d0862259a7f",
+    "run_with_new_log": "bbb24540fb30b58015935451a5b291b37f70efa5f72050cbbabb5985dd32be2b",
+    "exec_with_new_log": "0eafef8637aabff0fba2a583699a6924f06a76bf86420d28d265fa8ac38392fb",
+    "write_lock_owner": "5c2a950466a993a3d9c9a8e4f9d3b2b783f90655b73c499533a6dde37517e416",
 }
 
 
@@ -85,20 +212,100 @@ def shell_command_segments(source: str) -> list[list[str]]:
     return segments
 
 
-def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]:
-    approved_helper_bodies = (
-        "restore_build_stamp_in_pinned_dir",
-        "with_pinned_dir",
-        "write_server_marker",
-        "open_new_relative_file_fd",
-        "run_with_new_log",
-        "exec_with_new_log",
-        "remove_in_pinned_dir",
-        "write_lock_owner",
-        "initialize_revalidation_lock",
-        "run_generator",
+def shell_normalized_token_stream(source: str) -> list[str]:
+    lexer = shlex.shlex(
+        source.replace("\\\n", " "),
+        posix=True,
+        punctuation_chars="();<>|&\n",
     )
-    inspected = without_shell_functions(source, *approved_helper_bodies)
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    return list(lexer)
+
+
+def shell_token_stream_sha256(source: str) -> str:
+    normalized = json.dumps(
+        shell_normalized_token_stream(source),
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def shell_regions(source: str) -> list[tuple[str | None, str]]:
+    function_pattern = re.compile(
+        r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}",
+        re.MULTILINE | re.DOTALL,
+    )
+    matches = list(function_pattern.finditer(source))
+    top_level_parts: list[str] = []
+    previous_end = 0
+    for match in matches:
+        top_level_parts.append(source[previous_end : match.start()])
+        top_level_parts.append("\n")
+        previous_end = match.end()
+    top_level_parts.append(source[previous_end:])
+    return [(None, "".join(top_level_parts))] + [
+        (match.group(1), match.group(0)) for match in matches
+    ]
+
+
+def shell_command_substitutions(source: str) -> list[str]:
+    substitutions: list[str] = []
+    index = 0
+    while index + 1 < len(source):
+        if source[index : index + 2] != "$(":
+            index += 1
+            continue
+        if source[index : index + 3] == "$((":
+            arithmetic_body_start = index + 3
+            index += 3
+            depth = 2
+            while index < len(source) and depth:
+                if source[index] == "(":
+                    depth += 1
+                elif source[index] == ")":
+                    depth -= 1
+                index += 1
+            arithmetic_body_end = index - 2 if depth == 0 else index
+            substitutions.extend(
+                shell_command_substitutions(
+                    source[arithmetic_body_start:arithmetic_body_end]
+                )
+            )
+            continue
+
+        start = index
+        index += 2
+        depth = 1
+        single_quoted = False
+        double_quoted = False
+        escaped = False
+        while index < len(source) and depth:
+            character = source[index]
+            if escaped:
+                escaped = False
+            elif character == "\\" and not single_quoted:
+                escaped = True
+            elif character == "'" and not double_quoted:
+                single_quoted = not single_quoted
+            elif character == '"' and not single_quoted:
+                double_quoted = not double_quoted
+            elif not single_quoted:
+                if character == "(":
+                    depth += 1
+                elif character == ")":
+                    depth -= 1
+            index += 1
+        substitutions.append(source[start:index])
+    return substitutions
+
+
+def unsafe_filesystem_command_tokens(
+    source: str,
+    *,
+    write_redirect_classes: frozenset[str] = WRITE_REDIRECT_CLASSES,
+) -> list[tuple[str, list[str]]]:
     mutating_commands = {
         "rm",
         "rmdir",
@@ -150,6 +357,7 @@ def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]
         "exec",
         "exit",
         "finalize_revalidation",
+        "false",
         "flock",
         "git",
         "grep",
@@ -186,7 +394,6 @@ def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]
         "wait",
         "with_pinned_dir",
     }
-    write_redirects = {">", ">>", ">|", "<>", "&>", "&>>"}
     command_prefixes = {"if", "then", "elif", "else", "do", "while", "until", "!"}
     violations: list[tuple[str, list[str]]] = []
 
@@ -197,6 +404,16 @@ def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]
             and "/" not in token
             and "$" not in token
         )
+
+    def write_redirect_rule(segment: list[str], index: int) -> str | None:
+        token = segment[index]
+        if (
+            token == ">"
+            and index > 0
+            and re.fullmatch(r"\{[A-Za-z_][A-Za-z0-9_]*\}", segment[index - 1])
+        ):
+            return "{fd}>" if "{fd}>" in write_redirect_classes else None
+        return token if token in write_redirect_classes else None
 
     def pinned_helper_index(segment: list[str]) -> int | None:
         return next(
@@ -292,7 +509,9 @@ def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]
                 and all(simple_relative_name(token) for token in operands)
             )
         redirect_indexes = [
-            index for index, token in enumerate(arguments) if token in write_redirects
+            index
+            for index, _ in enumerate(arguments)
+            if write_redirect_rule(arguments, index) is not None
         ]
         if len(redirect_indexes) != 1:
             return False
@@ -400,68 +619,240 @@ def unsafe_filesystem_command_tokens(source: str) -> list[tuple[str, list[str]]]
             for token in suffix[:redirect_index]
         )
 
-    for segment in shell_command_segments(inspected):
-        executable_index = executable_index_for(segment)
-        if executable_index is not None:
-            executable = segment[executable_index].rsplit("/", 1)[-1]
-            if executable not in approved_command_tokens:
-                violations.append((executable, segment))
-            elif executable == "command" and not approved_command_builtin(
-                segment, executable_index
-            ):
-                violations.append((executable, segment))
-        if "with_pinned_dir" in segment and not approved_pinned_invocation(segment):
-            violations.append(("with_pinned_dir", segment))
-        if "run_generator" in segment:
-            if not approved_run_generator(segment):
+    approved_simple_substitutions = {
+        ("dirname", "$0"),
+        ("pwd", "-P"),
+        ("pinned_directory_identity", "$ROOT/site"),
+        ("pinned_directory_identity", "$ROOT"),
+        ("pinned_directory_identity", "$ROOT/build"),
+        ("pinned_directory_identity", "$BUILD_UAT"),
+        ("pinned_directory_identity", "$BUILD_STAMP_DIR"),
+        ("pinned_directory_identity", "$BUILD_UAT/$LOCK_NAME"),
+        ("git", "rev-parse", "HEAD"),
+        ("git", "status", "--short", "--untracked-files=normal", "${pathspecs[@]}"),
+        ("process_identity", "$$"),
+        ("process_identity", "$marker_pid"),
+        ("process_identity", "$lock_owner_pid"),
+        ("command", "-v", "curl"),
+        ("command", "-v", "flock"),
+        ("new_log_name", "local-server"),
+        ("new_log_name", "$label"),
+        ("new_log_name", "a11y"),
+        ("<", "$marker_name"),
+        ("curl", "-fsS", "--max-time", "2", "$MARKER_URL", "2", ">&", "-"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("stat", "-Lc", "%d:%i", "--", ".."),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("stat", "-Lc", "%F", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$marker_fd"),
+        ("stat", "-Lc", "%h", "--", "/proc/self/fd/$marker_fd"),
+        ("stat", "-Lc", "%h", "--", "$relative_name"),
+        ("stat", "-Lc", "%s", "--", "$relative_name"),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$directory_fd"),
+        ("stat", "-Lc", "%F", "--", "/proc/self/fd/$directory_fd"),
+    }
+    approved_pinned_capture_commands = {
+        (
+            "with_pinned_dir",
+            "$ROOT/site",
+            "$SITE_IDENTITY",
+            "mktemp",
+            ".final-revalidation-server.XXXXXX",
+        ),
+        (
+            "with_pinned_dir",
+            "$ROOT/site",
+            "$SITE_IDENTITY",
+            "relative_regular_file_identity",
+            "$MARKER_NAME",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT",
+            "$BUILD_UAT_IDENTITY",
+            "initialize_revalidation_lock",
+            "$LOCK_NAME",
+            "$LOCK_TOKEN",
+            "$BUILD_UAT_IDENTITY",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT/$LOCK_NAME",
+            "$existing_identity",
+            "read_regular_relative_file",
+            "owner",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT/$LOCK_NAME",
+            "$LOCK_IDENTITY",
+            "read_regular_relative_file",
+            "owner",
+        ),
+    }
+
+    def approved_command_substitution(substitution: str, helper_name: str | None) -> bool:
+        segments = shell_command_segments(substitution[2:-1])
+        if len(segments) == 1:
+            command = tuple(segments[0])
+            return command in approved_simple_substitutions or command in approved_pinned_capture_commands
+        if helper_name != "initialize_revalidation_lock":
+            return False
+        allowed_shapes = APPROVED_HELPER_COMMAND_SHAPES[helper_name]
+        for segment in segments:
+            executable_index = executable_index_for(segment)
+            if executable_index is None:
+                continue
+            if tuple(segment[executable_index:]) not in allowed_shapes:
+                return False
+        return True
+
+    approved_internal_helper_commands = {
+        "restore_build_stamp_in_pinned_dir": {
+            ("open_new_relative_file_fd", "$restore_name", "restore_fd"),
+            ("mv", "-T", "--", "$restore_name", "$relative_name"),
+        },
+        "write_server_marker": {
+            ("exec", "{marker_fd}", "<>", "$relative_name"),
+        },
+        "open_new_relative_file_fd": {
+            ("exec", "{new_fd}", ">", "$relative_name"),
+        },
+        "run_with_new_log": {
+            ("open_new_relative_file_fd", "$relative_name", "log_fd"),
+            ("exec", "$@"),
+            (">&", "$log_fd", "2", ">&", "1"),
+        },
+        "exec_with_new_log": {
+            ("open_new_relative_file_fd", "$relative_name", "log_fd"),
+            ("exec", "$@", ">&", "$log_fd", "2", ">&", "1"),
+        },
+        "write_lock_owner": {
+            ("open_new_relative_file_fd", "$relative_name", "owner_fd"),
+        },
+    }
+
+    def approved_helper_command(
+        helper_name: str | None, segment: list[str], executable_index: int
+    ) -> bool:
+        command_shape = tuple(segment[executable_index:])
+        if helper_name in APPROVED_HELPER_COMMAND_SHAPES:
+            return command_shape in APPROVED_HELPER_COMMAND_SHAPES[helper_name]
+        return command_shape in approved_internal_helper_commands.get(helper_name, set())
+
+    for helper_name, region_source in shell_regions(source):
+        if "`" in region_source:
+            violations.append(("backtick-command-substitution", [helper_name or "top-level"]))
+        for substitution in shell_command_substitutions(region_source):
+            if not approved_command_substitution(substitution, helper_name):
+                violations.append(("command-substitution", [substitution]))
+
+        region_segments = shell_command_segments(region_source)
+        if helper_name in APPROVED_HELPER_TOKEN_STREAM_SHA256:
+            grammar_matches = (
+                shell_token_stream_sha256(region_source)
+                == APPROVED_HELPER_TOKEN_STREAM_SHA256[helper_name]
+            )
+            relative_guard = REQUIRED_HELPER_RELATIVE_GUARDS.get(helper_name)
+            if relative_guard is not None and relative_guard not in region_source:
+                grammar_matches = False
+
+        if helper_name in APPROVED_HELPER_COMMAND_SHAPES:
+            command_order = tuple(
+                segment[executable_index]
+                for segment in region_segments
+                if segment != [helper_name]
+                if (executable_index := executable_index_for(segment)) is not None
+            )
+            grammar_matches = grammar_matches and (
+                command_order == APPROVED_HELPER_COMMAND_ORDER[helper_name]
+            )
+
+        if (
+            helper_name in APPROVED_HELPER_TOKEN_STREAM_SHA256
+            and not grammar_matches
+        ):
+            violations.append((f"{helper_name} grammar", [helper_name]))
+
+        for segment in region_segments:
+            if helper_name is not None and segment == [helper_name]:
+                continue
+            executable_index = executable_index_for(segment)
+            helper_command_is_approved = executable_index is not None and approved_helper_command(
+                helper_name, segment, executable_index
+            )
+            if executable_index is not None and not helper_command_is_approved:
+                executable = segment[executable_index].rsplit("/", 1)[-1]
+                if executable not in approved_command_tokens:
+                    violations.append((executable, segment))
+                elif executable == "command" and not approved_command_builtin(
+                    segment, executable_index
+                ):
+                    violations.append((executable, segment))
+
+            trap_index = next(
+                (index for index, token in enumerate(segment) if token == "trap"),
+                None,
+            )
+            if trap_index is not None and tuple(segment[trap_index:]) not in {
+                ("trap", "-", "EXIT"),
+                ("trap", "cleanup_on_exit", "EXIT"),
+                ("trap", "exit 130", "INT"),
+                ("trap", "exit 143", "TERM"),
+            }:
+                violations.append(("trap-handler", segment))
+
+            if helper_command_is_approved:
+                continue
+            if "with_pinned_dir" in segment and not approved_pinned_invocation(segment):
+                violations.append(("with_pinned_dir", segment))
+            if "run_generator" in segment and not approved_run_generator(segment):
                 violations.append(("run_generator", segment))
-        for index, token in enumerate(segment):
-            command_token = token.rsplit("/", 1)[-1]
-            if command_token in {"bash", "sh"} and segment[index + 1 : index + 2] == ["-c"]:
-                violations.append((f"{command_token} -c", segment))
-            elif command_token == "eval":
-                violations.append((command_token, segment))
-            elif command_token == "exec" and not exec_is_fd_operation(segment, index):
-                violations.append((command_token, segment))
-            elif command_token in {"python", "python3", "node"} and not approved_interpreter_command(
-                segment, index
-            ):
-                violations.append((command_token, segment))
-            elif command_token == "sed" and any(
-                argument == "--in-place"
-                or argument.startswith("--in-place=")
-                or re.fullmatch(r"-[A-Za-z]*i.*", argument)
-                for argument in segment[index + 1 :]
-            ):
-                violations.append(("sed -i", segment))
-            elif command_token == "rsync":
-                violations.append((command_token, segment))
-            elif command_token in mutating_commands and not approved_pinned_direct_command(
-                segment, index
-            ):
-                violations.append((command_token, segment))
-            elif token == "--directory" and not approved_pinned_http_server(segment, index):
-                violations.append((token, segment))
-            elif token in write_redirects and not safe_non_file_redirect(segment, index):
-                command_index = next(
-                    (
-                        command_position
-                        for command_position, command in enumerate(segment[:index])
-                        if command in {"printf", "cat"}
-                    ),
-                    -1,
-                )
-                if command_index < 0 or not approved_pinned_direct_command(segment, command_index):
+            for index, token in enumerate(segment):
+                command_token = token.rsplit("/", 1)[-1]
+                if command_token in {"bash", "sh"} and segment[index + 1 : index + 2] == ["-c"]:
+                    violations.append((f"{command_token} -c", segment))
+                elif command_token == "eval":
+                    violations.append((command_token, segment))
+                elif command_token == "exec" and not exec_is_fd_operation(segment, index):
+                    violations.append((command_token, segment))
+                elif command_token in {"python", "python3", "node"} and not approved_interpreter_command(
+                    segment, index
+                ):
+                    violations.append((command_token, segment))
+                elif command_token == "sed" and any(
+                    argument == "--in-place"
+                    or argument.startswith("--in-place=")
+                    or re.fullmatch(r"-[A-Za-z]*i.*", argument)
+                    for argument in segment[index + 1 :]
+                ):
+                    violations.append(("sed -i", segment))
+                elif command_token == "rsync":
+                    violations.append((command_token, segment))
+                elif command_token in mutating_commands and not approved_pinned_direct_command(
+                    segment, index
+                ):
+                    violations.append((command_token, segment))
+                elif token == "--directory" and not approved_pinned_http_server(segment, index):
                     violations.append((token, segment))
-            elif token in {">&", "<&"} and not safe_non_file_redirect(segment, index):
-                violations.append((token, segment))
+                else:
+                    redirect_rule = write_redirect_rule(segment, index)
+                    if redirect_rule is not None and not safe_non_file_redirect(segment, index):
+                        command_index = next(
+                            (
+                                command_position
+                                for command_position, command in enumerate(segment[:index])
+                                if command in {"printf", "cat"}
+                            ),
+                            -1,
+                        )
+                        if command_index < 0 or not approved_pinned_direct_command(
+                            segment, command_index
+                        ):
+                            violations.append((redirect_rule, segment))
+                    elif token in {">&", "<&"} and not safe_non_file_redirect(segment, index):
+                        violations.append((token, segment))
     return violations
-
-
-def without_shell_functions(source: str, *names: str) -> str:
-    for name in names:
-        source = source.replace(shell_function(source, name), "")
-    return source
 
 
 def initialize_git_repo(path: Path) -> None:
@@ -633,85 +1024,214 @@ def test_every_leg_contributes_to_the_final_exit_status() -> None:
 def test_all_filesystem_writes_use_pinned_directory_helpers() -> None:
     source = script_source()
     assert unsafe_filesystem_command_tokens(source) == []
+    assert unsafe_filesystem_command_tokens(source + "\nfalse\ntrue\n:\n") == []
 
     sentinels = [
-        ("mkdir", 'if false; then mkdir -- "$ROOT/site/mkdir-mutant"; fi'),
-        ("mv", 'if false; then mv -- source "$BUILD_UAT/mv-mutant"; fi'),
-        ("relative-redirect", "if false; then printf data > site/redirect-mutant; fi"),
+        ("mkdir", 'if false; then mkdir -- "$ROOT/site/mkdir-mutant"; fi', "mkdir"),
+        ("mv", 'if false; then mv -- source "$BUILD_UAT/mv-mutant"; fi', "mv"),
+        ("relative-redirect", "if false; then printf data > site/redirect-mutant; fi", ">"),
         (
             "mktemp-after-helper",
             'if false; then with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" true; '
             'mktemp "$ROOT/site/bypass.XXXXXX"; fi',
+            "mktemp",
         ),
-        ("compound-rm", 'if rm -rf -- "$ROOT/build/uat/runs"; then :; fi'),
-        ("full-path-rm", 'if false; then /bin/rm -rf -- "$ROOT/site/full-path-mutant"; fi'),
-        ("absolute-redirect", 'printf data > "$ROOT/site/redirect-mutant"'),
+        ("compound-rm", 'if rm -rf -- "$ROOT/build/uat/runs"; then :; fi', "rm"),
+        (
+            "full-path-rm",
+            'if false; then /bin/rm -rf -- "$ROOT/site/full-path-mutant"; fi',
+            "rm",
+        ),
+        ("absolute-redirect", 'printf data > "$ROOT/site/redirect-mutant"', ">"),
         (
             "helper-absolute-rm",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" rm -rf -- "$ROOT/site/rm-mutant"',
+            "rm",
         ),
         (
             "helper-absolute-mkdir",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" mkdir -- "$ROOT/site/mkdir-mutant"',
+            "mkdir",
         ),
         (
             "helper-shell-wrapper",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" bash -c "rm -rf -- /tmp/wrapper-mutant"',
+            "bash -c",
         ),
         (
             "helper-sh-wrapper",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" sh -c "touch /tmp/wrapper-mutant"',
+            "sh -c",
         ),
         (
             "helper-eval-wrapper",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" eval "mkdir /tmp/wrapper-mutant"',
+            "eval",
         ),
         (
             "helper-exec-wrapper",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" exec mkdir /tmp/wrapper-mutant',
+            "exec",
         ),
-        ("read-write-redirect", 'if false; then exec 9<> "$ROOT/site/redirect-mutant"; fi'),
-        ("append-both-redirect", 'if false; then printf data &>> "$ROOT/site/redirect-mutant"; fi'),
-        ("append-redirect", 'if false; then printf data >> "$ROOT/site/redirect-mutant"; fi'),
-        ("force-redirect", 'if false; then printf data >| "$ROOT/site/redirect-mutant"; fi'),
-        ("both-redirect", 'if false; then printf data &> "$ROOT/site/redirect-mutant"; fi'),
-        ("dynamic-fd-redirect", 'if false; then exec {mutant_fd}> "$ROOT/site/fd-mutant"; fi'),
-        ("copy", 'if false; then cp source "$ROOT/site/copy-mutant"; fi'),
-        ("sed-in-place", 'if false; then sed -i s/a/b/ "$ROOT/site/index.html"; fi'),
-        ("rsync", 'if false; then rsync source "$ROOT/site/rsync-mutant"; fi'),
+        (
+            "read-write-redirect",
+            'if false; then exec 9<> "$ROOT/site/redirect-mutant"; fi',
+            "<>",
+        ),
+        (
+            "append-both-redirect",
+            'if false; then printf data &>> "$ROOT/site/redirect-mutant"; fi',
+            "&>>",
+        ),
+        (
+            "append-redirect",
+            'if false; then printf data >> "$ROOT/site/redirect-mutant"; fi',
+            ">>",
+        ),
+        (
+            "force-redirect",
+            'if false; then printf data >| "$ROOT/site/redirect-mutant"; fi',
+            ">|",
+        ),
+        (
+            "both-redirect",
+            'if false; then printf data &> "$ROOT/site/redirect-mutant"; fi',
+            "&>",
+        ),
+        (
+            "dynamic-fd-redirect",
+            'if false; then exec {mutant_fd}> "$ROOT/site/fd-mutant"; fi',
+            "{fd}>",
+        ),
+        ("copy", 'if false; then cp source "$ROOT/site/copy-mutant"; fi', "cp"),
+        (
+            "sed-in-place",
+            'if false; then sed -i s/a/b/ "$ROOT/site/index.html"; fi',
+            "sed -i",
+        ),
+        ("rsync", 'if false; then rsync source "$ROOT/site/rsync-mutant"; fi', "rsync"),
         (
             "python-command-wrapper",
             'if false; then python3 -c "open(\047$ROOT/site/python-mutant\047, \047w\047)"; fi',
+            "python3",
         ),
         (
             "node-command-wrapper",
             'if false; then node -e "require(\047fs\047).writeFileSync(\047node-mutant\047, \047x\047)"; fi',
+            "node",
         ),
         (
             "helper-mktemp-tmpdir-option",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" '
             'mktemp --tmpdir=/tmp bypass.XXXXXX',
+            "mktemp",
         ),
         (
             "unknown-command-wrapper",
             'if false; then perl -e "open my $fh, q(>), q(/tmp/perl-mutant)"; fi',
+            "perl",
         ),
         (
             "helper-unknown-command-wrapper",
             'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" '
             'perl -e "open my $fh, q(>), q(/tmp/perl-helper-mutant)"',
+            "with_pinned_dir",
         ),
         (
             "unpinned-http-directory",
             'python3 -m http.server 9999 --directory "$ROOT/site"',
+            "--directory",
+        ),
+        (
+            "command-substitution-touch",
+            'printf %s "$(touch "$ROOT/site/substitution-mutant")"',
+            "command-substitution",
+        ),
+        (
+            "arithmetic-nested-command-substitution-touch",
+            'printf %s "$((1 + $(touch "$ROOT/site/arithmetic-substitution-mutant")))"',
+            "command-substitution",
+        ),
+        (
+            "backtick-command-substitution",
+            'printf %s "`touch "$ROOT/site/backtick-mutant"`"',
+            "backtick-command-substitution",
+        ),
+        (
+            "trap-handler-touch",
+            'trap \'touch "$ROOT/site/trap-mutant"\' EXIT',
+            "trap-handler",
+        ),
+        (
+            "helper-body-touch",
+            'initialize_revalidation_lock() {\n  touch "$ROOT/helper-body-mutant"\n}',
+            "touch",
         ),
     ]
-    for name, mutant in sentinels:
-        assert unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n"), name
+    for name, mutant, expected_rule in sentinels:
+        rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n")
+        }
+        assert expected_rule in rules, (name, expected_rule, sorted(rules))
+
+    helper_mutations = [
+        (
+            "run-generator-control-operator",
+            "run_generator",
+            'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY" &&',
+            'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY" ||',
+            "run_generator grammar",
+        ),
+        (
+            "with-pinned-dir-assignment-only",
+            "with_pinned_dir",
+            "    status=1\n  else",
+            "    status=0\n  else",
+            "with_pinned_dir grammar",
+        ),
+        (
+            "remove-in-pinned-dir-relative-guard-weakening",
+            "remove_in_pinned_dir",
+            '""|.|..|/*|*/*) return 1 ;;',
+            '""|.|..|/*) return 1 ;;',
+            "remove_in_pinned_dir grammar",
+        ),
+        (
+            "write-lock-owner-duplicate-command",
+            "write_lock_owner",
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1',
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1\n'
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1',
+            "write_lock_owner grammar",
+        ),
+        (
+            "exec-with-new-log-command-reorder",
+            "exec_with_new_log",
+            '  enter_pinned_dir "$command_dir" "$command_identity" || return 125\n'
+            "  close_inherited_pinning_fds || return 125",
+            "  close_inherited_pinning_fds || return 125\n"
+            '  enter_pinned_dir "$command_dir" "$command_identity" || return 125',
+            "exec_with_new_log grammar",
+        ),
+    ]
+    for name, helper_name, original, replacement, expected_rule in helper_mutations:
+        original_body = shell_function(source, helper_name)
+        assert original in original_body, (name, original)
+        mutant_body = original_body.replace(original, replacement, 1)
+        mutated_source = source.replace(original_body, mutant_body, 1)
+        rules = {
+            rule for rule, _ in unsafe_filesystem_command_tokens(mutated_source)
+        }
+        assert expected_rule in rules, (name, expected_rule, sorted(rules))
 
     for command in ("rmdir", "ln", "touch", "tee", "truncate", "install", "dd"):
         mutant = f'if false; then {command} "$ROOT/site/{command}-mutant"; fi'
-        assert unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n"), command
+        rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n")
+        }
+        assert command in rules, (command, sorted(rules))
 
     assert 'remove_in_pinned_dir "$ROOT/site" "$scanner_identity" file' in shell_function(
         source, "remove_stale_server_markers"
@@ -722,6 +1242,35 @@ def test_all_filesystem_writes_use_pinned_directory_helpers() -> None:
     assert 'remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree' in shell_function(
         source, "clear_prior_evidence"
     )
+
+
+def test_each_write_redirect_sentinel_depends_on_its_detector_rule() -> None:
+    source = script_source()
+    redirect_sentinels = [
+        (">", "printf data > site/redirect-mutant"),
+        (">>", "printf data >> site/redirect-mutant"),
+        (">|", "printf data >| site/redirect-mutant"),
+        ("<>", "exec 9<> site/redirect-mutant"),
+        ("&>", "printf data &> site/redirect-mutant"),
+        ("&>>", "printf data &>> site/redirect-mutant"),
+        ("{fd}>", "exec {mutant_fd}> site/redirect-mutant"),
+    ]
+    for expected_rule, mutant in redirect_sentinels:
+        mutated_source = source + "\n" + mutant + "\n"
+        baseline_rules = {
+            rule for rule, _ in unsafe_filesystem_command_tokens(mutated_source)
+        }
+        assert expected_rule in baseline_rules, (expected_rule, sorted(baseline_rules))
+
+        detector_mutant = WRITE_REDIRECT_CLASSES - {expected_rule}
+        mutant_rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(
+                mutated_source,
+                write_redirect_classes=detector_mutant,
+            )
+        }
+        assert expected_rule not in mutant_rules, (expected_rule, sorted(mutant_rules))
 
 
 def test_child_tools_receive_only_the_pinned_repository_root_as_cwd() -> None:
