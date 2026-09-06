@@ -57,33 +57,61 @@ restore_build_stamp() {
 # SIGKILL and host crashes bypass the EXIT trap. Remove only regular markers
 # created by this script whose recorded owner is no longer running; every other
 # untracked path remains visible to the clean-worktree gate below.
-remove_stale_server_markers() {
-  local marker marker_name marker_pid marker_token resolved_site
-  resolved_site=$(realpath -m -- "$ROOT/site") || \
-    die "could not resolve site/ before stale-marker cleanup"
-  if [ "$resolved_site" != "$ROOT/site" ]; then
-    die "site/ must resolve to its repository-local path before stale-marker cleanup (got $resolved_site)"
+process_start_ticks() {
+  local pid=$1 stat_line stat_tail
+  local -a stat_fields
+  if ! [[ "$pid" =~ ^[0-9]+$ ]] || ! IFS= read -r stat_line < "/proc/$pid/stat"; then
+    return 1
   fi
+  stat_tail=${stat_line##*) }
+  if [ "$stat_tail" = "$stat_line" ]; then
+    return 1
+  fi
+  read -r -a stat_fields <<< "$stat_tail"
+  if [ "${#stat_fields[@]}" -lt 20 ] || ! [[ "${stat_fields[19]}" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  printf '%s\n' "${stat_fields[19]}"
+}
 
-  for marker in "$ROOT"/site/.final-revalidation-server.??????; do
-    if [ ! -f "$marker" ] || [ -L "$marker" ]; then
-      continue
+remove_stale_server_markers() {
+  local current_start_ticks marker_name marker_pid marker_start_ticks marker_token
+  local resolved_site
+
+  if ! (
+    cd -P -- "$ROOT/site" || die "could not enter site/ before stale-marker cleanup"
+    resolved_site=$(realpath -m -- .) || \
+      die "could not resolve site/ before stale-marker cleanup"
+    if [ "$resolved_site" != "$ROOT/site" ]; then
+      die "site/ must resolve to its repository-local path before stale-marker cleanup (got $resolved_site)"
     fi
-    marker_name=${marker##*/}
-    if ! [[ "$marker_name" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]]; then
-      continue
-    fi
-    marker_token=$(<"$marker")
-    if ! [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):[0-9]+$ ]]; then
-      continue
-    fi
-    marker_pid=${BASH_REMATCH[2]}
-    if kill -0 "$marker_pid" 2>/dev/null; then
-      continue
-    fi
-    rm -f -- "$marker" || die "could not remove stale local-server marker: $marker"
-    printf 'removed stale local-server marker: %s\n' "${marker#"$ROOT"/}"
-  done
+    for marker_name in .final-revalidation-server.??????; do
+      if [ ! -f "$marker_name" ] || [ -L "$marker_name" ]; then
+        continue
+      fi
+      if ! [[ "$marker_name" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]]; then
+        continue
+      fi
+      marker_token=$(<"$marker_name")
+      if ! [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):([0-9]+):[0-9]+$ ]]; then
+        continue
+      fi
+      marker_pid=${BASH_REMATCH[2]}
+      marker_start_ticks=${BASH_REMATCH[3]}
+      if current_start_ticks=$(process_start_ticks "$marker_pid"); then
+        if [ "$current_start_ticks" = "$marker_start_ticks" ]; then
+          continue
+        fi
+      elif kill -0 "$marker_pid" 2>/dev/null || [ -d "/proc/$marker_pid" ]; then
+        continue
+      fi
+      rm -f -- "$marker_name" || \
+        die "could not remove stale local-server marker: site/$marker_name"
+      printf 'removed stale local-server marker: site/%s\n' "$marker_name"
+    done
+  ); then
+    die "stale local-server marker cleanup failed"
+  fi
 }
 
 require_clean_worktree() {
@@ -166,7 +194,9 @@ trap 'exit 143' TERM
 MARKER_PATH=$(mktemp "$ROOT/site/.final-revalidation-server.XXXXXX") || \
   die "could not create local-server identity marker"
 MARKER_NAME=$(basename "$MARKER_PATH")
-MARKER_TOKEN="final-revalidation:$SHA:$$:$RANDOM"
+MARKER_START_TICKS=$(process_start_ticks "$$") || \
+  die "could not read this revalidation process identity"
+MARKER_TOKEN="final-revalidation:$SHA:$$:$MARKER_START_TICKS:$RANDOM"
 printf '%s\n' "$MARKER_TOKEN" > "$MARKER_PATH"
 MARKER_URL="http://127.0.0.1:$PORT/$MARKER_NAME"
 

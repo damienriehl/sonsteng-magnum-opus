@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -67,7 +69,9 @@ def initialize_git_repo(path: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "fixture"], cwd=path, check=True)
 
 
-def run_bash(path: Path, program: str) -> subprocess.CompletedProcess[str]:
+def run_bash(
+    path: Path, program: str, *, timeout: float | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash"],
         cwd=path,
@@ -75,6 +79,7 @@ def run_bash(path: Path, program: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=timeout,
     )
 
 
@@ -184,13 +189,14 @@ def test_stale_server_marker_is_removed_without_weakening_initial_gate(
     functions = "\n\n".join(
         [
             shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
             shell_function(source, "remove_stale_server_markers"),
             shell_function(source, "require_clean_worktree"),
         ]
     )
     stale_marker = site / ".final-revalidation-server.ABC123"
     stale_marker.write_text(
-        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
     )
     stale_only = run_bash(
         tmp_path,
@@ -205,7 +211,7 @@ def test_stale_server_marker_is_removed_without_weakening_initial_gate(
     assert not stale_marker.exists()
 
     stale_marker.write_text(
-        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
     )
     unrelated = site / "unexpected-source.json"
     unrelated.write_text("unexpected\n", encoding="utf-8")
@@ -235,6 +241,7 @@ def test_malformed_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -
     functions = "\n\n".join(
         [
             shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
             shell_function(source, "remove_stale_server_markers"),
             shell_function(source, "require_clean_worktree"),
         ]
@@ -256,7 +263,9 @@ def test_malformed_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -
     assert "ERROR: initial gate failed" in result.stderr
 
 
-def test_live_owner_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -> None:
+def test_live_matching_owner_server_marker_is_preserved_for_initial_gate(
+    tmp_path: Path,
+) -> None:
     source = script_source()
     site = tmp_path / "site"
     site.mkdir()
@@ -266,6 +275,7 @@ def test_live_owner_server_marker_is_preserved_for_initial_gate(tmp_path: Path) 
     functions = "\n\n".join(
         [
             shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
             shell_function(source, "remove_stale_server_markers"),
             shell_function(source, "require_clean_worktree"),
         ]
@@ -276,8 +286,80 @@ def test_live_owner_server_marker_is_preserved_for_initial_gate(tmp_path: Path) 
         (
             f"set -uo pipefail\n{functions}\n"
             f"ROOT={shlex.quote(str(tmp_path))}\n"
-            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:12345\\n' \"$$\" > "
+            "owner_start_ticks=$(process_start_ticks \"$$\")\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:%s:12345\\n' "
+            '"$$" "$owner_start_ticks" > '
             f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_reused_pid_with_different_start_ticks_is_removed(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "owner_start_ticks=$(process_start_ticks \"$$\")\n"
+            "stale_start_ticks=$((owner_start_ticks + 1))\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:%s:12345\\n' "
+            '"$$" "$stale_start_ticks" > '
+            f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+
+def test_live_owner_with_unreadable_start_ticks_is_preserved_for_initial_gate(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:1:12345\\n' \"$$\" > "
+            f"{shlex.quote(str(marker))}\n"
+            "process_start_ticks() { return 1; }\n"
             "remove_stale_server_markers\n"
             "require_clean_worktree 'initial gate failed'\n"
         ),
@@ -300,11 +382,12 @@ def test_symlinked_site_cannot_delete_external_server_marker(tmp_path: Path) -> 
 
     marker = external_site / ".final-revalidation-server.ABC123"
     marker.write_text(
-        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
     )
     functions = "\n\n".join(
         [
             shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
             shell_function(source, "remove_stale_server_markers"),
         ]
     )
@@ -319,6 +402,93 @@ def test_symlinked_site_cannot_delete_external_server_marker(tmp_path: Path) -> 
     assert result.returncode == 1
     assert marker.exists()
     assert "site/ must resolve to its repository-local path" in result.stderr
+
+
+def test_site_swap_after_validation_cannot_delete_external_server_marker(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    external_site = tmp_path / "external-site"
+    repository.mkdir()
+    external_site.mkdir()
+    site = repository / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+
+    marker_name = ".final-revalidation-server.ABC123"
+    token = f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n"
+    original_marker = site / marker_name
+    external_marker = external_site / marker_name
+    original_marker.write_text(token, encoding="utf-8")
+    external_marker.write_text(token, encoding="utf-8")
+    realpath_bin = shutil.which("realpath")
+    assert realpath_bin is not None
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    realpath_shim = shim_dir / "realpath"
+    realpath_shim.write_text(
+        """#!/usr/bin/env bash
+set -uo pipefail
+resolved=$("$REALPATH_BIN" "$@") || exit 1
+mv -- "$ROOT/site" "$ROOT/original-site" || exit 1
+ln -s -- "$EXTERNAL_SITE" "$ROOT/site" || exit 1
+printf '%s\n' "$resolved"
+""",
+        encoding="utf-8",
+    )
+    realpath_shim.chmod(0o755)
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            f"EXTERNAL_SITE={shlex.quote(str(external_site))}\n"
+            f"REALPATH_BIN={shlex.quote(realpath_bin)}\n"
+            f"PATH={shlex.quote(str(shim_dir))}:$PATH\n"
+            "export ROOT EXTERNAL_SITE REALPATH_BIN PATH\n"
+            "remove_stale_server_markers\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (repository / "original-site" / marker_name).exists()
+    assert external_marker.exists()
+
+
+def test_non_directory_site_fails_without_blocking(tmp_path: Path) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    (repository / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+    os.mkfifo(repository / "site")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_start_ticks"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "remove_stale_server_markers\n"
+        ),
+        timeout=2,
+    )
+    assert result.returncode == 1
+    assert "could not enter site/ before stale-marker cleanup" in result.stderr
 
 
 def test_post_generator_gate_excludes_only_marker_and_build_stamp(tmp_path: Path) -> None:
