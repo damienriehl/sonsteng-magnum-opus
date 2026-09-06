@@ -25,7 +25,7 @@ export const PROVIDER_DEFAULT_MAX_ATTEMPTS = 3;
 export const DEBRIEF_PROVIDER_MAX_ATTEMPTS = 2;
 
 // buildReq: () => { url, headers, body }   (body = plain object, JSON-encoded here)
-// parseResp: (data) => { text, usage, stop_reason? } (usage normalized to the
+// parseResp: (data) => { text, usage, stop_reason?, usageMetadata? } (usage normalized to the
 //                                           Anthropic field names: input_tokens,
 //                                           output_tokens, cache_read_input_tokens,
 //                                           cache_creation_input_tokens; provider
@@ -64,12 +64,13 @@ export async function completeWithRetry(
       return { ok: false, kind: "upstream", status: res.status };
     }
     try {
-      const { text, usage, stop_reason } = parseResp(data);
+      const { text, usage, stop_reason, usageMetadata } = parseResp(data);
       return {
         ok: true,
         text,
         usage: usage || {},
         ...(stop_reason ? { stop_reason } : {}),
+        ...(usageMetadata ? { usageMetadata } : {}),
       };
     } catch {
       return { ok: false, kind: "upstream", status: res.status };

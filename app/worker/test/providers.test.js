@@ -123,16 +123,21 @@ test("google chat: systemInstruction, role mapping, maxOutputTokens, header auth
   assert.equal(body.contents[2].parts[0].text, "Tell me what happened.");
   assert.equal(body.generationConfig.maxOutputTokens, 300);
   assert.equal(body.generationConfig.responseMimeType, undefined);
+  assert.equal(body.generationConfig.thinkingConfig, undefined);
 });
 
-test("google jsonMode: responseMimeType application/json", () => {
-  const { body } = google.buildRequest(EVAL);
-  assert.equal(body.generationConfig.responseMimeType, "application/json");
+test("google debrief: json mode disables thinking with an exact request-body field", () => {
+  const { body } = google.buildRequest({ ...EVAL, thinkingBudget: 0 });
+  assert.deepEqual(body.generationConfig, {
+    maxOutputTokens: 1200,
+    responseMimeType: "application/json",
+    thinkingConfig: { thinkingBudget: 0 },
+  });
   assert.equal(body.systemInstruction, undefined);
 });
 
-test("google parseResponse: usage, thought tokens, and stop reason normalized", () => {
-  const { text, usage, stop_reason } = google.parseResponse({
+test("google parseResponse: max-token usage metadata and stop reason normalized", () => {
+  const { text, usage, stop_reason, usageMetadata } = google.parseResponse({
     candidates: [{
       finishReason: "MAX_TOKENS",
       content: { parts: [{ text: "re" }, { text: "ply" }] },
@@ -142,6 +147,7 @@ test("google parseResponse: usage, thought tokens, and stop reason normalized", 
       candidatesTokenCount: 40,
       cachedContentTokenCount: 100,
       thoughtsTokenCount: 25,
+      totalTokenCount: 1065,
     },
   });
   assert.equal(text, "reply");
@@ -152,6 +158,37 @@ test("google parseResponse: usage, thought tokens, and stop reason normalized", 
     thought_tokens: 25,
   });
   assert.equal(stop_reason, "max_tokens");
+  assert.deepEqual(usageMetadata, {
+    promptTokenCount: 900,
+    candidatesTokenCount: 40,
+    thoughtsTokenCount: 25,
+    totalTokenCount: 1065,
+  });
+});
+
+test("google complete surfaces max-token usage metadata in the normalized result", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [] } }],
+    usageMetadata: {
+      promptTokenCount: 700,
+      candidatesTokenCount: 0,
+      thoughtsTokenCount: 500,
+      totalTokenCount: 1200,
+    },
+  }), { status: 200 });
+  try {
+    const result = await google.complete({ ...EVAL, thinkingBudget: 0 });
+    assert.equal(result.stop_reason, "max_tokens");
+    assert.deepEqual(result.usageMetadata, {
+      promptTokenCount: 700,
+      candidatesTokenCount: 0,
+      thoughtsTokenCount: 500,
+      totalTokenCount: 1200,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 // ---- shared ------------------------------------------------------------------
