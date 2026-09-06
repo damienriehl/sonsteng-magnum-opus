@@ -6,8 +6,10 @@ const test = require('node:test');
 
 const {
   attributeMatches,
+  bindingReviewCount,
   collapseWhitespace,
   controlNameMatches,
+  decorateBindingAttempt,
   fetchBuild,
   filenameMatches,
   liveRegionTextMatches,
@@ -18,6 +20,26 @@ const {
   uatWorkspacePath,
   waitForAttribute,
 } = require('../verify_persona_journeys.js');
+
+test('binding output preserves the red-team REVIEW count separately from its verdict', () => {
+  const attempt = {journey: 'd6-redteam', verdict: 'PASS'};
+  const output = [
+    'REVIEW  d4-verify-speed                    ambiguous planted-fact response — inspect: "I could not tell you."',
+    '-'.repeat(90),
+    'PASS 11  FAIL 0  REVIEW 1  (of 12)',
+    'REVIEW items need a human read of the quoted reply.',
+  ].join('\n');
+
+  assert.equal(bindingReviewCount(output), 1);
+  assert.equal(bindingReviewCount('PASS ordinary-binding'), null);
+  assert.deepEqual(decorateBindingAttempt(attempt, output), {
+    journey: 'd6-redteam',
+    verdict: 'PASS',
+    review_count: 1,
+  });
+  assert.deepEqual(decorateBindingAttempt(attempt, 'PASS ordinary-binding'), attempt);
+  assert.equal(Object.hasOwn(decorateBindingAttempt(attempt, 'PASS ordinary-binding'), 'review_count'), false);
+});
 
 test('URL waits require both the expected location and a complete document', () => {
   assert.equal(navigationIsReady('/platform/skills/', 'https://example.test/platform/skills/', 'loading'), false);

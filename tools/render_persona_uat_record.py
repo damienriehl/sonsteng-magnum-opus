@@ -123,6 +123,13 @@ def build_cell(attempt: dict[str, object]) -> str:
     return " / ".join(part for part in parts if part) or "unknown"
 
 
+def review_cell(attempt: dict[str, object]) -> str:
+    if "review_count" not in attempt:
+        return "—"
+    count = int(attempt["review_count"])
+    return f"{count} — HUMAN READ REQUIRED" if count else "0"
+
+
 def unrun_attempts(current: list[dict[str, object]], journeys: list[dict[str, object]]) -> list[dict[str, object]]:
     covered = {str(item.get("story") or "") for item in current}
     placeholders = []
@@ -169,24 +176,25 @@ def render(runs: list[dict[str, object]], journeys: list[dict[str, object]] | No
         "",
         "## Current verdicts",
         "",
-        "| Story | Persona | Environment | Viewport | Verdict | Build | Artifact | First failure |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Story | Persona | Environment | Viewport | Verdict | Review | Build | Artifact | First failure |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for item in current:
         lines.append(
-            "| {story} | {persona} | {env} | {viewport} | {verdict} | {build} | {artifact} | {failure} |".format(
+            "| {story} | {persona} | {env} | {viewport} | {verdict} | {review} | {build} | {artifact} | {failure} |".format(
                 story=clean_cell(item.get("story")),
                 persona=clean_cell(item.get("persona")),
                 env=clean_cell(item.get("env")),
                 viewport=clean_cell(item.get("viewport")),
                 verdict=clean_cell(item.get("verdict")),
+                review=review_cell(item),
                 build=clean_cell(build_cell(item)),
                 artifact=artifact_cell(item),
                 failure=clean_cell(item.get("first_failure")) or "—",
             )
         )
     if not current:
-        lines.append("| — | — | — | — | NOT RUN | — | — | No run files rendered |")
+        lines.append("| — | — | — | — | NOT RUN | — | — | — | No run files rendered |")
 
     counts: dict[str, collections.Counter[str]] = collections.defaultdict(collections.Counter)
     for item in current:
@@ -242,13 +250,13 @@ def render(runs: list[dict[str, object]], journeys: list[dict[str, object]] | No
             "",
             "## Attempt history",
             "",
-            "| Run | Started | Story | Journey | Persona | Environment | Viewport | Verdict | Build | Artifact | First failure |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Run | Started | Story | Journey | Persona | Environment | Viewport | Verdict | Review | Build | Artifact | First failure |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
     )
     for item in sorted(attempts, key=lambda value: value["_order"]):
         lines.append(
-            "| {run} | {started} | {story} | {journey} | {persona} | {env} | {viewport} | {verdict} | {build} | {artifact} | {failure} |".format(
+            "| {run} | {started} | {story} | {journey} | {persona} | {env} | {viewport} | {verdict} | {review} | {build} | {artifact} | {failure} |".format(
                 run=clean_cell(item.get("run_id")),
                 started=clean_cell(item.get("started")),
                 story=clean_cell(item.get("story")),
@@ -257,13 +265,14 @@ def render(runs: list[dict[str, object]], journeys: list[dict[str, object]] | No
                 env=clean_cell(item.get("env")),
                 viewport=clean_cell(item.get("viewport")),
                 verdict=clean_cell(item.get("verdict")),
+                review=review_cell(item),
                 build=clean_cell(build_cell(item)),
                 artifact=artifact_cell(item),
                 failure=clean_cell(item.get("first_failure")) or "—",
             )
         )
     if not attempts:
-        lines.append("| — | — | — | — | — | — | — | NOT RUN | — | — | No attempts recorded |")
+        lines.append("| — | — | — | — | — | — | — | NOT RUN | — | — | — | No attempts recorded |")
     return "\n".join(lines) + "\n"
 
 

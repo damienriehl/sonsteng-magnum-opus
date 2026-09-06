@@ -25,6 +25,7 @@ def attempt(
     digest: str = "a" * 64,
     canary: bool = False,
     shot_path: str | None = None,
+    review_count: int | None = None,
 ) -> dict[str, object]:
     value: dict[str, object] = {
         "journey": journey,
@@ -39,6 +40,8 @@ def attempt(
     }
     if shot_path:
         value["shot_path"] = shot_path
+    if review_count is not None:
+        value["review_count"] = review_count
     return value
 
 
@@ -272,3 +275,26 @@ def test_blocked_is_an_accepted_verdict_and_has_its_own_persona_count(tmp_path: 
     assert "| US-1-01 | A1 | local | desktop | BLOCKED |" in record
     counts = record.split("## Per-persona counts", 1)[1].split("## Retained screenshots", 1)[0]
     assert "| A1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |" in counts
+
+
+def test_binding_review_count_requires_a_human_read_without_changing_the_verdict(tmp_path: Path) -> None:
+    reviewed = attempt(verdict="PASS", viewport="n/a", review_count=2)
+    reviewed["artifact"] = "build/uat/shots/run/redteam-binding.log"
+    write_json(
+        tmp_path / "runs" / "run.json",
+        run_file("run", "2026-09-02T12:00:00Z", [reviewed]),
+    )
+
+    result = invoke(
+        tmp_path,
+        stories="## US-1-01 — Run the red-team harness\n\n1. Inspect uncertain replies.\n",
+        journeys=[{"id": "pitch-home", "story": "US-1-01", "persona": "A1", "binding": "harness"}],
+    )
+
+    assert result.returncode == 0, result.stderr
+    record = result.record_path.read_text(encoding="utf-8")  # type: ignore[attr-defined]
+    current = record.split("## Current verdicts", 1)[1].split("## Per-persona counts", 1)[0]
+    history = record.split("## Attempt history", 1)[1]
+    assert "| US-1-01 | A1 | local | n/a | PASS | 2 — HUMAN READ REQUIRED |" in current
+    assert "| run | 2026-09-02T12:00:00Z | US-1-01 | pitch-home | A1 | local | n/a | PASS | 2 — HUMAN READ REQUIRED |" in history
+    assert "redteam-binding.log" in record

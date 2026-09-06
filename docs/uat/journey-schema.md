@@ -52,6 +52,8 @@ Commands must begin with `node`, `python3`, `python`, `npx`, `bash`, `sh`, `cd`,
 
 Exit zero records `PASS`; a non-zero exit records `FAIL`; and a timeout or spawn failure records `ERROR` and is retried once. Every process attempt uses viewport `n/a`. The complete combined stdout/stderr is retained as `build/uat/shots/<run>/<journey>-binding.log`, its SHA-256 is the attempt digest, and only the last 40 output lines appear in `first_failure` for `FAIL` or `ERROR`. The runner does not print or prepend its environment to command logs.
 
+The live red-team harness additionally classifies ambiguous planted-fact replies as `REVIEW`: this remains separate from `PASS` in its output but does not fail the binding leg, because the narrow heuristic may flag a correct rephrased refusal. Its summary count is stored on the run attempt as `review_count` and rendered as `HUMAN READ REQUIRED`; the reviewer must read the quoted reply in the retained binding log before accepting the result.
+
 ## Evidence and retries
 
 Each invocation writes `build/uat/runs/<UTC>-<environment>.json`. Verdicts are `PASS`, `FAIL`, `OPEN`, `BLOCKED`, `NOT RUN`, and `ERROR`. Every browser attempt contains its journey, story, persona, viewport, verdict, first failure, SHA-256 screenshot digest, duration, canary flag, and retry number. PASS screenshots are deleted after hashing. FAIL and ERROR screenshots remain below `build/uat/shots/<run>/` until triage. Infrastructure errors are `ERROR`, retried once, and both attempts remain in history; an HTTP error response is `FAIL` because the browser reached the surface.
