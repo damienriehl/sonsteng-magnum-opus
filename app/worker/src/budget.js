@@ -61,7 +61,7 @@ export class BudgetCounter extends DurableObject {
     return this.core.reserveOneShot(id, opts);
   }
 
-  settleOneShot(id, usage) {
-    return this.core.settleOneShot(id, usage);
+  settleOneShot(id, usage, retainedCents) {
+    return this.core.settleOneShot(id, usage, retainedCents);
   }
 }
