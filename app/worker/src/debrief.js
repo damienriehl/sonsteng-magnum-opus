@@ -23,6 +23,28 @@ export function debriefValidationMessage(subtype) {
     : GENERIC_VALIDATION_MESSAGE;
 }
 
+// validMessages accepts at most 24,000 UTF-16 code units. One scalar code unit
+// can encode to 3 UTF-8 bytes (for example U+0800), so accepted transcript text
+// alone can occupy 72,000 bytes. A byte-level tokenizer cannot produce more
+// input tokens than bytes. Measuring the final serialized message also covers
+// server-owned prompt/framing bytes and conservatively counts escaped surrogates.
+export function debriefInputTokenUpperBound(prompt) {
+  const framedInput = JSON.stringify([{ role: "user", content: prompt }]);
+  return new TextEncoder().encode(framedInput).length;
+}
+
+async function reconcileBudgetTransition(transition) {
+  try {
+    return await transition();
+  } catch {
+    try {
+      return await transition();
+    } catch {
+      return null;
+    }
+  }
+}
+
 export async function completeBudgetedOneShot({
   budget,
   reservationId,
@@ -30,18 +52,29 @@ export async function completeBudgetedOneShot({
   caps,
   inputTokens,
   maxTokens,
+  providerMaxAttempts = 2,
   complete,
 }) {
-  const reserved = await budget.reserveOneShot(reservationId, {
+  const perCallReserveCents = Math.max(
+    1,
+    worstCaseReserveCents(inputTokens, maxTokens),
+  );
+  const reservation = {
     pool,
     capPublicCents: caps.capPublicCents,
     capDemoCents: caps.capDemoCents,
-    reserveCents: Math.max(1, worstCaseReserveCents(inputTokens, maxTokens)),
-  });
-  if (!reserved.ok) {
+    // A fetch rejection can occur after the provider accepted and billed the
+    // POST. Reserve every allowed provider request, then retain one per-call
+    // worst case for each response whose usage was lost.
+    reserveCents: perCallReserveCents * providerMaxAttempts,
+  };
+  const reserved = await reconcileBudgetTransition(
+    () => budget.reserveOneShot(reservationId, reservation),
+  );
+  if (!reserved?.ok) {
     return {
       ok: false,
-      kind: reserved.reason === "cap_exceeded" ? "cap" : "upstream",
+      kind: reserved?.reason === "cap_exceeded" ? "cap" : "upstream",
     };
   }
 
@@ -52,12 +85,14 @@ export async function completeBudgetedOneShot({
     completion = { ok: false, kind: "upstream" };
   }
 
-  try {
-    await budget.settleOneShot(
+  const settled = await reconcileBudgetTransition(
+    () => budget.settleOneShot(
       reservationId,
       completion.ok ? completion.usage : null,
-    );
-  } catch {
+      Math.min(completion.ambiguous_attempts || 0, providerMaxAttempts) * perCallReserveCents,
+    ),
+  );
+  if (!settled?.ok) {
     return { ok: false, kind: "upstream" };
   }
   return completion;
@@ -72,20 +107,52 @@ export async function generateDebriefScorecard({ complete, persona, factMap }) {
     }
   };
 
+  let attemptCount = 1;
   let result = await run(DEBRIEF_INITIAL_MAX_TOKENS);
-  if (!result.ok) return { ok: false, kind: "upstream", upstreamResult: result };
+  const initialStopReason = result.stop_reason;
+  const attempt = (outcome) => ({
+    count: attemptCount,
+    ...(initialStopReason ? { initial_stop_reason: initialStopReason } : {}),
+    outcome,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      kind: "upstream",
+      upstreamResult: result,
+      attempt: attempt("initial_upstream_failed"),
+    };
+  }
 
   if (result.stop_reason === "max_tokens") {
+    attemptCount = 2;
     result = await run(DEBRIEF_RETRY_MAX_TOKENS);
-    if (!result.ok) return { ok: false, kind: "upstream", upstreamResult: result };
+    if (!result.ok) {
+      return {
+        ok: false,
+        kind: "upstream",
+        upstreamResult: result,
+        attempt: attempt("retry_upstream_failed"),
+      };
+    }
     if (result.stop_reason === "max_tokens") {
-      return { ok: false, kind: "validation", subtype: "truncated" };
+      return {
+        ok: false,
+        kind: "validation",
+        subtype: "truncated",
+        attempt: attempt("retry_truncated"),
+      };
     }
   }
 
   const parsed = parseModelJson(result.text);
   if (!parsed) {
-    return { ok: false, kind: "validation", subtype: "unparseable" };
+    return {
+      ok: false,
+      kind: "validation",
+      subtype: "unparseable",
+      attempt: attempt(attemptCount === 2 ? "retry_invalid" : "invalid"),
+    };
   }
 
   const check = validateDebriefScorecard(parsed);
@@ -95,6 +162,7 @@ export async function generateDebriefScorecard({ complete, persona, factMap }) {
       kind: "validation",
       subtype: "wrong_shape",
       errors: check.errors,
+      attempt: attempt(attemptCount === 2 ? "retry_invalid" : "invalid"),
     };
   }
 
@@ -106,8 +174,13 @@ export async function generateDebriefScorecard({ complete, persona, factMap }) {
       kind: "validation",
       subtype: "oracle_leak",
       leakField,
+      attempt: attempt(attemptCount === 2 ? "retry_invalid" : "invalid"),
     };
   }
 
-  return { ok: true, scorecard: parsed };
+  return {
+    ok: true,
+    scorecard: parsed,
+    attempt: attempt(attemptCount === 2 ? "recovered" : "completed"),
+  };
 }

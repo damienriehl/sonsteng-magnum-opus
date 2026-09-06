@@ -69,6 +69,18 @@ test("the debrief handler maps validation subtypes and logs metadata only", () =
   assert.match(handler, /debriefValidationMessage\(outcome\.subtype\)/);
   assert.match(handler, /provider: up\.provider/);
   assert.match(handler, /validation_subtype: outcome\.subtype/);
+  assert.match(handler, /attempt_count/);
+  assert.match(handler, /attempt_outcome/);
+  assert.match(handler, /initial_stop_reason/);
+  const upstreamLogStart = handler.lastIndexOf(
+    "return upstreamFailureResponse(",
+    handler.indexOf('"debrief_upstream_fail"'),
+  );
+  const upstreamLogEnd = handler.indexOf(");", upstreamLogStart) + 2;
+  assert.match(handler.slice(upstreamLogStart, upstreamLogEnd), /\.\.\.attemptMetadata/);
+  const successLogStart = handler.indexOf('ev: "debrief_ok"');
+  const successLogEnd = handler.indexOf("return json", successLogStart);
+  assert.match(handler.slice(successLogStart, successLogEnd), /\.\.\.attemptMetadata/);
   for (const logCall of handler.matchAll(/logMeta\(\{[\s\S]*?\}\);/g)) {
     assert.doesNotMatch(logCall[0], /\b(prompt|reply|api_?key|credential)\b/i);
   }

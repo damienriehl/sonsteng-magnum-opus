@@ -5,8 +5,12 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 
 import { BudgetCore } from "../src/budget-core.js";
-import { centsForUsage } from "../src/cost.js";
-import { completeBudgetedOneShot, generateDebriefScorecard } from "../src/debrief.js";
+import { centsForUsage, worstCaseReserveCents } from "../src/cost.js";
+import {
+  completeBudgetedOneShot,
+  debriefInputTokenUpperBound,
+  generateDebriefScorecard,
+} from "../src/debrief.js";
 
 // Adapter matching the DO's ctx.storage.sql surface for the queries BudgetCore
 // issues: exec(query, ...binds) -> { toArray() }.
@@ -226,8 +230,8 @@ test("one-shot reservations atomically bound concurrent provider starts", () => 
     reason: "cap_exceeded",
   });
   assert.deepEqual(core.reserveOneShot("call-1", opts), {
-    ok: false,
-    reason: "duplicate",
+    ok: true,
+    replay: true,
   });
   assert.deepEqual(
     core.settleOneShot("call-1", { input_tokens: 20_000, output_tokens: 300 }),
@@ -244,7 +248,188 @@ test("failed one-shot calls release their full reserve", () => {
   assert.equal(spent(core, "demo"), 5);
   assert.deepEqual(core.settleOneShot("failed-call", null), { ok: true, actualCents: 0 });
   assert.equal(spent(core, "demo"), 0);
-  assert.deepEqual(core.settleOneShot("failed-call", null), { ok: true, replay: true });
+  assert.deepEqual(core.settleOneShot("failed-call", null), {
+    ok: true,
+    replay: true,
+    actualCents: 0,
+  });
+});
+
+test("a lost reserve response reconciles the same reservation id without double-reserving", async () => {
+  const core = makeCore();
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 3 };
+  let reserveCalls = 0;
+  let providerCalls = 0;
+  const budget = {
+    async reserveOneShot(id, options) {
+      reserveCalls += 1;
+      const result = core.reserveOneShot(id, options);
+      if (reserveCalls === 1) throw new Error("response lost after commit");
+      return result;
+    },
+    async settleOneShot(id, usage) {
+      return core.settleOneShot(id, usage);
+    },
+  };
+
+  const result = await completeBudgetedOneShot({
+    budget,
+    reservationId: "lost-reserve-response",
+    pool: "public",
+    caps: { capPublicCents: 5, capDemoCents: 5 },
+    inputTokens: 1000,
+    maxTokens: 1200,
+    complete: async () => {
+      providerCalls += 1;
+      return {
+        ok: true,
+        text: "paid completion",
+        usage: { input_tokens: 1000, output_tokens: 100 },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(reserveCalls, 2);
+  assert.equal(providerCalls, 1);
+  assert.equal(spent(core), centsForUsage(result.usage));
+});
+
+test("settling the same reservation id twice is idempotent", () => {
+  const core = makeCore();
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 3 };
+  const usage = { input_tokens: 20_000, output_tokens: 300 };
+
+  assert.deepEqual(core.reserveOneShot("settle-twice", opts), { ok: true });
+  assert.deepEqual(core.settleOneShot("settle-twice", usage), {
+    ok: true,
+    actualCents: 3,
+  });
+  assert.equal(spent(core), 3);
+  assert.deepEqual(core.settleOneShot("settle-twice", usage), {
+    ok: true,
+    replay: true,
+    actualCents: 3,
+  });
+  assert.equal(spent(core), 3);
+});
+
+test("a settled reservation replays through rollover and can be reused the next day", () => {
+  const clock = { value: new Date("2026-08-20T12:00:00Z") };
+  const core = makeCore(() => clock.value);
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 3 };
+  const usage = { input_tokens: 20_000, output_tokens: 300 };
+
+  assert.deepEqual(core.reserveOneShot("daily-replay", opts), { ok: true });
+  assert.deepEqual(core.settleOneShot("daily-replay", usage), {
+    ok: true,
+    actualCents: 3,
+  });
+  assert.deepEqual(core.reserveOneShot("daily-replay", opts), {
+    ok: true,
+    replay: true,
+    settled: true,
+  });
+  assert.equal(spent(core), 3);
+
+  clock.value = new Date("2026-08-21T12:00:00Z");
+  assert.deepEqual(core.reserveOneShot("daily-replay", opts), { ok: true });
+  assert.equal(spent(core), 3);
+});
+
+test("a committed settle with a lost response reconciles and returns the paid completion", async () => {
+  const core = makeCore();
+  let settleCalls = 0;
+  const budget = {
+    reserveOneShot: (id, options) => core.reserveOneShot(id, options),
+    settleOneShot(id, usage, retainedCents) {
+      settleCalls += 1;
+      const result = core.settleOneShot(id, usage, retainedCents);
+      if (settleCalls === 1) throw new Error("response lost after commit");
+      return result;
+    },
+  };
+  const usage = { input_tokens: 1000, output_tokens: 300 };
+
+  const result = await completeBudgetedOneShot({
+    budget,
+    reservationId: "lost-settle-response",
+    pool: "public",
+    caps: { capPublicCents: 5, capDemoCents: 5 },
+    inputTokens: 1000,
+    maxTokens: 1200,
+    complete: async () => ({ ok: true, text: "paid completion", usage }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(settleCalls, 2);
+  assert.equal(spent(core), centsForUsage(usage));
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_reservations").count, 0);
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM one_shot_settlements").count, 1);
+});
+
+test("token-dense debrief input settles at but never above its exact admitted cap", async () => {
+  const denseTranscript = Array.from({ length: 6 }, () => "\u0800".repeat(4000)).join("");
+  const inputTokens = debriefInputTokenUpperBound(denseTranscript);
+  const maxTokens = 2400;
+  const perCallReserve = Math.max(1, worstCaseReserveCents(inputTokens, maxTokens));
+  const exactCap = perCallReserve * 2;
+  const core = makeCore();
+
+  const result = await completeBudgetedOneShot({
+    budget: core,
+    reservationId: "dense-cap-boundary",
+    pool: "public",
+    caps: { capPublicCents: exactCap, capDemoCents: exactCap },
+    inputTokens,
+    maxTokens,
+    complete: async () => ({
+      ok: true,
+      text: "paid completion",
+      usage: { input_tokens: inputTokens, output_tokens: maxTokens },
+      ambiguous_attempts: 1,
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(spent(core), exactCap);
+  assert.deepEqual(
+    core.reserveOneShot("over-cap", {
+      pool: "public",
+      capPublicCents: exactCap,
+      capDemoCents: exactCap,
+      reserveCents: 1,
+    }),
+    { ok: false, reason: "cap_exceeded" },
+  );
+});
+
+test("one-shot settlement rolls back every mutation when finalization aborts", () => {
+  const core = makeCore();
+  const opts = { pool: "public", capPublicCents: 5, capDemoCents: 5, reserveCents: 3 };
+  assert.deepEqual(core.reserveOneShot("atomic-settlement", opts), { ok: true });
+  core.sql.exec(`
+    CREATE TRIGGER abort_one_shot_delete
+    BEFORE DELETE ON one_shot_reservations
+    WHEN OLD.id = 'atomic-settlement'
+    BEGIN
+      SELECT RAISE(ABORT, 'forced settlement abort');
+    END;
+  `);
+
+  assert.throws(
+    () => core.settleOneShot("atomic-settlement", { input_tokens: 20_000, output_tokens: 300 }),
+    /forced settlement abort/,
+  );
+  assert.equal(spent(core), 3, "the original reserve remains charged");
+  assert.equal(
+    core._one("SELECT COUNT(*) AS count FROM one_shot_reservations WHERE id=?", "atomic-settlement").count,
+    1,
+  );
+  assert.equal(
+    core._one("SELECT COUNT(*) AS count FROM one_shot_settlements WHERE id=?", "atomic-settlement").count,
+    0,
+  );
 });
 
 test("day rollover clears conservative one-shot reservations left by an interrupted call", () => {

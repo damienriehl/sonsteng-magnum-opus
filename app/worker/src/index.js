@@ -22,10 +22,16 @@ import { parseAllowedOrigins, matchOrigin, handlePreflight, withCors } from "./c
 import { mintSession, verifySession, timingSafeEqualStr } from "./session.js";
 import { gateSessionMint } from "./turnstile.js";
 import { getProvider } from "./providers/registry.js";
+import { DEBRIEF_PROVIDER_MAX_ATTEMPTS } from "./providers/common.js";
 import { resolveUpstream, resolvePanelUpstreams } from "./byok.js";
 import { renderPersona, buildDebriefPrompt, buildCritiquePrompt, rubricCriteriaLabels } from "./prompts.js";
 import { validateCritiqueScorecard, validateLearnerResultRequest, parseModelJson } from "./validate.js";
-import { completeBudgetedOneShot, debriefValidationMessage, generateDebriefScorecard } from "./debrief.js";
+import {
+  completeBudgetedOneShot,
+  debriefInputTokenUpperBound,
+  debriefValidationMessage,
+  generateDebriefScorecard,
+} from "./debrief.js";
 import { runFormativeMemoPanel, SUMMATIVE_BLOCKERS } from "./panel.js";
 import { buildAssessmentAuditInput, persistAssessmentAudit } from "./assessment-audit.js";
 import { resolveAssessmentThresholdConfig } from "./assessment-config.js";
@@ -100,11 +106,12 @@ function upstreamOrError(env, body) {
 }
 
 // One upstream completion via the resolved provider adapter.
-function callUpstream(up, { system, messages, maxTokens, jsonMode }) {
+function callUpstream(up, { system, messages, maxTokens, jsonMode, providerMaxAttempts }) {
   const provider = getProvider(up.provider);
   return provider.complete({
     system, messages, maxTokens,
     providerCfg: { apiKey: up.apiKey, model: up.model, jsonMode: !!jsonMode },
+    providerMaxAttempts,
   });
 }
 
@@ -112,8 +119,15 @@ function callUpstream(up, { system, messages, maxTokens, jsonMode }) {
 // BYOK call almost always means the USER'S key or model was rejected — surface
 // it as a plain validation_error (never in-character). Hosted config failures
 // are OUR bug: log-and-alert semantics, generic upstream error to the client.
-function upstreamFailureResponse(up, result, ev) {
-  logMeta({ ev, mode: up.mode, provider: up.provider, kind: result.kind, status: result.status || 0 });
+function upstreamFailureResponse(up, result, ev, metadata = {}) {
+  logMeta({
+    ...metadata,
+    ev,
+    mode: up.mode,
+    provider: up.provider,
+    kind: result.kind,
+    status: result.status || 0,
+  });
   if (result.kind === "config" && up.mode === "byok") {
     return errorEnvelope(
       "validation_error",
@@ -359,7 +373,7 @@ async function handleDebrief(request, env, origin) {
     factMap: bundle.fact_map[personaId] || {},
     transcript, interviewerOnOpposingSide: false,
   });
-  const inputTokens = estTokens(prompt.length);
+  const inputTokens = debriefInputTokenUpperBound(prompt);
   const outcome = await generateDebriefScorecard({
     complete: (maxTokens) => {
       const complete = () => callUpstream(up, {
@@ -367,6 +381,7 @@ async function handleDebrief(request, env, origin) {
         messages: [{ role: "user", content: prompt }],
         maxTokens,
         jsonMode: true,
+        providerMaxAttempts: DEBRIEF_PROVIDER_MAX_ATTEMPTS,
       });
       if (up.skipBudget) return complete();
       return completeBudgetedOneShot({
@@ -376,22 +391,42 @@ async function handleDebrief(request, env, origin) {
         caps,
         inputTokens,
         maxTokens,
+        providerMaxAttempts: DEBRIEF_PROVIDER_MAX_ATTEMPTS,
         complete,
       });
     },
     persona,
     factMap: bundle.fact_map[personaId] || {},
   });
+  const attemptMetadata = {
+    attempt_count: outcome.attempt.count,
+    attempt_outcome: outcome.attempt.outcome,
+    ...(outcome.attempt.initial_stop_reason
+      ? { initial_stop_reason: outcome.attempt.initial_stop_reason }
+      : {}),
+  };
   if (!outcome.ok && outcome.kind === "upstream") {
     if (outcome.upstreamResult.kind === "cap") {
+      logMeta({
+        ev: "debrief_cap_exceeded",
+        provider: up.provider,
+        pool: session.p,
+        ...attemptMetadata,
+      });
       return errorEnvelope("cap_exceeded", "The daily demo budget has been reached.", 429);
     }
-    return upstreamFailureResponse(up, outcome.upstreamResult, "debrief_upstream_fail");
+    return upstreamFailureResponse(
+      up,
+      outcome.upstreamResult,
+      "debrief_upstream_fail",
+      { pool: session.p, ...attemptMetadata },
+    );
   }
   if (!outcome.ok) {
     const metadata = {
       provider: up.provider,
       validation_subtype: outcome.subtype,
+      ...attemptMetadata,
     };
     if (outcome.subtype === "oracle_leak") {
       logMeta({ ev: "debrief_oracle_leak", ...metadata, field: outcome.leakField });
@@ -405,7 +440,13 @@ async function handleDebrief(request, env, origin) {
     return errorEnvelope("validation_error", debriefValidationMessage(outcome.subtype), 502);
   }
 
-  logMeta({ ev: "debrief_ok", mode: up.mode, provider: up.provider, pool: session.p });
+  logMeta({
+    ev: "debrief_ok",
+    mode: up.mode,
+    provider: up.provider,
+    pool: session.p,
+    ...attemptMetadata,
+  });
   return json({ scorecard: outcome.scorecard });
 }
 

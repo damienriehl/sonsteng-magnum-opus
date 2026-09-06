@@ -62,5 +62,5 @@ export function parseResponse(data) {
 }
 
 export function complete(opts) {
-  return completeWithRetry(() => buildRequest(opts), parseResponse);
+  return completeWithRetry(() => buildRequest(opts), parseResponse, opts.providerMaxAttempts);
 }

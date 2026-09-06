@@ -6,7 +6,13 @@ import * as anthropic from "../src/providers/anthropic.js";
 import * as openai from "../src/providers/openai.js";
 import * as google from "../src/providers/google.js";
 import { getProvider, PROVIDER_NAMES } from "../src/providers/registry.js";
-import { completeWithRetry, PROVIDER_TIMEOUT_MS, systemToString } from "../src/providers/common.js";
+import {
+  completeWithRetry,
+  DEBRIEF_PROVIDER_MAX_ATTEMPTS,
+  PROVIDER_DEFAULT_MAX_ATTEMPTS,
+  PROVIDER_TIMEOUT_MS,
+  systemToString,
+} from "../src/providers/common.js";
 
 const CHAT = {
   system: { prefix: "SEGMENT-A-TEXT", tail: "PERSONA-TAIL" },
@@ -177,5 +183,71 @@ test("provider completions carry a bounded abort signal", async () => {
     assert.equal(PROVIDER_TIMEOUT_MS, 60_000);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("non-debrief completion preserves mixed-failure recovery on a third provider request", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let calls = 0;
+  globalThis.setTimeout = (callback) => {
+    callback();
+    return 0;
+  };
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("network failure");
+    if (calls === 2) return new Response("retry", { status: 500 });
+    return new Response(JSON.stringify({ answer: "unexpected" }), { status: 200 });
+  };
+  try {
+    const result = await completeWithRetry(
+      () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
+      (data) => ({ text: data.answer, usage: {} }),
+    );
+    assert.deepEqual(result, {
+      ok: true,
+      text: "unexpected",
+      usage: {},
+      ambiguous_attempts: 1,
+    });
+    assert.equal(PROVIDER_DEFAULT_MAX_ATTEMPTS, 3);
+    assert.equal(calls, PROVIDER_DEFAULT_MAX_ATTEMPTS);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test("a debrief completion stops the mixed failure sequence after two provider requests", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSetTimeout = globalThis.setTimeout;
+  let calls = 0;
+  globalThis.setTimeout = (callback) => {
+    callback();
+    return 0;
+  };
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("ambiguous network failure");
+    if (calls === 2) return new Response("retry", { status: 500 });
+    return new Response(JSON.stringify({ answer: "must not run" }), { status: 200 });
+  };
+  try {
+    const result = await completeWithRetry(
+      () => ({ url: "https://provider.example.test", headers: {}, body: {} }),
+      (data) => ({ text: data.answer, usage: {} }),
+      DEBRIEF_PROVIDER_MAX_ATTEMPTS,
+    );
+    assert.deepEqual(result, {
+      ok: false,
+      kind: "upstream",
+      status: 500,
+      ambiguous_attempts: 1,
+    });
+    assert.equal(calls, DEBRIEF_PROVIDER_MAX_ATTEMPTS);
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.setTimeout = originalSetTimeout;
   }
 });
