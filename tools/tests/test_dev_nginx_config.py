@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import textwrap
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -239,6 +240,15 @@ def _write_executable(path: Path, source: str) -> None:
     path.chmod(0o755)
 
 
+def _preflight_function_source(source: str) -> str:
+    end = source.index("# ---- headless gates")
+    node_resolution = source[
+        source.index("NODE_BIN=$(type -P node") : source.index('cd "$(dirname "$0")/.."')
+    ]
+    functions = source[source.index("WANT_BROWSER=1") : end]
+    return node_resolution + functions
+
+
 def _run_persona_gate(
     tmp_path: Path,
     runner_exit: int,
@@ -248,6 +258,7 @@ def _run_persona_gate(
     fake_clock_step_ms: int | None = None,
     fake_clock_fail_after: int | None = None,
     fake_probe_elapsed_ms: int = 0,
+    curl_sleep_seconds: int = 0,
 ) -> tuple[
     subprocess.CompletedProcess[str],
     list[list[str]],
@@ -255,9 +266,7 @@ def _run_persona_gate(
     list[str],
 ]:
     source = PREFLIGHT.read_text(encoding="utf-8")
-    functions = source[
-        source.index("resolve_node_binary() {") : source.index("# ---- headless gates")
-    ]
+    functions = _preflight_function_source(source)
     definitions = tmp_path / "preflight-functions.sh"
     definitions.write_text(functions, encoding="utf-8")
 
@@ -285,14 +294,18 @@ def _run_persona_gate(
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    after_start_bin_dir = tmp_path / "after-start-bin"
+    after_start_bin_dir.mkdir()
     server_pid_file = tmp_path / "server.pid"
     curl_args_file = tmp_path / "curl.args"
     curl_count_file = tmp_path / "curl.count"
+    curl_pid_file = tmp_path / "curl.pid"
     runner_args_file = tmp_path / "runner.args"
     runner_env_file = tmp_path / "runner.env"
     sleep_args_file = tmp_path / "sleep.args"
     fake_clock_file = tmp_path / "fake-clock.ms"
-    fake_node_marker = tmp_path / "fake-node-ran"
+    startup_node_marker = tmp_path / "startup-node-ran"
+    after_start_node_marker = tmp_path / "after-start-node-ran"
     browser = tmp_path / "browser"
 
     _write_executable(browser, "#!/usr/bin/env bash\nexit 0\n")
@@ -301,7 +314,17 @@ def _run_persona_gate(
         textwrap.dedent(
             """\
             #!/usr/bin/env bash
-            : > "$FAKE_NODE_MARKER"
+            : > "$STARTUP_NODE_MARKER"
+            exec "$TRUSTED_NODE_BIN" "$@"
+            """
+        ),
+    )
+    _write_executable(
+        after_start_bin_dir / "node",
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env bash
+            : > "$AFTER_START_NODE_MARKER"
             exit 99
             """
         ),
@@ -343,6 +366,11 @@ def _run_persona_gate(
               printf 'CALL\n'
               printf '%s\n' "$@"
             } >> "$CURL_ARGS_FILE"
+            if [ "$FAKE_CURL_SLEEP_SECONDS" -gt 0 ]; then
+              printf '%s\n' "$$" > "$CURL_PID_FILE"
+              trap '' TERM
+              exec /bin/sleep "$FAKE_CURL_SLEEP_SECONDS"
+            fi
             if [ "$FAKE_PROBE_ELAPSED_MS" -gt 0 ]; then
               timeout_seconds=""
               while [ "$#" -gt 0 ]; do
@@ -372,9 +400,14 @@ def _run_persona_gate(
     env.pop("PERSONA_JOURNEY_RUNNER", None)
     env.update(
         {
+            "AFTER_START_NODE_MARKER": str(after_start_node_marker),
+            "AFTER_START_PATH": (
+                f"{after_start_bin_dir}:{bin_dir}:{env['PATH']}"
+            ),
             "CHROME_BIN": str(browser),
             "CURL_ARGS_FILE": str(curl_args_file),
             "CURL_COUNT_FILE": str(curl_count_file),
+            "CURL_PID_FILE": str(curl_pid_file),
             "FAKE_CLOCK_STEP_MS": (
                 "" if fake_clock_step_ms is None else str(fake_clock_step_ms)
             ),
@@ -383,7 +416,7 @@ def _run_persona_gate(
                 "" if fake_clock_fail_after is None else str(fake_clock_fail_after)
             ),
             "FAKE_PROBE_ELAPSED_MS": str(fake_probe_elapsed_ms),
-            "FAKE_NODE_MARKER": str(fake_node_marker),
+            "FAKE_CURL_SLEEP_SECONDS": str(curl_sleep_seconds),
             "NODE_OPTIONS": "--require=/hostile/path/node-options-shadow.js",
             "NODE_PATH": "/hostile/path/node-modules-shadow",
             "PATH": f"{bin_dir}:{env['PATH']}",
@@ -395,6 +428,8 @@ def _run_persona_gate(
             "SLEEP_ARGS_FILE": str(sleep_args_file),
             "STUB_CURL_FAILURES": str(curl_failures),
             "STUB_RUNNER_EXIT": str(runner_exit),
+            "STARTUP_NODE_MARKER": str(startup_node_marker),
+            "TRUSTED_NODE_BIN": shutil.which("node", path=env["PATH"]) or "node",
             "TRUSTED_PYTHON_BIN": shutil.which("python3", path=env["PATH"])
             or "python3",
         }
@@ -405,6 +440,8 @@ def _run_persona_gate(
         """\
         source "$PREFLIGHT_FUNCTIONS"
         ROOT="$REPO_ROOT"
+        PATH="$AFTER_START_PATH"
+        export PATH
         if [ -n "$FAKE_CLOCK_STEP_MS" ]; then
           printf '0\n' > "$FAKE_CLOCK_FILE"
           fake_clock_calls=0
@@ -520,16 +557,87 @@ def test_preflight_persona_gate_ignores_inherited_runner_override(
     )
 
 
-def test_preflight_persona_gate_uses_pinned_node_when_path_is_shadowed(
+def test_preflight_persona_gate_uses_node_from_startup_path_after_path_changes(
     tmp_path: Path,
 ) -> None:
     result, _, _, _ = _run_persona_gate(tmp_path, runner_exit=23)
 
     assert result.returncode == 23, result.stdout + result.stderr
-    assert not (tmp_path / "fake-node-ran").exists()
+    assert (tmp_path / "startup-node-ran").exists()
+    assert not (tmp_path / "after-start-node-ran").exists()
     assert (tmp_path / "runner.env").read_text(encoding="utf-8") == (
         "<unset>\n<unset>\n"
     )
+
+
+def test_preflight_fails_at_start_when_path_has_no_node(tmp_path: Path) -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    definitions = tmp_path / "preflight-functions.sh"
+    definitions.write_text(_preflight_function_source(source), encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", "-c", 'source "$PREFLIGHT_FUNCTIONS"'],
+        env={"PATH": "", "PREFLIGHT_FUNCTIONS": str(definitions)},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Node unavailable on PATH at preflight start.\n"
+
+
+def test_preflight_rejects_relative_node_path_at_start(tmp_path: Path) -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    definitions = tmp_path / "preflight-functions.sh"
+    definitions.write_text(_preflight_function_source(source), encoding="utf-8")
+    relative_bin = tmp_path / "relative-bin"
+    relative_bin.mkdir()
+    _write_executable(relative_bin / "node", "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["/bin/bash", "-c", 'source "$PREFLIGHT_FUNCTIONS"'],
+        cwd=tmp_path,
+        env={"PATH": "relative-bin", "PREFLIGHT_FUNCTIONS": str(definitions)},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Node unavailable on PATH at preflight start.\n"
+
+
+def test_preflight_routes_every_node_gate_through_startup_node() -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    assert re.search(r"^NODE_BIN=\$\(type -P node 2>/dev/null\)", source, re.MULTILINE)
+    gate_source = source[source.index("run_node()") :]
+    executable_node_references = [
+        line.strip()
+        for line in gate_source.splitlines()
+        if not line.lstrip().startswith("#") and re.search(r"\bnode\b", line)
+    ]
+
+    assert not executable_node_references
+    node_wrapper = source[source.index("run_node()") : source.index("find_chromium()")]
+    assert "unset NODE_OPTIONS NODE_PATH" in node_wrapper
+    assert 'exec "$NODE_BIN" "$@"' in node_wrapper
+    assert "NODE_BIN" not in source[source.index("find_chromium()") :]
+
+
+def test_preflight_persona_gate_handles_immediate_success_repeatedly(
+    tmp_path: Path,
+) -> None:
+    for attempt in range(20):
+        attempt_path = tmp_path / str(attempt)
+        attempt_path.mkdir()
+        result, _, _, _ = _run_persona_gate(
+            attempt_path,
+            runner_exit=0,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_preflight_persona_gate_retries_with_delay_until_ready(tmp_path: Path) -> None:
@@ -586,6 +694,32 @@ def test_preflight_persona_gate_caps_slow_probe_at_readiness_deadline(
     assert sleep_arguments == ["0.100"] * 6
     assert int((tmp_path / "fake-clock.ms").read_text(encoding="utf-8")) == 5000
     assert not runner_arguments
+
+
+def test_preflight_persona_gate_terminates_curl_at_readiness_deadline(
+    tmp_path: Path,
+) -> None:
+    started = time.monotonic()
+    result, curl_calls, runner_arguments, _ = _run_persona_gate(
+        tmp_path,
+        runner_exit=0,
+        curl_sleep_seconds=30,
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 4.5 <= elapsed <= 5.75
+    assert curl_calls
+    assert all(
+        float(call[call.index("--max-time") + 1]) <= 0.75 for call in curl_calls
+    )
+    assert not runner_arguments
+    server_pid = int((tmp_path / "server.pid").read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(server_pid, 0)
+    curl_pid = int((tmp_path / "curl.pid").read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(curl_pid, 0)
 
 
 def test_preflight_persona_gate_caps_final_sleep_at_readiness_deadline(

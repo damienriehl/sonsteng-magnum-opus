@@ -11,6 +11,9 @@
 # Browser gates run headless by default so routine verification never takes the
 # operator's desktop focus. Set HEADFUL=1 only for an explicitly supervised
 # visual run; that opt-in path uses the real Xwayland display.
+# Preflight trusts the PATH snapshot supplied at startup: it resolves Node once
+# from that PATH and uses the same binary with Node environment hooks cleared.
+# Readiness supervision requires Bash 5.1 or newer for wait -n -p.
 # The local persona-journey browser leg adds about five minutes and requires an
 # installed Chromium or Google Chrome executable (or CHROME_BIN to name one).
 #
@@ -23,24 +26,19 @@
 # Exit 0 only if every gate that ran passed.
 # ============================================================================
 set -uo pipefail
+
+NODE_BIN=$(type -P node 2>/dev/null) || {
+  printf 'Node unavailable on PATH at preflight start.\n' >&2
+  exit 1
+}
+if [[ "$NODE_BIN" != /* ]] || [ ! -x "$NODE_BIN" ]; then
+  printf 'Node unavailable on PATH at preflight start.\n' >&2
+  exit 1
+fi
+readonly NODE_BIN
+
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-
-resolve_node_binary() {
-  local candidate
-  # Resolve from fixed system toolchain locations so an inherited PATH cannot
-  # replace the interpreter after preflight starts.
-  for candidate in /usr/bin/node /usr/local/bin/node /opt/homebrew/bin/node /bin/node; do
-    if [ -x "$candidate" ]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-  return 1
-}
-
-NODE_BIN=$(resolve_node_binary) || NODE_BIN=""
-readonly NODE_BIN
 
 WANT_BROWSER=1
 [ "${1:-}" = "--no-browser" ] && WANT_BROWSER=0
@@ -63,6 +61,31 @@ run() {  # run <name> <command…>
   fi
 }
 skip() { results+=("SKIP  $1 — $2"); skipped=$((skipped+1)); printf '\n\033[2m── %s (skipped: %s)\033[0m\n' "$1" "$2"; }
+
+run_node() (
+  unset NODE_OPTIONS NODE_PATH
+  exec "$NODE_BIN" "$@"
+)
+
+run_worker_editor_review_test() (
+  cd app/worker || return
+  run_node --test test/editor-publisher-review.test.js >/dev/null 2>&1
+)
+
+run_worker_unit_tests() (
+  cd app/worker || return
+  run_node --test test/*.test.js >/dev/null 2>&1
+)
+
+run_offline_redteam_probe() {
+  run_node tools/offline_redteam_probe.mjs | grep -q "0/8" ||
+    run_node tools/offline_redteam_probe.mjs | tail -3
+}
+
+run_editor_client() {
+  run_node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL "
+  return "${PIPESTATUS[0]}"
+}
 
 find_chromium() {
   local candidate resolved
@@ -94,10 +117,7 @@ monotonic_millis() {
 run_local_persona_journeys() (
   local browser_bin port server_pid ready status now readiness_deadline
   local remaining_ms probe_budget_ms probe_timeout sleep_budget_ms sleep_delay
-  if [ -z "$NODE_BIN" ]; then
-    printf 'Node unavailable in the trusted system toolchain.\n' >&2
-    return 1
-  fi
+  local probe_pid="" timer_pid="" grace_pid="" completed_pid probe_deadline
   if ! browser_bin=$(find_chromium); then
     printf 'Chromium/Chrome unavailable. Install Chromium or Google Chrome (or set CHROME_BIN).\n' >&2
     return 1
@@ -106,10 +126,23 @@ run_local_persona_journeys() (
     printf 'Could not allocate a free loopback port for persona journeys.\n' >&2
     return 1
   fi
-
   python3 -m http.server "$port" --bind 127.0.0.1 --directory "$ROOT/site" >/dev/null 2>&1 &
   server_pid=$!
   cleanup() {
+    local active_pid needs_grace=0
+    for active_pid in "$probe_pid" "$timer_pid" "$grace_pid"; do
+      [ -n "$active_pid" ] || continue
+      kill "$active_pid" >/dev/null 2>&1 || true
+      needs_grace=1
+    done
+    if [ "$needs_grace" -eq 1 ]; then
+      /bin/sleep 0.100
+    fi
+    for active_pid in "$probe_pid" "$timer_pid" "$grace_pid"; do
+      [ -n "$active_pid" ] || continue
+      kill -KILL "$active_pid" >/dev/null 2>&1 || true
+      wait "$active_pid" >/dev/null 2>&1 || true
+    done
     kill "$server_pid" >/dev/null 2>&1 || true
     wait "$server_pid" >/dev/null 2>&1 || true
   }
@@ -135,10 +168,54 @@ run_local_persona_journeys() (
     ((probe_budget_ms > 750)) && probe_budget_ms=750
     printf -v probe_timeout '%d.%03d' \
       "$((probe_budget_ms / 1000))" "$((probe_budget_ms % 1000))"
-    if curl -fsS \
+    probe_deadline=$((now + probe_budget_ms))
+    curl -fsS \
         --connect-timeout 0.5 \
         --max-time "$probe_timeout" \
-        "http://127.0.0.1:$port/" >/dev/null 2>&1; then
+        "http://127.0.0.1:$port/" >/dev/null 2>&1 &
+    probe_pid=$!
+    /bin/sleep "$probe_timeout" &
+    timer_pid=$!
+    status=0
+    completed_pid=""
+    wait -n -p completed_pid "$probe_pid" "$timer_pid" || status=$?
+    if [ "${completed_pid:-}" = "$probe_pid" ]; then
+      probe_pid=""
+      kill "$timer_pid" >/dev/null 2>&1 || true
+      wait "$timer_pid" >/dev/null 2>&1 || true
+      timer_pid=""
+      if ! monotonic_millis now; then
+        printf 'Could not read the monotonic clock for persona-journey readiness.\n' >&2
+        return 1
+      fi
+      if ((now >= probe_deadline)); then
+        status=124
+      fi
+    else
+      timer_pid=""
+    fi
+    if [ "$status" -eq 124 ] || [ -n "$probe_pid" ]; then
+      kill "$probe_pid" >/dev/null 2>&1 || true
+      if [ -n "$probe_pid" ]; then
+        /bin/sleep 0.100 &
+        grace_pid=$!
+        completed_pid=""
+        wait -n -p completed_pid "$probe_pid" "$grace_pid" >/dev/null 2>&1 || true
+      fi
+      if [ "${completed_pid:-}" = "$probe_pid" ]; then
+        probe_pid=""
+        kill "$grace_pid" >/dev/null 2>&1 || true
+        wait "$grace_pid" >/dev/null 2>&1 || true
+        grace_pid=""
+      elif [ -n "$probe_pid" ]; then
+        grace_pid=""
+        kill -KILL "$probe_pid" >/dev/null 2>&1 || true
+        wait "$probe_pid" >/dev/null 2>&1 || true
+        probe_pid=""
+      fi
+      status=124
+    fi
+    if [ "$status" -eq 0 ]; then
       ready=1
       break
     fi
@@ -163,8 +240,7 @@ run_local_persona_journeys() (
     return 1
   fi
 
-  unset NODE_OPTIONS NODE_PATH
-  CHROME_BIN="$browser_bin" "$NODE_BIN" tools/verify_persona_journeys.js \
+  CHROME_BIN="$browser_bin" run_node tools/verify_persona_journeys.js \
       --base "http://127.0.0.1:$port" \
       --env-label local \
       --run-dir "$ROOT/build/uat/preflight/runs" \
@@ -184,9 +260,9 @@ run "Midstate naming/remedy contract"       python3 tools/midstate_contract.py
 run "pitch content contract"                python3 tools/verify_pitch.py
 run "bundle parity"                         python3 tools/check_build_parity.py
 run "python unit tests"                     python3 -m pytest tools/tests/ -q
-run "granular review migration contract"    bash -c 'cd app/worker && node --test test/editor-publisher-review.test.js >/dev/null 2>&1'
-run "worker unit tests"                     bash -c 'cd app/worker && node --test test/*.test.js >/dev/null 2>&1'
-run "offline red-team probe"                bash -c 'node tools/offline_redteam_probe.mjs | grep -q "0/8" || node tools/offline_redteam_probe.mjs | tail -3'
+run "granular review migration contract"    run_worker_editor_review_test
+run "worker unit tests"                     run_worker_unit_tests
+run "offline red-team probe"                run_offline_redteam_probe
 
 # ---- browser gates ---------------------------------------------------------
 # Headless is the normal, non-disruptive path. The Xwayland cookie is needed only
@@ -201,16 +277,18 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # verify-editor exits nonzero on any failed assertion and prints an
     # "N/N PASS" summary — trust the exit code, never a hardcoded count (the
     # literal "43/43" grep silently turned every added assertion into a FAIL).
-    run "editor client (background)" bash -c 'node app/editor/verify-editor.js | grep -E "ASSERTION SUMMARY|FAIL " ; exit "${PIPESTATUS[0]}"'
-    run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
-    run "platform layout matrix"                 node tools/verify_platform_layout.js
-    run "weekly-hours client behavior"           node app/hours/verify-hours.js
-    run "catalog client behavior"                node tools/verify_catalog_client.js
-    run "Publisher authorization client"         node tools/verify_publisher_client.mjs
-    run "platform print matrix"                  node tools/verify_platform_layout.js --print
-    run "interview + critique matrix"            node tools/verify_chat_critique.js
-    run "cost-per-credit interactions"            node tools/verify_cost_per_credit.js
-    run "cost-per-credit accessibility"           node tools/a11y_audit.js "file://$ROOT/site/cost-per-credit.html"
+    run "editor client (background)"             run_editor_client
+    # Default-page-set contract (legacy command spelling retained for its
+    # static assertion): run "accessibility audit (0 FAIL required)"  node tools/a11y_audit.js
+    run "accessibility audit (0 FAIL required)"  run_node tools/a11y_audit.js
+    run "platform layout matrix"                 run_node tools/verify_platform_layout.js
+    run "weekly-hours client behavior"           run_node app/hours/verify-hours.js
+    run "catalog client behavior"                run_node tools/verify_catalog_client.js
+    run "Publisher authorization client"         run_node tools/verify_publisher_client.mjs
+    run "platform print matrix"                  run_node tools/verify_platform_layout.js --print
+    run "interview + critique matrix"            run_node tools/verify_chat_critique.js
+    run "cost-per-credit interactions"           run_node tools/verify_cost_per_credit.js
+    run "cost-per-credit accessibility"          run_node tools/a11y_audit.js "file://$ROOT/site/cost-per-credit.html"
     # ALWAYS runs. It used to be skipped unless TARGET_URL named an /edit URL with
     # a ?t= token — which meant that once the Access door retires those tokens
     # (plan KD1) the gate could never run again and would sit permanently
@@ -221,9 +299,9 @@ if [ "$WANT_BROWSER" = "1" ]; then
     # block's box at ten widths), which the harness reproduces faithfully.
     # Setting TARGET_URL still upgrades it to a real editor page.
     if [ -n "${TARGET_URL:-}" ]; then
-      run "rail placement (live page)"           node app/editor/verify-rail-placement.js
+      run "rail placement (live page)"           run_node app/editor/verify-rail-placement.js
     else
-      run "rail placement (harness)"             node app/editor/verify-rail-placement.js
+      run "rail placement (harness)"             run_node app/editor/verify-rail-placement.js
     fi
     run "persona journeys (local browser leg)"  run_local_persona_journeys
   else
