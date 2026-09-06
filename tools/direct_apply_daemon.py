@@ -35,14 +35,16 @@ The engine's reconcile-first + DO in_flight-lease + append-only apply_batches
 journal + git-worktree isolation own this; the daemon adds a host-local flock so
 two timer firings never overlap. See docs/direct-apply-daemon.md.
 
-STALE-CHECKOUT DEPLOY GUARD: before entering either deployment-bearing path
-(accepted-edit apply or approved revert), the daemon compares HEAD with its
-recorded upstream using `git rev-list --count HEAD..@{upstream}`. A positive
-count, a missing/unresolvable upstream, or an invalid result refuses the whole
-transaction before mutation. The refusal heartbeats unhealthy, sends a
-metadata-only ntfy alert, and leaves accepted rows / revert journal state intact
-for a later tick. The check reads local refs only: it never fetches or advances
-the checkout, so updating the daemon checkout remains a deliberate operator act.
+STALE-REF DEPLOY GUARD: before entering either deployment-bearing path
+(accepted-edit apply or approved revert), the daemon compares the configured
+deploy branch with that branch's recorded upstream and requires it to be the
+checked-out branch because the apply and Worker deploy paths consume checkout
+content. A positive count, a branch mismatch, a missing/unresolvable branch or
+upstream, or an invalid result refuses the whole transaction before mutation.
+The refusal heartbeats unhealthy, sends a metadata-only ntfy alert, and leaves
+accepted rows / revert journal state intact for a later tick. The checks read
+local refs only: they never fetch or advance the checkout, so updates remain
+deliberate.
 
 Python 3, stdlib only. Every side effect (review fetch, engine run, rebuild,
 deploy, deploy guard, heartbeat, notify, clock) is injectable so the
@@ -357,24 +359,65 @@ class DeployCheckoutStatus:
                 "behind": self.behind}
 
 
-def checkout_deploy_status(repo_root=REPO_ROOT, *, git=None):
-    """Return whether HEAD is safe to deploy relative to its recorded upstream.
+def checkout_deploy_status(
+        repo_root=REPO_ROOT, *, branch=DEFAULT_DEPLOY_BRANCH, git=None):
+    """Return whether every local ref consumed by a deploy is current.
 
-    This deliberately does not fetch: `HEAD..@{upstream}` reads only the local
-    remote-tracking ref. Any inability to prove that the behind count is zero is
-    a fail-closed refusal. `git` is injectable for hermetic unit tests.
+    ``deploy-dev.sh`` archives the configured local branch, while revert Worker
+    deploys bundle the checkout and the apply engine bases its deploy worktree on
+    HEAD. The configured and checked-out branch must therefore be identical. That
+    exact branch is compared with its own upstream. These checks deliberately do
+    not fetch. Any inability to prove a zero behind count fails closed. ``git``
+    is injectable for hermetic unit tests.
     """
     git = git or (lambda args: _git(args, repo_root))
+
+    def compare(local_ref):
+        try:
+            rc, _ = git(["show-ref", "--verify", "--quiet", local_ref])
+            if rc != 0:
+                return DeployCheckoutStatus()
+            rc, output = git(["for-each-ref", "--format=%(upstream)", local_ref])
+            upstream_lines = output.strip().splitlines()
+            if rc != 0 or len(upstream_lines) != 1:
+                return DeployCheckoutStatus()
+            upstream_ref = upstream_lines[0]
+            rc, _ = git(["check-ref-format", upstream_ref])
+            if rc != 0:
+                return DeployCheckoutStatus()
+            rc, output = git(
+                ["rev-list", "--count", "%s..%s" % (local_ref, upstream_ref)])
+            if rc != 0:
+                return DeployCheckoutStatus()
+            behind = int(output.strip())
+            if behind < 0:
+                raise ValueError("negative behind count")
+        except Exception:
+            return DeployCheckoutStatus()
+        return DeployCheckoutStatus(behind)
+
     try:
-        rc, output = git(["rev-list", "--count", "HEAD..@{upstream}"])
+        deploy_ref = "refs/heads/" + branch
+        rc, _ = git(["check-ref-format", deploy_ref])
         if rc != 0:
             return DeployCheckoutStatus()
-        behind = int(output.strip())
-        if behind < 0:
-            raise ValueError("negative behind count")
     except Exception:
         return DeployCheckoutStatus()
-    return DeployCheckoutStatus(behind)
+
+    deployed = compare(deploy_ref)
+    if not deployed.deployable:
+        return deployed
+
+    try:
+        rc, head_ref = git(["symbolic-ref", "--quiet", "HEAD"])
+    except Exception:
+        rc, head_ref = 1, ""
+    if rc != 0:
+        return DeployCheckoutStatus()
+    head_ref = head_ref.strip()
+    if head_ref != deploy_ref:
+        return DeployCheckoutStatus()
+    return deployed
 
 
 def fetch_revert_requests(api_base, token, timeout=30):
@@ -624,13 +667,13 @@ def notify_deploy_refusal(status, *, topic_resolver=None, publish=None):
     publish = publish or digest_push.publish_ntfy
     title = "Sonsteng apply deploy REFUSED"
     if status.reason == "behind" and status.behind is not None:
-        body = ("The home-box apply daemon refused to deploy because its checkout "
-                "is behind its recorded upstream by %d commit%s. No deploy ran. "
+        body = ("The home-box apply daemon refused to deploy because a guarded deploy "
+                "ref is behind its recorded upstream by %d commit%s. No deploy ran. "
                 "Refresh the daemon checkout deliberately, then let a later tick retry."
                 % (status.behind, "" if status.behind == 1 else "s"))
     else:
-        body = ("The home-box apply daemon refused to deploy because it could not "
-                "prove that its checkout is not behind its recorded upstream. "
+        body = ("The home-box apply daemon refused to deploy because it could not prove "
+                "that every guarded deploy ref is current with its recorded upstream. "
                 "No deploy ran. Repair or refresh the upstream tracking state, "
                 "then let a later tick retry.")
     with contextlib.suppress(Exception):
@@ -780,7 +823,8 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     heartbeat = heartbeat or (
         lambda ok, applied: post_heartbeat(api_base, token, ok=ok, applied=applied, ts=ts))
     notify = notify or notify_failure
-    deploy_guard = deploy_guard or checkout_deploy_status
+    deploy_guard = deploy_guard or (
+        lambda selected: checkout_deploy_status(branch=selected))
     deploy_refusal_notify = deploy_refusal_notify or notify_deploy_refusal
     editorial = editorial or (lambda bid: dispatch_editorial(bid))
 
@@ -790,7 +834,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     def deploy_refusal(batch_id=""):
         """Fail closed without changing retry-critical apply/revert state."""
         try:
-            status = deploy_guard()
+            status = deploy_guard(branch)
         except Exception:
             status = DeployCheckoutStatus()
         if not isinstance(status, DeployCheckoutStatus):
@@ -803,9 +847,9 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         deploy_refusal_notify(status)
         steps.append(("notify_deploy_refusal", status.metadata()))
         if status.reason == "behind":
-            detail = "checkout is behind upstream by %d commit(s)" % status.behind
+            detail = "guarded deploy ref is behind upstream by %d commit(s)" % status.behind
         else:
-            detail = "checkout upstream comparison is unresolvable"
+            detail = "guarded deploy ref or upstream is unresolvable"
         print("[daemon] deploy REFUSED: %s. No mutation or deploy ran; retry state preserved."
               % detail, file=out)
         return DaemonResult(0, batch_id, "deploy_refused", hb, False, steps)

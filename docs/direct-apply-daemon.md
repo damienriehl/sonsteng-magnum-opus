@@ -90,14 +90,26 @@ location with `SONSTENG_DAEMON_ROOT=…`.
 
 ### Stale-checkout deploy guard
 
-Before either deployment-bearing transaction, the daemon runs
-`git rev-list --count HEAD..@{upstream}` in its own checkout. Zero permits the
-transaction; a positive count, missing upstream, command failure, or malformed
-result refuses it before the apply engine or revert mutates the repository. This
-guards both publication surfaces: `deploy-dev.sh` can publish stale canonical
-content to DEV, and the revert path's bare Wrangler command deploys the bundled
-editor Worker. The apply engine's own `APPLY_DEPLOY=1` DEV deploy is also downstream
-of the same pre-transaction check.
+Before either deployment-bearing transaction, the daemon resolves the short local
+branch name selected by `--branch` / `APPLY_DEPLOY_BRANCH`, resolves that branch's
+recorded upstream with `git for-each-ref`, and runs `git rev-list --count` between
+those fully qualified refs. This is the ref that matters to the final site publish:
+`deploy-dev.sh` receives the same branch argument and archives it with
+`git archive "$BRANCH"`.
+
+The configured deploy branch must also be the checked-out branch. Matching only
+the two branches' freshness is insufficient: two different branches can both be
+current against their own upstreams while containing different commits. The
+identity requirement is necessary because publication is not limited to the final
+site archive: the revert path's bare Wrangler command bundles the daemon checkout,
+and the apply engine's `APPLY_DEPLOY=1` site/Worker deploy builds a temporary
+worktree from canonical `HEAD`. Refusing a branch-name mismatch ensures the
+mutation, site archive, and Worker bundle all use one branch lineage.
+
+Zero for every required comparison permits the transaction. A positive count,
+configured/checked-out branch mismatch, invalid or missing local branch, detached
+`HEAD`, missing/unresolvable upstream, command failure, or malformed result refuses
+it before the apply engine or revert mutates the repository.
 
 A refusal posts an unhealthy heartbeat, exits the tick nonzero, and sends a
 metadata-only ntfy alert containing only the comparison outcome and optional
@@ -112,6 +124,21 @@ only staleness already represented in that local ref. Operators must continue to
 refresh refs and the daemon checkout deliberately; merging this guard into `main`
 does not activate it until `~/.local/share/sonsteng-daemon/checkout` itself is
 updated to code that contains the guard.
+
+There remains a narrow time-of-check-to-time-of-use window if another process moves
+a guarded ref after the comparison. Closing it requires publication from captured,
+immutable commit IDs (and coordinating the apply/revert mutations and Worker bundle
+source around those IDs), or a lock honored by every process that can move the refs;
+neither is a cheap local change to this daemon. The daemon flock prevents overlapping
+daemon ticks but cannot serialize unrelated Git processes, so this residual is
+documented rather than overstated as solved.
+
+An unchanged refusal continues to send a high-priority alert on every two-minute
+tick. Suppression was intentionally not added: this process starts afresh each tick,
+so reliable deduplication would require new persistent bookkeeping on a path whose
+central invariant is that refusal mutates no apply/revert state. Repeated alerts are
+noisy, but they keep an unsafe, still-pending publication visible and cannot hide a
+new refusal reason.
 
 **Regenerable-site guard.** `build_site.py` stamps the current HEAD sha into
 `site/platform/data/.build-stamp.json` (traceability only — deliberately not part of

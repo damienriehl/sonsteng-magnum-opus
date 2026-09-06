@@ -108,7 +108,7 @@ def _run_reverts(rec, **kw):
             fetch=_empty_review,                       # no accepted suggestions
             do_rebuild=rec.rebuild, do_deploy=rec.deploy,
             heartbeat=rec.heartbeat, notify=rec.notify,
-            deploy_guard=lambda: dad.DeployCheckoutStatus(0),
+            deploy_guard=lambda _branch: dad.DeployCheckoutStatus(0),
             deploy_refusal_notify=rec.notify_deploy_refusal,
             fetch_reverts=rec.fetch_reverts, revert_exec=rec.revert_exec,
             revert_resolve=rec.revert_resolve, do_deploy_worker=rec.deploy_worker,
@@ -143,29 +143,31 @@ class TestRevertOrchestration(unittest.TestCase):
         self.assertIn(("record", "rq1", "sha123"), rec.calls)
         self.assertIn(("complete", "rq1", "sha123"), rec.calls)
 
-    def test_guard_refusal_keeps_merged_revert_retryable(self):
+    def test_each_guard_refusal_keeps_merged_revert_retryable(self):
         evidence = _merged_revert_evidence()
-        behind = dad.DeployCheckoutStatus(7)
-        refused = RevertRecorder([evidence])
+        for refusal in (dad.DeployCheckoutStatus(7), dad.DeployCheckoutStatus()):
+            with self.subTest(reason=refusal.reason):
+                refused = RevertRecorder([evidence])
+                first = _run_reverts(
+                    refused, deploy_guard=lambda _branch: refusal)
 
-        first = _run_reverts(refused, deploy_guard=lambda: behind)
+                self.assertEqual(first.reason, "deploy_refused")
+                self.assertNotIn(("revert_exec", "rq1"), refused.calls)
+                self.assertFalse(any(call[0] in {"record", "complete", "resolve"}
+                                     for call in refused.calls
+                                     if isinstance(call, tuple)))
+                self.assertFalse(any(isinstance(call, tuple) and call[0] == "deploy"
+                                     for call in refused.calls))
+                self.assertNotIn("deploy_worker", refused.calls)
+                self.assertEqual(refused.deploy_refusals, [refusal])
 
-        self.assertEqual(first.reason, "deploy_refused")
-        self.assertNotIn(("revert_exec", "rq1"), refused.calls)
-        self.assertFalse(any(call[0] in {"record", "complete", "resolve"}
-                             for call in refused.calls if isinstance(call, tuple)))
-        self.assertFalse(any(isinstance(call, tuple) and call[0] == "deploy"
-                             for call in refused.calls))
-        self.assertNotIn("deploy_worker", refused.calls)
-        self.assertEqual(refused.deploy_refusals, [behind])
+                resumed = RevertRecorder([evidence])
+                second = _run_reverts(resumed)
 
-        resumed = RevertRecorder([evidence])
-        second = _run_reverts(resumed)
-
-        self.assertEqual(second.reason, "no_accepted")
-        self.assertNotIn(("revert_exec", "rq1"), resumed.calls)
-        self.assertIn(("record", "rq1", "sha123"), resumed.calls)
-        self.assertIn(("complete", "rq1", "sha123"), resumed.calls)
+                self.assertEqual(second.reason, "no_accepted")
+                self.assertNotIn(("revert_exec", "rq1"), resumed.calls)
+                self.assertIn(("record", "rq1", "sha123"), resumed.calls)
+                self.assertIn(("complete", "rq1", "sha123"), resumed.calls)
 
     def test_revert_exec_failure_resolves_failed_and_alerts_ids_only(self):
         rec = RevertRecorder([{"id": "rq2", "doc": "d", "run_first": "aa", "run_last": "bb"}],
