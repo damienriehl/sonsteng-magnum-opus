@@ -1,0 +1,3601 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import select
+import shlex
+import subprocess
+import time
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT_PATH = ROOT / "tools" / "final_revalidation.sh"
+CATALOG_PATH = ROOT / "tools" / "persona_journeys.json"
+EXPECTED_LEGS = [
+    ("browser-local", "local", "browser"),
+    ("browser-dev", "dev", "browser"),
+    ("browser-prod", "prod", "browser"),
+    ("bindings-local", "local", "bindings"),
+    ("bindings-dev", "dev", "bindings"),
+    ("bindings-prod", "prod", "bindings"),
+]
+EXPECTED_ONLY_IDS = {
+    "bindings-dev": [
+        "hostile-bot-gate",
+        "student-live-provider-dev",
+        "hostile-live-redteam-dev",
+    ],
+    "bindings-prod": ["hostile-bot-gate"],
+}
+EXPECTED_A11Y_PATHS = {
+    "/",
+    "/platform/",
+    "/platform/matters/",
+    "/platform/matters/m05-dwi-meridian/",
+    "/platform/hours/",
+    "/cost-per-credit.html",
+}
+
+WRITE_REDIRECT_CLASSES = frozenset({">", ">>", ">|", "<>", "&>", "&>>", "{fd}>"})
+
+# These helpers deliberately execute commands or mutate files only after entering
+# and revalidating a pinned directory.  Their grammars are command-specific: an
+# added command, a changed option, or a non-relative filesystem operand is not an
+# approved helper operation.
+APPROVED_HELPER_COMMAND_SHAPES = {
+    "with_pinned_dir": {
+        ("local", "expected_physical_dir=$1", "expected_identity=$2", "command_name", "resolved_dir"),
+        ("local", "pinned_return_fd", "previous_identity", "restore_status=0", "status=1"),
+        ("shift", "2"),
+        ("[", "$#", "-gt", "0", "]"),
+        ("return", "1"),
+        ("exec", "{pinned_return_fd}", "<", "."),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("exec", "{pinned_return_fd}", "<&", "-"),
+        ("[", "$(stat -Lc '%F' -- /proc/self/fd/$pinned_return_fd)", "!=", "directory", "]"),
+        ("cd", "-P", "--", "$expected_physical_dir"),
+        ("pwd", "-P"),
+        ("[", "$resolved_dir", "!=", "$expected_physical_dir", "]"),
+        ("[", "-z", "$expected_identity", "]"),
+        ("[", "$(stat -Lc '%d:%i' -- .)", "!=", "$expected_identity", "]"),
+        ("$@",),
+        ("cd", "-P", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("[", "$restore_status", "-eq", "0", "]"),
+        ("[", "$(stat -Lc '%d:%i' -- .)", "!=", "$previous_identity", "]"),
+        ("return", "$status"),
+    },
+    "remove_in_pinned_dir": {
+        ("local", "expected_physical_dir=$1", "expected_identity=$2", "delete_mode=$3"),
+        ("local", "actual_identity", "relative_name", "resolved_dir"),
+        ("shift", "3"),
+        ("[", "$#", "-gt", "0", "]"),
+        ("return", "0"),
+        ("trap", "-", "EXIT"),
+        ("cd", "-P", "--", "$expected_physical_dir"),
+        ("return", "1"),
+        ("pwd", "-P"),
+        ("[", "$resolved_dir", "=", "$expected_physical_dir", "]"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("[", "-n", "$expected_identity", "]"),
+        ("[", "$actual_identity", "=", "$expected_identity", "]"),
+        ("file",),
+        ("[", "!", "-d", "$relative_name", "]"),
+        ("rm", "-f", "--", "$@"),
+        ("tree",),
+        ("rm", "-rf", "--", "$@"),
+        ("*",),
+    },
+    "initialize_revalidation_lock": {
+        ("local", "relative_lock_name=$1", "token=$2", "expected_parent_identity=$3"),
+        ("local", "created_identity", "current_identity", "lock_identity", "lock_status"),
+        ("return", "2"),
+        ("[", "-n", "$expected_parent_identity", "]"),
+        ("mkdir", "--", "$relative_lock_name"),
+        ("exit", "1"),
+        ("cd", "-P", "--", "$relative_lock_name"),
+        ("exit", "2"),
+        ("[", "$(stat -Lc '%d:%i' -- ..)", "=", "$expected_parent_identity", "]"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("write_lock_owner", "owner", "$token"),
+        ("cd", ".."),
+        ("stat", "-c", "%d:%i", "--", "$relative_lock_name"),
+        ("[", "$current_identity", "=", "$created_identity", "]"),
+        ("rm", "-rf", "--", "$relative_lock_name"),
+        ("true",),
+        ("[", "$lock_status", "-eq", "0", "]"),
+        ("return", "$lock_status"),
+        ("printf", "%s\\n", "$lock_identity"),
+    },
+    "run_generator": {
+        ("local", "label=$1"),
+        ("shift",),
+        ("enter_pinned_dir", "$ROOT", "$ROOT_IDENTITY"),
+        ("close_inherited_pinning_fds",),
+        ("exec", "$@"),
+        ("die", "generator failed: $label"),
+    },
+}
+
+APPROVED_HELPER_COMMAND_ORDER = {
+    "with_pinned_dir": (
+        "local", "local", "shift", "[", "return", "return", "exec", "return",
+        "stat", "exec", "return", "[", "cd", "pwd", "[", "[", "[", "$@",
+        "cd", "[", "[", "exec", "[", "return", "return",
+    ),
+    "remove_in_pinned_dir": (
+        "local", "local", "shift", "[", "return", "trap", "cd", "return", "pwd",
+        "return", "[", "return", "stat", "return", "[", "[", "return", "return",
+        "file", "[", "return", "rm", "tree", "rm", "*", "return",
+    ),
+    "initialize_revalidation_lock": (
+        "local", "local", "return", "[", "return", "mkdir", "exit", "cd", "exit",
+        "[", "exit", "stat", "exit", "write_lock_owner", "cd", "exit", "stat", "exit",
+        "[", "rm", "true", "exit", "stat", "[", "return", "printf",
+    ),
+    "run_generator": (
+        "local", "shift", "enter_pinned_dir", "close_inherited_pinning_fds", "exec", "die",
+    ),
+}
+
+REQUIRED_HELPER_RELATIVE_GUARDS = {
+    "with_pinned_dir": 'case "$command_name" in\n    ""|.|..|/*|*/*) return 1 ;;\n  esac',
+    "remove_in_pinned_dir": 'case "$relative_name" in\n        ""|.|..|/*|*/*) return 1 ;;\n      esac',
+    "initialize_revalidation_lock": (
+        'case "$relative_lock_name" in\n    ""|.|..|/*|*/*) return 2 ;;\n  esac'
+    ),
+}
+
+# The readable command-shape allowlists above make the intended operations easy
+# to audit.  These digests additionally pin every normalized shell token in each
+# security-sensitive helper, including control operators and assignment-only
+# statements that do not have an executable command name.
+APPROVED_HELPER_TOKEN_STREAM_SHA256 = {
+    "with_pinned_dir": "111a2d40c02d54f8ba28c69cf5e012c29ec4479b80adfcac8538dd4b2ecab828",
+    "remove_in_pinned_dir": "733a600a6678684035e2d5bdb92bcd06b14ae3008d997d5bee449178a80c2281",
+    "initialize_revalidation_lock": "91e2906590ade58cccca1be7a9073644d13b189f832103871c244f6205ed5bc6",
+    "run_generator": "0fdd27c5e28de6955a48a5bc872fc24ca2b2be5535b1c2f709f2b4421a6c974d",
+    "restore_build_stamp_in_pinned_dir": "3bd2eb1ed00e95604fb0d833a676cd7f8a406903bbc3242d8251dc14c945399e",
+    "write_server_marker": "71bc9b645fc66812f955d65c990ebefe662dfebc175ca584b4e00faf4c3a641c",
+    "open_new_relative_file_fd": "c8d2376dd1ccb3b925ab7fbb9bb7f04225c6a4cb0dbcf404cc865d0862259a7f",
+    "run_with_new_log": "bbb24540fb30b58015935451a5b291b37f70efa5f72050cbbabb5985dd32be2b",
+    "exec_with_new_log": "0eafef8637aabff0fba2a583699a6924f06a76bf86420d28d265fa8ac38392fb",
+    "write_lock_owner": "5c2a950466a993a3d9c9a8e4f9d3b2b783f90655b73c499533a6dde37517e416",
+}
+
+
+def script_source() -> str:
+    return SCRIPT_PATH.read_text(encoding="utf-8")
+
+
+def journey_ids() -> set[str]:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    assert catalog["schema_version"] == 1
+    return {journey["id"] for journey in catalog["journeys"]}
+
+
+def run_legs(source: str) -> list[tuple[str, list[str]]]:
+    legs: list[tuple[str, list[str]]] = []
+    for match in re.finditer(r"^run\s+(\S+)\s+(.+)$", source, re.MULTILINE):
+        legs.append((match.group(1), shlex.split(match.group(2), comments=True)))
+    return legs
+
+
+def shell_function(source: str, name: str) -> str:
+    match = re.search(rf"^{re.escape(name)}\(\) \{{\n.*?^\}}", source, re.MULTILINE | re.DOTALL)
+    assert match is not None, f"missing shell function: {name}"
+    return match.group(0)
+
+
+def shell_command_segments(source: str) -> list[list[str]]:
+    lexer = shlex.shlex(
+        source.replace("\\\n", " "),
+        posix=True,
+        punctuation_chars="();<>|&\n",
+    )
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in lexer:
+        if "\n" in token or (token and set(token) <= set(";|&()")):
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def shell_normalized_token_stream(source: str) -> list[str]:
+    lexer = shlex.shlex(
+        source.replace("\\\n", " "),
+        posix=True,
+        punctuation_chars="();<>|&\n",
+    )
+    lexer.whitespace = " \t\r"
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    return list(lexer)
+
+
+def shell_token_stream_sha256(source: str) -> str:
+    normalized = json.dumps(
+        shell_normalized_token_stream(source),
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(normalized).hexdigest()
+
+
+def shell_regions(source: str) -> list[tuple[str | None, str]]:
+    function_pattern = re.compile(
+        r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}",
+        re.MULTILINE | re.DOTALL,
+    )
+    matches = list(function_pattern.finditer(source))
+    top_level_parts: list[str] = []
+    previous_end = 0
+    for match in matches:
+        top_level_parts.append(source[previous_end : match.start()])
+        top_level_parts.append("\n")
+        previous_end = match.end()
+    top_level_parts.append(source[previous_end:])
+    return [(None, "".join(top_level_parts))] + [
+        (match.group(1), match.group(0)) for match in matches
+    ]
+
+
+def shell_command_substitutions(source: str) -> list[str]:
+    substitutions: list[str] = []
+    index = 0
+    while index + 1 < len(source):
+        if source[index : index + 2] != "$(":
+            index += 1
+            continue
+        if source[index : index + 3] == "$((":
+            arithmetic_body_start = index + 3
+            index += 3
+            depth = 2
+            while index < len(source) and depth:
+                if source[index] == "(":
+                    depth += 1
+                elif source[index] == ")":
+                    depth -= 1
+                index += 1
+            arithmetic_body_end = index - 2 if depth == 0 else index
+            substitutions.extend(
+                shell_command_substitutions(
+                    source[arithmetic_body_start:arithmetic_body_end]
+                )
+            )
+            continue
+
+        start = index
+        index += 2
+        depth = 1
+        single_quoted = False
+        double_quoted = False
+        escaped = False
+        while index < len(source) and depth:
+            character = source[index]
+            if escaped:
+                escaped = False
+            elif character == "\\" and not single_quoted:
+                escaped = True
+            elif character == "'" and not double_quoted:
+                single_quoted = not single_quoted
+            elif character == '"' and not single_quoted:
+                double_quoted = not double_quoted
+            elif not single_quoted:
+                if character == "(":
+                    depth += 1
+                elif character == ")":
+                    depth -= 1
+            index += 1
+        substitutions.append(source[start:index])
+    return substitutions
+
+
+def unsafe_filesystem_command_tokens(
+    source: str,
+    *,
+    write_redirect_classes: frozenset[str] = WRITE_REDIRECT_CLASSES,
+) -> list[tuple[str, list[str]]]:
+    mutating_commands = {
+        "rm",
+        "rmdir",
+        "mv",
+        "cp",
+        "ln",
+        "mkdir",
+        "mktemp",
+        "touch",
+        "tee",
+        "truncate",
+        "install",
+        "dd",
+    }
+    approved_direct_commands = {"rm", "mkdir", "mktemp", "printf", "cat"}
+    approved_generator_commands = {
+        ("site build", "python3", "tools/build_site.py", "--check"),
+        ("instructor bundle", "python3", "tools/build_instructor_bundle.py"),
+        ("editor data bundle", "node", "app/worker/scripts/bundle-editor-data.mjs"),
+    }
+    approved_logged_node_children = {
+        "tools/verify_persona_journeys.js",
+        "tools/a11y_audit.js",
+    }
+    approved_pinned_helper_commands = {
+        "grep",
+        "initialize_revalidation_lock",
+        "read_regular_relative_file",
+        "relative_regular_file_identity",
+        "restore_build_stamp_in_pinned_dir",
+        "write_server_marker",
+    }
+    approved_command_tokens = {
+        "[",
+        "[[",
+        "acquire_revalidation_lock",
+        "break",
+        "cat",
+        "cd",
+        "cleanup",
+        "cleanup_on_exit",
+        "clear_prior_evidence",
+        "close_inherited_pinning_fds",
+        "command",
+        "continue",
+        "cut",
+        "die",
+        "enter_pinned_dir",
+        "exec",
+        "exit",
+        "finalize_revalidation",
+        "false",
+        "flock",
+        "git",
+        "grep",
+        "head",
+        "kill",
+        "local",
+        "new_log_name",
+        "node",
+        "open_pinned_directory_fd",
+        "pinned_directory_identity",
+        "printf",
+        "process_identity",
+        "pwd",
+        "python3",
+        "read",
+        "read_regular_relative_file",
+        "record_status",
+        "relative_regular_file_identity",
+        "release_revalidation_lock",
+        "remove_in_pinned_dir",
+        "remove_stale_server_markers",
+        "require_clean_worktree",
+        "restore_build_stamp",
+        "return",
+        "run",
+        "run_generator",
+        "server_matches_worktree",
+        "set",
+        "shift",
+        "sleep",
+        "stat",
+        "trap",
+        "true",
+        "wait",
+        "with_pinned_dir",
+    }
+    command_prefixes = {"if", "then", "elif", "else", "do", "while", "until", "!"}
+    violations: list[tuple[str, list[str]]] = []
+
+    def simple_relative_name(token: str) -> bool:
+        return (
+            bool(token)
+            and token not in {".", ".."}
+            and "/" not in token
+            and "$" not in token
+        )
+
+    def write_redirect_rule(segment: list[str], index: int) -> str | None:
+        token = segment[index]
+        if (
+            token == ">"
+            and index > 0
+            and re.fullmatch(r"\{[A-Za-z_][A-Za-z0-9_]*\}", segment[index - 1])
+        ):
+            return "{fd}>" if "{fd}>" in write_redirect_classes else None
+        return token if token in write_redirect_classes else None
+
+    def pinned_helper_index(segment: list[str]) -> int | None:
+        return next(
+            (
+                index
+                for index, token in enumerate(segment)
+                if token == "with_pinned_dir"
+                and all(
+                    prefix in command_prefixes
+                    or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", prefix)
+                    for prefix in segment[:index]
+                )
+            ),
+            None,
+        )
+
+    def executable_index_for(segment: list[str]) -> int | None:
+        index = 0
+        while index < len(segment) and (
+            segment[index] in command_prefixes
+            or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", segment[index])
+        ):
+            index += 1
+        if index >= len(segment):
+            return None
+        token = segment[index]
+        if token in {
+            "",
+            "(<",
+            "--",
+            ".",
+            "..",
+            ":",
+            ":[0-9]+$",
+            "/*",
+            "*/*",
+            "[0-9]+",
+            "{",
+            "}",
+            "case",
+            "done",
+            "esac",
+            "fi",
+            "for",
+            "in",
+            "select",
+            "then",
+        }:
+            return None
+        if token.isdigit() or token.startswith("[[:"):
+            return None
+        if index + 1 < len(segment) and segment[index + 1] == "<" and token.isidentifier():
+            return None
+        return index
+
+    def approved_pinned_direct_command(segment: list[str], command_index: int) -> bool:
+        helper_index = pinned_helper_index(segment)
+        if helper_index is None or command_index != helper_index + 3:
+            return False
+        command = segment[command_index]
+        if command not in approved_direct_commands:
+            return False
+        arguments = segment[command_index + 1 :]
+        if command == "mkdir":
+            return (
+                len(arguments) == 2
+                and arguments[0] == "--"
+                and simple_relative_name(arguments[1])
+            ) or (
+                len(arguments) == 3
+                and arguments[:2] == ["-p", "--"]
+                and simple_relative_name(arguments[2])
+            )
+        if command == "mktemp":
+            return (
+                len(arguments) == 1 and simple_relative_name(arguments[0])
+            ) or (
+                len(arguments) == 2
+                and arguments[0] == "--"
+                and simple_relative_name(arguments[1])
+            )
+        if command == "rm":
+            try:
+                separator_index = arguments.index("--")
+            except ValueError:
+                return False
+            options = arguments[:separator_index]
+            operands = arguments[separator_index + 1 :]
+            return (
+                len(options) <= 1
+                and all(option in {"-f", "-r", "-rf", "-fr"} for option in options)
+                and bool(operands)
+                and all(simple_relative_name(token) for token in operands)
+            )
+        redirect_indexes = [
+            index
+            for index, _ in enumerate(arguments)
+            if write_redirect_rule(arguments, index) is not None
+        ]
+        if len(redirect_indexes) != 1:
+            return False
+        redirect_index = redirect_indexes[0]
+        if redirect_index + 2 != len(arguments) or not simple_relative_name(
+            arguments[redirect_index + 1]
+        ):
+            return False
+        if command == "cat":
+            input_names = [
+                token
+                for token in arguments[:redirect_index]
+                if token != "--" and not token.startswith("-")
+            ]
+            return bool(input_names) and all(simple_relative_name(token) for token in input_names)
+        return True
+
+    def approved_pinned_http_server(segment: list[str], directory_index: int) -> bool:
+        helper_index = pinned_helper_index(segment)
+        if helper_index is None or directory_index + 1 >= len(segment):
+            return False
+        command_tail = segment[helper_index + 3 :]
+        try:
+            python_index = command_tail.index("python3")
+        except ValueError:
+            return False
+        return (
+            command_tail[python_index : python_index + 3]
+            == ["python3", "-m", "http.server"]
+            and command_tail.count("--directory") == 1
+            and command_tail[-2:] == ["--directory", "."]
+        )
+
+    def approved_run_generator(segment: list[str]) -> bool:
+        if "run_generator" not in segment:
+            return False
+        generator_index = segment.index("run_generator")
+        return tuple(segment[generator_index + 1 :]) in approved_generator_commands
+
+    def approved_command_builtin(segment: list[str], index: int) -> bool:
+        return segment[index:] in (["command", "-v", "flock"], ["command", "-v", "curl"])
+
+    def approved_interpreter_command(segment: list[str], command_index: int) -> bool:
+        command = segment[command_index].rsplit("/", 1)[-1]
+        if approved_run_generator(segment) and command_index == segment.index("run_generator") + 2:
+            return True
+        if command == "python3" and "--directory" in segment:
+            return approved_pinned_http_server(segment, segment.index("--directory"))
+        if command == "node":
+            helper_index = pinned_helper_index(segment)
+            if helper_index is None or segment[helper_index + 3 : helper_index + 4] != [
+                "run_with_new_log"
+            ]:
+                return False
+            return (
+                command_index + 1 < len(segment)
+                and segment[command_index + 1] in approved_logged_node_children
+            )
+        return False
+
+    def approved_pinned_invocation(segment: list[str]) -> bool:
+        helper_index = pinned_helper_index(segment)
+        if helper_index is None or helper_index + 3 >= len(segment):
+            return False
+        command_index = helper_index + 3
+        command = segment[command_index].rsplit("/", 1)[-1]
+        if command in approved_direct_commands:
+            return approved_pinned_direct_command(segment, command_index)
+        if command in approved_pinned_helper_commands:
+            return True
+        if command == "exec_with_new_log":
+            return "python3" in segment and approved_pinned_http_server(
+                segment, segment.index("--directory")
+            )
+        if command == "run_with_new_log":
+            return any(child in segment for child in approved_logged_node_children)
+        return False
+
+    def safe_non_file_redirect(segment: list[str], redirect_index: int) -> bool:
+        if redirect_index + 1 >= len(segment):
+            return False
+        operator = segment[redirect_index]
+        target = segment[redirect_index + 1]
+        if target == "/dev/null":
+            return True
+        if operator in {">&", "<&"} and (target == "-" or target.isdigit()):
+            return True
+        if operator in {">&", "<&"} and re.fullmatch(
+            r"\$(?:\{)?[A-Za-z_][A-Za-z0-9_]*(?:\})?", target
+        ):
+            variable = target.removeprefix("${").removeprefix("$").removesuffix("}")
+            return variable.lower().endswith("fd")
+        return False
+
+    def exec_is_fd_operation(segment: list[str], exec_index: int) -> bool:
+        suffix = segment[exec_index + 1 :]
+        redirect_index = next(
+            (index for index, token in enumerate(suffix) if "<" in token or ">" in token),
+            None,
+        )
+        if redirect_index is None:
+            return False
+        return redirect_index + 2 == len(suffix) and all(
+            re.fullmatch(r"(?:[0-9]+|\{[A-Za-z_][A-Za-z0-9_]*\})", token)
+            for token in suffix[:redirect_index]
+        )
+
+    approved_simple_substitutions = {
+        ("dirname", "$0"),
+        ("pwd", "-P"),
+        ("pinned_directory_identity", "$ROOT/site"),
+        ("pinned_directory_identity", "$ROOT"),
+        ("pinned_directory_identity", "$ROOT/build"),
+        ("pinned_directory_identity", "$BUILD_UAT"),
+        ("pinned_directory_identity", "$BUILD_STAMP_DIR"),
+        ("pinned_directory_identity", "$BUILD_UAT/$LOCK_NAME"),
+        ("git", "rev-parse", "HEAD"),
+        ("git", "status", "--short", "--untracked-files=normal", "${pathspecs[@]}"),
+        ("process_identity", "$$"),
+        ("process_identity", "$marker_pid"),
+        ("process_identity", "$lock_owner_pid"),
+        ("command", "-v", "curl"),
+        ("command", "-v", "flock"),
+        ("new_log_name", "local-server"),
+        ("new_log_name", "$label"),
+        ("new_log_name", "a11y"),
+        ("<", "$marker_name"),
+        ("curl", "-fsS", "--max-time", "2", "$MARKER_URL", "2", ">&", "-"),
+        ("stat", "-Lc", "%d:%i", "--", "."),
+        ("stat", "-Lc", "%d:%i", "--", ".."),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("stat", "-Lc", "%F", "--", "/proc/self/fd/$pinned_return_fd"),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$marker_fd"),
+        ("stat", "-Lc", "%h", "--", "/proc/self/fd/$marker_fd"),
+        ("stat", "-Lc", "%h", "--", "$relative_name"),
+        ("stat", "-Lc", "%s", "--", "$relative_name"),
+        ("stat", "-Lc", "%d:%i", "--", "/proc/self/fd/$directory_fd"),
+        ("stat", "-Lc", "%F", "--", "/proc/self/fd/$directory_fd"),
+    }
+    approved_pinned_capture_commands = {
+        (
+            "with_pinned_dir",
+            "$ROOT/site",
+            "$SITE_IDENTITY",
+            "mktemp",
+            ".final-revalidation-server.XXXXXX",
+        ),
+        (
+            "with_pinned_dir",
+            "$ROOT/site",
+            "$SITE_IDENTITY",
+            "relative_regular_file_identity",
+            "$MARKER_NAME",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT",
+            "$BUILD_UAT_IDENTITY",
+            "initialize_revalidation_lock",
+            "$LOCK_NAME",
+            "$LOCK_TOKEN",
+            "$BUILD_UAT_IDENTITY",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT/$LOCK_NAME",
+            "$existing_identity",
+            "read_regular_relative_file",
+            "owner",
+        ),
+        (
+            "with_pinned_dir",
+            "$BUILD_UAT/$LOCK_NAME",
+            "$LOCK_IDENTITY",
+            "read_regular_relative_file",
+            "owner",
+        ),
+    }
+
+    def approved_command_substitution(substitution: str, helper_name: str | None) -> bool:
+        segments = shell_command_segments(substitution[2:-1])
+        if len(segments) == 1:
+            command = tuple(segments[0])
+            return command in approved_simple_substitutions or command in approved_pinned_capture_commands
+        if helper_name != "initialize_revalidation_lock":
+            return False
+        allowed_shapes = APPROVED_HELPER_COMMAND_SHAPES[helper_name]
+        for segment in segments:
+            executable_index = executable_index_for(segment)
+            if executable_index is None:
+                continue
+            if tuple(segment[executable_index:]) not in allowed_shapes:
+                return False
+        return True
+
+    approved_internal_helper_commands = {
+        "restore_build_stamp_in_pinned_dir": {
+            ("open_new_relative_file_fd", "$restore_name", "restore_fd"),
+            ("mv", "-T", "--", "$restore_name", "$relative_name"),
+        },
+        "write_server_marker": {
+            ("exec", "{marker_fd}", "<>", "$relative_name"),
+        },
+        "open_new_relative_file_fd": {
+            ("exec", "{new_fd}", ">", "$relative_name"),
+        },
+        "run_with_new_log": {
+            ("open_new_relative_file_fd", "$relative_name", "log_fd"),
+            ("exec", "$@"),
+            (">&", "$log_fd", "2", ">&", "1"),
+        },
+        "exec_with_new_log": {
+            ("open_new_relative_file_fd", "$relative_name", "log_fd"),
+            ("exec", "$@", ">&", "$log_fd", "2", ">&", "1"),
+        },
+        "write_lock_owner": {
+            ("open_new_relative_file_fd", "$relative_name", "owner_fd"),
+        },
+    }
+
+    def approved_helper_command(
+        helper_name: str | None, segment: list[str], executable_index: int
+    ) -> bool:
+        command_shape = tuple(segment[executable_index:])
+        if helper_name in APPROVED_HELPER_COMMAND_SHAPES:
+            return command_shape in APPROVED_HELPER_COMMAND_SHAPES[helper_name]
+        return command_shape in approved_internal_helper_commands.get(helper_name, set())
+
+    for helper_name, region_source in shell_regions(source):
+        if "`" in region_source:
+            violations.append(("backtick-command-substitution", [helper_name or "top-level"]))
+        for substitution in shell_command_substitutions(region_source):
+            if not approved_command_substitution(substitution, helper_name):
+                violations.append(("command-substitution", [substitution]))
+
+        region_segments = shell_command_segments(region_source)
+        if helper_name in APPROVED_HELPER_TOKEN_STREAM_SHA256:
+            grammar_matches = (
+                shell_token_stream_sha256(region_source)
+                == APPROVED_HELPER_TOKEN_STREAM_SHA256[helper_name]
+            )
+            relative_guard = REQUIRED_HELPER_RELATIVE_GUARDS.get(helper_name)
+            if relative_guard is not None and relative_guard not in region_source:
+                grammar_matches = False
+
+        if helper_name in APPROVED_HELPER_COMMAND_SHAPES:
+            command_order = tuple(
+                segment[executable_index]
+                for segment in region_segments
+                if segment != [helper_name]
+                if (executable_index := executable_index_for(segment)) is not None
+            )
+            grammar_matches = grammar_matches and (
+                command_order == APPROVED_HELPER_COMMAND_ORDER[helper_name]
+            )
+
+        if (
+            helper_name in APPROVED_HELPER_TOKEN_STREAM_SHA256
+            and not grammar_matches
+        ):
+            violations.append((f"{helper_name} grammar", [helper_name]))
+
+        for segment in region_segments:
+            if helper_name is not None and segment == [helper_name]:
+                continue
+            executable_index = executable_index_for(segment)
+            helper_command_is_approved = executable_index is not None and approved_helper_command(
+                helper_name, segment, executable_index
+            )
+            if executable_index is not None and not helper_command_is_approved:
+                executable = segment[executable_index].rsplit("/", 1)[-1]
+                if executable not in approved_command_tokens:
+                    violations.append((executable, segment))
+                elif executable == "command" and not approved_command_builtin(
+                    segment, executable_index
+                ):
+                    violations.append((executable, segment))
+
+            trap_index = next(
+                (index for index, token in enumerate(segment) if token == "trap"),
+                None,
+            )
+            if trap_index is not None and tuple(segment[trap_index:]) not in {
+                ("trap", "-", "EXIT"),
+                ("trap", "cleanup_on_exit", "EXIT"),
+                ("trap", "exit 130", "INT"),
+                ("trap", "exit 143", "TERM"),
+            }:
+                violations.append(("trap-handler", segment))
+
+            if helper_command_is_approved:
+                continue
+            if "with_pinned_dir" in segment and not approved_pinned_invocation(segment):
+                violations.append(("with_pinned_dir", segment))
+            if "run_generator" in segment and not approved_run_generator(segment):
+                violations.append(("run_generator", segment))
+            for index, token in enumerate(segment):
+                command_token = token.rsplit("/", 1)[-1]
+                if command_token in {"bash", "sh"} and segment[index + 1 : index + 2] == ["-c"]:
+                    violations.append((f"{command_token} -c", segment))
+                elif command_token == "eval":
+                    violations.append((command_token, segment))
+                elif command_token == "exec" and not exec_is_fd_operation(segment, index):
+                    violations.append((command_token, segment))
+                elif command_token in {"python", "python3", "node"} and not approved_interpreter_command(
+                    segment, index
+                ):
+                    violations.append((command_token, segment))
+                elif command_token == "sed" and any(
+                    argument == "--in-place"
+                    or argument.startswith("--in-place=")
+                    or re.fullmatch(r"-[A-Za-z]*i.*", argument)
+                    for argument in segment[index + 1 :]
+                ):
+                    violations.append(("sed -i", segment))
+                elif command_token == "rsync":
+                    violations.append((command_token, segment))
+                elif command_token in mutating_commands and not approved_pinned_direct_command(
+                    segment, index
+                ):
+                    violations.append((command_token, segment))
+                elif token == "--directory" and not approved_pinned_http_server(segment, index):
+                    violations.append((token, segment))
+                else:
+                    redirect_rule = write_redirect_rule(segment, index)
+                    if redirect_rule is not None and not safe_non_file_redirect(segment, index):
+                        command_index = next(
+                            (
+                                command_position
+                                for command_position, command in enumerate(segment[:index])
+                                if command in {"printf", "cat"}
+                            ),
+                            -1,
+                        )
+                        if command_index < 0 or not approved_pinned_direct_command(
+                            segment, command_index
+                        ):
+                            violations.append((redirect_rule, segment))
+                    elif token in {">&", "<&"} and not safe_non_file_redirect(segment, index):
+                        violations.append((token, segment))
+    return violations
+
+
+def initialize_git_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "contract@example.test"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Contract Test"], cwd=path, check=True)
+    subprocess.run(["git", "add", "."], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=path, check=True)
+
+
+def run_bash(
+    path: Path, program: str, *, timeout: float | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash"],
+        cwd=path,
+        input=program,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+def run_synchronized_lock_contenders(
+    path: Path, program_template: str, *, timeout: float = 3
+) -> tuple[int, dict[int, tuple[int, str, str]]]:
+    start_read, start_write = os.pipe()
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        program = (
+            program_template.replace("__START_FD__", str(start_read))
+            .replace("__READY_FD__", str(ready_write))
+            .replace("__RELEASE_FD__", str(release_read))
+        )
+        for _ in range(2):
+            processes.append(
+                subprocess.Popen(
+                    ["bash", "-c", program],
+                    cwd=path,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    pass_fds=(start_read, ready_write, release_read),
+                )
+            )
+        os.close(start_read)
+        start_read = -1
+        os.close(ready_write)
+        ready_write = -1
+        os.close(release_read)
+        release_read = -1
+        os.write(start_write, b"SS")
+        os.close(start_write)
+        start_write = -1
+
+        readable, _, _ = select.select([ready_read], [], [], timeout)
+        assert readable, "neither contender acquired the lock"
+        winner_pid = int(os.read(ready_read, 64).decode("ascii").strip())
+        loser = next(process for process in processes if process.pid != winner_pid)
+        loser_stdout, loser_stderr = loser.communicate(timeout=timeout)
+
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+        winner = next(process for process in processes if process.pid == winner_pid)
+        winner_stdout, winner_stderr = winner.communicate(timeout=timeout)
+        return winner_pid, {
+            winner.pid: (winner.returncode, winner_stdout, winner_stderr),
+            loser.pid: (loser.returncode, loser_stdout, loser_stderr),
+        }
+    finally:
+        for descriptor in (
+            start_read,
+            start_write,
+            ready_read,
+            ready_write,
+            release_read,
+            release_write,
+        ):
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+
+
+def read_process_identity(pid: int) -> tuple[str, str]:
+    stat_line = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    stat_fields = stat_line.rsplit(") ", 1)[1].split()
+    return stat_fields[0], stat_fields[19]
+
+
+def test_script_has_valid_bash_syntax() -> None:
+    result = subprocess.run(
+        ["bash", "-n", str(SCRIPT_PATH)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_journey_legs_use_known_ids_and_their_required_modes() -> None:
+    legs = run_legs(script_source())
+    assert [name for name, _ in legs] == [name for name, _, _ in EXPECTED_LEGS]
+
+    known_ids = journey_ids()
+    for (name, arguments), (_, expected_label, expected_mode) in zip(legs, EXPECTED_LEGS):
+        label_index = arguments.index("--env-label")
+        assert arguments[label_index + 1] == expected_label
+
+        if expected_mode == "bindings":
+            assert "--bindings" in arguments, name
+            assert "--base" not in arguments, name
+        else:
+            assert "--base" in arguments, name
+            assert "--bindings" not in arguments, name
+
+        if "--only" in arguments:
+            only_index = arguments.index("--only")
+            requested_ids = arguments[only_index + 1].split(",")
+            assert requested_ids
+            assert set(requested_ids) <= known_ids, set(requested_ids) - known_ids
+            assert requested_ids == EXPECTED_ONLY_IDS[name]
+        else:
+            assert name not in EXPECTED_ONLY_IDS
+
+    assert {label for _, label, _ in EXPECTED_LEGS} == {"local", "dev", "prod"}
+
+
+def test_a11y_uses_the_same_expected_paths_for_dev_and_production() -> None:
+    urls = re.findall(r'"\$\{(DEV_BASE|PROD_BASE)\}(/[^"\n]*)"', script_source())
+    paths_by_environment = {
+        variable: {path for found_variable, path in urls if found_variable == variable}
+        for variable in ("DEV_BASE", "PROD_BASE")
+    }
+    assert paths_by_environment["DEV_BASE"] == EXPECTED_A11Y_PATHS
+    assert paths_by_environment["PROD_BASE"] == EXPECTED_A11Y_PATHS
+    assert len(urls) == 2 * len(EXPECTED_A11Y_PATHS)
+
+
+def test_script_contains_no_credentials_or_non_uat_build_paths() -> None:
+    source = script_source()
+    assert not re.search(r"api_key|AIza|sk-|Bearer", source, re.IGNORECASE)
+
+    build_references = list(re.finditer(r"build/", source))
+    assert build_references
+    for reference in build_references:
+        assert source.startswith("build/uat/", reference.start()) or source.startswith(
+            'build/uat"', reference.start()
+        )
+
+
+def test_every_leg_contributes_to_the_final_exit_status() -> None:
+    source = script_source()
+    assert 'record_status "$status"' in source
+    assert 'record_status "$a11y_status"' in source
+    assert "finalize_revalidation\nexit $?" in source
+
+
+def test_all_filesystem_writes_use_pinned_directory_helpers() -> None:
+    source = script_source()
+    assert unsafe_filesystem_command_tokens(source) == []
+    assert unsafe_filesystem_command_tokens(source + "\nfalse\ntrue\n:\n") == []
+
+    sentinels = [
+        ("mkdir", 'if false; then mkdir -- "$ROOT/site/mkdir-mutant"; fi', "mkdir"),
+        ("mv", 'if false; then mv -- source "$BUILD_UAT/mv-mutant"; fi', "mv"),
+        ("relative-redirect", "if false; then printf data > site/redirect-mutant; fi", ">"),
+        (
+            "mktemp-after-helper",
+            'if false; then with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" true; '
+            'mktemp "$ROOT/site/bypass.XXXXXX"; fi',
+            "mktemp",
+        ),
+        ("compound-rm", 'if rm -rf -- "$ROOT/build/uat/runs"; then :; fi', "rm"),
+        (
+            "full-path-rm",
+            'if false; then /bin/rm -rf -- "$ROOT/site/full-path-mutant"; fi',
+            "rm",
+        ),
+        ("absolute-redirect", 'printf data > "$ROOT/site/redirect-mutant"', ">"),
+        (
+            "helper-absolute-rm",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" rm -rf -- "$ROOT/site/rm-mutant"',
+            "rm",
+        ),
+        (
+            "helper-absolute-mkdir",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" mkdir -- "$ROOT/site/mkdir-mutant"',
+            "mkdir",
+        ),
+        (
+            "helper-shell-wrapper",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" bash -c "rm -rf -- /tmp/wrapper-mutant"',
+            "bash -c",
+        ),
+        (
+            "helper-sh-wrapper",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" sh -c "touch /tmp/wrapper-mutant"',
+            "sh -c",
+        ),
+        (
+            "helper-eval-wrapper",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" eval "mkdir /tmp/wrapper-mutant"',
+            "eval",
+        ),
+        (
+            "helper-exec-wrapper",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" exec mkdir /tmp/wrapper-mutant',
+            "exec",
+        ),
+        (
+            "read-write-redirect",
+            'if false; then exec 9<> "$ROOT/site/redirect-mutant"; fi',
+            "<>",
+        ),
+        (
+            "append-both-redirect",
+            'if false; then printf data &>> "$ROOT/site/redirect-mutant"; fi',
+            "&>>",
+        ),
+        (
+            "append-redirect",
+            'if false; then printf data >> "$ROOT/site/redirect-mutant"; fi',
+            ">>",
+        ),
+        (
+            "force-redirect",
+            'if false; then printf data >| "$ROOT/site/redirect-mutant"; fi',
+            ">|",
+        ),
+        (
+            "both-redirect",
+            'if false; then printf data &> "$ROOT/site/redirect-mutant"; fi',
+            "&>",
+        ),
+        (
+            "dynamic-fd-redirect",
+            'if false; then exec {mutant_fd}> "$ROOT/site/fd-mutant"; fi',
+            "{fd}>",
+        ),
+        ("copy", 'if false; then cp source "$ROOT/site/copy-mutant"; fi', "cp"),
+        (
+            "sed-in-place",
+            'if false; then sed -i s/a/b/ "$ROOT/site/index.html"; fi',
+            "sed -i",
+        ),
+        ("rsync", 'if false; then rsync source "$ROOT/site/rsync-mutant"; fi', "rsync"),
+        (
+            "python-command-wrapper",
+            'if false; then python3 -c "open(\047$ROOT/site/python-mutant\047, \047w\047)"; fi',
+            "python3",
+        ),
+        (
+            "node-command-wrapper",
+            'if false; then node -e "require(\047fs\047).writeFileSync(\047node-mutant\047, \047x\047)"; fi',
+            "node",
+        ),
+        (
+            "helper-mktemp-tmpdir-option",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" '
+            'mktemp --tmpdir=/tmp bypass.XXXXXX',
+            "mktemp",
+        ),
+        (
+            "unknown-command-wrapper",
+            'if false; then perl -e "open my $fh, q(>), q(/tmp/perl-mutant)"; fi',
+            "perl",
+        ),
+        (
+            "helper-unknown-command-wrapper",
+            'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" '
+            'perl -e "open my $fh, q(>), q(/tmp/perl-helper-mutant)"',
+            "with_pinned_dir",
+        ),
+        (
+            "unpinned-http-directory",
+            'python3 -m http.server 9999 --directory "$ROOT/site"',
+            "--directory",
+        ),
+        (
+            "command-substitution-touch",
+            'printf %s "$(touch "$ROOT/site/substitution-mutant")"',
+            "command-substitution",
+        ),
+        (
+            "arithmetic-nested-command-substitution-touch",
+            'printf %s "$((1 + $(touch "$ROOT/site/arithmetic-substitution-mutant")))"',
+            "command-substitution",
+        ),
+        (
+            "backtick-command-substitution",
+            'printf %s "`touch "$ROOT/site/backtick-mutant"`"',
+            "backtick-command-substitution",
+        ),
+        (
+            "trap-handler-touch",
+            'trap \'touch "$ROOT/site/trap-mutant"\' EXIT',
+            "trap-handler",
+        ),
+        (
+            "helper-body-touch",
+            'initialize_revalidation_lock() {\n  touch "$ROOT/helper-body-mutant"\n}',
+            "touch",
+        ),
+    ]
+    for name, mutant, expected_rule in sentinels:
+        rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n")
+        }
+        assert expected_rule in rules, (name, expected_rule, sorted(rules))
+
+    helper_mutations = [
+        (
+            "run-generator-control-operator",
+            "run_generator",
+            'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY" &&',
+            'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY" ||',
+            "run_generator grammar",
+        ),
+        (
+            "with-pinned-dir-assignment-only",
+            "with_pinned_dir",
+            "    status=1\n  else",
+            "    status=0\n  else",
+            "with_pinned_dir grammar",
+        ),
+        (
+            "remove-in-pinned-dir-relative-guard-weakening",
+            "remove_in_pinned_dir",
+            '""|.|..|/*|*/*) return 1 ;;',
+            '""|.|..|/*) return 1 ;;',
+            "remove_in_pinned_dir grammar",
+        ),
+        (
+            "write-lock-owner-duplicate-command",
+            "write_lock_owner",
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1',
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1\n'
+            '  open_new_relative_file_fd "$relative_name" owner_fd || return 1',
+            "write_lock_owner grammar",
+        ),
+        (
+            "exec-with-new-log-command-reorder",
+            "exec_with_new_log",
+            '  enter_pinned_dir "$command_dir" "$command_identity" || return 125\n'
+            "  close_inherited_pinning_fds || return 125",
+            "  close_inherited_pinning_fds || return 125\n"
+            '  enter_pinned_dir "$command_dir" "$command_identity" || return 125',
+            "exec_with_new_log grammar",
+        ),
+    ]
+    for name, helper_name, original, replacement, expected_rule in helper_mutations:
+        original_body = shell_function(source, helper_name)
+        assert original in original_body, (name, original)
+        mutant_body = original_body.replace(original, replacement, 1)
+        mutated_source = source.replace(original_body, mutant_body, 1)
+        rules = {
+            rule for rule, _ in unsafe_filesystem_command_tokens(mutated_source)
+        }
+        assert expected_rule in rules, (name, expected_rule, sorted(rules))
+
+    for command in ("rmdir", "ln", "touch", "tee", "truncate", "install", "dd"):
+        mutant = f'if false; then {command} "$ROOT/site/{command}-mutant"; fi'
+        rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(source + "\n" + mutant + "\n")
+        }
+        assert command in rules, (command, sorted(rules))
+
+    assert 'remove_in_pinned_dir "$ROOT/site" "$scanner_identity" file' in shell_function(
+        source, "remove_stale_server_markers"
+    )
+    assert 'remove_in_pinned_dir "$ROOT/site" "${SITE_IDENTITY:-}" file' in shell_function(
+        source, "cleanup"
+    )
+    assert 'remove_in_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" tree' in shell_function(
+        source, "clear_prior_evidence"
+    )
+
+
+def test_each_write_redirect_sentinel_depends_on_its_detector_rule() -> None:
+    source = script_source()
+    redirect_sentinels = [
+        (">", "printf data > site/redirect-mutant"),
+        (">>", "printf data >> site/redirect-mutant"),
+        (">|", "printf data >| site/redirect-mutant"),
+        ("<>", "exec 9<> site/redirect-mutant"),
+        ("&>", "printf data &> site/redirect-mutant"),
+        ("&>>", "printf data &>> site/redirect-mutant"),
+        ("{fd}>", "exec {mutant_fd}> site/redirect-mutant"),
+    ]
+    for expected_rule, mutant in redirect_sentinels:
+        mutated_source = source + "\n" + mutant + "\n"
+        baseline_rules = {
+            rule for rule, _ in unsafe_filesystem_command_tokens(mutated_source)
+        }
+        assert expected_rule in baseline_rules, (expected_rule, sorted(baseline_rules))
+
+        detector_mutant = WRITE_REDIRECT_CLASSES - {expected_rule}
+        mutant_rules = {
+            rule
+            for rule, _ in unsafe_filesystem_command_tokens(
+                mutated_source,
+                write_redirect_classes=detector_mutant,
+            )
+        }
+        assert expected_rule not in mutant_rules, (expected_rule, sorted(mutant_rules))
+
+
+def test_child_tools_receive_only_the_pinned_repository_root_as_cwd() -> None:
+    source = script_source()
+    documentation = (ROOT / "docs" / "uat" / "journey-schema.md").read_text(encoding="utf-8")
+    root_cd = 'cd "$(dirname "$0")/.." || exit 2'
+    root_capture = "ROOT=$(pwd -P)"
+    assert source.index(root_cd) < source.index(root_capture)
+    assert 'enter_pinned_dir "$ROOT" "$ROOT_IDENTITY"' in shell_function(
+        source, "run_generator"
+    )
+    assert (
+        '"$log_name" "$ROOT" "$ROOT_IDENTITY" node '
+        'tools/verify_persona_journeys.js "$@"'
+    ) in shell_function(source, "run")
+    assert (
+        '"$A11Y_LOG_NAME" "$ROOT" "$ROOT_IDENTITY" node tools/a11y_audit.js'
+    ) in source
+    assert "`app/worker/scripts/bundle-editor-data.mjs`" in documentation
+
+    child_invocations = [
+        segment
+        for segment in shell_command_segments(source)
+        if any(
+            child in segment
+            for child in (
+                "tools/build_site.py",
+                "tools/build_instructor_bundle.py",
+                "app/worker/scripts/bundle-editor-data.mjs",
+                "tools/verify_persona_journeys.js",
+                "tools/a11y_audit.js",
+            )
+        )
+    ]
+    assert len(child_invocations) == 5
+    for segment in child_invocations:
+        child = next(
+            token
+            for token in segment
+            if token
+            in {
+                "tools/build_site.py",
+                "tools/build_instructor_bundle.py",
+                "app/worker/scripts/bundle-editor-data.mjs",
+                "tools/verify_persona_journeys.js",
+                "tools/a11y_audit.js",
+            }
+        )
+        if child in {
+            "tools/build_site.py",
+            "tools/build_instructor_bundle.py",
+            "app/worker/scripts/bundle-editor-data.mjs",
+        }:
+            assert "run_generator" in segment
+            assert segment.index("run_generator") < segment.index(child)
+        else:
+            assert "run_with_new_log" in segment
+            command_index = segment.index("run_with_new_log")
+            assert segment[command_index + 2 : command_index + 4] == [
+                "$ROOT",
+                "$ROOT_IDENTITY",
+            ]
+        assert "$ROOT/site" not in segment
+        assert "$ROOT/build/uat" not in segment
+
+
+def test_pinned_helpers_reject_unsafe_names_directory_file_mode_and_empty_identity(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    pinned = tmp_path / "pinned"
+    pinned.mkdir()
+    (pinned / "directory-entry").mkdir()
+    identity = f"{pinned.stat().st_dev}:{pinned.stat().st_ino}"
+    functions = "\n\n".join(
+        [
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "remove_in_pinned_dir"),
+        ]
+    )
+    rejected_names = ["", ".", "..", "/tmp/outside", "nested/name"]
+    cases = "\n".join(
+        f"remove_in_pinned_dir \"$PINNED\" \"$IDENTITY\" file {shlex.quote(name)} && exit 21"
+        for name in rejected_names
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"PINNED={shlex.quote(str(pinned))}\n"
+            f"IDENTITY={shlex.quote(identity)}\n"
+            "rm() { printf 'RM_INVOKED\\n'; return 0; }\n"
+            f"{cases}\n"
+            "remove_in_pinned_dir \"$PINNED\" \"$IDENTITY\" file directory-entry && exit 22\n"
+            "remove_in_pinned_dir \"$PINNED\" '' tree safe-entry && exit 23\n"
+            "with_pinned_dir \"$PINNED\" '' true && exit 24\n"
+            "with_pinned_dir \"$PINNED\" \"$IDENTITY\" /bin/true && exit 25\n"
+            "with_pinned_dir \"$PINNED\" \"$IDENTITY\" nested/command && exit 26\n"
+            "printf 'all-rejected\\n'\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "all-rejected\n"
+
+    inherited_exit_trap = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"PINNED={shlex.quote(str(pinned))}\n"
+            f"IDENTITY={shlex.quote(identity)}\n"
+            "trap 'true' EXIT\n"
+            "with_pinned_dir \"$PINNED\" \"$IDENTITY\" false && exit 31\n"
+            "remove_in_pinned_dir \"$PINNED\" '' tree safe-entry && exit 32\n"
+            "trap - EXIT\n"
+            "exit 0\n"
+        ),
+    )
+    assert inherited_exit_trap.returncode == 0, inherited_exit_trap.stderr
+
+    helper = shell_function(source, "remove_in_pinned_dir")
+    assert '""|.|..|/*|*/*) return 1' in helper
+    assert '[ ! -d "$relative_name" ] || return 1' in helper
+    assert '""|.|..|/*|*/*) return 1' in shell_function(source, "with_pinned_dir")
+
+
+def test_with_pinned_dir_restores_caller_by_open_directory_identity(tmp_path: Path) -> None:
+    source = script_source()
+    caller = tmp_path / "caller"
+    pinned = tmp_path / "pinned"
+    caller.mkdir()
+    pinned.mkdir()
+    caller_identity = f"{caller.stat().st_dev}:{caller.stat().st_ino}"
+    pinned_identity = f"{pinned.stat().st_dev}:{pinned.stat().st_ino}"
+    result = run_bash(
+        caller,
+        (
+            f"set -uo pipefail\n{shell_function(source, 'with_pinned_dir')}\n"
+            f"CALLER={shlex.quote(str(caller))}\n"
+            f"PINNED={shlex.quote(str(pinned))}\n"
+            f"CALLER_IDENTITY={shlex.quote(caller_identity)}\n"
+            f"PINNED_IDENTITY={shlex.quote(pinned_identity)}\n"
+            "swap_caller() {\n"
+            "  mv -- \"$CALLER\" \"${CALLER}-original\" || return 1\n"
+            "  mkdir -- \"$CALLER\" || return 1\n"
+            "}\n"
+            "with_pinned_dir \"$PINNED\" \"$PINNED_IDENTITY\" swap_caller\n"
+            "test \"$(stat -Lc '%d:%i' -- .)\" = \"$CALLER_IDENTITY\"\n"
+            "test \"$(pwd -P)\" = \"${CALLER}-original\"\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert (caller.stat().st_dev, caller.stat().st_ino) != (
+        int(caller_identity.split(":")[0]),
+        int(caller_identity.split(":")[1]),
+    )
+
+
+def test_build_uat_identity_is_captured_before_lock_and_evidence_clear() -> None:
+    source = script_source()
+    mkdir_position = source.index('with_pinned_dir "$ROOT/build" "$BUILD_IDENTITY" mkdir -p -- uat')
+    capture = 'BUILD_UAT_IDENTITY=$(pinned_directory_identity "$BUILD_UAT")'
+    capture_position = source.index(capture)
+    lock_position = source.index("\nacquire_revalidation_lock\n", capture_position)
+    clear_position = source.index("\nclear_prior_evidence\n", lock_position)
+    assert mkdir_position < capture_position < lock_position < clear_position
+    main_calls = [match.start() for match in re.finditer(r"^clear_prior_evidence$", source, re.MULTILINE)]
+    assert main_calls == [clear_position + 1]
+    early_clear_mutant = source[:lock_position] + "\nclear_prior_evidence\n" + source[lock_position:]
+    assert len(re.findall(r"^clear_prior_evidence$", early_clear_mutant, re.MULTILINE)) == 2
+    lock_helper = shell_function(source, "acquire_revalidation_lock")
+    assert 'open_pinned_directory_fd "$ROOT" "$ROOT_IDENTITY" LOCK_GUARD_FD' in lock_helper
+    assert (
+        'open_pinned_directory_fd "$BUILD_UAT" "$BUILD_UAT_IDENTITY" LOCK_GUARD_FD'
+        not in lock_helper
+    )
+
+
+def test_initial_gate_rejects_non_ignored_untracked_generator_input(tmp_path: Path) -> None:
+    source = script_source()
+    (tmp_path / ".gitignore").write_text("ignored-input.json\n", encoding="utf-8")
+    (tmp_path / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    (tmp_path / "ignored-input.json").write_text("ignored\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [shell_function(source, "die"), shell_function(source, "require_clean_worktree")]
+    )
+    ignored_only = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\nrequire_clean_worktree 'initial gate failed'\n",
+    )
+    assert ignored_only.returncode == 0, ignored_only.stderr
+
+    (tmp_path / "untracked-generator-input.json").write_text("untracked\n", encoding="utf-8")
+    untracked_input = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\nrequire_clean_worktree 'initial gate failed'\n",
+    )
+    assert untracked_input.returncode == 1
+    assert "?? untracked-generator-input.json" in untracked_input.stderr
+    assert "ignored-input.json" not in untracked_input.stderr
+    assert "ERROR: initial gate failed" in untracked_input.stderr
+
+
+def test_stale_server_marker_is_removed_without_weakening_initial_gate(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    stale_marker = site / ".final-revalidation-server.ABC123"
+    stale_marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
+    )
+    stale_only = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert stale_only.returncode == 0, stale_only.stderr
+    assert not stale_marker.exists()
+    assert stale_only.stdout == (
+        "removed stale local-server marker: site/.final-revalidation-server.ABC123\n"
+    )
+    assert stale_only.stderr == ""
+
+    stale_marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
+    )
+    unrelated = site / "unexpected-source.json"
+    unrelated.write_text("unexpected\n", encoding="utf-8")
+    unrelated_change = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert unrelated_change.returncode == 1
+    assert not stale_marker.exists()
+    assert "?? site/unexpected-source.json" in unrelated_change.stderr
+    assert ".final-revalidation-server" not in unrelated_change.stderr
+    assert "ERROR: initial gate failed" in unrelated_change.stderr
+
+
+def test_malformed_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("not-a-final-revalidation-token\n", encoding="utf-8")
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_dead_legacy_server_marker_is_removed(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:12345\n", encoding="utf-8"
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+
+def test_live_legacy_server_marker_is_preserved_for_initial_gate(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:12345\\n' \"$$\" > "
+            f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+
+
+def test_pid_zero_server_marker_is_malformed_and_preserved(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:0:1:12345\n", encoding="utf-8"
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "/proc/0/stat" not in result.stderr
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+
+
+def test_live_matching_owner_server_marker_is_preserved_for_initial_gate(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "read -r _ owner_start_ticks <<< \"$(process_identity \"$$\")\"\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:%s:12345\\n' "
+            '"$$" "$owner_start_ticks" > '
+            f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_reused_pid_with_different_start_ticks_is_removed(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "read -r _ owner_start_ticks <<< \"$(process_identity \"$$\")\"\n"
+            "stale_start_ticks=$((owner_start_ticks + 1))\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:%s:12345\\n' "
+            '"$$" "$stale_start_ticks" > '
+            f"{shlex.quote(str(marker))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+
+def test_matching_zombie_owner_server_marker_is_removed(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    marker = site / ".final-revalidation-server.ABC123"
+
+    zombie_pid = os.fork()
+    if zombie_pid == 0:
+        os._exit(0)
+    try:
+        os.waitid(os.P_PID, zombie_pid, os.WEXITED | os.WNOWAIT)
+        state, start_ticks = read_process_identity(zombie_pid)
+        assert state == "Z"
+
+        marker.write_text(
+            f"final-revalidation:{'deadbeef' * 5}:{zombie_pid}:{start_ticks}:12345\n",
+            encoding="utf-8",
+        )
+        functions = "\n\n".join(
+            [
+                shell_function(source, "die"),
+                shell_function(source, "process_identity"),
+                shell_function(source, "remove_in_pinned_dir"),
+                shell_function(source, "remove_stale_server_markers"),
+                shell_function(source, "require_clean_worktree"),
+            ]
+        )
+        result = run_bash(
+            tmp_path,
+            (
+                f"set -uo pipefail\n{functions}\n"
+                f"ROOT={shlex.quote(str(tmp_path))}\n"
+                "remove_stale_server_markers\n"
+                "require_clean_worktree 'initial gate failed'\n"
+            ),
+        )
+        assert result.returncode == 0, result.stderr
+        assert not marker.exists()
+    finally:
+        os.waitpid(zombie_pid, 0)
+
+
+def test_process_stat_parser_handles_comm_with_close_paren_and_spaces(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    ready_read, ready_write = os.pipe()
+    child_pid = os.fork()
+    if child_pid == 0:
+        os.close(ready_read)
+        try:
+            import ctypes
+
+            libc = ctypes.CDLL(None, use_errno=True)
+            if libc.prctl(15, b"a) b c) d", 0, 0, 0) != 0:
+                os._exit(2)
+            os.write(ready_write, b"1")
+            time.sleep(30)
+        finally:
+            os._exit(0)
+
+    os.close(ready_write)
+    try:
+        assert os.read(ready_read, 1) == b"1"
+        _, expected_ticks = read_process_identity(child_pid)
+        functions = shell_function(source, "process_identity")
+        result = run_bash(
+            tmp_path,
+            (
+                f"set -uo pipefail\n{functions}\n"
+                f"process_identity {child_pid}\n"
+            ),
+        )
+        assert result.returncode == 0, result.stderr
+        output_state, output_ticks = result.stdout.split()
+        assert re.fullmatch(r"[A-Za-z]", output_state)
+        assert output_ticks == expected_ticks
+    finally:
+        os.close(ready_read)
+        os.kill(child_pid, 15)
+        os.waitpid(child_pid, 0)
+
+
+def test_live_owner_with_unreadable_start_ticks_is_preserved_for_initial_gate(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            f"printf 'final-revalidation:{'deadbeef' * 5}:%s:1:12345\\n' \"$$\" > "
+            f"{shlex.quote(str(marker))}\n"
+            "process_identity() { return 1; }\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+    assert "ERROR: initial gate failed" in result.stderr
+
+
+def test_marker_entry_symlink_and_external_target_are_preserved(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    external_marker = tmp_path / "external-marker"
+    external_marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
+    )
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.symlink_to(external_marker)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.is_symlink()
+    assert external_marker.exists()
+    assert "?? site/.final-revalidation-server.ABC123" in result.stderr
+
+
+def test_stale_marker_cleanup_handles_root_spaces_and_glob_characters(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repo [x]* space"
+    site = repository / "site"
+    site.mkdir(parents=True)
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
+    )
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+            shell_function(source, "require_clean_worktree"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "remove_stale_server_markers\n"
+            "require_clean_worktree 'initial gate failed'\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+
+def test_symlinked_site_cannot_delete_external_server_marker(tmp_path: Path) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    external_site = tmp_path / "external-site"
+    repository.mkdir()
+    external_site.mkdir()
+    (repository / "site").symlink_to(external_site, target_is_directory=True)
+    (repository / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+
+    marker = external_site / ".final-revalidation-server.ABC123"
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n", encoding="utf-8"
+    )
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "remove_stale_server_markers\n"
+            "printf 'SENTINEL: stale cleanup returned\\n'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert "SENTINEL" not in result.stdout
+    assert marker.exists()
+    assert "site/ must resolve to its repository-local path" in result.stderr
+
+
+def test_clean_symlinked_site_is_rejected_before_marker_creation(tmp_path: Path) -> None:
+    source = script_source()
+    site_validation = source.index(
+        'SITE_IDENTITY=$(pinned_directory_identity "$ROOT/site")'
+    )
+    stale_cleanup = source.index("\nremove_stale_server_markers\n", site_validation)
+    marker_creation = source.index(
+        'MARKER_NAME=$(with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" mktemp ',
+        stale_cleanup,
+    )
+    assert site_validation < stale_cleanup < marker_creation
+
+    repository = tmp_path / "repository"
+    external_site = tmp_path / "external-site"
+    repository.mkdir()
+    external_site.mkdir()
+    (repository / "site").symlink_to(external_site, target_is_directory=True)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "pinned_directory_identity"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\") || "
+            "die 'site identity validation failed'\n"
+            "touch \"$ROOT/site/.final-revalidation-server.ABC123\"\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert not (external_site / ".final-revalidation-server.ABC123").exists()
+    assert result.stderr == "ERROR: site identity validation failed\n"
+
+
+def test_site_parent_swap_blocks_marker_create_token_write_and_server_start(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    site = repository / "site"
+    replacement = tmp_path / "replacement-site"
+    site.mkdir(parents=True)
+    replacement.mkdir()
+    marker_name = ".final-revalidation-server.ABC123"
+    (site / marker_name).write_text("original\n", encoding="utf-8")
+    (replacement / marker_name).write_text("replacement\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "write_server_marker"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            f"REPLACEMENT={shlex.quote(str(replacement))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            f"MARKER_FILE_IDENTITY=$(stat -Lc '%d:%i' -- \"$ROOT/site/{marker_name}\")\n"
+            "mv -- \"$ROOT/site\" \"$ROOT/original-site\"\n"
+            "ln -s -- \"$REPLACEMENT\" \"$ROOT/site\"\n"
+            "if with_pinned_dir \"$ROOT/site\" \"$SITE_IDENTITY\" "
+            "mktemp .final-revalidation-server.XXXXXX; then exit 21; fi\n"
+            f"if with_pinned_dir \"$ROOT/site\" \"$SITE_IDENTITY\" write_server_marker "
+            f"{marker_name} \"$MARKER_FILE_IDENTITY\" changed; then exit 22; fi\n"
+            "python3() { touch \"$REPLACEMENT/server-started\"; }\n"
+            "if with_pinned_dir \"$ROOT/site\" \"$SITE_IDENTITY\" python3 -m http.server "
+            "8791 --bind 127.0.0.1 --directory .; then exit 23; fi\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert (repository / "original-site" / marker_name).read_text(encoding="utf-8") == "original\n"
+    assert (replacement / marker_name).read_text(encoding="utf-8") == "replacement\n"
+    assert not (replacement / "server-started").exists()
+    assert 'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" mktemp ' in source
+    assert 'with_pinned_dir "$ROOT/site" "$SITE_IDENTITY" write_server_marker ' in source
+    assert '--directory .' in source
+    assert '--directory "$ROOT' not in source
+
+
+def test_marker_token_write_uses_validated_open_descriptor(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("original\n", encoding="utf-8")
+    expected_identity = f"{marker.stat().st_dev}:{marker.stat().st_ino}"
+    external = tmp_path / "external-marker"
+    external.write_text("KEEP\n", encoding="utf-8")
+    marker.unlink()
+    marker.symlink_to(external)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "write_server_marker"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"SITE={shlex.quote(str(site))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$SITE\")\n"
+            f"if with_pinned_dir \"$SITE\" \"$SITE_IDENTITY\" write_server_marker "
+            f"{marker.name} {shlex.quote(expected_identity)} changed; then exit 31; fi\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.is_symlink()
+    assert external.read_text(encoding="utf-8") == "KEEP\n"
+    marker_writer = shell_function(source, "write_server_marker")
+    assert 'stat -Lc \'%d:%i\' -- "/proc/self/fd/$marker_fd"' in marker_writer
+    assert 'printf \'%s\\n\' "$token" >&"$marker_fd"' in marker_writer
+
+
+def test_real_site_replacement_before_helper_entry_deletes_neither_marker(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    site = repository / "site"
+    site.mkdir()
+    (site / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+
+    marker_name = ".final-revalidation-server.ABC123"
+    token = f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n"
+    original_marker = site / marker_name
+    original_marker.write_text(token, encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "process_identity() {\n"
+            "  mv -- \"$ROOT/site\" \"$ROOT/original-site\" || return 1\n"
+            "  mkdir -- \"$ROOT/site\" || return 1\n"
+            f"  printf '%s' {shlex.quote(token)} > \"$ROOT/site/{marker_name}\" || return 1\n"
+            "  return 1\n"
+            "}\n"
+            "remove_stale_server_markers\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert (repository / "original-site" / marker_name).exists()
+    assert (repository / "site" / marker_name).exists()
+    assert "could not remove stale local-server marker" in result.stderr
+
+
+def test_stale_marker_directory_substitution_is_not_recursively_deleted(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    site = repository / "site"
+    site.mkdir(parents=True)
+    marker_name = ".final-revalidation-server.ABC123"
+    marker = site / marker_name
+    marker.write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n",
+        encoding="utf-8",
+    )
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "process_identity() {\n"
+            f"  rm -f -- \"$ROOT/site/{marker_name}\" || return 1\n"
+            f"  mkdir -- \"$ROOT/site/{marker_name}\" || return 1\n"
+            f"  printf 'keep\\n' > \"$ROOT/site/{marker_name}/evidence.txt\" || return 1\n"
+            "  return 1\n"
+            "}\n"
+            "remove_stale_server_markers\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert (marker / "evidence.txt").read_text(encoding="utf-8") == "keep\n"
+    assert "could not remove stale local-server marker" in result.stderr
+
+
+def test_non_directory_site_fails_without_blocking(tmp_path: Path) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    (repository / "tracked.txt").write_text("fixture\n", encoding="utf-8")
+    initialize_git_repo(repository)
+    os.mkfifo(repository / "site")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "process_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "remove_stale_server_markers"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "remove_stale_server_markers\n"
+            "printf 'SENTINEL: stale cleanup returned\\n'\n"
+        ),
+        timeout=2,
+    )
+    assert result.returncode == 1
+    assert "SENTINEL" not in result.stdout
+    assert "could not enter site/ before stale-marker cleanup" in result.stderr
+
+
+def test_cleanup_real_site_replacement_cannot_delete_either_active_marker(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    replacement_site = tmp_path / "replacement-site"
+    site = repository / "site"
+    site.mkdir(parents=True)
+    replacement_site.mkdir()
+    marker_name = ".final-revalidation-server.ABC123"
+    original_marker = site / marker_name
+    replacement_marker = replacement_site / marker_name
+    original_marker.write_text("original\n", encoding="utf-8")
+    replacement_marker.write_text("replacement\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            f"REPLACEMENT_SITE={shlex.quote(str(replacement_site))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            f"MARKER_NAME={marker_name}\n"
+            "MARKER_PATH=\"$ROOT/site/$MARKER_NAME\"\n"
+            "SERVER_PID=''\n"
+            "mv -- \"$ROOT/site\" \"$ROOT/original-site\"\n"
+            "mv -- \"$REPLACEMENT_SITE\" \"$ROOT/site\"\n"
+            "cleanup 0\n"
+            "status=$?\n"
+            "printf 'cleanup_status=%s\\n' \"$status\"\n"
+            "exit \"$status\"\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert result.stdout == "cleanup_status=1\n"
+    assert (repository / "original-site" / marker_name).exists()
+    assert (repository / "site" / marker_name).exists()
+    assert "could not remove active local-server marker" in result.stderr
+
+
+def test_interrupted_marker_name_initialization_is_cleaned_from_path(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("marker\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "SERVER_PID=''\n"
+            "MARKER_NAME=''\n"
+            "MARKER_PATH=\"$ROOT/site/.final-revalidation-server.ABC123\"\n"
+            "cleanup 0\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not marker.exists()
+
+
+def test_active_marker_directory_substitution_is_not_recursively_deleted(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.mkdir(parents=True)
+    (marker / "evidence.txt").write_text("keep\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "SERVER_PID=''\n"
+            "MARKER_NAME=.final-revalidation-server.ABC123\n"
+            "MARKER_PATH=\"$ROOT/site/$MARKER_NAME\"\n"
+            "cleanup 0\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert (marker / "evidence.txt").read_text(encoding="utf-8") == "keep\n"
+    assert "could not remove active local-server marker" in result.stderr
+
+
+def test_build_uat_swap_after_validation_cannot_clear_replacement(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    repository = tmp_path / "repository"
+    build_uat = repository / "build" / "uat"
+    external_uat = tmp_path / "external-uat"
+    for path in (build_uat / "runs", build_uat / "shots", external_uat / "runs", external_uat / "shots"):
+        path.mkdir(parents=True)
+        (path / "evidence.txt").write_text("fixture\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "clear_prior_evidence"),
+        ]
+    )
+    result = run_bash(
+        repository,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(repository))}\n"
+            "BUILD_UAT=\"$ROOT/build/uat\"\n"
+            f"EXTERNAL_UAT={shlex.quote(str(external_uat))}\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "mv -- \"$ROOT/build/uat\" \"$ROOT/build/original-uat\"\n"
+            "ln -s -- \"$EXTERNAL_UAT\" \"$ROOT/build/uat\"\n"
+            "clear_prior_evidence\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert (repository / "build" / "original-uat" / "runs" / "evidence.txt").exists()
+    assert (repository / "build" / "original-uat" / "shots" / "evidence.txt").exists()
+    assert (external_uat / "runs" / "evidence.txt").exists()
+    assert (external_uat / "shots" / "evidence.txt").exists()
+    assert result.stderr == "ERROR: could not clear prior UAT evidence\n"
+
+
+def test_post_generator_gate_excludes_only_marker_and_build_stamp(tmp_path: Path) -> None:
+    source = script_source()
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    marker = tmp_path / "site" / ".final-revalidation-server.fixture"
+    marker.write_text("marker\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [shell_function(source, "die"), shell_function(source, "require_clean_worktree")]
+    )
+    post_generator_gate = (
+        "require_clean_worktree 'post-generator gate failed' "
+        "':(top,exclude,literal)site/.final-revalidation-server.fixture' "
+        "':(top,exclude,literal)site/platform/data/.build-stamp.json'"
+    )
+    expected_changes = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\n{post_generator_gate}\n",
+    )
+    assert expected_changes.returncode == 0, expected_changes.stderr
+
+    (tmp_path / "site" / "unexpected-source.json").write_text("unexpected\n", encoding="utf-8")
+    unexpected_change = run_bash(
+        tmp_path,
+        f"set -uo pipefail\n{functions}\n{post_generator_gate}\n",
+    )
+    assert unexpected_change.returncode == 1
+    assert "?? site/unexpected-source.json" in unexpected_change.stderr
+
+    assert (
+        'require_clean_worktree "generators changed tracked or untracked files; '
+        'revalidation would no longer describe one SHA"'
+    ) in source
+    assert '":(top,exclude,literal)site/$MARKER_NAME"' in source
+    assert '":(top,exclude,literal)site/platform/data/.build-stamp.json"' in source
+
+
+def test_generated_build_stamp_remains_installed_until_cleanup(tmp_path: Path) -> None:
+    source = script_source()
+    after_generators = source.index('run_generator "editor data bundle"')
+    browser_local = source.index("run browser-local")
+    bindings_local = source.index("run bindings-local")
+    bindings_dev = source.index("run bindings-dev")
+    final_cleanup = source.rindex("\nfinalize_revalidation\n")
+
+    assert "restore_build_stamp" not in source[after_generators:bindings_dev]
+    assert after_generators < browser_local < bindings_local < final_cleanup
+    assert "restore_build_stamp" in shell_function(source, "cleanup")
+
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "restore_build_stamp"),
+            shell_function(source, "restore_build_stamp_in_pinned_dir"),
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "open_new_relative_file_fd"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+        ]
+    )
+    cleanup_result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "BUILD_STAMP_DIR=\"$ROOT/site/platform/data\"\n"
+            "BUILD_STAMP_DIR_IDENTITY=$(pinned_directory_identity \"$BUILD_STAMP_DIR\")\n"
+            "BUILD_STAMP_DIRTY=1\n"
+            "SERVER_PID=''\nMARKER_NAME=''\n"
+            "test \"$(cat site/platform/data/.build-stamp.json)\" = generated\n"
+            "cleanup\n"
+            "test \"$(cat site/platform/data/.build-stamp.json)\" = committed\n"
+        ),
+    )
+    assert cleanup_result.returncode == 0, cleanup_result.stderr
+
+
+def test_failed_build_stamp_restoration_fails_normal_final_adapter(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+    marker = tmp_path / "site" / ".final-revalidation-server.ABC123"
+    marker.write_text("marker\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "restore_build_stamp"),
+            shell_function(source, "restore_build_stamp_in_pinned_dir"),
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "open_new_relative_file_fd"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+            shell_function(source, "record_status"),
+            shell_function(source, "finalize_revalidation"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "git() {\n"
+            "  if [ \"$1\" = show ]; then return 1; fi\n"
+            "  command git \"$@\"\n"
+            "}\n"
+            "sleep 30 &\n"
+            "server_pid=$!\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "BUILD_STAMP_DIR=\"$ROOT/site/platform/data\"\n"
+            "BUILD_STAMP_DIR_IDENTITY=$(pinned_directory_identity \"$BUILD_STAMP_DIR\")\n"
+            "BUILD_STAMP_DIRTY=1\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "SERVER_PID=$server_pid\n"
+            "MARKER_NAME=.final-revalidation-server.ABC123\n"
+            "MARKER_PATH=\"$ROOT/site/$MARKER_NAME\"\n"
+            "REVALIDATION_STATUS=0\n"
+            "SHA=fixture\n"
+            "finalize_revalidation\n"
+            "exit $?\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert not marker.exists()
+    assert "generated" == stamp.read_text(encoding="utf-8").strip()
+    assert "could not restore generated build stamp" in result.stderr
+    assert "site/platform/data/.build-stamp.json" in result.stderr
+    assert " M site/platform/data/.build-stamp.json" in result.stderr
+    assert not list(stamp.parent.glob(".final-revalidation-build-stamp.*"))
+
+
+def test_failed_build_stamp_restoration_fails_exit_trap(tmp_path: Path) -> None:
+    source = script_source()
+    stamp = tmp_path / "site" / "platform" / "data" / ".build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("generated\n", encoding="utf-8")
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "restore_build_stamp"),
+            shell_function(source, "restore_build_stamp_in_pinned_dir"),
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "open_new_relative_file_fd"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+            shell_function(source, "cleanup_on_exit"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "git() {\n"
+            "  if [ \"$1\" = show ]; then return 1; fi\n"
+            "  command git \"$@\"\n"
+            "}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "BUILD_STAMP_DIR=\"$ROOT/site/platform/data\"\n"
+            "BUILD_STAMP_DIR_IDENTITY=$(pinned_directory_identity \"$BUILD_STAMP_DIR\")\n"
+            "BUILD_STAMP_DIRTY=1\n"
+            "SERVER_PID=''\n"
+            "MARKER_NAME=''\n"
+            "trap cleanup_on_exit EXIT\n"
+            "exit 0\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert "generated" == stamp.read_text(encoding="utf-8").strip()
+    assert "could not restore generated build stamp" in result.stderr
+    assert not list(stamp.parent.glob(".final-revalidation-build-stamp.*"))
+
+
+def test_build_stamp_restore_rejects_parent_swap(tmp_path: Path) -> None:
+    source = script_source()
+    data_dir = tmp_path / "site" / "platform" / "data"
+    replacement = tmp_path / "replacement-data"
+    data_dir.mkdir(parents=True)
+    replacement.mkdir()
+    stamp = data_dir / ".build-stamp.json"
+    replacement_stamp = replacement / ".build-stamp.json"
+    stamp.write_text("committed\n", encoding="utf-8")
+    initialize_git_repo(tmp_path)
+    stamp.write_text("original-generated\n", encoding="utf-8")
+    replacement_stamp.write_text("replacement-generated\n", encoding="utf-8")
+    functions = "\n\n".join(
+        shell_function(source, name)
+        for name in (
+            "restore_build_stamp",
+            "restore_build_stamp_in_pinned_dir",
+            "pinned_directory_identity",
+            "with_pinned_dir",
+            "open_new_relative_file_fd",
+        )
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "BUILD_STAMP_DIR=\"$ROOT/site/platform/data\"\n"
+            "BUILD_STAMP_DIR_IDENTITY=$(pinned_directory_identity \"$BUILD_STAMP_DIR\")\n"
+            "BUILD_STAMP_DIRTY=1\n"
+            "mv -- \"$BUILD_STAMP_DIR\" \"$ROOT/site/platform/original-data\"\n"
+            f"ln -s -- {shlex.quote(str(replacement))} \"$BUILD_STAMP_DIR\"\n"
+            "restore_build_stamp && exit 31\n"
+            "exit 0\n"
+        ),
+    )
+    assert result.returncode == 0
+    assert (tmp_path / "site/platform/original-data/.build-stamp.json").read_text(
+        encoding="utf-8"
+    ) == "original-generated\n"
+    assert replacement_stamp.read_text(encoding="utf-8") == "replacement-generated\n"
+
+
+def test_rejected_contender_cleanup_does_not_restore_build_stamp(tmp_path: Path) -> None:
+    source = script_source()
+    called = tmp_path / "git-called"
+    functions = "\n\n".join(
+        [shell_function(source, "restore_build_stamp"), shell_function(source, "cleanup")]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"CALLED={shlex.quote(str(called))}\n"
+            "git() { touch \"$CALLED\"; return 1; }\n"
+            "SERVER_PID=''\nMARKER_NAME=''\nMARKER_PATH=''\n"
+            "BUILD_STAMP_DIRTY=0\nLOCK_HELD=0\n"
+            "cleanup 0\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert not called.exists()
+    capture = source.index("BUILD_STAMP_DIRTY=1")
+    lock = source.index("\nacquire_revalidation_lock\n")
+    assert lock < capture
+
+
+def test_active_marker_unlink_failure_fails_normal_final_adapter(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("marker\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+            shell_function(source, "record_status"),
+            shell_function(source, "finalize_revalidation"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            "rm() { return 1; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "SERVER_PID=''\n"
+            "MARKER_NAME=.final-revalidation-server.ABC123\n"
+            "MARKER_PATH=\"$ROOT/site/$MARKER_NAME\"\n"
+            "REVALIDATION_STATUS=0\n"
+            "SHA=fixture\n"
+            "finalize_revalidation\n"
+            "exit $?\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "could not remove active local-server marker" in result.stderr
+
+
+def test_active_marker_unlink_failure_fails_exit_trap(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    site.mkdir()
+    marker = site / ".final-revalidation-server.ABC123"
+    marker.write_text("marker\n", encoding="utf-8")
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "cleanup"),
+            shell_function(source, "cleanup_on_exit"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            "rm() { return 1; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "SERVER_PID=''\n"
+            "MARKER_NAME=.final-revalidation-server.ABC123\n"
+            "MARKER_PATH=\"$ROOT/site/$MARKER_NAME\"\n"
+            "trap cleanup_on_exit EXIT\n"
+            "exit 0\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert marker.exists()
+    assert "could not remove active local-server marker" in result.stderr
+
+
+def test_evidence_clear_failure_aborts(tmp_path: Path) -> None:
+    source = script_source()
+    (tmp_path / "build" / "uat").mkdir(parents=True)
+    functions = "\n\n".join(
+        [
+            shell_function(source, "die"),
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "remove_in_pinned_dir"),
+            shell_function(source, "clear_prior_evidence"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "BUILD_UAT=\"$ROOT/build/uat\"\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "rm() { return 1; }\n"
+            "clear_prior_evidence\n"
+            "printf 'SENTINEL: evidence cleanup returned\\n'\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert "SENTINEL" not in result.stdout
+    assert result.stderr == "ERROR: could not clear prior UAT evidence\n"
+
+
+def exercise_log_alias_preservation(tmp_path: Path, alias_kind: str) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    fixed_names = ["local-server.log", "final-browser-local.log", "final-a11y.log"]
+    targets: list[Path] = []
+    aliases: list[Path] = []
+    for index, fixed_name in enumerate(fixed_names):
+        target = tmp_path / f"external-{index}.log"
+        target.write_text(f"KEEP-{index}\n", encoding="utf-8")
+        alias = build_uat / fixed_name
+        if alias_kind == "symlink":
+            alias.symlink_to(target)
+        else:
+            os.link(target, alias)
+        targets.append(target)
+        aliases.append(alias)
+
+    functions = "\n\n".join(
+        [
+            shell_function(source, "pinned_directory_identity"),
+            shell_function(source, "with_pinned_dir"),
+            shell_function(source, "open_new_relative_file_fd"),
+            shell_function(source, "enter_pinned_dir"),
+            shell_function(source, "close_inherited_pinning_fds"),
+            shell_function(source, "run_with_new_log"),
+        ]
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            f"COMMAND_DIR={shlex.quote(str(tmp_path))}\n"
+            "COMMAND_IDENTITY=$(pinned_directory_identity \"$COMMAND_DIR\")\n"
+            "for name in server-unique.log journey-unique.log a11y-unique.log; do\n"
+            "  with_pinned_dir \"$BUILD_UAT\" \"$BUILD_UAT_IDENTITY\" "
+            "run_with_new_log \"$name\" \"$COMMAND_DIR\" \"$COMMAND_IDENTITY\" "
+            "printf 'NEW-DATA\\n' || exit 31\n"
+            "done\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    for index, (target, alias) in enumerate(zip(targets, aliases)):
+        assert target.read_text(encoding="utf-8") == f"KEEP-{index}\n"
+        assert alias.read_text(encoding="utf-8") == f"KEEP-{index}\n"
+        if alias_kind == "symlink":
+            assert alias.is_symlink()
+        else:
+            assert alias.stat().st_ino == target.stat().st_ino
+    for unique_name in ("server-unique.log", "journey-unique.log", "a11y-unique.log"):
+        assert (build_uat / unique_name).read_text(encoding="utf-8") == "NEW-DATA\n"
+
+    assert 'SERVER_LOG_NAME=$(new_log_name local-server)' in source
+    assert 'log_name=$(new_log_name "$label")' in source
+    assert 'A11Y_LOG_NAME=$(new_log_name a11y)' in source
+
+
+def test_server_journey_and_a11y_logs_preserve_symlink_targets(tmp_path: Path) -> None:
+    exercise_log_alias_preservation(tmp_path, "symlink")
+
+
+def test_server_journey_and_a11y_logs_preserve_hardlink_targets(tmp_path: Path) -> None:
+    exercise_log_alias_preservation(tmp_path, "hardlink")
+
+
+def test_logged_commands_run_from_pinned_repository_root(tmp_path: Path) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    functions = "\n\n".join(
+        shell_function(source, name)
+        for name in (
+            "pinned_directory_identity",
+            "with_pinned_dir",
+            "open_new_relative_file_fd",
+            "enter_pinned_dir",
+            "close_inherited_pinning_fds",
+            "run_with_new_log",
+        )
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+            "BUILD_UAT=\"$ROOT/build/uat\"\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "with_pinned_dir \"$BUILD_UAT\" \"$BUILD_UAT_IDENTITY\" run_with_new_log "
+            "cwd.log \"$ROOT\" \"$ROOT_IDENTITY\" pwd\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert (build_uat / "cwd.log").read_text(encoding="utf-8").strip() == str(tmp_path)
+
+
+def test_server_pid_is_execed_process_and_cleanup_terminates_it(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    build_uat = tmp_path / "build" / "uat"
+    site.mkdir()
+    build_uat.mkdir(parents=True)
+    functions = "\n\n".join(
+        shell_function(source, name)
+        for name in (
+            "pinned_directory_identity",
+            "with_pinned_dir",
+            "open_new_relative_file_fd",
+            "enter_pinned_dir",
+            "close_inherited_pinning_fds",
+            "exec_with_new_log",
+            "remove_in_pinned_dir",
+            "cleanup",
+        )
+    )
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "restore_build_stamp() { return 0; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+            "BUILD_UAT=\"$ROOT/build/uat\"\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "MARKER_NAME=''\nMARKER_PATH=''\nBUILD_STAMP_DIRTY=0\nLOCK_HELD=0\n"
+            "with_pinned_dir \"$BUILD_UAT\" \"$BUILD_UAT_IDENTITY\" exec_with_new_log "
+            "server.log \"$ROOT/site\" \"$SITE_IDENTITY\" sleep 30 &\n"
+            "SERVER_PID=$!\n"
+            "for _ in {1..100}; do [ -e \"/proc/$SERVER_PID/exe\" ] && break; sleep 0.01; done\n"
+            "test \"$(basename \"$(readlink \"/proc/$SERVER_PID/exe\")\")\" = sleep\n"
+            "test \"$(readlink \"/proc/$SERVER_PID/cwd\")\" = \"$ROOT/site\"\n"
+            "cleanup 0\n"
+            "! kill -0 \"$SERVER_PID\" 2>/dev/null\n"
+        ),
+        timeout=5,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_server_child_does_not_inherit_run_lock_after_owner_crash(tmp_path: Path) -> None:
+    source = script_source()
+    site = tmp_path / "site"
+    build_uat = tmp_path / "build" / "uat"
+    site.mkdir()
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+        "enter_pinned_dir",
+        "close_inherited_pinning_fds",
+        "exec_with_new_log",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    pid_file = tmp_path / "owner-and-child-pids"
+    setup = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "SITE_IDENTITY=$(pinned_directory_identity \"$ROOT/site\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+    )
+    owner_program = (
+        setup
+        + "acquire_revalidation_lock\n"
+        + "with_pinned_dir \"$BUILD_UAT\" \"$BUILD_UAT_IDENTITY\" exec_with_new_log "
+        + "server.log \"$ROOT/site\" \"$SITE_IDENTITY\" sleep 30 &\n"
+        + "SERVER_PID=$!\n"
+        + f"printf '%s %s\\n' \"$$\" \"$SERVER_PID\" > {shlex.quote(str(pid_file))}\n"
+        + "wait \"$SERVER_PID\"\n"
+    )
+    owner = subprocess.Popen(
+        ["bash"],
+        cwd=tmp_path,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert owner.stdin is not None
+    owner.stdin.write(owner_program)
+    owner.stdin.close()
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not pid_file.exists():
+        time.sleep(0.01)
+    assert pid_file.exists(), "lock owner did not launch its server child"
+    owner_pid, server_pid = map(int, pid_file.read_text(encoding="utf-8").split())
+    assert owner_pid == owner.pid
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            executable = Path(f"/proc/{server_pid}/exe")
+            if executable.exists() and Path(os.readlink(executable)).name == "sleep":
+                break
+            time.sleep(0.01)
+        else:
+            raise AssertionError("server child did not reach its exec boundary")
+        owner.kill()
+        owner.wait(timeout=3)
+        assert Path(f"/proc/{server_pid}").exists(), "server child exited before recovery probe"
+        contender = run_bash(
+            tmp_path,
+            setup + "acquire_revalidation_lock\nrelease_revalidation_lock\n",
+            timeout=3,
+        )
+        assert contender.returncode == 0, contender.stderr
+        assert "removed stale final-revalidation lock" in contender.stdout
+    finally:
+        try:
+            os.kill(server_pid, 15)
+        except ProcessLookupError:
+            pass
+
+
+def test_run_lock_allows_only_one_contender_to_clear_and_enter_legs(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    for evidence_name in ("runs", "shots"):
+        evidence = build_uat / evidence_name
+        evidence.mkdir(parents=True)
+        (evidence / "old.txt").write_text("old\n", encoding="utf-8")
+
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+        "clear_prior_evidence",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    program = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+        "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+        "read -r -n 1 <&__START_FD__\n"
+        "acquire_revalidation_lock\n"
+        "clear_prior_evidence\n"
+        "printf '%s\\n' \"$$\" >&__READY_FD__\n"
+        "read -r -n 1 <&__RELEASE_FD__\n"
+    )
+    _, results_by_pid = run_synchronized_lock_contenders(tmp_path, program)
+    results = list(results_by_pid.values())
+    assert sorted(result[0] == 0 for result in results) == [False, True]
+    loser = next(result for result in results if result[0] != 0)
+    assert "another final revalidation run owns build/uat/" in loser[2]
+    assert not (build_uat / "runs").exists()
+    assert not (build_uat / "shots").exists()
+    assert not (build_uat / ".final-revalidation.lock").exists()
+
+
+def test_run_lock_stays_per_worktree_when_build_uat_is_replaced(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    setup = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+    )
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    winner = subprocess.Popen(
+        [
+            "bash",
+            "-c",
+            setup
+            + "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+            + "acquire_revalidation_lock\n"
+            + f"printf '%s\\n' \"$$\" >&{ready_write}\n"
+            + f"read -r -n 1 <&{release_read}\n",
+        ],
+        cwd=tmp_path,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        pass_fds=(ready_write, release_read),
+    )
+    os.close(ready_write)
+    os.close(release_read)
+    try:
+        readable, _, _ = select.select([ready_read], [], [], 3)
+        assert readable, "winner did not acquire the worktree lock"
+        assert int(os.read(ready_read, 64).decode("ascii").strip()) == winner.pid
+
+        original_uat = tmp_path / "build" / "uat-original"
+        build_uat.rename(original_uat)
+        build_uat.mkdir()
+        contender = run_bash(
+            tmp_path,
+            setup
+            + "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            + "acquire_revalidation_lock\n",
+            timeout=3,
+        )
+        assert contender.returncode != 0
+        assert "another final revalidation run owns build/uat/" in contender.stderr
+
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+        winner_stdout, winner_stderr = winner.communicate(timeout=3)
+        assert winner.returncode == 0, winner_stdout + winner_stderr
+        assert not (build_uat / ".final-revalidation.lock").exists()
+    finally:
+        os.close(ready_read)
+        if release_write >= 0:
+            os.close(release_write)
+        if winner.poll() is None:
+            winner.kill()
+            winner.communicate()
+
+
+def test_lock_owner_initialization_stays_in_pinned_build_uat_when_path_is_swapped(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    lock_helper = shell_function(source, "acquire_revalidation_lock")
+    assert lock_helper.count(
+        'LOCK_IDENTITY=$(with_pinned_dir "$BUILD_UAT" "$BUILD_UAT_IDENTITY" \\\n'
+        '      initialize_revalidation_lock "$LOCK_NAME" "$LOCK_TOKEN" "$BUILD_UAT_IDENTITY")'
+    ) == 1
+    assert 'LOCK_IDENTITY=$(pinned_directory_identity "$BUILD_UAT/$LOCK_NAME")' not in lock_helper
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+    ]
+    if re.search(r"^initialize_revalidation_lock\(\) \{", source, re.MULTILINE):
+        function_names.insert(
+            function_names.index("acquire_revalidation_lock"),
+            "initialize_revalidation_lock",
+        )
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    program = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+        "mkdir() {\n"
+        "  command mkdir \"$@\" || return 1\n"
+        "  if [ \"${!#}\" = \"$LOCK_NAME\" ]; then\n"
+        f"    printf 'ready\\n' >&{ready_write}\n"
+        f"    read -r -n 1 <&{release_read}\n"
+        "  fi\n"
+        "}\n"
+        "acquire_revalidation_lock\n"
+        "printf '%s\\n' \"$LOCK_IDENTITY\"\n"
+    )
+    process = subprocess.Popen(
+        ["bash"],
+        cwd=tmp_path,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        pass_fds=(ready_write, release_read),
+    )
+    os.close(ready_write)
+    os.close(release_read)
+    assert process.stdin is not None
+    process.stdin.write(program)
+    process.stdin.close()
+    try:
+        readable, _, _ = select.select([ready_read], [], [], 3)
+        assert readable, "lock mkdir did not reach the initialization barrier"
+        assert os.read(ready_read, 64) == b"ready\n"
+
+        original_uat = tmp_path / "build" / "uat-original"
+        build_uat.rename(original_uat)
+        replacement_lock = build_uat / ".final-revalidation.lock"
+        replacement_lock.mkdir(parents=True)
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+
+        stdout, stderr = process.communicate(timeout=3)
+        assert process.returncode == 0, stdout + stderr
+        original_lock = original_uat / ".final-revalidation.lock"
+        assert (original_lock / "owner").is_file()
+        assert not (replacement_lock / "owner").exists()
+        assert stdout.strip() == f"{original_lock.stat().st_dev}:{original_lock.stat().st_ino}"
+    finally:
+        os.close(ready_read)
+        if release_write >= 0:
+            os.close(release_write)
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+def test_lock_identity_is_captured_from_the_inode_that_received_the_owner(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "open_pinned_directory_fd",
+        "initialize_revalidation_lock",
+        "acquire_revalidation_lock",
+    ]
+    original_write_owner = shell_function(source, "write_lock_owner").replace(
+        "write_lock_owner()", "original_write_lock_owner()", 1
+    )
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    program = (
+        f"set -uo pipefail\n{original_write_owner}\n\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+        "write_lock_owner() {\n"
+        "  original_write_lock_owner \"$@\" || return 1\n"
+        f"  printf 'ready\\n' >&{ready_write}\n"
+        f"  read -r -n 1 <&{release_read}\n"
+        "}\n"
+        "acquire_revalidation_lock\n"
+        "printf '%s\\n' \"$LOCK_IDENTITY\"\n"
+    )
+    process = subprocess.Popen(
+        ["bash"],
+        cwd=tmp_path,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        pass_fds=(ready_write, release_read),
+    )
+    os.close(ready_write)
+    os.close(release_read)
+    assert process.stdin is not None
+    process.stdin.write(program)
+    process.stdin.close()
+    try:
+        readable, _, _ = select.select([ready_read], [], [], 3)
+        assert readable, "owner write did not reach the identity-capture barrier"
+        assert os.read(ready_read, 64) == b"ready\n"
+
+        original_lock = build_uat / ".final-revalidation.lock"
+        moved_lock = build_uat / ".final-revalidation.lock-original"
+        original_lock.rename(moved_lock)
+        replacement_lock = build_uat / ".final-revalidation.lock"
+        replacement_lock.mkdir()
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+
+        stdout, stderr = process.communicate(timeout=3)
+        assert process.returncode == 0, stdout + stderr
+        assert (moved_lock / "owner").is_file()
+        assert not (replacement_lock / "owner").exists()
+        assert stdout.strip() == f"{moved_lock.stat().st_dev}:{moved_lock.stat().st_ino}"
+    finally:
+        os.close(ready_read)
+        if release_write >= 0:
+            os.close(release_write)
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+def test_lock_initialization_rejects_a_basename_swapped_to_an_external_symlink(
+    tmp_path: Path,
+) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    outside_lock = tmp_path / "outside-lock-target"
+    outside_lock.mkdir()
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "open_pinned_directory_fd",
+        "initialize_revalidation_lock",
+        "acquire_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    ready_read, ready_write = os.pipe()
+    release_read, release_write = os.pipe()
+    program = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        "BUILD_UAT=\"$ROOT/build/uat\"\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+        "mkdir() {\n"
+        "  command mkdir \"$@\" || return 1\n"
+        "  if [ \"${!#}\" = \"$LOCK_NAME\" ]; then\n"
+        f"    printf 'ready\\n' >&{ready_write}\n"
+        f"    read -r -n 1 <&{release_read}\n"
+        "  fi\n"
+        "}\n"
+        "acquire_revalidation_lock\n"
+    )
+    process = subprocess.Popen(
+        ["bash"],
+        cwd=tmp_path,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        pass_fds=(ready_write, release_read),
+    )
+    os.close(ready_write)
+    os.close(release_read)
+    assert process.stdin is not None
+    process.stdin.write(program)
+    process.stdin.close()
+    try:
+        readable, _, _ = select.select([ready_read], [], [], 3)
+        assert readable, "lock mkdir did not reach the pre-owner barrier"
+        assert os.read(ready_read, 64) == b"ready\n"
+
+        original_lock = build_uat / ".final-revalidation.lock"
+        created_lock = build_uat / ".final-revalidation.lock-created"
+        original_lock.rename(created_lock)
+        original_lock.symlink_to(outside_lock, target_is_directory=True)
+        os.write(release_write, b"R")
+        os.close(release_write)
+        release_write = -1
+
+        stdout, stderr = process.communicate(timeout=3)
+        assert process.returncode != 0, stdout + stderr
+        assert "could not initialize the final-revalidation run lock" in stderr
+        assert not (outside_lock / "owner").exists()
+        assert not (created_lock / "owner").exists()
+        assert original_lock.is_symlink()
+    finally:
+        os.close(ready_read)
+        if release_write >= 0:
+            os.close(release_write)
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+
+
+def test_dead_run_lock_is_recovered_before_acquisition(tmp_path: Path) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    lock = build_uat / ".final-revalidation.lock"
+    lock.mkdir(parents=True)
+    (lock / "owner").write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n",
+        encoding="utf-8",
+    )
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+            f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+            "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+            f"SHA={'deadbeef' * 5}\n"
+            "acquire_revalidation_lock\n"
+            "test \"$LOCK_HELD\" -eq 1\n"
+            "release_revalidation_lock\n"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "removed stale final-revalidation lock from build/uat/\n"
+    assert not lock.exists()
+
+
+def test_live_lock_is_preserved_but_reused_pid_lock_is_recovered(tmp_path: Path) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    lock = build_uat / ".final-revalidation.lock"
+    lock.mkdir(parents=True)
+    _, live_start_ticks = read_process_identity(os.getpid())
+    sha = "deadbeef" * 5
+    owner = lock / "owner"
+    owner.write_text(
+        f"final-revalidation:{sha}:{os.getpid()}:{live_start_ticks}:12345\n",
+        encoding="utf-8",
+    )
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    setup = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={sha}\n"
+    )
+    live_result = run_bash(tmp_path, setup + "acquire_revalidation_lock\n")
+    assert live_result.returncode == 1
+    assert f"(pid {os.getpid()})" in live_result.stderr
+    assert lock.exists()
+
+    owner.write_text(
+        f"final-revalidation:{sha}:{os.getpid()}:{int(live_start_ticks) + 1}:12345\n",
+        encoding="utf-8",
+    )
+    reused_result = run_bash(
+        tmp_path,
+        setup + "acquire_revalidation_lock\nrelease_revalidation_lock\n",
+    )
+    assert reused_result.returncode == 0, reused_result.stderr
+    assert "removed stale final-revalidation lock" in reused_result.stdout
+    assert not lock.exists()
+
+
+def test_malformed_and_uncertain_lock_owners_are_preserved(tmp_path: Path) -> None:
+    source = script_source()
+    sha = "deadbeef" * 5
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    fixtures: list[tuple[str, str | None]] = [
+        ("missing", None),
+        ("malformed", "not-a-lock-token\n"),
+        ("oversized", "x" * 257),
+    ]
+    for label, owner_contents in fixtures:
+        build_uat = tmp_path / label / "build" / "uat"
+        lock = build_uat / ".final-revalidation.lock"
+        lock.mkdir(parents=True)
+        if owner_contents is not None:
+            (lock / "owner").write_text(owner_contents, encoding="utf-8")
+        setup = (
+            f"set -uo pipefail\n{functions}\n"
+            f"ROOT={shlex.quote(str(tmp_path / label))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+            f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+            "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+            f"SHA={sha}\n"
+            "acquire_revalidation_lock\n"
+        )
+        result = run_bash(tmp_path, setup)
+        assert result.returncode == 1, label
+        assert "lock owner" in result.stderr and "malformed" in result.stderr, label
+        assert lock.exists(), label
+
+    uncertain_uat = tmp_path / "uncertain" / "build" / "uat"
+    uncertain_lock = uncertain_uat / ".final-revalidation.lock"
+    uncertain_lock.mkdir(parents=True)
+    uncertain_program = (
+        f"set -uo pipefail\n{functions}\n"
+        "process_identity() {\n"
+        "  if [ \"$1\" = \"$$\" ]; then printf 'S 1\\n'; else return 1; fi\n"
+        "}\n"
+        f"ROOT={shlex.quote(str(tmp_path / 'uncertain'))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        f"BUILD_UAT={shlex.quote(str(uncertain_uat))}\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={sha}\n"
+        f"printf 'final-revalidation:%s:{os.getpid()}:1:12345\\n' \"$SHA\" > "
+        '"$BUILD_UAT/$LOCK_NAME/owner"\n'
+        "acquire_revalidation_lock\n"
+    )
+    uncertain_result = run_bash(tmp_path, uncertain_program)
+    assert uncertain_result.returncode == 1
+    assert "identity is unreadable" in uncertain_result.stderr
+    assert uncertain_lock.exists()
+
+
+def test_lock_initialization_failure_removes_partial_owned_lock(tmp_path: Path) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    build_uat.mkdir(parents=True)
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    result = run_bash(
+        tmp_path,
+        (
+            f"set -uo pipefail\n{functions}\n"
+            "write_lock_owner() { return 1; }\n"
+            f"ROOT={shlex.quote(str(tmp_path))}\n"
+            "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+            f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+            "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+            "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+            "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+            f"SHA={'deadbeef' * 5}\n"
+            "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+            "acquire_revalidation_lock\n"
+        ),
+    )
+    assert result.returncode == 1
+    assert "could not initialize the final-revalidation run lock" in result.stderr
+    assert not (build_uat / ".final-revalidation.lock").exists()
+
+
+def test_two_contenders_serialize_stale_lock_recovery(tmp_path: Path) -> None:
+    source = script_source()
+    build_uat = tmp_path / "build" / "uat"
+    lock = build_uat / ".final-revalidation.lock"
+    lock.mkdir(parents=True)
+    (lock / "owner").write_text(
+        f"final-revalidation:{'deadbeef' * 5}:99999999:1:12345\n",
+        encoding="utf-8",
+    )
+    function_names = [
+        "die",
+        "pinned_directory_identity",
+        "with_pinned_dir",
+        "remove_in_pinned_dir",
+        "process_identity",
+        "read_regular_relative_file",
+        "open_new_relative_file_fd",
+        "write_lock_owner",
+        "initialize_revalidation_lock",
+        "open_pinned_directory_fd",
+        "acquire_revalidation_lock",
+        "release_revalidation_lock",
+    ]
+    functions = "\n\n".join(shell_function(source, name) for name in function_names)
+    program = (
+        f"set -uo pipefail\n{functions}\n"
+        f"ROOT={shlex.quote(str(tmp_path))}\n"
+        "ROOT_IDENTITY=$(pinned_directory_identity \"$ROOT\")\n"
+        f"BUILD_UAT={shlex.quote(str(build_uat))}\n"
+        "BUILD_UAT_IDENTITY=$(pinned_directory_identity \"$BUILD_UAT\")\n"
+        "LOCK_NAME=.final-revalidation.lock\nLOCK_HELD=0\nLOCK_INITIALIZING=0\n"
+        "LOCK_IDENTITY=''\nLOCK_TOKEN=''\nLOCK_GUARD_FD=''\n"
+        f"SHA={'deadbeef' * 5}\n"
+        "trap 'release_revalidation_lock >/dev/null 2>&1 || true' EXIT\n"
+        "read -r -n 1 <&__START_FD__\n"
+        "acquire_revalidation_lock\n"
+        "printf '%s\\n' \"$$\" >&__READY_FD__\n"
+        "read -r -n 1 <&__RELEASE_FD__\n"
+    )
+    _, results_by_pid = run_synchronized_lock_contenders(tmp_path, program)
+    results = list(results_by_pid.values())
+    assert sorted(result[0] == 0 for result in results) == [False, True]
+    assert sum("removed stale final-revalidation lock" in result[1] for result in results) == 1
+    loser = next(result for result in results if result[0] != 0)
+    assert "another final revalidation run owns build/uat/" in loser[2]
+    assert not lock.exists()
