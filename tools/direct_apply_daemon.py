@@ -398,8 +398,8 @@ class DeployCheckoutStatus:
     @property
     def reason(self):
         if self.failure_reason is not None:
-            return self.failure_reason
-        if self.behind is None:
+            base = self.failure_reason
+        elif self.behind is None:
             base = "upstream_unresolvable"
         else:
             base = "current" if self.behind == 0 else "behind"
@@ -408,14 +408,13 @@ class DeployCheckoutStatus:
         return base
 
     def metadata(self):
-        result = {"deployable": self.deployable, "reason": self.reason,
-                  "behind": self.behind}
-        if self.upstream_fallback:
-            result["upstream_fallback"] = True
-        if self.failure_reason == "fetch_failed":
-            result["fetch_rc"] = self.fetch_rc
-            result["fetch_stderr"] = self.fetch_stderr
-        return result
+        return {
+            "reason": self.reason,
+            "deployable": self.deployable,
+            "behind": self.behind,
+            "upstream_fallback": self.upstream_fallback,
+            "fetch_rc": self.fetch_rc,
+        }
 
 
 def checkout_deploy_status(
@@ -473,6 +472,12 @@ def checkout_deploy_status(
             rc, _ = git(["check-ref-format", upstream_ref])
             if rc != 0 or not upstream_ref.startswith("refs/remotes/"):
                 return DeployCheckoutStatus()
+            rc, _ = git(["symbolic-ref", "--quiet", upstream_ref])
+            # rc 0 means Git would dereference the fetch destination; any rc
+            # other than the documented non-symbolic result (1) is an
+            # inspection failure. Both must refuse before fetch can move a ref.
+            if rc != 1:
+                return DeployCheckoutStatus(upstream_fallback=upstream_fallback)
 
             fetch_args = [
                 "fetch", "--no-tags", "--no-prune", remote,
@@ -781,7 +786,7 @@ def notify_deploy_refusal(status, *, topic_resolver=None, publish=None):
                 "ref is behind its recorded upstream by %d commit%s. No deploy ran. "
                 "Refresh the daemon checkout deliberately, then let a later tick retry."
                 % (status.behind, "" if status.behind == 1 else "s"))
-    elif status.reason == "fetch_failed":
+    elif status.failure_reason == "fetch_failed":
         body = ("The home-box apply daemon refused to deploy because it could not "
                 "refresh the guarded deploy ref's upstream (git fetch rc %d). "
                 "No deploy ran. Repair upstream access, then let a later tick retry."
@@ -963,7 +968,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         steps.append(("notify_deploy_refusal", status.metadata()))
         if status.reason.startswith("behind"):
             detail = "guarded deploy ref is behind upstream by %d commit(s)" % status.behind
-        elif status.reason == "fetch_failed":
+        elif status.failure_reason == "fetch_failed":
             detail = "guarded deploy ref upstream fetch failed (rc %d)" % status.fetch_rc
         else:
             detail = "guarded deploy ref or upstream is unresolvable"
@@ -1032,19 +1037,20 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
                 notify([rid])
                 print("[daemon] revert %s FAILED (%s)." % (rid, detail), file=out)
 
-    # U7: scoped-change drafting — opt-in, best-effort, never gates the flush.
-    if do_scoped is not None and not dry_run:
-        try:
-            sok, _stail = do_scoped()
-            steps.append(("scoped_drafts", sok))
-        except Exception:
-            steps.append(("scoped_drafts", False))
-
     rows = fetch()
     steps.append(("fetch_review", len(rows)))
     accepted = accepted_ids(rows)
 
     if not accepted:
+        # U7: scoped-change drafting remains opt-in and best-effort on quiet
+        # ticks. Review classification comes first so an accepted apply can run
+        # its deploy guard before any unrelated drafting mutation.
+        if do_scoped is not None and not dry_run:
+            try:
+                sok, _stail = do_scoped()
+                steps.append(("scoped_drafts", sok))
+            except Exception:
+                steps.append(("scoped_drafts", False))
         hb = heartbeat(True, 0)
         steps.append(("heartbeat", {"ok": True, "applied": 0}))
         # Session-end trigger (a): a quiet tick past the idle window over an

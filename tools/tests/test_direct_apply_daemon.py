@@ -139,6 +139,46 @@ class TestAcceptedFilter(unittest.TestCase):
 
 
 class TestDeployCheckoutGuard(unittest.TestCase):
+    def test_symbolic_tracking_ref_refuses_without_moving_local_branch(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, local_a, _remote_b = _stale_remote_fixture(d)
+            tracking_ref = "refs/remotes/origin/main"
+            _git(checkout, "symbolic-ref", tracking_ref, "refs/heads/main")
+
+            status = dad.checkout_deploy_status(checkout, branch="main")
+
+            self.assertEqual(status.reason, "upstream_unresolvable")
+            self.assertFalse(status.deployable)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/heads/main").stdout.strip(), local_a)
+
+    def test_tracking_ref_inspection_error_refuses_without_fetch(self):
+        fetch_calls = []
+
+        def git(args):
+            if args in (["check-ref-format", "refs/heads/deploy"],
+                        ["show-ref", "--verify", "--quiet", "refs/heads/deploy"],
+                        ["check-ref-format", "refs/remotes/origin/deploy"]):
+                return 0, ""
+            if args == ["config", "--get", "branch.deploy.remote"]:
+                return 0, "origin\n"
+            if args == ["config", "--get", "branch.deploy.merge"]:
+                return 0, "refs/heads/deploy\n"
+            if args == ["for-each-ref", "--format=%(upstream)",
+                        "refs/heads/deploy"]:
+                return 0, "refs/remotes/origin/deploy\n"
+            if args == ["symbolic-ref", "--quiet", "refs/remotes/origin/deploy"]:
+                return 2, "inspection failed"
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        status = dad.checkout_deploy_status(
+            "/repo", branch="deploy", git=git,
+            fetch=lambda args: fetch_calls.append(args))
+
+        self.assertEqual(status.reason, "upstream_unresolvable")
+        self.assertFalse(status.deployable)
+        self.assertEqual(fetch_calls, [])
+
     def test_stale_cached_upstream_fetches_then_apply_refuses(self):
         with tempfile.TemporaryDirectory() as d:
             checkout, _remote, cached_a, remote_b = _stale_remote_fixture(d)
@@ -305,6 +345,9 @@ class TestDeployCheckoutGuard(unittest.TestCase):
                 return 0, "0\n"
             if args == ["symbolic-ref", "--quiet", "HEAD"]:
                 return 0, "refs/heads/feat/canonical-docs\n"
+            if args == ["symbolic-ref", "--quiet",
+                        "refs/remotes/origin/feat/canonical-docs"]:
+                return 1, ""
             self.fail("unexpected git invocation: %r" % (args,))
 
         def fetch(args):
@@ -465,6 +508,20 @@ class TestDeployCheckoutGuard(unittest.TestCase):
             self.assertEqual(current.reason, "current_fallback_origin")
             self.assertTrue(current.deployable)
 
+    def test_fallback_fetch_failure_reason_includes_origin_suffix(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, _remote_b = _stale_remote_fixture(d)
+            _git(checkout, "config", "--unset", "branch.main.remote")
+            _git(checkout, "config", "--unset", "branch.main.merge")
+            _git(checkout, "remote", "set-url", "origin", os.path.join(d, "missing.git"))
+
+            status = dad.checkout_deploy_status(checkout, branch="main")
+
+            self.assertEqual(status.reason, "fetch_failed_fallback_origin")
+            self.assertEqual(status.failure_reason, "fetch_failed")
+            self.assertTrue(status.upstream_fallback)
+            self.assertFalse(status.deployable)
+
     def test_local_repository_upstream_refuses_without_fetch(self):
         def git(args):
             if args in (["check-ref-format", "refs/heads/deploy"],
@@ -532,16 +589,57 @@ class TestDeployCheckoutGuard(unittest.TestCase):
         published = []
         status = dad.DeployCheckoutStatus(
             failure_reason="fetch_failed", fetch_rc=128,
-            fetch_stderr="sensitive diagnostic /private/path")
+            fetch_stderr="sensitive diagnostic /private/path",
+            upstream_fallback=True)
         dad.notify_deploy_refusal(
             status, topic_resolver=lambda: "topic",
             publish=lambda *args, **kwargs: published.append((args, kwargs)))
 
         args, kwargs = published[0]
+        self.assertEqual(status.reason, "fetch_failed_fallback_origin")
         self.assertIn("git fetch rc 128", args[2])
         self.assertNotIn("sensitive diagnostic", args[2])
         self.assertNotIn("/private/path", args[2])
         self.assertEqual(kwargs["priority"], "high")
+
+    def test_fallback_fetch_failure_uses_fetch_specific_refusal_detail(self):
+        status = dad.DeployCheckoutStatus(
+            failure_reason="fetch_failed", fetch_rc=128,
+            fetch_stderr="sensitive diagnostic /private/path",
+            upstream_fallback=True)
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"), out=output,
+                deploy_guard=lambda _branch: status)
+
+        self.assertEqual(result.reason, "deploy_refused")
+        self.assertIn("upstream fetch failed (rc 128)", output.getvalue())
+        self.assertNotIn("upstream is unresolvable", output.getvalue())
+
+    def test_refusal_steps_contain_only_normalized_checkout_metadata(self):
+        status = dad.DeployCheckoutStatus(
+            failure_reason="fetch_failed", fetch_rc=128,
+            fetch_stderr="sensitive diagnostic /private/path")
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                deploy_guard=lambda _branch: status)
+
+        expected = {
+            "reason": "fetch_failed",
+            "deployable": False,
+            "behind": None,
+            "upstream_fallback": False,
+            "fetch_rc": 128,
+        }
+        payloads = dict(result.steps)
+        self.assertEqual(payloads["deploy_guard"], expected)
+        self.assertEqual(payloads["notify_deploy_refusal"], expected)
+        self.assertNotIn("fetch_stderr", payloads["deploy_guard"])
+        self.assertNotIn("fetch_stderr", payloads["notify_deploy_refusal"])
 
     def test_main_maps_deploy_refusal_to_exit_one(self):
         refused = dad.DaemonResult(
@@ -592,8 +690,59 @@ class TestNoOpPath(unittest.TestCase):
         self.assertEqual(rec.calls, ["fetch", "heartbeat"])  # NO apply/rebuild/deploy
         self.assertEqual(rec.heartbeats, [{"ok": True, "applied": 0}])
 
+    def test_no_accepted_tick_runs_scoped_drafting_after_review_fetch(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("bbbbbbbb", "pending")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped)
+
+        self.assertEqual(result.reason, "no_accepted")
+        self.assertEqual(rec.calls, ["fetch", "scoped", "heartbeat"])
+
 
 class TestApplyBatchOrdering(unittest.TestCase):
+    def test_apply_refusal_skips_scoped_drafting(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped,
+                deploy_guard=lambda _branch: dad.DeployCheckoutStatus(1))
+
+        self.assertEqual(result.reason, "deploy_refused")
+        self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+        self.assertNotIn("scoped", rec.calls)
+
+    def test_apply_success_skips_scoped_drafting(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped,
+                deploy_guard=lambda _branch: dad.DeployCheckoutStatus(0))
+
+        self.assertEqual(result.reason, "applied")
+        self.assertEqual(
+            rec.calls,
+            ["fetch", "apply", "rebuild", "deploy:feat/canonical-docs", "heartbeat"])
+        self.assertNotIn("scoped", rec.calls)
+
     def test_order_apply_rebuild_deploy_heartbeat(self):
         with tempfile.TemporaryDirectory() as d:
             sp = os.path.join(d, "state.json")
