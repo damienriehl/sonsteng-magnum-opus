@@ -32,6 +32,41 @@ const EVAL = {
   providerCfg: { apiKey: "sk-test-abc", model: "test-model", jsonMode: true },
 };
 
+const CRITIQUE = {
+  ...EVAL,
+  messages: [{ role: "user", content: "Critique this deliverable as valid JSON …" }],
+  maxTokens: 1500,
+};
+
+const NON_GOOGLE_EVALUATOR_BODIES = {
+  anthropic: [
+    {
+      model: "test-model",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: "Return ONLY valid JSON …" }],
+    },
+    {
+      model: "test-model",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: "Critique this deliverable as valid JSON …" }],
+    },
+  ],
+  openai: [
+    {
+      model: "test-model",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: "Return ONLY valid JSON …" }],
+      response_format: { type: "json_object" },
+    },
+    {
+      model: "test-model",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: "Critique this deliverable as valid JSON …" }],
+      response_format: { type: "json_object" },
+    },
+  ],
+};
+
 test("registry exposes exactly the three providers", () => {
   assert.deepEqual(PROVIDER_NAMES.sort(), ["anthropic", "google", "openai"]);
   for (const n of PROVIDER_NAMES) assert.equal(typeof getProvider(n).complete, "function");
@@ -136,6 +171,63 @@ test("google debrief: json mode disables thinking with an exact request-body fie
   assert.equal(body.systemInstruction, undefined);
 });
 
+test("complete sends exact debrief and critique request bodies for every provider", async () => {
+  const originalFetch = globalThis.fetch;
+  const evaluatorFixtures = [EVAL, CRITIQUE];
+  const successResponses = {
+    anthropic: {
+      content: [{ type: "text", text: "{}" }],
+      usage: {},
+      stop_reason: "end_turn",
+    },
+    openai: {
+      choices: [{ message: { content: "{}" }, finish_reason: "stop" }],
+      usage: {},
+    },
+    google: {
+      candidates: [{ content: { parts: [{ text: "{}" }] }, finishReason: "STOP" }],
+      usageMetadata: {},
+    },
+  };
+
+  try {
+    for (const [providerName, provider] of Object.entries({ anthropic, openai, google })) {
+      const capturedBodies = [];
+      globalThis.fetch = async (_url, init) => {
+        capturedBodies.push(JSON.parse(init.body));
+        return new Response(JSON.stringify(successResponses[providerName]), { status: 200 });
+      };
+
+      for (const fixture of evaluatorFixtures) {
+        const result = await provider.complete({
+          ...fixture,
+          thinkingBudget: providerName === "google" ? 0 : undefined,
+        });
+        assert.equal(result.ok, true);
+      }
+
+      if (providerName === "google") {
+        assert.deepEqual(capturedBodies.map((body) => body.generationConfig), [
+          {
+            maxOutputTokens: 1200,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+          {
+            maxOutputTokens: 1500,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        ]);
+      } else {
+        assert.deepEqual(capturedBodies, NON_GOOGLE_EVALUATOR_BODIES[providerName]);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("google parseResponse: max-token usage metadata and stop reason normalized", () => {
   const { text, usage, stop_reason, usageMetadata } = google.parseResponse({
     candidates: [{
@@ -164,6 +256,47 @@ test("google parseResponse: max-token usage metadata and stop reason normalized"
     thoughtsTokenCount: 25,
     totalTokenCount: 1065,
   });
+});
+
+test("google parseResponse: normal stop omits usage metadata passthrough", () => {
+  const result = google.parseResponse({
+    candidates: [{
+      finishReason: "STOP",
+      content: { parts: [{ text: "reply" }] },
+    }],
+    usageMetadata: {
+      promptTokenCount: 900,
+      candidatesTokenCount: 40,
+      thoughtsTokenCount: 25,
+      totalTokenCount: 965,
+      responseText: "must never pass through",
+    },
+  });
+
+  assert.equal(result.stop_reason, "stop");
+  assert.equal(result.usageMetadata, undefined);
+});
+
+test("google parseResponse: max-token metadata keeps only finite allowed counts", () => {
+  const { usageMetadata } = google.parseResponse({
+    candidates: [{
+      finishReason: "MAX_TOKENS",
+      content: { parts: [{ text: "partial" }] },
+    }],
+    usageMetadata: {
+      promptTokenCount: 900,
+      candidatesTokenCount: "40",
+      thoughtsTokenCount: Infinity,
+      totalTokenCount: -3,
+      responseText: "must never pass through",
+    },
+  });
+
+  assert.deepEqual(usageMetadata, {
+    promptTokenCount: 900,
+    totalTokenCount: 0,
+  });
+  assert.equal(usageMetadata.responseText, undefined);
 });
 
 test("google complete surfaces max-token usage metadata in the normalized result", async () => {

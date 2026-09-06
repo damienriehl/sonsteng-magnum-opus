@@ -495,7 +495,10 @@ for (const [provider, expected] of Object.entries({
           assert.equal(body.stream, true);
           assert.deepEqual(body.stream_options, { include_usage: true });
         }
-        if (provider === "google") assert.equal(body.stream, undefined);
+        if (provider === "google") {
+          assert.equal(body.stream, undefined);
+          assert.equal(body.generationConfig.thinkingConfig, undefined);
+        }
         assert.ok(init.signal instanceof AbortSignal);
         return fake;
       },
