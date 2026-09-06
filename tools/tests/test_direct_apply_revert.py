@@ -119,6 +119,116 @@ def _run_reverts(rec, **kw):
 
 
 class TestRevertOrchestration(unittest.TestCase):
+    def test_stale_cached_upstream_fetches_then_revert_refuses(self):
+        evidence = _merged_revert_evidence()
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, cached_a, remote_b = _stale_remote_fixture(d)
+            rec = RevertRecorder([evidence])
+            res = _run_reverts(
+                rec, branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "deploy_refused")
+            status = rec.deploy_refusals[0]
+            self.assertEqual(status.reason, "behind")
+            self.assertEqual(status.behind, 1)
+            self.assertFalse(status.deployable)
+            self.assertNotIn(("revert_exec", "rq1"), rec.calls)
+            self.assertFalse(any(
+                isinstance(call, tuple) and call[0] == "deploy"
+                for call in rec.calls))
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                remote_b)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/heads/main").stdout.strip(), cached_a)
+
+    def test_stale_cached_upstream_fetch_failure_refuses_revert(self):
+        evidence = _merged_revert_evidence()
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, cached_a, _remote_b = _stale_remote_fixture(d)
+            _git(checkout, "remote", "set-url", "origin", os.path.join(d, "missing.git"))
+            rec = RevertRecorder([evidence])
+            res = _run_reverts(
+                rec, branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "deploy_refused")
+            status = rec.deploy_refusals[0]
+            self.assertEqual(status.reason, "fetch_failed")
+            self.assertNotEqual(status.fetch_rc, 0)
+            self.assertTrue(status.fetch_stderr)
+            self.assertLessEqual(len(status.fetch_stderr), dad.FETCH_STDERR_LIMIT)
+            self.assertFalse(status.deployable)
+            self.assertNotIn(("revert_exec", "rq1"), rec.calls)
+            self.assertFalse(any(
+                isinstance(call, tuple) and call[0] == "deploy"
+                for call in rec.calls))
+            self.assertNotIn("deploy_worker", rec.calls)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                cached_a)
+
+    def test_up_to_date_after_fetch_allows_revert(self):
+        evidence = _merged_revert_evidence()
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, remote_b = _stale_remote_fixture(d)
+            _git(checkout, "reset", "-q", "--hard", remote_b)
+            rec = RevertRecorder([evidence])
+            res = _run_reverts(
+                rec, branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "no_accepted")
+            self.assertEqual(rec.deploy_refusals, [])
+            self.assertIn(("deploy", "main"), rec.calls)
+            self.assertIn("deploy_worker", rec.calls)
+
+    def test_selected_branch_is_fetched_and_compared_for_revert(self):
+        selected = "release/env-selected"
+        evidence = _merged_revert_evidence()
+        with tempfile.TemporaryDirectory() as d:
+            checkout, remote, cached_a, remote_b = _stale_remote_fixture(
+                d, branch=selected)
+            remote_name = "deploy-upstream"
+            merge_ref = "refs/heads/releases/canonical"
+            tracking_ref = "refs/remotes/deploy-upstream/releases/canonical"
+            _git(remote, "update-ref", merge_ref, remote_b)
+            _git(checkout, "remote", "rename", "origin", remote_name)
+            _git(checkout, "config", "branch.%s.merge" % selected, merge_ref)
+            _git(checkout, "update-ref", tracking_ref, cached_a)
+            git_calls = []
+            fetch_calls = []
+
+            def git(args):
+                git_calls.append(args)
+                return dad._git(args, checkout)
+
+            def fetch(args):
+                fetch_calls.append(args)
+                return dad._fetch_git(args, checkout)
+
+            rec = RevertRecorder([evidence])
+            res = _run_reverts(
+                rec, branch=selected,
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch, git=git, fetch=fetch))
+
+            self.assertEqual(res.reason, "deploy_refused")
+            self.assertEqual(fetch_calls, [[
+                "fetch", "--no-tags", "--no-prune", remote_name,
+                merge_ref + ":" + tracking_ref,
+            ]])
+            self.assertIn([
+                "rev-list", "--count",
+                "refs/heads/release/env-selected.."
+                "refs/remotes/deploy-upstream/releases/canonical",
+            ], git_calls)
+            self.assertEqual(rec.deploy_refusals[0].reason, "behind")
+
     def test_approved_revert_executes_deploys_resolves_done(self):
         rec = RevertRecorder([{"id": "rq1", "doc": "d", "run_first": "aa", "run_last": "bb"}])
         res = _run_reverts(rec)
@@ -220,6 +330,34 @@ def _write_commit(td, path, content, msg):
     _git(td, "add", "-A")
     _git(td, "commit", "-q", "-m", msg)
     return _git(td, "rev-parse", "HEAD").stdout.strip()
+
+
+def _stale_remote_fixture(root, branch="main"):
+    """Local checkout/cache stay at A while a bare upstream advances to B."""
+    remote = os.path.join(root, "remote.git")
+    seed = os.path.join(root, "seed")
+    checkout = os.path.join(root, "checkout")
+    writer = os.path.join(root, "writer")
+    _git(root, "init", "-q", "--bare", remote)
+    _git(root, "init", "-q", seed)
+    _git(seed, "config", "user.email", "test@example.invalid")
+    _git(seed, "config", "user.name", "Test")
+    _git(seed, "commit", "--allow-empty", "-q", "-m", "A")
+    _git(seed, "branch", "-m", branch)
+    _git(seed, "remote", "add", "origin", remote)
+    _git(seed, "push", "-q", "-u", "origin", branch)
+    _git(root, "clone", "-q", "--shared", "--branch", branch, remote, checkout)
+    _git(root, "clone", "-q", "--shared", "--branch", branch, remote, writer)
+    _git(writer, "config", "user.email", "test@example.invalid")
+    _git(writer, "config", "user.name", "Test")
+    local_a = _git(checkout, "rev-parse", "refs/heads/" + branch).stdout.strip()
+    cached_a = _git(
+        checkout, "rev-parse", "refs/remotes/origin/" + branch).stdout.strip()
+    _git(writer, "commit", "--allow-empty", "-q", "-m", "B")
+    remote_b = _git(writer, "rev-parse", "HEAD").stdout.strip()
+    _git(writer, "push", "-q", "origin", branch)
+    assert local_a == cached_a and remote_b != local_a
+    return checkout, remote, local_a, remote_b
 
 
 class TestExecuteRevertGit(unittest.TestCase):

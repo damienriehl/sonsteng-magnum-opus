@@ -118,12 +118,11 @@ output. Accepted suggestions remain accepted, and an approved or already-merged
 revert retains its journal phase, so a later tick can retry after an operator
 deliberately refreshes or repairs the daemon checkout.
 
-The comparison is read-only and has no network access: it uses the recorded
-remote-tracking ref and never fetches or fast-forwards. Consequently, it detects
-only staleness already represented in that local ref. Operators must continue to
-refresh refs and the daemon checkout deliberately; merging this guard into `main`
-does not activate it until `~/.local/share/sonsteng-daemon/checkout` itself is
-updated to code that contains the guard.
+Before comparing, the guard runs a bounded `--no-tags --no-prune` fetch of the
+selected branch's configured remote and merge ref; if both settings are absent it
+explicitly reports its `origin/<branch>` fallback. Any fetch failure refuses the
+transaction, and a successful fetch updates only the remote-tracking ref—not the
+local deploy branch—so advancing the daemon checkout remains deliberate.
 
 There remains a narrow time-of-check-to-time-of-use window if another process moves
 a guarded ref after the comparison. Closing it requires publication from captured,
