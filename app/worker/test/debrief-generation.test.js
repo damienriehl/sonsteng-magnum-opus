@@ -102,12 +102,24 @@ test("a truncated debrief retries exactly once at 2400 and returns the retry sco
   assert.equal(DEBRIEF_RETRY_MAX_TOKENS, 2400);
 });
 
-test("a second truncation fails distinctly and never attempts a third completion", async () => {
+test("a second truncation exposes numeric Gemini usage metadata and never attempts a third completion", async () => {
   const calls = [];
+  const usageMetadata = {
+    promptTokenCount: 1100,
+    candidatesTokenCount: 0,
+    thoughtsTokenCount: 1300,
+    totalTokenCount: 2400,
+  };
   const result = await generateDebriefScorecard({
     complete: async (maxTokens) => {
       calls.push(maxTokens);
-      return { ok: true, text: "{", stop_reason: "max_tokens", usage: {} };
+      return {
+        ok: true,
+        text: "must never reach structured logs",
+        stop_reason: "max_tokens",
+        usage: {},
+        usageMetadata,
+      };
     },
     persona: PERSONA,
     factMap: {},
@@ -123,6 +135,8 @@ test("a second truncation fails distinctly and never attempts a third completion
     initial_stop_reason: "max_tokens",
     outcome: "retry_truncated",
   });
+  assert.deepEqual(result.usageMetadata, usageMetadata);
+  assert.equal(JSON.stringify(result.usageMetadata).includes("must never reach"), false);
   assert.notEqual(
     debriefValidationMessage(result.subtype),
     debriefValidationMessage("wrong_shape"),

@@ -106,10 +106,17 @@ function upstreamOrError(env, body) {
 }
 
 // One upstream completion via the resolved provider adapter.
-function callUpstream(up, { system, messages, maxTokens, jsonMode, providerMaxAttempts }) {
+function callUpstream(up, {
+  system,
+  messages,
+  maxTokens,
+  jsonMode,
+  thinkingBudget,
+  providerMaxAttempts,
+}) {
   const provider = getProvider(up.provider);
   return provider.complete({
-    system, messages, maxTokens,
+    system, messages, maxTokens, thinkingBudget,
     providerCfg: { apiKey: up.apiKey, model: up.model, jsonMode: !!jsonMode },
     providerMaxAttempts,
   });
@@ -381,6 +388,7 @@ async function handleDebrief(request, env, origin) {
         messages: [{ role: "user", content: prompt }],
         maxTokens,
         jsonMode: true,
+        thinkingBudget: up.provider === "google" ? 0 : undefined,
         providerMaxAttempts: DEBRIEF_PROVIDER_MAX_ATTEMPTS,
       });
       if (up.skipBudget) return complete();
@@ -427,6 +435,14 @@ async function handleDebrief(request, env, origin) {
       provider: up.provider,
       validation_subtype: outcome.subtype,
       ...attemptMetadata,
+      ...(outcome.subtype === "truncated" && outcome.usageMetadata
+        ? {
+          promptTokenCount: outcome.usageMetadata.promptTokenCount,
+          candidatesTokenCount: outcome.usageMetadata.candidatesTokenCount,
+          thoughtsTokenCount: outcome.usageMetadata.thoughtsTokenCount,
+          totalTokenCount: outcome.usageMetadata.totalTokenCount,
+        }
+        : {}),
     };
     if (outcome.subtype === "oracle_leak") {
       logMeta({ ev: "debrief_oracle_leak", ...metadata, field: outcome.leakField });
@@ -637,6 +653,7 @@ async function handleCritique(request, env, origin) {
   const result = await callUpstream(up, {
     system: null, messages: [{ role: "user", content: prompt }],
     maxTokens: CRITIQUE_MAX_TOKENS, jsonMode: true,
+    thinkingBudget: up.provider === "google" ? 0 : undefined,
   });
   if (!result.ok) return upstreamFailureResponse(up, result, "critique_upstream_fail");
 

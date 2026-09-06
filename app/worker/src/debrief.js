@@ -153,6 +153,7 @@ export async function generateDebriefScorecard({ complete, persona, factMap }) {
         kind: "validation",
         subtype: "truncated",
         attempt: attempt("retry_truncated"),
+        ...(result.usageMetadata ? { usageMetadata: result.usageMetadata } : {}),
       };
     }
   }
