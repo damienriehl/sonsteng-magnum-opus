@@ -32,8 +32,11 @@ PROD_BASE=${PROD_BASE:-https://legalpracticum.org}
 DEV_BASE=${DEV_BASE%/}
 PROD_BASE=${PROD_BASE%/}
 BUILD_UAT="$ROOT/build/uat/"
+BUILD_UAT_IDENTITY=""
 SERVER_PID=""
 MARKER_PATH=""
+MARKER_NAME=""
+SITE_IDENTITY=""
 REVALIDATION_STATUS=0
 
 die() {
@@ -54,13 +57,58 @@ restore_build_stamp() {
   return 1
 }
 
-# SIGKILL and host crashes bypass the EXIT trap. Remove only regular markers
-# created by this script whose recorded owner is no longer running; every other
-# untracked path remains visible to the clean-worktree gate below.
-process_start_ticks() {
+# Return the device:inode identity only after physically entering the expected
+# repository-local directory and proving that no symlink redirected the entry.
+pinned_directory_identity() {
+  local expected_physical_dir=$1 resolved_dir
+  (
+    cd -P -- "$expected_physical_dir" || return 1
+    resolved_dir=$(pwd -P) || return 1
+    [ "$resolved_dir" = "$expected_physical_dir" ] || return 1
+    stat -Lc '%d:%i' -- .
+  )
+}
+
+# Every deletion is pinned to a physically entered, path- and identity-validated
+# directory. Callers pass a file/tree mode and only relative entry names, so rm
+# never resolves a path assembled from ROOT.
+remove_in_pinned_dir() {
+  local expected_physical_dir=$1 expected_identity=$2 delete_mode=$3
+  local actual_identity relative_name resolved_dir
+  shift 3
+  [ "$#" -gt 0 ] || return 0
+  (
+    cd -P -- "$expected_physical_dir" || return 1
+    resolved_dir=$(pwd -P) || return 1
+    [ "$resolved_dir" = "$expected_physical_dir" ] || return 1
+    actual_identity=$(stat -Lc '%d:%i' -- .) || return 1
+    [ -n "$expected_identity" ] && \
+      [ "$actual_identity" = "$expected_identity" ] || return 1
+    for relative_name in "$@"; do
+      case "$relative_name" in
+        ""|.|..|/*|*/*) return 1 ;;
+      esac
+    done
+    case "$delete_mode" in
+      file)
+        for relative_name in "$@"; do
+          [ ! -d "$relative_name" ] || return 1
+        done
+        rm -f -- "$@"
+        ;;
+      tree)
+        rm -rf -- "$@"
+        ;;
+      *) return 1 ;;
+    esac
+  )
+}
+
+process_identity() {
   local pid=$1 stat_line stat_tail
   local -a stat_fields
-  if ! [[ "$pid" =~ ^[0-9]+$ ]] || ! IFS= read -r stat_line < "/proc/$pid/stat"; then
+  if ! [[ "$pid" =~ ^[1-9][0-9]*$ ]] || \
+      ! IFS= read -r stat_line 2>/dev/null < "/proc/$pid/stat"; then
     return 1
   fi
   stat_tail=${stat_line##*) }
@@ -68,22 +116,32 @@ process_start_ticks() {
     return 1
   fi
   read -r -a stat_fields <<< "$stat_tail"
-  if [ "${#stat_fields[@]}" -lt 20 ] || ! [[ "${stat_fields[19]}" =~ ^[0-9]+$ ]]; then
+  if [ "${#stat_fields[@]}" -lt 20 ] || \
+      ! [[ "${stat_fields[0]}" =~ ^[[:alpha:]]$ ]] || \
+      ! [[ "${stat_fields[19]}" =~ ^[0-9]+$ ]]; then
     return 1
   fi
-  printf '%s\n' "${stat_fields[19]}"
+  printf '%s %s\n' "${stat_fields[0]}" "${stat_fields[19]}"
 }
 
+# SIGKILL and host crashes bypass the EXIT trap. Remove only regular markers
+# created by this script whose recorded owner is no longer running; every other
+# untracked path remains visible to the clean-worktree gate below.
 remove_stale_server_markers() {
-  local current_start_ticks marker_name marker_pid marker_start_ticks marker_token
-  local resolved_site
+  local current_identity current_start_ticks marker_name marker_pid
+  local marker_start_ticks marker_token process_state resolved_site scanner_identity
 
   if ! (
     cd -P -- "$ROOT/site" || die "could not enter site/ before stale-marker cleanup"
-    resolved_site=$(realpath -m -- .) || \
+    resolved_site=$(pwd -P) || \
       die "could not resolve site/ before stale-marker cleanup"
-    if [ "$resolved_site" != "$ROOT/site" ]; then
+    [ "$resolved_site" = "$ROOT/site" ] || \
       die "site/ must resolve to its repository-local path before stale-marker cleanup (got $resolved_site)"
+    scanner_identity=$(stat -Lc '%d:%i' -- .) || \
+      die "could not identify site/ before stale-marker cleanup"
+    if [ -n "${SITE_IDENTITY:-}" ] && \
+        [ "$scanner_identity" != "$SITE_IDENTITY" ]; then
+      die "site/ identity changed before stale-marker cleanup"
     fi
     for marker_name in .final-revalidation-server.??????; do
       if [ ! -f "$marker_name" ] || [ -L "$marker_name" ]; then
@@ -93,19 +151,30 @@ remove_stale_server_markers() {
         continue
       fi
       marker_token=$(<"$marker_name")
-      if ! [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):([0-9]+):[0-9]+$ ]]; then
+      marker_start_ticks=""
+      if [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):([0-9]+):[0-9]+$ ]]; then
+        marker_pid=${BASH_REMATCH[2]}
+        marker_start_ticks=${BASH_REMATCH[3]}
+      elif [[ "$marker_token" =~ ^final-revalidation:([[:xdigit:]]{40}|[[:xdigit:]]{64}):([0-9]+):[0-9]+$ ]]; then
+        marker_pid=${BASH_REMATCH[2]}
+      else
         continue
       fi
-      marker_pid=${BASH_REMATCH[2]}
-      marker_start_ticks=${BASH_REMATCH[3]}
-      if current_start_ticks=$(process_start_ticks "$marker_pid"); then
-        if [ "$current_start_ticks" = "$marker_start_ticks" ]; then
+      if ! [[ "$marker_pid" =~ ^[1-9][0-9]*$ ]]; then
+        continue
+      fi
+      if current_identity=$(process_identity "$marker_pid"); then
+        read -r process_state current_start_ticks <<< "$current_identity"
+        if [ "$process_state" != Z ] && [ "$process_state" != X ] && \
+            [ "$process_state" != x ] && \
+            { [ -z "$marker_start_ticks" ] || \
+              [ "$current_start_ticks" = "$marker_start_ticks" ]; }; then
           continue
         fi
       elif kill -0 "$marker_pid" 2>/dev/null || [ -d "/proc/$marker_pid" ]; then
         continue
       fi
-      rm -f -- "$marker_name" || \
+      remove_in_pinned_dir "$ROOT/site" "$scanner_identity" file "$marker_name" || \
         die "could not remove stale local-server marker: site/$marker_name"
       printf 'removed stale local-server marker: site/%s\n' "$marker_name"
     done
@@ -132,7 +201,7 @@ require_clean_worktree() {
 }
 
 clear_prior_evidence() {
-  rm -rf -- "${BUILD_UAT}runs" "${BUILD_UAT}shots" || \
+  remove_in_pinned_dir "${BUILD_UAT%/}" "$BUILD_UAT_IDENTITY" tree runs shots || \
     die "could not clear prior UAT evidence"
 }
 
@@ -143,13 +212,25 @@ record_status() {
 }
 
 cleanup() {
-  local status=${1:-0}
+  local marker_name=${MARKER_NAME:-} status=${1:-0}
   if [ -n "$SERVER_PID" ]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  if [ -n "$MARKER_PATH" ]; then
-    rm -f -- "$MARKER_PATH"
+  if [ -z "$marker_name" ] && [ -n "${MARKER_PATH:-}" ]; then
+    marker_name=${MARKER_PATH##*/}
+  fi
+  if [ -n "$marker_name" ] && \
+      { ! [[ "$marker_name" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]] || \
+        { [ -n "${MARKER_PATH:-}" ] && \
+          [ "$MARKER_PATH" != "$ROOT/site/$marker_name" ]; }; }; then
+    printf 'ERROR: active local-server marker path is invalid\n' >&2
+    status=1
+  elif [ -n "$marker_name" ] && \
+      ! remove_in_pinned_dir "$ROOT/site" "${SITE_IDENTITY:-}" file "$marker_name"; then
+    printf 'ERROR: could not remove active local-server marker: site/%s\n' \
+      "$marker_name" >&2
+    status=1
   fi
   if ! restore_build_stamp; then
     status=1
@@ -164,6 +245,19 @@ cleanup_on_exit() {
   exit $?
 }
 
+finalize_revalidation() {
+  local cleanup_status
+  cleanup "$REVALIDATION_STATUS"
+  cleanup_status=$?
+  trap - EXIT
+  record_status "$cleanup_status"
+  git status --short | head -5
+  printf 'revalidation done @ %s\n' "$SHA"
+  return "$REVALIDATION_STATUS"
+}
+
+SITE_IDENTITY=$(pinned_directory_identity "$ROOT/site") || \
+  die "site/ must be a physically entered repository-local directory"
 remove_stale_server_markers
 require_clean_worktree "tracked or untracked changes found; run from a clean worktree at the SHA under test"
 
@@ -182,6 +276,8 @@ if [ "$resolved_uat/" != "$BUILD_UAT" ]; then
   die "build/uat/ must resolve to its repository-local path (got $resolved_uat)"
 fi
 mkdir -p "$BUILD_UAT" || die "could not create build/uat/"
+BUILD_UAT_IDENTITY=$(pinned_directory_identity "${BUILD_UAT%/}") || \
+  die "could not identify build/uat/"
 clear_prior_evidence
 
 SHA=$(git rev-parse HEAD) || die "could not resolve HEAD"
@@ -193,9 +289,13 @@ trap 'exit 143' TERM
 
 MARKER_PATH=$(mktemp "$ROOT/site/.final-revalidation-server.XXXXXX") || \
   die "could not create local-server identity marker"
-MARKER_NAME=$(basename "$MARKER_PATH")
-MARKER_START_TICKS=$(process_start_ticks "$$") || \
+MARKER_NAME=${MARKER_PATH##*/}
+if ! [[ "$MARKER_NAME" =~ ^\.final-revalidation-server\.[A-Za-z0-9]{6}$ ]]; then
+  die "local-server identity marker has an invalid basename"
+fi
+MARKER_IDENTITY=$(process_identity "$$") || \
   die "could not read this revalidation process identity"
+read -r _ MARKER_START_TICKS <<< "$MARKER_IDENTITY"
 MARKER_TOKEN="final-revalidation:$SHA:$$:$MARKER_START_TICKS:$RANDOM"
 printf '%s\n' "$MARKER_TOKEN" > "$MARKER_PATH"
 MARKER_URL="http://127.0.0.1:$PORT/$MARKER_NAME"
@@ -287,12 +387,5 @@ record_status "$a11y_status"
 printf 'a11y exit=%s\n' "$a11y_status"
 grep -E '^=== |A11Y AUDIT' "${BUILD_UAT}final-a11y.log" || true
 
-cleanup "$REVALIDATION_STATUS"
-cleanup_status=$?
-trap - EXIT
-if [ "$cleanup_status" -ne 0 ]; then
-  REVALIDATION_STATUS=1
-fi
-git status --short | head -5
-printf 'revalidation done @ %s\n' "$SHA"
-exit "$REVALIDATION_STATUS"
+finalize_revalidation
+exit $?
