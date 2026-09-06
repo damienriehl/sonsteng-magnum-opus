@@ -35,10 +35,21 @@ The engine's reconcile-first + DO in_flight-lease + append-only apply_batches
 journal + git-worktree isolation own this; the daemon adds a host-local flock so
 two timer firings never overlap. See docs/direct-apply-daemon.md.
 
+STALE-REF DEPLOY GUARD: before entering either deployment-bearing path
+(accepted-edit apply or approved revert), the daemon compares the configured
+deploy branch with that branch's recorded upstream and requires it to be the
+checked-out branch because the apply and Worker deploy paths consume checkout
+content. A positive count, a branch mismatch, a missing/unresolvable branch or
+upstream, or an invalid result refuses the whole transaction before mutation.
+The refusal heartbeats unhealthy, sends a metadata-only ntfy alert, and leaves
+accepted rows / revert journal state intact for a later tick. The guard fetches
+only the selected branch's exact upstream and fails closed if that bounded fetch
+does not succeed; it never advances the local deploy branch.
+
 Python 3, stdlib only. Every side effect (review fetch, engine run, rebuild,
-deploy, heartbeat, notify, clock) is injectable so the orchestration is unit-
-testable with no network, no subprocess, and no live model (see
-tools/tests/test_direct_apply_daemon.py). `--dry-run` plans without mutating.
+deploy, deploy guard, heartbeat, notify, clock) is injectable so the
+orchestration is unit-testable with no network, no subprocess, and no live model
+(see tools/tests/test_direct_apply_daemon.py). `--dry-run` plans without mutating.
 """
 
 from __future__ import annotations
@@ -54,6 +65,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -78,6 +90,8 @@ ENV_OBSERVER_TOKEN = "SONSTENG_PROD_OBSERVER_BEARER"  # dedicated read-only PROD
 DEFAULT_DEPLOY_BRANCH = "main"  # canonical since the 2026-07-24 merge of feat/canonical-docs
 SERVICE_USER_AGENT = "sonsteng-apply-daemon/1.0"
 DEFAULT_IDLE_MINUTES = 30
+DEPLOY_GUARD_FETCH_TIMEOUT = 30
+FETCH_STDERR_LIMIT = 500
 
 # The status the daemon flushes. Auto-accept (worker lane) lands rows here; the
 # engine's /claim only ever claims `accepted` rows, so this is the exact trigger.
@@ -321,6 +335,206 @@ def _git(args, repo_root=REPO_ROOT, timeout=300):
     return proc.returncode, (proc.stdout or "")
 
 
+def _bounded_fetch_stderr(stderr):
+    text = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr or "")
+    return text.strip()[-FETCH_STDERR_LIMIT:]
+
+
+def _fetch_stderr_tail(stderr_file):
+    stderr_file.seek(0, os.SEEK_END)
+    stderr_file.seek(max(0, stderr_file.tell() - FETCH_STDERR_LIMIT))
+    return _bounded_fetch_stderr(stderr_file.read())
+
+
+def _fetch_git(args, repo_root=REPO_ROOT, timeout=DEPLOY_GUARD_FETCH_TIMEOUT):
+    """Run the guard's network-capable Git operation with bounded diagnostics."""
+    with tempfile.TemporaryFile() as stderr_file:
+        try:
+            proc = subprocess.run(
+                ["git", *args], cwd=repo_root, check=False, shell=False,
+                stdout=subprocess.DEVNULL, stderr=stderr_file, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            detail = _fetch_stderr_tail(stderr_file)
+            prefix = "fetch timed out after %d seconds" % timeout
+            if detail:
+                detail = detail[-max(0, FETCH_STDERR_LIMIT - len(prefix) - 2):]
+                prefix += ": " + detail
+            return 124, prefix
+        except OSError as exc:
+            return 127, _bounded_fetch_stderr(exc)
+        return proc.returncode, _fetch_stderr_tail(stderr_file)
+
+
+@dataclasses.dataclass(frozen=True)
+class DeployCheckoutStatus:
+    """Safe, content-free result of the local upstream comparison."""
+
+    behind: int | None = None
+    failure_reason: str | None = None
+    fetch_rc: int | None = None
+    fetch_stderr: str = ""
+    upstream_fallback: bool = False
+
+    def __post_init__(self):
+        if (self.behind is not None and
+                (not isinstance(self.behind, int) or
+                 isinstance(self.behind, bool) or self.behind < 0)):
+            raise ValueError("behind must be a nonnegative integer or None")
+        if self.failure_reason not in (None, "fetch_failed"):
+            raise ValueError("unsupported deploy-checkout failure reason")
+        if self.failure_reason is not None and self.behind is not None:
+            raise ValueError("a failed status cannot carry a behind count")
+        if self.failure_reason == "fetch_failed":
+            if (not isinstance(self.fetch_rc, int) or
+                    isinstance(self.fetch_rc, bool) or self.fetch_rc == 0):
+                raise ValueError("fetch_failed must carry a nonzero integer rc")
+        elif self.fetch_rc is not None or self.fetch_stderr:
+            raise ValueError("fetch diagnostics require fetch_failed")
+
+    @property
+    def deployable(self):
+        return self.failure_reason is None and self.behind == 0
+
+    @property
+    def reason(self):
+        if self.failure_reason is not None:
+            base = self.failure_reason
+        elif self.behind is None:
+            base = "upstream_unresolvable"
+        else:
+            base = "current" if self.behind == 0 else "behind"
+        if self.upstream_fallback:
+            return base + "_fallback_origin"
+        return base
+
+    def metadata(self):
+        return {
+            "reason": self.reason,
+            "deployable": self.deployable,
+            "behind": self.behind,
+            "upstream_fallback": self.upstream_fallback,
+            "fetch_rc": self.fetch_rc,
+        }
+
+
+def checkout_deploy_status(
+        repo_root=REPO_ROOT, *, branch=DEFAULT_DEPLOY_BRANCH, git=None,
+        fetch=None, fetch_timeout=DEPLOY_GUARD_FETCH_TIMEOUT):
+    """Return whether every local ref consumed by a deploy is current.
+
+    ``deploy-dev.sh`` archives the configured local branch, while revert Worker
+    deploys bundle the checkout and the apply engine bases its deploy worktree on
+    HEAD. The configured and checked-out branch must therefore be identical. That
+    exact branch is compared with its own freshly fetched upstream. Any inability
+    to prove a zero behind count fails closed. ``git`` and ``fetch`` are injectable
+    for hermetic unit tests.
+    """
+    git = git or (lambda args: _git(args, repo_root))
+    fetch = fetch or (lambda args: _fetch_git(args, repo_root, fetch_timeout))
+
+    def compare(local_ref):
+        upstream_fallback = False
+        try:
+            rc, _ = git(["show-ref", "--verify", "--quiet", local_ref])
+            if rc != 0:
+                return DeployCheckoutStatus()
+
+            remote_rc, remote_output = git(
+                ["config", "--get", "branch.%s.remote" % branch])
+            merge_rc, merge_output = git(
+                ["config", "--get", "branch.%s.merge" % branch])
+            remote_unset = remote_rc == 1 and not remote_output.strip()
+            merge_unset = merge_rc == 1 and not merge_output.strip()
+            if remote_unset and merge_unset:
+                remote = "origin"
+                merge_ref = "refs/heads/" + branch
+                upstream_ref = "refs/remotes/origin/" + branch
+                upstream_fallback = True
+            else:
+                remote_lines = remote_output.strip().splitlines()
+                merge_lines = merge_output.strip().splitlines()
+                if (remote_rc != 0 or merge_rc != 0 or
+                        len(remote_lines) != 1 or len(merge_lines) != 1 or
+                        not remote_lines[0] or not merge_lines[0]):
+                    return DeployCheckoutStatus()
+                remote = remote_lines[0]
+                merge_ref = merge_lines[0]
+                rc, output = git(
+                    ["for-each-ref", "--format=%(upstream)", local_ref])
+                upstream_lines = output.strip().splitlines()
+                if rc != 0 or len(upstream_lines) != 1 or not upstream_lines[0]:
+                    return DeployCheckoutStatus()
+                upstream_ref = upstream_lines[0]
+
+            rc, _ = git(["check-ref-format", merge_ref])
+            if rc != 0 or not merge_ref.startswith("refs/heads/"):
+                return DeployCheckoutStatus()
+            rc, _ = git(["check-ref-format", upstream_ref])
+            if rc != 0 or not upstream_ref.startswith("refs/remotes/"):
+                return DeployCheckoutStatus()
+            rc, _ = git(["symbolic-ref", "--quiet", upstream_ref])
+            # rc 0 means Git would dereference the fetch destination; any rc
+            # other than the documented non-symbolic result (1) is an
+            # inspection failure. Both must refuse before fetch can move a ref.
+            if rc != 1:
+                return DeployCheckoutStatus(upstream_fallback=upstream_fallback)
+
+            fetch_args = [
+                "fetch", "--no-tags", "--no-prune", remote,
+                "%s:%s" % (merge_ref, upstream_ref),
+            ]
+            try:
+                fetch_rc, fetch_stderr = fetch(fetch_args)
+            except subprocess.TimeoutExpired as exc:
+                fetch_rc = 124
+                fetch_stderr = "fetch timed out after %d seconds" % fetch_timeout
+                if exc.stderr:
+                    fetch_stderr += ": " + _bounded_fetch_stderr(exc.stderr)
+            except OSError as exc:
+                fetch_rc, fetch_stderr = 127, _bounded_fetch_stderr(exc)
+            except Exception as exc:
+                fetch_rc, fetch_stderr = 1, _bounded_fetch_stderr(exc)
+            if fetch_rc != 0:
+                return DeployCheckoutStatus(
+                    failure_reason="fetch_failed", fetch_rc=fetch_rc,
+                    fetch_stderr=_bounded_fetch_stderr(fetch_stderr),
+                    upstream_fallback=upstream_fallback)
+
+            rc, output = git(
+                ["rev-list", "--count", "%s..%s" % (local_ref, upstream_ref)])
+            if rc != 0:
+                return DeployCheckoutStatus(upstream_fallback=upstream_fallback)
+            behind = int(output.strip())
+            if behind < 0:
+                raise ValueError("negative behind count")
+        except Exception:
+            return DeployCheckoutStatus(upstream_fallback=upstream_fallback)
+        return DeployCheckoutStatus(behind, upstream_fallback=upstream_fallback)
+
+    try:
+        deploy_ref = "refs/heads/" + branch
+        rc, _ = git(["check-ref-format", deploy_ref])
+        if rc != 0:
+            return DeployCheckoutStatus()
+    except Exception:
+        return DeployCheckoutStatus()
+
+    deployed = compare(deploy_ref)
+    if not deployed.deployable:
+        return deployed
+
+    try:
+        rc, head_ref = git(["symbolic-ref", "--quiet", "HEAD"])
+    except Exception:
+        rc, head_ref = 1, ""
+    if rc != 0:
+        return DeployCheckoutStatus()
+    head_ref = head_ref.strip()
+    if head_ref != deploy_ref:
+        return DeployCheckoutStatus()
+    return deployed
+
+
 def fetch_revert_requests(api_base, token, timeout=30):
     """GET {api_base}/revert-requests?status=approved (admin) -> list of rows.
     Best-effort: a missing endpoint or unreachable worker degrades to [] (a revert
@@ -557,6 +771,36 @@ def notify_failure(failed_ids, *, topic_resolver=None, publish=None):
         publish(topic, title, body, None, priority="high", tags="rotating_light")
 
 
+def notify_deploy_refusal(status, *, topic_resolver=None, publish=None):
+    """Best-effort ntfy alert containing checkout metadata only.
+
+    Never include suggestion content, file content, paths, credentials, or raw
+    git output. The behind count and comparison outcome are sufficient for the
+    operator to distinguish a stale checkout from an unresolvable upstream.
+    """
+    topic_resolver = topic_resolver or digest_push.resolve_topic
+    publish = publish or digest_push.publish_ntfy
+    title = "Sonsteng apply deploy REFUSED"
+    if status.reason.startswith("behind") and status.behind is not None:
+        body = ("The home-box apply daemon refused to deploy because a guarded deploy "
+                "ref is behind its recorded upstream by %d commit%s. No deploy ran. "
+                "Refresh the daemon checkout deliberately, then let a later tick retry."
+                % (status.behind, "" if status.behind == 1 else "s"))
+    elif status.failure_reason == "fetch_failed":
+        body = ("The home-box apply daemon refused to deploy because it could not "
+                "refresh the guarded deploy ref's upstream (git fetch rc %d). "
+                "No deploy ran. Repair upstream access, then let a later tick retry."
+                % status.fetch_rc)
+    else:
+        body = ("The home-box apply daemon refused to deploy because it could not prove "
+                "that every guarded deploy ref is current with its recorded upstream. "
+                "No deploy ran. Repair or refresh the upstream tracking state, "
+                "then let a later tick retry.")
+    with contextlib.suppress(Exception):
+        publish(topic_resolver(), title, body, None, priority="high",
+                tags="rotating_light,warning")
+
+
 def notify_consistency(status, batch_id, *, topic_resolver=None, publish=None):
     """Best-effort, text-free U18 alert. Clean results need no interruption."""
     if status == "clean":
@@ -678,7 +922,7 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         do_history=None, fetch_reverts=None, revert_exec=None, revert_resolve=None,
         revert_record=None,
         clean_site=None, do_deploy_worker=None, do_scoped=None,
-        legacy_u18=None):
+        legacy_u18=None, deploy_guard=None, deploy_refusal_notify=None):
     """Execute one daemon tick. Returns DaemonResult. All I/O is injectable; the
     production wiring is supplied by main().
 
@@ -699,10 +943,38 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
     heartbeat = heartbeat or (
         lambda ok, applied: post_heartbeat(api_base, token, ok=ok, applied=applied, ts=ts))
     notify = notify or notify_failure
+    deploy_guard = deploy_guard or (
+        lambda selected: checkout_deploy_status(branch=selected))
+    deploy_refusal_notify = deploy_refusal_notify or notify_deploy_refusal
     editorial = editorial or (lambda bid: dispatch_editorial(bid))
 
     steps = []
     state = load_state(state_path)
+
+    def deploy_refusal(batch_id=""):
+        """Fail closed without changing retry-critical apply/revert state."""
+        try:
+            status = deploy_guard(branch)
+        except Exception:
+            status = DeployCheckoutStatus()
+        if not isinstance(status, DeployCheckoutStatus):
+            status = DeployCheckoutStatus()
+        steps.append(("deploy_guard", status.metadata()))
+        if status.deployable:
+            return None
+        hb = heartbeat(False, 0)
+        steps.append(("heartbeat", {"ok": False, "applied": 0}))
+        deploy_refusal_notify(status)
+        steps.append(("notify_deploy_refusal", status.metadata()))
+        if status.reason.startswith("behind"):
+            detail = "guarded deploy ref is behind upstream by %d commit(s)" % status.behind
+        elif status.failure_reason == "fetch_failed":
+            detail = "guarded deploy ref upstream fetch failed (rc %d)" % status.fetch_rc
+        else:
+            detail = "guarded deploy ref or upstream is unresolvable"
+        print("[daemon] deploy REFUSED: %s. No mutation or deploy ran; retry state preserved."
+              % detail, file=out)
+        return DaemonResult(0, batch_id, "deploy_refused", hb, False, steps)
 
     # ---- approved revert requests (History browser, SL8) — execute FIRST -----
     # A quiet or busy tick both drain approved reverts. Each revert is an
@@ -715,6 +987,9 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
             reqs = []
         for req in reqs or []:
             rid = req.get("id")
+            refused = deploy_refusal(req.get("batch_id") or "")
+            if refused is not None:
+                return refused
             if req.get("mutation_phase") == "merged":
                 detail = {"id":rid,"batch_id":req["batch_id"],
                     "actor":req["mutation_actor"],"source_ref":req["source_ref"],
@@ -762,19 +1037,20 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
                 notify([rid])
                 print("[daemon] revert %s FAILED (%s)." % (rid, detail), file=out)
 
-    # U7: scoped-change drafting — opt-in, best-effort, never gates the flush.
-    if do_scoped is not None and not dry_run:
-        try:
-            sok, _stail = do_scoped()
-            steps.append(("scoped_drafts", sok))
-        except Exception:
-            steps.append(("scoped_drafts", False))
-
     rows = fetch()
     steps.append(("fetch_review", len(rows)))
     accepted = accepted_ids(rows)
 
     if not accepted:
+        # U7: scoped-change drafting remains opt-in and best-effort on quiet
+        # ticks. Review classification comes first so an accepted apply can run
+        # its deploy guard before any unrelated drafting mutation.
+        if do_scoped is not None and not dry_run:
+            try:
+                sok, _stail = do_scoped()
+                steps.append(("scoped_drafts", sok))
+            except Exception:
+                steps.append(("scoped_drafts", False))
         hb = heartbeat(True, 0)
         steps.append(("heartbeat", {"ok": True, "applied": 0}))
         # Session-end trigger (a): a quiet tick past the idle window over an
@@ -801,6 +1077,14 @@ def run(*, api_base, token, branch=DEFAULT_DEPLOY_BRANCH, dry_run=False,
         print("[daemon] DRY-RUN: would run apply engine, rebuild, deploy %s, heartbeat"
               % branch, file=out)
         return DaemonResult(len(accepted), batch_id, "dry_run", {}, False, steps)
+
+    # The apply engine itself performs a DEV deployment under APPLY_DEPLOY=1,
+    # followed by this daemon's authoritative deploy_dev call. Authorize the
+    # whole deployment-bearing transaction before touching the checkout so a
+    # refusal leaves the accepted rows available for the next tick.
+    refused = deploy_refusal(batch_id)
+    if refused is not None:
+        return refused
 
     # 0) Clear benign GENERATED-output churn (site/.build-stamp.json carries the
     #    HEAD sha, so the last tick's rebuild left it dirty). The engine's
@@ -945,8 +1229,8 @@ def main(argv=None):
         print("[daemon] ERROR: %s" % exc, file=sys.stderr)
         return 2
 
-    # Non-zero only on a genuine apply/rebuild/deploy failure (so systemd marks the
-    # unit failed and the alert already fired). No-op + applied are both success.
+    # Non-zero on a genuine apply/rebuild/deploy failure or a fail-closed stale-
+    # checkout refusal (the alert already fired). No-op + applied are successes.
     return 0 if result.reason in ("no_accepted", "applied", "dry_run") else 1
 
 

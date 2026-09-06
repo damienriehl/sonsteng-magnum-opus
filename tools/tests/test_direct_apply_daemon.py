@@ -15,6 +15,7 @@ import datetime
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -42,6 +43,7 @@ class Recorder:
         self.calls = []
         self.heartbeats = []
         self.notified = None
+        self.deploy_refusals = []
         self.editorial_batch = None
 
     def fetch(self):
@@ -70,6 +72,10 @@ class Recorder:
         self.calls.append("notify")
         self.notified = list(ids)
 
+    def notify_deploy_refusal(self, status):
+        self.calls.append("notify_deploy_refusal")
+        self.deploy_refusals.append(status)
+
     def editorial(self, batch_id):
         self.calls.append("editorial")
         self.editorial_batch = batch_id
@@ -81,9 +87,44 @@ def _run(rec, **kw):
         now=NOW, fetch=rec.fetch, apply_engine=rec.apply_engine,
         do_rebuild=rec.rebuild, do_deploy=rec.deploy, heartbeat=rec.heartbeat,
         notify=rec.notify, editorial=rec.editorial, out=io.StringIO(),
+        deploy_guard=lambda _branch: dad.DeployCheckoutStatus(0),
+        deploy_refusal_notify=rec.notify_deploy_refusal,
     )
     defaults.update(kw)
     return dad.run(**defaults)
+
+
+def _git(td, *args, check=True):
+    return subprocess.run(
+        ["git", *args], cwd=td, check=check, capture_output=True, text=True)
+
+
+def _stale_remote_fixture(root, branch="main"):
+    """Local checkout/cache stay at A while a bare upstream advances to B."""
+    remote = os.path.join(root, "remote.git")
+    seed = os.path.join(root, "seed")
+    checkout = os.path.join(root, "checkout")
+    writer = os.path.join(root, "writer")
+    _git(root, "init", "-q", "--bare", remote)
+    _git(root, "init", "-q", seed)
+    _git(seed, "config", "user.email", "test@example.invalid")
+    _git(seed, "config", "user.name", "Test")
+    _git(seed, "commit", "--allow-empty", "-q", "-m", "A")
+    _git(seed, "branch", "-m", branch)
+    _git(seed, "remote", "add", "origin", remote)
+    _git(seed, "push", "-q", "-u", "origin", branch)
+    _git(root, "clone", "-q", "--shared", "--branch", branch, remote, checkout)
+    _git(root, "clone", "-q", "--shared", "--branch", branch, remote, writer)
+    _git(writer, "config", "user.email", "test@example.invalid")
+    _git(writer, "config", "user.name", "Test")
+    local_a = _git(checkout, "rev-parse", "refs/heads/" + branch).stdout.strip()
+    cached_a = _git(
+        checkout, "rev-parse", "refs/remotes/origin/" + branch).stdout.strip()
+    _git(writer, "commit", "--allow-empty", "-q", "-m", "B")
+    remote_b = _git(writer, "rev-parse", "HEAD").stdout.strip()
+    _git(writer, "push", "-q", "origin", branch)
+    assert local_a == cached_a and remote_b != local_a
+    return checkout, remote, local_a, remote_b
 
 
 class TestAcceptedFilter(unittest.TestCase):
@@ -95,6 +136,517 @@ class TestAcceptedFilter(unittest.TestCase):
 
     def test_skips_rows_without_id(self):
         self.assertEqual(dad.accepted_ids([{"status": "accepted"}]), [])
+
+
+class TestDeployCheckoutGuard(unittest.TestCase):
+    def test_symbolic_tracking_ref_refuses_without_moving_local_branch(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, local_a, _remote_b = _stale_remote_fixture(d)
+            tracking_ref = "refs/remotes/origin/main"
+            _git(checkout, "symbolic-ref", tracking_ref, "refs/heads/main")
+
+            status = dad.checkout_deploy_status(checkout, branch="main")
+
+            self.assertEqual(status.reason, "upstream_unresolvable")
+            self.assertFalse(status.deployable)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/heads/main").stdout.strip(), local_a)
+
+    def test_tracking_ref_inspection_error_refuses_without_fetch(self):
+        fetch_calls = []
+
+        def git(args):
+            if args in (["check-ref-format", "refs/heads/deploy"],
+                        ["show-ref", "--verify", "--quiet", "refs/heads/deploy"],
+                        ["check-ref-format", "refs/remotes/origin/deploy"]):
+                return 0, ""
+            if args == ["config", "--get", "branch.deploy.remote"]:
+                return 0, "origin\n"
+            if args == ["config", "--get", "branch.deploy.merge"]:
+                return 0, "refs/heads/deploy\n"
+            if args == ["for-each-ref", "--format=%(upstream)",
+                        "refs/heads/deploy"]:
+                return 0, "refs/remotes/origin/deploy\n"
+            if args == ["symbolic-ref", "--quiet", "refs/remotes/origin/deploy"]:
+                return 2, "inspection failed"
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        status = dad.checkout_deploy_status(
+            "/repo", branch="deploy", git=git,
+            fetch=lambda args: fetch_calls.append(args))
+
+        self.assertEqual(status.reason, "upstream_unresolvable")
+        self.assertFalse(status.deployable)
+        self.assertEqual(fetch_calls, [])
+
+    def test_stale_cached_upstream_fetches_then_apply_refuses(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, cached_a, remote_b = _stale_remote_fixture(d)
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(
+                rec, state_path=os.path.join(d, "state.json"), branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "deploy_refused")
+            self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+            status = rec.deploy_refusals[0]
+            self.assertEqual(status.reason, "behind")
+            self.assertEqual(status.behind, 1)
+            self.assertFalse(status.deployable)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                remote_b)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/heads/main").stdout.strip(), cached_a)
+
+    def test_stale_cached_upstream_fetch_failure_refuses_apply(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, cached_a, _remote_b = _stale_remote_fixture(d)
+            missing_remote = os.path.join(d, "missing.git")
+            _git(checkout, "remote", "set-url", "origin", missing_remote)
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(
+                rec, state_path=os.path.join(d, "state.json"), branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "deploy_refused")
+            status = rec.deploy_refusals[0]
+            self.assertEqual(status.reason, "fetch_failed")
+            self.assertNotEqual(status.fetch_rc, 0)
+            self.assertTrue(status.fetch_stderr)
+            self.assertLessEqual(len(status.fetch_stderr), dad.FETCH_STDERR_LIMIT)
+            self.assertFalse(status.deployable)
+            self.assertNotIn("apply", rec.calls)
+            self.assertEqual(
+                _git(checkout, "rev-parse", "refs/remotes/origin/main").stdout.strip(),
+                cached_a)
+
+    def test_up_to_date_after_fetch_allows_apply(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, remote_b = _stale_remote_fixture(d)
+            _git(checkout, "reset", "-q", "--hard", remote_b)
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(
+                rec, state_path=os.path.join(d, "state.json"), branch="main",
+                deploy_guard=lambda branch: dad.checkout_deploy_status(
+                    checkout, branch=branch))
+
+            self.assertEqual(res.reason, "applied")
+            self.assertEqual(rec.deploy_refusals, [])
+            self.assertIn("deploy:main", rec.calls)
+
+    def test_env_selected_branch_is_fetched_and_compared_for_apply(self):
+        selected = "release/env-selected"
+        with tempfile.TemporaryDirectory() as d:
+            checkout, remote, cached_a, remote_b = _stale_remote_fixture(
+                d, branch=selected)
+            remote_name = "deploy-upstream"
+            merge_ref = "refs/heads/releases/canonical"
+            tracking_ref = "refs/remotes/deploy-upstream/releases/canonical"
+            _git(remote, "update-ref", merge_ref, remote_b)
+            _git(checkout, "remote", "rename", "origin", remote_name)
+            _git(checkout, "config", "branch.%s.merge" % selected, merge_ref)
+            _git(checkout, "update-ref", tracking_ref, cached_a)
+            git_calls = []
+            fetch_calls = []
+
+            def git(args):
+                git_calls.append(args)
+                return dad._git(args, checkout)
+
+            def fetch(args):
+                fetch_calls.append(args)
+                return dad._fetch_git(args, checkout)
+
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            with mock.patch.dict(
+                    os.environ, {dad.ENV_DEPLOY_BRANCH: selected}, clear=True), \
+                    mock.patch.object(dad, "run") as run:
+                def exercise_selected_branch(**kwargs):
+                    self.assertEqual(kwargs["branch"], selected)
+                    status = dad.checkout_deploy_status(
+                        checkout, branch=kwargs["branch"], git=git, fetch=fetch)
+                    rec.notify_deploy_refusal(status)
+                    return dad.DaemonResult(
+                        0, "batch-1", "deploy_refused", {}, False, [])
+
+                run.side_effect = exercise_selected_branch
+                self.assertEqual(dad.main(["--no-lock"]), 1)
+
+            self.assertEqual(fetch_calls, [[
+                "fetch", "--no-tags", "--no-prune", remote_name,
+                merge_ref + ":" + tracking_ref,
+            ]])
+            self.assertIn([
+                "rev-list", "--count",
+                "refs/heads/release/env-selected.."
+                "refs/remotes/deploy-upstream/releases/canonical",
+            ], git_calls)
+            self.assertEqual(rec.deploy_refusals[0].reason, "behind")
+
+    def test_fetch_exceptions_refuse_with_bounded_diagnostics(self):
+        cases = (
+            (subprocess.TimeoutExpired(
+                cmd=["git", "fetch"], timeout=1, stderr=b"timeout-detail"), 124),
+            (OSError("transport unavailable"), 127),
+        )
+        for raised, expected_rc in cases:
+            with self.subTest(exception=type(raised).__name__), \
+                    tempfile.TemporaryDirectory() as d:
+                checkout, _remote, _cached_a, _remote_b = _stale_remote_fixture(d)
+
+                def fetch(_args, error=raised):
+                    raise error
+
+                status = dad.checkout_deploy_status(
+                    checkout, branch="main", fetch=fetch, fetch_timeout=1)
+
+                self.assertEqual(status.reason, "fetch_failed")
+                self.assertEqual(status.fetch_rc, expected_rc)
+                self.assertTrue(status.fetch_stderr)
+                self.assertLessEqual(len(status.fetch_stderr), dad.FETCH_STDERR_LIMIT)
+                self.assertFalse(status.deployable)
+
+        timeout = subprocess.TimeoutExpired(
+            cmd=["git", "fetch"], timeout=1, stderr=b"x" * 1000)
+        with mock.patch.object(dad.subprocess, "run", side_effect=timeout):
+            rc, stderr = dad._fetch_git(["fetch"], "/repo", timeout=1)
+        self.assertEqual(rc, 124)
+        self.assertLessEqual(len(stderr), dad.FETCH_STDERR_LIMIT)
+        self.assertIn("timed out", stderr)
+
+    def test_deployed_branch_current_deploys_as_before(self):
+        calls = []
+
+        def git(args):
+            calls.append(args)
+            if args == ["check-ref-format", "refs/heads/feat/canonical-docs"]:
+                return 0, ""
+            if args == ["show-ref", "--verify", "--quiet",
+                        "refs/heads/feat/canonical-docs"]:
+                return 0, ""
+            if args == ["config", "--get",
+                        "branch.feat/canonical-docs.remote"]:
+                return 0, "origin\n"
+            if args == ["config", "--get",
+                        "branch.feat/canonical-docs.merge"]:
+                return 0, "refs/heads/feat/canonical-docs\n"
+            if args == ["for-each-ref", "--format=%(upstream)",
+                        "refs/heads/feat/canonical-docs"]:
+                return 0, "refs/remotes/origin/feat/canonical-docs\n"
+            if args in (["check-ref-format", "refs/heads/feat/canonical-docs"],
+                        ["check-ref-format",
+                         "refs/remotes/origin/feat/canonical-docs"]):
+                return 0, ""
+            if args == ["rev-list", "--count", "refs/heads/feat/canonical-docs.."
+                        "refs/remotes/origin/feat/canonical-docs"]:
+                return 0, "0\n"
+            if args == ["symbolic-ref", "--quiet", "HEAD"]:
+                return 0, "refs/heads/feat/canonical-docs\n"
+            if args == ["symbolic-ref", "--quiet",
+                        "refs/remotes/origin/feat/canonical-docs"]:
+                return 1, ""
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        def fetch(args):
+            calls.append(args)
+            return 0, ""
+
+        status = dad.checkout_deploy_status(
+            "/repo", branch="feat/canonical-docs", git=git, fetch=fetch)
+        self.assertEqual(status, dad.DeployCheckoutStatus(0))
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       deploy_guard=lambda branch: (
+                           self.assertEqual(branch, "feat/canonical-docs") or status))
+
+        self.assertEqual(res.reason, "applied")
+        self.assertEqual(
+            rec.calls,
+            ["fetch", "apply", "rebuild", "deploy:feat/canonical-docs", "heartbeat"])
+        self.assertEqual(rec.deploy_refusals, [])
+        self.assertEqual(calls[-1], ["symbolic-ref", "--quiet", "HEAD"])
+
+    def test_deployed_branch_behind_while_head_current_refuses(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, remote_b = _stale_remote_fixture(
+                d, branch="stale-deploy")
+            _git(checkout, "branch", "current-head", remote_b)
+            _git(checkout, "checkout", "-q", "current-head")
+            _git(checkout, "push", "-q", "-u", "origin", "current-head")
+
+            self.assertEqual(
+                dad.checkout_deploy_status(checkout, branch="current-head"),
+                dad.DeployCheckoutStatus(0))
+            status = dad.checkout_deploy_status(checkout, branch="stale-deploy")
+            self.assertEqual(status, dad.DeployCheckoutStatus(1))
+
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       branch="stale-deploy",
+                       deploy_guard=lambda branch: dad.checkout_deploy_status(
+                           checkout, branch=branch))
+
+        self.assertEqual(res.reason, "deploy_refused")
+        self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+        self.assertEqual(rec.heartbeats, [{"ok": False, "applied": 0}])
+        self.assertEqual(rec.deploy_refusals, [status])
+        self.assertIsNone(rec.notified)
+
+    def test_different_current_deployed_branch_and_head_refuse(self):
+        def git(args):
+            if args[0] == "check-ref-format":
+                return 0, ""
+            if args[:3] == ["show-ref", "--verify", "--quiet"]:
+                return 0, ""
+            if args[:2] == ["for-each-ref", "--format=%(upstream)"]:
+                return 0, "refs/remotes/origin/deploy\n"
+            if args == ["symbolic-ref", "--quiet", "HEAD"]:
+                return 0, "refs/heads/checked-out\n"
+            if args[:2] == ["rev-list", "--count"]:
+                return 0, "0\n"
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        status = dad.checkout_deploy_status("/repo", branch="deploy", git=git)
+        self.assertEqual(status, dad.DeployCheckoutStatus())
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       branch="deploy", deploy_guard=lambda _branch: status)
+
+        self.assertEqual(res.reason, "deploy_refused")
+        self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+
+    def test_missing_branch_prefix_does_not_resolve_descendant(self):
+        with tempfile.TemporaryDirectory() as d:
+            def git(*args):
+                return subprocess.run(
+                    ["git", *args], cwd=d, check=True, capture_output=True, text=True)
+
+            git("init", "-q")
+            git("config", "user.email", "test@example.invalid")
+            git("config", "user.name", "Test")
+            git("commit", "--allow-empty", "-m", "base")
+            git("branch", "-m", "release/v2")
+            git("remote", "add", "origin", ".")
+            current = git("rev-parse", "HEAD").stdout.strip()
+            git("update-ref", "refs/remotes/origin/release/v2", current)
+            git("config", "branch.release/v2.remote", "origin")
+            git("config", "branch.release/v2.merge", "refs/heads/release/v2")
+
+            self.assertEqual(
+                dad.checkout_deploy_status(d, branch="release"),
+                dad.DeployCheckoutStatus())
+
+    def test_unresolvable_deployed_branch_refuses(self):
+        calls = []
+
+        def git(args):
+            calls.append(args)
+            if args == ["check-ref-format", "refs/heads/missing-deploy"]:
+                return 0, ""
+            if args == ["show-ref", "--verify", "--quiet",
+                        "refs/heads/missing-deploy"]:
+                return 1, ""
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        status = dad.checkout_deploy_status(
+            "/repo", branch="missing-deploy", git=git)
+        self.assertEqual(
+            status, dad.DeployCheckoutStatus())
+
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            res = _run(rec, state_path=os.path.join(d, "state.json"),
+                       branch="missing-deploy",
+                       deploy_guard=lambda _branch: status)
+
+        self.assertEqual(res.reason, "deploy_refused")
+        self.assertNotIn("apply", rec.calls)
+        self.assertFalse(any(call.startswith("deploy:") for call in rec.calls))
+        self.assertEqual(rec.deploy_refusals, [status])
+
+    def test_partially_configured_upstream_refuses_without_fallback(self):
+        calls = []
+
+        def git(args):
+            calls.append(args)
+            if args in (["check-ref-format", "refs/heads/deploy"],
+                        ["show-ref", "--verify", "--quiet", "refs/heads/deploy"]):
+                return 0, ""
+            if args == ["config", "--get", "branch.deploy.remote"]:
+                return 0, "origin\n"
+            if args == ["config", "--get", "branch.deploy.merge"]:
+                return 1, ""
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        self.assertEqual(
+            dad.checkout_deploy_status("/repo", branch="deploy", git=git),
+            dad.DeployCheckoutStatus())
+        self.assertFalse(any(call[0] == "fetch" for call in calls))
+
+    def test_both_upstream_settings_unset_fall_back_to_origin_branch(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, remote_b = _stale_remote_fixture(d)
+            _git(checkout, "config", "--unset", "branch.main.remote")
+            _git(checkout, "config", "--unset", "branch.main.merge")
+
+            status = dad.checkout_deploy_status(checkout, branch="main")
+
+            self.assertEqual(status.behind, 1)
+            self.assertEqual(status.reason, "behind_fallback_origin")
+            self.assertTrue(status.upstream_fallback)
+            self.assertFalse(status.deployable)
+
+            _git(checkout, "reset", "-q", "--hard", remote_b)
+            current = dad.checkout_deploy_status(checkout, branch="main")
+            self.assertEqual(current.reason, "current_fallback_origin")
+            self.assertTrue(current.deployable)
+
+    def test_fallback_fetch_failure_reason_includes_origin_suffix(self):
+        with tempfile.TemporaryDirectory() as d:
+            checkout, _remote, _cached_a, _remote_b = _stale_remote_fixture(d)
+            _git(checkout, "config", "--unset", "branch.main.remote")
+            _git(checkout, "config", "--unset", "branch.main.merge")
+            _git(checkout, "remote", "set-url", "origin", os.path.join(d, "missing.git"))
+
+            status = dad.checkout_deploy_status(checkout, branch="main")
+
+            self.assertEqual(status.reason, "fetch_failed_fallback_origin")
+            self.assertEqual(status.failure_reason, "fetch_failed")
+            self.assertTrue(status.upstream_fallback)
+            self.assertFalse(status.deployable)
+
+    def test_local_repository_upstream_refuses_without_fetch(self):
+        def git(args):
+            if args in (["check-ref-format", "refs/heads/deploy"],
+                        ["show-ref", "--verify", "--quiet", "refs/heads/deploy"],
+                        ["check-ref-format", "refs/heads/upstream"]):
+                return 0, ""
+            if args == ["config", "--get", "branch.deploy.remote"]:
+                return 0, ".\n"
+            if args == ["config", "--get", "branch.deploy.merge"]:
+                return 0, "refs/heads/upstream\n"
+            if args == ["for-each-ref", "--format=%(upstream)",
+                        "refs/heads/deploy"]:
+                return 0, "refs/heads/upstream\n"
+            self.fail("unexpected git invocation: %r" % (args,))
+
+        def fetch(_args):
+            self.fail("a local branch ref must never be a fetch destination")
+
+        status = dad.checkout_deploy_status(
+            "/repo", branch="deploy", git=git, fetch=fetch)
+        self.assertEqual(status.reason, "upstream_unresolvable")
+        self.assertFalse(status.deployable)
+
+    def test_each_refusal_preserves_state_and_next_run_can_resume(self):
+        initial = {"last_batch_id": "older-batch", "batch_reviewed": False,
+                   "last_applied_ts": "2026-07-19T17:59:00+00:00"}
+        current = dad.DeployCheckoutStatus(0)
+        for refusal in (dad.DeployCheckoutStatus(4), dad.DeployCheckoutStatus()):
+            with self.subTest(reason=refusal.reason), tempfile.TemporaryDirectory() as d:
+                state_path = os.path.join(d, "state.json")
+                dad.save_state(state_path, initial)
+
+                refused = Recorder(rows=[row("aaaaaaaa")])
+                first = _run(refused, state_path=state_path,
+                             deploy_guard=lambda _branch: refusal)
+                self.assertEqual(first.reason, "deploy_refused")
+                self.assertEqual(dad.load_state(state_path), initial)
+
+                resumed = Recorder(rows=[row("aaaaaaaa")])
+                second = _run(resumed, state_path=state_path,
+                              now=NOW + datetime.timedelta(minutes=2),
+                              deploy_guard=lambda _branch: current)
+                state = dad.load_state(state_path)
+
+                self.assertEqual(second.reason, "applied")
+                self.assertEqual(resumed.calls.count("apply"), 1)
+                self.assertEqual(state["last_batch_id"], second.batch_id)
+                self.assertFalse(state["batch_reviewed"])
+
+    def test_refusal_notification_contains_only_checkout_metadata(self):
+        published = []
+        status = dad.DeployCheckoutStatus(39)
+        dad.notify_deploy_refusal(
+            status, topic_resolver=lambda: "topic",
+            publish=lambda *args, **kwargs: published.append((args, kwargs)))
+
+        args, kwargs = published[0]
+        self.assertEqual(args[0], "topic")
+        self.assertIn("refused to deploy", args[2])
+        self.assertIn("behind its recorded upstream by 39 commits", args[2])
+        self.assertNotIn("data/", args[2])
+        self.assertEqual(kwargs["priority"], "high")
+
+    def test_fetch_failure_notification_excludes_stderr(self):
+        published = []
+        status = dad.DeployCheckoutStatus(
+            failure_reason="fetch_failed", fetch_rc=128,
+            fetch_stderr="sensitive diagnostic /private/path",
+            upstream_fallback=True)
+        dad.notify_deploy_refusal(
+            status, topic_resolver=lambda: "topic",
+            publish=lambda *args, **kwargs: published.append((args, kwargs)))
+
+        args, kwargs = published[0]
+        self.assertEqual(status.reason, "fetch_failed_fallback_origin")
+        self.assertIn("git fetch rc 128", args[2])
+        self.assertNotIn("sensitive diagnostic", args[2])
+        self.assertNotIn("/private/path", args[2])
+        self.assertEqual(kwargs["priority"], "high")
+
+    def test_fallback_fetch_failure_uses_fetch_specific_refusal_detail(self):
+        status = dad.DeployCheckoutStatus(
+            failure_reason="fetch_failed", fetch_rc=128,
+            fetch_stderr="sensitive diagnostic /private/path",
+            upstream_fallback=True)
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"), out=output,
+                deploy_guard=lambda _branch: status)
+
+        self.assertEqual(result.reason, "deploy_refused")
+        self.assertIn("upstream fetch failed (rc 128)", output.getvalue())
+        self.assertNotIn("upstream is unresolvable", output.getvalue())
+
+    def test_refusal_steps_contain_only_normalized_checkout_metadata(self):
+        status = dad.DeployCheckoutStatus(
+            failure_reason="fetch_failed", fetch_rc=128,
+            fetch_stderr="sensitive diagnostic /private/path")
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                deploy_guard=lambda _branch: status)
+
+        expected = {
+            "reason": "fetch_failed",
+            "deployable": False,
+            "behind": None,
+            "upstream_fallback": False,
+            "fetch_rc": 128,
+        }
+        payloads = dict(result.steps)
+        self.assertEqual(payloads["deploy_guard"], expected)
+        self.assertEqual(payloads["notify_deploy_refusal"], expected)
+        self.assertNotIn("fetch_stderr", payloads["deploy_guard"])
+        self.assertNotIn("fetch_stderr", payloads["notify_deploy_refusal"])
+
+    def test_main_maps_deploy_refusal_to_exit_one(self):
+        refused = dad.DaemonResult(
+            0, "batch-1", "deploy_refused", {"sent": True}, False, [])
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch.object(dad, "run", return_value=refused):
+            self.assertEqual(dad.main(["--no-lock"]), 1)
 
 
 class TestRevertJournalTransport(unittest.TestCase):
@@ -138,8 +690,59 @@ class TestNoOpPath(unittest.TestCase):
         self.assertEqual(rec.calls, ["fetch", "heartbeat"])  # NO apply/rebuild/deploy
         self.assertEqual(rec.heartbeats, [{"ok": True, "applied": 0}])
 
+    def test_no_accepted_tick_runs_scoped_drafting_after_review_fetch(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("bbbbbbbb", "pending")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped)
+
+        self.assertEqual(result.reason, "no_accepted")
+        self.assertEqual(rec.calls, ["fetch", "scoped", "heartbeat"])
+
 
 class TestApplyBatchOrdering(unittest.TestCase):
+    def test_apply_refusal_skips_scoped_drafting(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped,
+                deploy_guard=lambda _branch: dad.DeployCheckoutStatus(1))
+
+        self.assertEqual(result.reason, "deploy_refused")
+        self.assertEqual(rec.calls, ["fetch", "heartbeat", "notify_deploy_refusal"])
+        self.assertNotIn("scoped", rec.calls)
+
+    def test_apply_success_skips_scoped_drafting(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = Recorder(rows=[row("aaaaaaaa")])
+
+            def do_scoped():
+                rec.calls.append("scoped")
+                return True, ""
+
+            result = _run(
+                rec, state_path=os.path.join(d, "state.json"),
+                do_scoped=do_scoped,
+                deploy_guard=lambda _branch: dad.DeployCheckoutStatus(0))
+
+        self.assertEqual(result.reason, "applied")
+        self.assertEqual(
+            rec.calls,
+            ["fetch", "apply", "rebuild", "deploy:feat/canonical-docs", "heartbeat"])
+        self.assertNotIn("scoped", rec.calls)
+
     def test_order_apply_rebuild_deploy_heartbeat(self):
         with tempfile.TemporaryDirectory() as d:
             sp = os.path.join(d, "state.json")

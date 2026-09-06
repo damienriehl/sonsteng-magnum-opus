@@ -88,6 +88,60 @@ creates the worktree if it is missing, builds the gitignored generated bundles
 is on a branch other than `APPLY_DEPLOY_BRANCH`, and writes the units. Override the
 location with `SONSTENG_DAEMON_ROOT=…`.
 
+### Stale-checkout deploy guard
+
+Before either deployment-bearing transaction, the daemon resolves the short local
+branch name selected by `--branch` / `APPLY_DEPLOY_BRANCH`, resolves that branch's
+recorded upstream with `git for-each-ref`, and runs `git rev-list --count` between
+those fully qualified refs. This is the ref that matters to the final site publish:
+`deploy-dev.sh` receives the same branch argument and archives it with
+`git archive "$BRANCH"`.
+
+The configured deploy branch must also be the checked-out branch. Matching only
+the two branches' freshness is insufficient: two different branches can both be
+current against their own upstreams while containing different commits. The
+identity requirement is necessary because publication is not limited to the final
+site archive: the revert path's bare Wrangler command bundles the daemon checkout,
+and the apply engine's `APPLY_DEPLOY=1` site/Worker deploy builds a temporary
+worktree from canonical `HEAD`. Refusing a branch-name mismatch ensures the
+mutation, site archive, and Worker bundle all use one branch lineage.
+
+Zero for every required comparison permits the transaction. A positive count,
+configured/checked-out branch mismatch, invalid or missing local branch, detached
+`HEAD`, missing/unresolvable upstream, command failure, or malformed result refuses
+it before the apply engine or revert mutates the repository.
+
+A refusal posts an unhealthy heartbeat, exits the tick nonzero, and records only
+normalized metadata fields (`reason`, `deployable`, `behind`,
+`upstream_fallback`, and `fetch_rc`) in both refusal steps. Its metadata-only ntfy
+alert likewise never includes suggestion text, file content, paths, credentials,
+or raw Git output. Accepted suggestions remain accepted, and an approved or
+already-merged revert retains its journal phase, so a later tick can retry after
+an operator deliberately refreshes or repairs the daemon checkout.
+
+Before comparing, the guard proves that the fetch destination is a direct
+remote-tracking ref, then runs a bounded `--no-tags --no-prune` fetch of the
+selected branch's configured remote and merge ref; if both settings are absent it
+explicitly reports its `origin/<branch>` fallback. A symbolic destination, an
+inspection error, or any fetch failure refuses the transaction. A successful
+fetch updates only the direct remote-tracking ref—not the local deploy branch—so
+advancing the daemon checkout remains deliberate.
+
+There remains a narrow time-of-check-to-time-of-use window if another process moves
+a guarded ref after the comparison. Closing it requires publication from captured,
+immutable commit IDs (and coordinating the apply/revert mutations and Worker bundle
+source around those IDs), or a lock honored by every process that can move the refs;
+neither is a cheap local change to this daemon. The daemon flock prevents overlapping
+daemon ticks but cannot serialize unrelated Git processes, so this residual is
+documented rather than overstated as solved.
+
+An unchanged refusal continues to send a high-priority alert on every two-minute
+tick. Suppression was intentionally not added: this process starts afresh each tick,
+so reliable deduplication would require new persistent bookkeeping on a path whose
+central invariant is that refusal mutates no apply/revert state. Repeated alerts are
+noisy, but they keep an unsafe, still-pending publication visible and cannot hide a
+new refusal reason.
+
 **Regenerable-site guard.** `build_site.py` stamps the current HEAD sha into
 `site/platform/data/.build-stamp.json` (traceability only — deliberately not part of
 the parity hash), so the tick's post-apply rebuild always leaves that one tracked
@@ -104,26 +158,32 @@ still stops the engine, which is the point.
 Each tick, under a host-local **daemon flock** (`.locks/daemon.lock`, distinct
 from and cooperating with the engine's `.locks/apply.lock`):
 
-1. `GET {EDIT_API_BASE}/review` (admin) → filter `status == "accepted"`. This is
+1. Drain approved revert requests first. Each deployment-bearing revert is guarded
+   immediately before its repository mutation; refusal leaves its journal state
+   retryable and ends the tick.
+2. `GET {EDIT_API_BASE}/review` (admin) → filter `status == "accepted"`. This is
    the auto-accept output the worker lane emits; `/review` already surfaces
    `accepted`, so the daemon works with **today's** API shape.
-2. **No accepted** → best-effort heartbeat `{ok:true, applied:0, ts}` and stop.
-   The 2-min cadence **is** the flush — no withholding logic (SL3). If a batch has
-   been idle ≥30 min and is still unreviewed, this quiet tick also dispatches the
-   **session-end** editorial pass and marks the batch reviewed.
-3. **Any accepted** → subprocess `tools/apply_suggestions.py --batch-id … --base-url …`
+3. **No accepted** → run best-effort scoped drafting when configured, then post
+   heartbeat `{ok:true, applied:0, ts}` and stop. The 2-min cadence **is** the
+   flush — no withholding logic (SL3). If a batch has been idle ≥30 min and is
+   still unreviewed, this quiet tick also dispatches the **session-end** editorial
+   pass and marks the batch reviewed.
+4. **Any accepted** → run the stale-checkout deploy guard immediately after
+   classification. Refusal ends the tick before scoped drafting or any apply-path
+   mutation. On success, run `tools/apply_suggestions.py --batch-id … --base-url …`
    with `APPLY_DEPLOY=1`. The existing engine (unmodified) patches canonical, runs
    the validator + parity gates, marks `applied` / `needs_human` / `accepted_blocked`
    via `/finalize`, and fast-forward-merges into canonical.
-4. **Authoritative publish**: `build_site.py` rebuild, then
+5. **Authoritative publish**: `build_site.py` rebuild, then
    `deploy/deploy-dev.sh <branch>` with the branch passed **explicitly** (default
    `feat/canonical-docs`). **DEV only** — `deploy-dev.sh` targets the Hetzner DEV
    box and can never reach PROD.
-5. `POST {EDIT_API_BASE}/heartbeat` (admin Bearer) `{ok:true, applied:N, ts}`.
+6. `POST {EDIT_API_BASE}/heartbeat` (admin Bearer) `{ok:true, applied:N, ts}`.
    The endpoint is being added by the worker lane; the daemon sends **best-effort
    and tolerates 404** until that merges (a 404/unreachable heartbeat never gates
    the apply).
-6. After a successful accepted batch only, read the exact completed production
+7. After a successful accepted batch only, read the exact completed production
    frontier through the separate `release_observer` bearer and run the existing
    consistency checker from that SHA. Persist one text-free `legacy_u18` state
    record as `clean`, `flagged`, `missing-baseline`, `bad-revision`, or
@@ -132,7 +192,7 @@ from and cooperating with the engine's `.locks/apply.lock`):
    authorize, or publish a production release. Missing observer provisioning and
    checker failures are visible and nonfatal to the already-completed DEV apply.
    No-accepted ticks and `--dry-run` never invoke or record U18.
-7. On **any** apply/rebuild/deploy failure: heartbeat `{ok:false}` + an **ntfy
+8. On **any** apply/rebuild/deploy failure: heartbeat `{ok:false}` + an **ntfy
    alert** naming the failed suggestion **IDs only** (never content), so a stalled
    home box is never silent (SL1/SL6).
 
