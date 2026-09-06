@@ -248,7 +248,7 @@ function validateNormalizedFrames(frames) {
   return { done, deltaCount, usage: normalizedUsage(done.usage) };
 }
 
-async function readNormalizedStream(response, secrets) {
+export async function readSSEFrames(response, secrets) {
   if (!response.body || typeof response.body.getReader !== "function") {
     fail("stream_transport", "The Worker response did not expose a readable stream body.");
   }
@@ -285,7 +285,11 @@ async function readNormalizedStream(response, secrets) {
     fail("stream_transport", "The Worker response body ended unexpectedly.");
   }
   if (pending.trim()) fail("sse_contract", "The stream ended with an incomplete SSE frame.");
-  return validateNormalizedFrames(frames);
+  return frames;
+}
+
+async function readNormalizedStream(response, secrets) {
+  return validateNormalizedFrames(await readSSEFrames(response, secrets));
 }
 
 export async function request(fetchImpl, url, init, code, timeoutMs = REQUEST_TIMEOUT_MS) {

@@ -26,7 +26,7 @@ The normalized SSE event contract is provider-independent:
 - `delta` carries `{ "text": "..." }`.
 - `done` carries the same successful reply payload as the JSON path, after
   terminal provider usage and server-side budget settlement complete.
-- `error` carries the ordinary typed error envelope. A transport, terminal
+- `error` carries `{ "message": "..." }`. A transport, terminal
   frame, or settlement failure emits no `done` and stores no partial replay.
 
 ### Live DEV streaming verification

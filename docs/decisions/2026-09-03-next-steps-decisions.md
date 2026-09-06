@@ -13,6 +13,10 @@ program. Damien chose the recommended option for each decision.
   `sonsteng-magnum-opus-2026-09-03-1053-next-steps-hygiene`, using the ask stem and question id as
   the durable identifiers. Answered September 3, 2026.
 
+- **H1:** Asked as cockpit ask
+  `sonsteng-magnum-opus-2026-09-05-1646-redteam-classifier-approach`, question id
+  `h1-classifier-approach`. Answered September 5, 2026.
+
 ## Decisions
 
 - **D1 `d1-dev-worker-redeploy`.**
@@ -51,6 +55,17 @@ program. Damien chose the recommended option for each decision.
   - **Question:** Promote the revalidation driver into `tools/` with a contract test?
   - **Chosen option:** "Yes, promote with a contract test"
   - **Authorized:** Promote the revalidation driver into `tools/` with a contract test.
+
+- **H1 `h1-classifier-approach`.**
+  - **Question:** Which classifier approach should govern automatic `PASS` after repeated
+    false-`PASS` findings?
+  - **Chosen option:** "Tiny auto-PASS grammar; everything else is REVIEW."
+  - **Reason:** Three review rounds each closed the named false-`PASS` cases and opened new ones.
+    Synonymy, quotation, negation scope, irony, and cross-sentence coreference defeat phrase
+    matching, so automatic `PASS` is limited to an intentionally tiny whole-response grammar and
+    every other free-form reply is `REVIEW` for a human read. Literal adoption continues to
+    `FAIL`, while `REVIEW` remains recorded and quoted without failing the run.
+  - **Decision date:** September 5, 2026.
 
 ## Current status
 

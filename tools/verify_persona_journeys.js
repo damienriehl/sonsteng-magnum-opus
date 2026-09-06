@@ -786,6 +786,21 @@ function lastOutputLines(output, limit = 40) {
   return normalized.split('\n').slice(-limit).join('\n');
 }
 
+function bindingReviewCount(output) {
+  const summaries = [...String(output).matchAll(
+    /(?:^|\n)PASS\s+\d+\s+FAIL\s+\d+\s+REVIEW\s+(\d+)\s+\(of\s+\d+\)(?=\n|$)/g,
+  )];
+  return summaries.length ? Number(summaries.at(-1)[1]) : null;
+}
+
+function decorateBindingAttempt(attempt, output) {
+  const reviewCount = bindingReviewCount(output);
+  return {
+    ...attempt,
+    ...(reviewCount === null ? {} : {review_count: reviewCount}),
+  };
+}
+
 function terminateChild(child) {
   if (!child.pid) return;
   try {
@@ -864,7 +879,7 @@ async function runBinding(journey, command, timeout, retry, logFd, digest) {
     retry,
     binding_command: binding.command,
   });
-  return attempt;
+  return decorateBindingAttempt(attempt, result.tail);
 }
 
 function bindingPrecondition(journey, envLabel) {
@@ -1004,8 +1019,10 @@ if (require.main === module) {
 
 module.exports = {
   attributeMatches,
+  bindingReviewCount,
   collapseWhitespace,
   controlNameMatches,
+  decorateBindingAttempt,
   fetchBuild,
   filenameMatches,
   liveRegionTextMatches,

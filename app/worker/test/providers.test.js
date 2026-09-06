@@ -13,6 +13,7 @@ import {
   PROVIDER_TIMEOUT_MS,
   systemToString,
 } from "../src/providers/common.js";
+import { parseModelJson, validateDebriefScorecard } from "../src/validate.js";
 
 const CHAT = {
   system: { prefix: "SEGMENT-A-TEXT", tail: "PERSONA-TAIL" },
@@ -322,6 +323,35 @@ test("google complete surfaces max-token usage metadata in the normalized result
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("google MAX_TOKENS debrief response reproduces an unparseable validation failure offline", () => {
+  const { text } = google.parseResponse({
+    candidates: [{
+      finishReason: "MAX_TOKENS",
+      content: { parts: [{ text: '{"schema_version":"1.0.0","matter_id":"m00"' }] },
+    }],
+    usageMetadata: {
+      promptTokenCount: 5000,
+      candidatesTokenCount: 1200,
+      thoughtsTokenCount: 850,
+    },
+  });
+
+  assert.equal(parseModelJson(text), null);
+});
+
+test("google JSON-mode syntax without the debrief shape still fails structural validation", () => {
+  const { text } = google.parseResponse({
+    candidates: [{
+      finishReason: "STOP",
+      content: { parts: [{ text: '{"schema_version":"1.0.0"}' }] },
+    }],
+  });
+  const parsed = parseModelJson(text);
+
+  assert.deepEqual(parsed, { schema_version: "1.0.0" });
+  assert.equal(validateDebriefScorecard(parsed).ok, false);
 });
 
 // ---- shared ------------------------------------------------------------------
