@@ -717,6 +717,16 @@ def test_preflight_routes_every_node_gate_through_startup_node() -> None:
     assert "NODE_BIN" not in source[source.index("find_chromium()") :]
 
 
+def _offline_redteam_registration_match(source: str) -> re.Match[str]:
+    match = re.search(
+        r'^run[\t ]+"offline red-team probe"[\t ]+run_offline_redteam_probe[\t ]*\n',
+        source,
+        re.MULTILINE,
+    )
+    assert match is not None
+    return match
+
+
 def _assert_single_offline_redteam_registration(source: str) -> None:
     headless_marker = "# ---- headless gates"
     browser_marker = "# ---- browser gates"
@@ -724,16 +734,37 @@ def _assert_single_offline_redteam_registration(source: str) -> None:
     assert source.count(browser_marker) == 1
     headless_start = source.index(headless_marker)
     browser_start = source.index(browser_marker, headless_start)
-    registrations = list(
-        re.finditer(
-            r'^run[\t ]+"offline red-team probe"[\t ]+run_offline_redteam_probe[\t ]*$',
-            source,
-            re.MULTILINE,
-        )
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            "-c",
+            textwrap.dedent(
+                """\
+                set -euo pipefail
+                declare -a recorded_names=()
+                declare -a recorded_commands=()
+                run() {
+                  recorded_names+=("$1")
+                  recorded_commands+=("$2")
+                }
+                source /dev/stdin >/dev/null
+                for ((index = 0; index < ${#recorded_names[@]}; index++)); do
+                  printf '%s\\t%s\\n' \
+                    "${recorded_names[index]}" "${recorded_commands[index]}"
+                done
+                """
+            ),
+        ],
+        input=source[headless_start:browser_start],
+        check=False,
+        capture_output=True,
+        text=True,
     )
-    assert len(registrations) == 1 and (
-        headless_start < registrations[0].start() < browser_start
-    ), (
+    assert result.returncode == 0, result.stdout + result.stderr
+    recorded = [tuple(line.split("\t", 1)) for line in result.stdout.splitlines()]
+    assert recorded.count(
+        ("offline red-team probe", "run_offline_redteam_probe")
+    ) == 1, (
         "preflight must contain exactly one executable top-level "
         '`run "offline red-team probe" run_offline_redteam_probe` registration'
     )
@@ -747,27 +778,40 @@ def test_preflight_registers_offline_redteam_probe_exactly_once() -> None:
 def test_offline_redteam_registration_contract_rejects_missing_or_duplicate_lines(
     registration_count: int,
 ) -> None:
-    registration = 'run "offline red-team probe" run_offline_redteam_probe\n'
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    match = _offline_redteam_registration_match(source)
     source = (
-        "# ---- headless gates\n"
-        + registration * registration_count
-        + "# ---- browser gates\n"
+        source[: match.start()]
+        + match.group(0) * registration_count
+        + source[match.end() :]
     )
+
     with pytest.raises(AssertionError, match="exactly one executable top-level"):
         _assert_single_offline_redteam_registration(source)
 
 
 def test_offline_redteam_registration_contract_rejects_line_in_uncalled_function(
 ) -> None:
-    registration = 'run "offline red-team probe" run_offline_redteam_probe\n'
-    source = (
-        "uncalled_probe_registration() {\n"
-        + registration
-        + "}\n"
-        + "# ---- headless gates\n"
-        + "# registration must execute here\n"
-        + "# ---- browser gates\n"
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    match = _offline_redteam_registration_match(source)
+    wrapped_registration = (
+        "uncalled_probe_registration() {\n  " + match.group(0) + "}\n"
     )
+    source = (
+        source[: match.start()] + wrapped_registration + source[match.end() :]
+    )
+
+    with pytest.raises(AssertionError, match="exactly one executable top-level"):
+        _assert_single_offline_redteam_registration(source)
+
+
+def test_offline_redteam_registration_contract_rejects_spoofed_output() -> None:
+    source = PREFLIGHT.read_text(encoding="utf-8")
+    match = _offline_redteam_registration_match(source)
+    spoofed_registration = (
+        "printf 'offline red-team probe\\trun_offline_redteam_probe\\n'\n"
+    )
+    source = source[: match.start()] + spoofed_registration + source[match.end() :]
 
     with pytest.raises(AssertionError, match="exactly one executable top-level"):
         _assert_single_offline_redteam_registration(source)
