@@ -27,6 +27,7 @@ APPLY_TIMER_UNIT = "sonsteng-apply.timer"
 USER_AGENT = "sonsteng-queue-proof/1.0"
 ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 WINDOW_OWNER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+CONTENT_LENGTH_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 ALLOWED_LEDGER_ORIGINS = frozenset(
     {"https://sonsteng-chat.damienriehl.workers.dev"}
 )
@@ -146,25 +147,12 @@ def _reject_duplicate_json_keys(pairs):
     return result
 
 
-def _get_json(url, bearer, opener, *, review=False):
-    headers = {
-        "Accept": "application/json",
-        "Authorization": "Bearer " + bearer,
-        "User-Agent": USER_AGENT,
-    }
-    if review:
-        headers["X-Edit-Request"] = "1"
+def _response_call(callback):
+    """Bound failures from one external response-lifecycle operation."""
     try:
-        request = urllib.request.Request(url, method="GET", headers=headers)
-        with opener(request, timeout=TIMEOUT_SECONDS) as response:
-            status = response.getcode()
-            if (
-                not isinstance(status, int)
-                or isinstance(status, bool)
-                or status != 200
-            ):
-                raise ProofError("http-status-invalid")
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
+        return callback()
+    except (ProofError, AssertionError):
+        raise
     except (
         TimeoutError,
         http.client.HTTPException,
@@ -174,14 +162,108 @@ def _get_json(url, bearer, opener, *, review=False):
         OSError,
     ) as exc:
         raise ProofError("http-unavailable") from exc
-    if len(raw) > MAX_RESPONSE_BYTES:
+    except Exception as exc:
+        raise ProofError("http-response-lifecycle") from exc
+
+
+def _declared_content_length(headers):
+    if not isinstance(headers, list) or not headers:
+        raise ProofError("http-response-framing-invalid")
+
+    content_lengths = []
+    transfer_encodings = []
+    content_encodings = []
+    for header in headers:
+        if not isinstance(header, tuple) or len(header) != 2:
+            raise ProofError("http-response-framing-invalid")
+        name, value = header
+        if not isinstance(name, str) or not name or not isinstance(value, str):
+            raise ProofError("http-response-framing-invalid")
+        normalized_name = name.casefold()
+        if normalized_name == "content-length":
+            content_lengths.append(value)
+        elif normalized_name == "transfer-encoding":
+            transfer_encodings.append(value)
+        elif normalized_name == "content-encoding":
+            content_encodings.append(value)
+
+    # This proof accepts only an identity body with one explicit length. That
+    # excludes ambiguous duplicate lengths, chunked framing, and transforms
+    # whose wire length would not describe the JSON bytes being validated.
+    if transfer_encodings or content_encodings or len(content_lengths) != 1:
+        raise ProofError("http-response-framing-invalid")
+    value = content_lengths[0]
+    if not value or not CONTENT_LENGTH_RE.fullmatch(value):
+        raise ProofError("http-response-framing-invalid")
+    if len(value) > len(str(MAX_RESPONSE_BYTES)):
         raise ProofError("http-response-too-large")
+    declared_length = int(value)
+    if declared_length > MAX_RESPONSE_BYTES:
+        raise ProofError("http-response-too-large")
+    return declared_length
+
+
+def _read_response(manager):
+    response = _response_call(lambda: manager.__enter__())
+    try:
+        status = _response_call(lambda: response.getcode())
+        if (
+            not isinstance(status, int)
+            or isinstance(status, bool)
+            or status != 200
+        ):
+            raise ProofError("http-status-invalid")
+        headers = _response_call(lambda: list(response.getheaders()))
+        declared_length = _declared_content_length(headers)
+        raw = _response_call(lambda: response.read(MAX_RESPONSE_BYTES + 1))
+        if not isinstance(raw, bytes):
+            raise ProofError("http-response-malformed")
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise ProofError("http-response-too-large")
+        if len(raw) != declared_length:
+            raise ProofError("http-response-framing-invalid")
+    except BaseException:
+        exception_type, exception, traceback = sys.exc_info()
+        try:
+            _response_call(
+                lambda: manager.__exit__(exception_type, exception, traceback)
+            )
+        except ProofError:
+            # Preserve the original verifier failure or defect. A secondary
+            # context-exit failure must not replace it.
+            pass
+        raise
+    else:
+        _response_call(lambda: manager.__exit__(None, None, None))
+    return raw
+
+
+def _get_json(url, bearer, opener, *, review=False):
+    headers = {
+        "Accept": "application/json",
+        "Authorization": "Bearer " + bearer,
+        "User-Agent": USER_AGENT,
+    }
+    if review:
+        headers["X-Edit-Request"] = "1"
+    request = _response_call(
+        lambda: urllib.request.Request(url, method="GET", headers=headers)
+    )
+    manager = _response_call(
+        lambda: opener(request, timeout=TIMEOUT_SECONDS)
+    )
+    raw = _read_response(manager)
     try:
         payload = json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_json_keys,
         )
-    except (UnicodeError, json.JSONDecodeError, RecursionError, TypeError) as exc:
+    except (
+        UnicodeError,
+        RecursionError,
+        TypeError,
+        ValueError,
+    ) as exc:
         raise ProofError("http-response-malformed") from exc
     if not isinstance(payload, dict):
         raise ProofError("http-response-malformed")

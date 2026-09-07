@@ -32,9 +32,14 @@ EMPTY_FRONTIER = {
 
 
 class Response:
-    def __init__(self, payload, *, status=200):
+    def __init__(self, payload, *, status=200, headers=None):
         self._body = json.dumps(payload).encode("utf-8")
         self._status = status
+        self._headers = (
+            [("Content-Length", str(len(self._body)))]
+            if headers is None
+            else headers
+        )
         self.read_calls = 0
 
     def __enter__(self):
@@ -50,12 +55,41 @@ class Response:
     def getcode(self):
         return self._status
 
+    def getheaders(self):
+        return list(self._headers)
+
 
 class RawResponse(Response):
-    def __init__(self, body, *, status=200):
+    def __init__(self, body, *, status=200, headers=None):
         self._body = body
         self._status = status
+        self._headers = (
+            [("Content-Length", str(len(self._body)))]
+            if headers is None
+            else headers
+        )
         self.read_calls = 0
+
+
+class BytesSocket:
+    def __init__(self, wire_bytes):
+        self._stream = io.BytesIO(wire_bytes)
+
+    def makefile(self, *_args, **_kwargs):
+        return self._stream
+
+
+def real_http_response(body, *, declared_length):
+    wire = (
+        b"HTTP/1.1 200 OK\r\n"
+        b"Content-Type: application/json\r\n"
+        + f"Content-Length: {declared_length}\r\n".encode("ascii")
+        + b"\r\n"
+        + body
+    )
+    response = http.client.HTTPResponse(BytesSocket(wire))
+    response.begin()
+    return response
 
 
 def write_apply_env(path):
@@ -135,6 +169,7 @@ def run_main(
     window_owner=WINDOW_OWNER,
     ledger_origin=LEDGER_ORIGIN,
     event_log=None,
+    raw_output=False,
 ):
     apply_env = tmp_path / "apply.env"
     observer_env = tmp_path / "observer.env"
@@ -179,7 +214,9 @@ def run_main(
         utc_now=utc_now,
         stdout=output,
     )
-    return code, json.loads(output.getvalue()), systemctl_calls
+    serialized = output.getvalue()
+    receipt = serialized if raw_output else json.loads(serialized)
+    return code, receipt, systemctl_calls
 
 
 def invoke(
@@ -396,7 +433,7 @@ def test_nonempty_publication_frontiers_fail_without_leaking_ids(tmp_path):
 
 
 def test_review_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
-    for status in (201, 202, 206):
+    for status in (201, 202, 203, 206):
         response = Response({"ok": True, "items": []}, status=status)
 
         code, receipt, _systemctl_calls = run_main(
@@ -411,7 +448,7 @@ def test_review_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
 
 
 def test_frontier_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
-    for status in (201, 202, 206):
+    for status in (201, 202, 203, 206):
         review_response = Response({"ok": True, "items": []})
         frontier_response = Response(
             {"ok": True, "context": EMPTY_FRONTIER}, status=status
@@ -432,6 +469,184 @@ def test_frontier_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
         assert receipt["proof_error"] == "http-status-invalid"
         assert review_response.read_calls == 1
         assert frontier_response.read_calls == 0
+
+
+def test_review_early_eof_with_real_http_response_returns_one_bounded_receipt(
+    tmp_path,
+):
+    body = json.dumps({"ok": True, "items": []}).encode("utf-8")
+    response = real_http_response(body, declared_length=len(body) + 64)
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return response
+        return Response({"ok": True, "context": EMPTY_FRONTIER})
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+
+
+def test_frontier_early_eof_with_real_http_response_returns_one_bounded_receipt(
+    tmp_path,
+):
+    body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
+    review_response = Response({"ok": True, "items": []})
+    frontier_response = real_http_response(body, declared_length=len(body) + 64)
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return review_response
+        return frontier_response
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [],
+        [("Content-Length", "24"), ("Content-Length", "24")],
+        [("Content-Length", "24"), ("Content-Length", "25")],
+        [("Content-Length", "024")],
+        [("Content-Length", "-1")],
+        [("Content-Length", "+24")],
+        [("Content-Length", "24, 24")],
+        [("Content-Length", "24"), ("Transfer-Encoding", "chunked")],
+        [("Content-Length", "24"), ("Content-Encoding", "gzip")],
+    ],
+)
+def test_response_framing_requires_one_plain_content_length_before_read(
+    tmp_path, headers
+):
+    response = Response({"ok": True, "items": []}, headers=headers)
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: response,
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+    assert response.read_calls == 0
+
+
+def test_declared_response_too_large_fails_before_body_read(tmp_path):
+    response = Response(
+        {"ok": True, "items": []},
+        headers=[("Content-Length", str(queues.MAX_RESPONSE_BYTES + 1))],
+    )
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: response,
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-too-large"
+    assert response.read_calls == 0
+
+
+def test_getcode_failure_returns_one_bounded_receipt(tmp_path):
+    class GetcodeFailureResponse(Response):
+        def getcode(self):
+            raise RuntimeError("private getcode failure detail")
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: GetcodeFailureResponse({}),
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-lifecycle"
+    assert "private getcode failure detail" not in output
+
+
+def test_response_context_exit_failure_returns_one_bounded_receipt(tmp_path):
+    class ExitFailureResponse(Response):
+        def __exit__(self, *_args):
+            raise RuntimeError("private context-exit failure detail")
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: ExitFailureResponse(
+            {"ok": True, "items": []}
+        ),
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-lifecycle"
+    assert "private context-exit failure detail" not in output
+
+
+def test_response_lifecycle_does_not_catch_assertion_errors(tmp_path):
+    class AssertionResponse(Response):
+        def getcode(self):
+            raise AssertionError("test assertion must escape")
+
+    with pytest.raises(AssertionError, match="^test assertion must escape$"):
+        run_main(
+            tmp_path,
+            opener=lambda _request, timeout: AssertionResponse({}),
+        )
+
+
+def test_response_lifecycle_does_not_mask_verifier_defects(tmp_path, monkeypatch):
+    def verifier_defect(_headers):
+        raise TypeError("verifier defect must escape")
+
+    monkeypatch.setattr(queues, "_declared_content_length", verifier_defect)
+
+    with pytest.raises(TypeError, match="^verifier defect must escape$"):
+        run_main(
+            tmp_path,
+            opener=lambda _request, timeout: Response({"ok": True, "items": []}),
+        )
+
+
+def test_large_json_integer_returns_one_bounded_receipt(tmp_path):
+    raw = b'{"ok":true,"items":[' + b"9" * 5_000 + b"]}"
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: RawResponse(raw),
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-malformed"
+    assert "Exceeds the limit" not in output
 
 
 def test_explicit_empty_frontier_context_is_not_replaced_by_default(tmp_path):
