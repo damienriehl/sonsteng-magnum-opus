@@ -229,9 +229,26 @@ does not authorize or execute production work.
 Damien must perform the production window at the keyboard under the Cloudflare
 PROD principal described in `docs/prod-release-operations.md`:
 
-1. notify John and independently prove the queue empty;
+1. notify John and independently prove all three queues empty with the one
+   text-free, read-only receipt:
+
+   ```bash
+   python3 tools/prove_queues_empty.py \
+     --apply-env-file ~/.config/sonsteng-apply/env \
+     --observer-env-file ~/.config/sonsteng-release-observer/env
+   ```
+
+   Require exit `0` and `"all_queues_empty":true`. The tool performs only the
+   daemon's admin review GET and the observer's readiness-frontier GET, emits
+   counts rather than authored rows or IDs, and names only the ledger host. If
+   the observer environment file does not exist, the receipt instead reports
+   `"publication":"observer-env-absent"` and passes that queue only when
+   `sonsteng-prod-release.timer` is proved disabled and inactive; the receipt
+   states that fallback explicitly. Never put environment-file values on the
+   command line;
 2. stop the apply timer, prove both services quiescent, take the daemon lock,
-   and establish the six-actor exclusive change window;
+   and establish the six-actor exclusive change window; then rerun item 1's
+   queue-proof command and require a fresh passing receipt before item 3;
 3. capture and verify the exact prior pair and both live SHA headers;
 4. rehearse, then materialize and commit the combined rewrite plus generated
    artifacts exactly once; merge only that commit;
