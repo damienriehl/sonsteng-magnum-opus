@@ -234,6 +234,7 @@ PROD principal described in `docs/prod-release-operations.md`:
 
    ```bash
    python3 tools/prove_queues_empty.py \
+     --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
      --apply-env-file ~/.config/sonsteng-apply/env \
      --observer-env-file ~/.config/sonsteng-release-observer/env
    ```

@@ -13,6 +13,8 @@ spec = importlib.util.spec_from_file_location(
 queues = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(queues)
 
+LEDGER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev"
+
 
 class Response:
     def __init__(self, payload):
@@ -28,9 +30,14 @@ class Response:
         return self._body
 
 
+class RawResponse(Response):
+    def __init__(self, body):
+        self._body = body
+
+
 def write_apply_env(path):
     path.write_text(
-        "EDIT_API_BASE=https://ledger.example/edit/v1\n"
+        "EDIT_API_BASE=https://wrong-host.example/edit/v1\n"
         "EDIT_SERVICE_TOKEN=admin-secret\n"
         "APPLY_DEPLOY_BRANCH=main\n",
         encoding="utf-8",
@@ -78,6 +85,37 @@ def injected_systemctl(*, enabled=False, active=False):
     return run, calls
 
 
+def run_main(
+    tmp_path,
+    *,
+    opener,
+    observer=True,
+    timer_enabled=False,
+    ledger_origin=LEDGER_ORIGIN,
+):
+    apply_env = tmp_path / "apply.env"
+    observer_env = tmp_path / "observer.env"
+    write_apply_env(apply_env)
+    if observer:
+        write_observer_env(observer_env)
+    systemctl, systemctl_calls = injected_systemctl(enabled=timer_enabled)
+    output = io.StringIO()
+    code = queues.main(
+        [
+            "--ledger-origin",
+            ledger_origin,
+            "--apply-env-file",
+            str(apply_env),
+            "--observer-env-file",
+            str(observer_env),
+        ],
+        opener=opener,
+        run_systemctl=systemctl,
+        stdout=output,
+    )
+    return code, json.loads(output.getvalue()), systemctl_calls
+
+
 def invoke(
     tmp_path,
     *,
@@ -86,24 +124,14 @@ def invoke(
     timer_enabled=False,
     frontier_context=None,
 ):
-    apply_env = tmp_path / "apply.env"
-    observer_env = tmp_path / "observer.env"
-    write_apply_env(apply_env)
-    if observer:
-        write_observer_env(observer_env)
     opener, http_calls = injected_opener(review_rows, frontier_context)
-    systemctl, systemctl_calls = injected_systemctl(enabled=timer_enabled)
-    output = io.StringIO()
-    argv = [
-        "--apply-env-file",
-        str(apply_env),
-        "--observer-env-file",
-        str(observer_env),
-    ]
-    code = queues.main(
-        argv, opener=opener, run_systemctl=systemctl, stdout=output
+    code, receipt, systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        observer=observer,
+        timer_enabled=timer_enabled,
     )
-    return code, json.loads(output.getvalue()), http_calls, systemctl_calls
+    return code, receipt, http_calls, systemctl_calls
 
 
 def test_all_empty_returns_true_and_zero(tmp_path):
@@ -120,7 +148,7 @@ def test_all_empty_returns_true_and_zero(tmp_path):
             "other_non_terminal": 0,
             "pending": 0,
         },
-        "ledger_host": "ledger.example",
+        "ledger_host": "sonsteng-chat.damienriehl.workers.dev",
         "publication": "observer-frontier",
         "publication_fallback": None,
         "publication_frontier": {
@@ -184,7 +212,7 @@ def test_one_accepted_row_fails_the_apply_queue_without_leaking_row(tmp_path):
     assert "accepted authored text" not in serialized
 
 
-def test_other_non_terminal_status_is_counted_without_leaking_row(tmp_path):
+def test_unknown_status_is_counted_as_non_terminal_and_returns_false(tmp_path):
     code, receipt, _http_calls, _systemctl_calls = invoke(
         tmp_path,
         review_rows=[
@@ -262,6 +290,8 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
     output = io.StringIO()
     code = queues.main(
         [
+            "--ledger-origin",
+            LEDGER_ORIGIN,
             "--apply-env-file",
             str(apply_env),
             "--observer-env-file",
@@ -315,3 +345,128 @@ def test_observer_absent_and_timer_enabled_returns_false(tmp_path):
         "available": True,
         "enabled": True,
     }
+
+
+def test_env_host_cannot_redirect_pinned_ledger_calls(tmp_path):
+    code, receipt, http_calls, _systemctl_calls = invoke(
+        tmp_path, review_rows=[]
+    )
+
+    assert code == 0
+    assert receipt["ledger_host"] == "sonsteng-chat.damienriehl.workers.dev"
+    assert [call[0].full_url for call in http_calls] == [
+        LEDGER_ORIGIN + "/edit/v1/review",
+        LEDGER_ORIGIN + "/edit/v1/prod/releases/frontier",
+    ]
+    assert all("wrong-host.example" not in call[0].full_url for call in http_calls)
+
+
+def test_disallowed_ledger_origin_fails_before_any_get(tmp_path):
+    http_calls = []
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda request, timeout: http_calls.append((request, timeout)),
+        ledger_origin="https://wrong-host.example",
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "ledger-origin-invalid"
+    assert http_calls == []
+
+
+def test_hidden_accepted_row_on_page_two_fails_closed(tmp_path):
+    http_calls = []
+
+    def opener(request, timeout):
+        http_calls.append((request, timeout))
+        if request.full_url.endswith("/review"):
+            return Response(
+                {
+                    "ok": True,
+                    "items": [],
+                    "has_more": True,
+                    "next_cursor": "page-2",
+                }
+            )
+        if request.full_url.endswith("cursor=page-2"):
+            return Response(
+                {"ok": True, "items": [{"status": "accepted"}]}
+            )
+        raise AssertionError("unexpected HTTP request")
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "review-response-malformed"
+    assert len(http_calls) == 1
+
+
+def test_conflicting_review_list_keys_are_a_proof_error(tmp_path):
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: Response(
+            {
+                "ok": True,
+                "items": [],
+                "suggestions": [{"status": "accepted"}],
+            }
+        ),
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "review-response-malformed"
+
+
+def test_frontier_omitting_required_key_is_a_proof_error(tmp_path):
+    for context in ({"batches": []}, {"active_release": None}):
+        code, receipt, _http_calls, _systemctl_calls = invoke(
+            tmp_path,
+            review_rows=[],
+            frontier_context=context,
+        )
+
+        assert code == 1
+        assert receipt["all_queues_empty"] is False
+        assert receipt["proof_error"] == "frontier-response-malformed"
+
+
+def test_duplicate_review_items_are_a_proof_error(tmp_path):
+    raw = (
+        b'{"ok":true,"items":[{"status":"accepted"}],"items":[]}'
+    )
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: RawResponse(raw),
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-malformed"
+
+
+def test_duplicate_nested_frontier_key_is_a_proof_error(tmp_path):
+    calls = 0
+
+    def opener(request, timeout):
+        nonlocal calls
+        calls += 1
+        if request.full_url.endswith("/review"):
+            return Response({"ok": True, "items": []})
+        return RawResponse(
+            b'{"ok":true,"context":{"active_release":{"id":"private"},'
+            b'"active_release":null,"batches":[]}}'
+        )
+
+    code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-malformed"
+    assert calls == 2
+    assert "private" not in json.dumps(receipt)
