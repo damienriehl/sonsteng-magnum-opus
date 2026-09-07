@@ -244,6 +244,136 @@ def test_forward_refuses_multi_parent_candidate(repositories: Repositories):
     assert remote_sha(repositories.daemon) == repositories.prior
 
 
+def test_forward_refuses_grafted_unrelated_candidate_before_mutation(
+    repositories: Repositories,
+):
+    tree = sha(repositories.seed, f"{repositories.candidate}^{{tree}}")
+    unrelated_candidate = git(
+        repositories.seed,
+        "commit-tree",
+        tree,
+        "-m",
+        "unrelated candidate",
+    ).stdout.strip()
+    assert unrelated_candidate
+    raw_headers = git(
+        repositories.seed,
+        "cat-file",
+        "commit",
+        unrelated_candidate,
+    ).stdout.partition("\n\n")[0]
+    assert raw_headers and "parent " not in raw_headers.splitlines()
+    git(
+        repositories.daemon,
+        "fetch",
+        "-q",
+        str(repositories.seed),
+        unrelated_candidate,
+    )
+    grafts = repositories.daemon / ".git" / "info" / "grafts"
+    grafts.write_text(
+        f"{unrelated_candidate} {repositories.prior}\n",
+        encoding="utf-8",
+    )
+    reported_parents = git(
+        repositories.daemon,
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        unrelated_candidate,
+    ).stdout.split()
+    assert reported_parents and reported_parents == [
+        unrelated_candidate,
+        repositories.prior,
+    ]
+
+    completed = invoke(
+        repositories,
+        "forward",
+        to_sha=unrelated_candidate,
+    )
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == (
+        "candidate must have exactly one parent equal to the prior SHA"
+    )
+    assert failure["mutations"] == []
+    observed_head = sha(repositories.daemon)
+    observed_remote = remote_sha(repositories.daemon)
+    assert observed_head and observed_head == repositories.prior
+    assert observed_remote and observed_remote == repositories.prior
+
+
+def test_forward_refuses_replacement_object_spoof_before_mutation(
+    repositories: Repositories,
+):
+    tree = sha(repositories.seed, f"{repositories.candidate}^{{tree}}")
+    assert tree
+    unrelated_candidate = git(
+        repositories.seed,
+        "commit-tree",
+        tree,
+        "-m",
+        "unrelated candidate",
+    ).stdout.strip()
+    replacement_candidate = git(
+        repositories.seed,
+        "commit-tree",
+        tree,
+        "-p",
+        repositories.prior,
+        "-m",
+        "replacement candidate",
+    ).stdout.strip()
+    assert unrelated_candidate
+    assert replacement_candidate
+    git(
+        repositories.daemon,
+        "fetch",
+        "-q",
+        str(repositories.seed),
+        unrelated_candidate,
+        replacement_candidate,
+    )
+    git(
+        repositories.daemon,
+        "replace",
+        unrelated_candidate,
+        replacement_candidate,
+    )
+    reported_parents = git(
+        repositories.daemon,
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        unrelated_candidate,
+    ).stdout.split()
+    assert reported_parents and reported_parents == [
+        unrelated_candidate,
+        repositories.prior,
+    ]
+
+    completed = invoke(
+        repositories,
+        "forward",
+        to_sha=unrelated_candidate,
+    )
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == (
+        "candidate must have exactly one parent equal to the prior SHA"
+    )
+    assert failure["mutations"] == []
+    observed_head = sha(repositories.daemon)
+    observed_remote = remote_sha(repositories.daemon)
+    assert observed_head and observed_head == repositories.prior
+    assert observed_remote and observed_remote == repositories.prior
+
+
 def test_restore_happy(repositories: Repositories):
     assert invoke(repositories, "forward").returncode == 0
 
@@ -371,6 +501,136 @@ def test_core_filemode_false_cannot_hide_executable_bit_drift(
     failure = receipt(completed)
     assert failure["error"] == "daemon worktree must be clean"
     assert failure["mutations"] == []
+
+
+def test_core_symlinks_false_cannot_hide_tracked_file_type_drift(
+    repositories: Repositories,
+):
+    link = repositories.daemon / "tracked-link"
+    git(repositories.daemon, "config", "user.name", "CAS Test")
+    git(repositories.daemon, "config", "user.email", "cas@example.invalid")
+    link.symlink_to("base.txt")
+    git(repositories.daemon, "add", "tracked-link")
+    git(repositories.daemon, "commit", "-q", "-m", "track symlink")
+    committed = sha(repositories.daemon)
+    assert committed
+    git(
+        repositories.daemon,
+        "push",
+        "-q",
+        "origin",
+        f"{committed}:refs/heads/main",
+    )
+    tree = sha(repositories.daemon, f"{committed}^{{tree}}")
+    assert tree
+    next_candidate = git(
+        repositories.daemon,
+        "commit-tree",
+        tree,
+        "-p",
+        committed,
+        "-m",
+        "candidate after symlink",
+    ).stdout.strip()
+    assert next_candidate
+    git(repositories.daemon, "config", "core.symlinks", "false")
+    link.unlink()
+    link.write_text("base.txt", encoding="utf-8")
+
+    completed = invoke(
+        repositories,
+        "forward",
+        from_sha=committed,
+        to_sha=next_candidate,
+    )
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "daemon worktree must be clean"
+    assert failure["mutations"] == []
+    observed_head = sha(repositories.daemon)
+    observed_remote = remote_sha(repositories.daemon)
+    assert observed_head and observed_head == committed
+    assert observed_remote and observed_remote == committed
+
+
+def test_core_symlinks_false_allows_exact_symlink_forward_and_restore(
+    repositories: Repositories,
+):
+    path = repositories.daemon / "mode-switch"
+    git(repositories.daemon, "config", "user.name", "CAS Test")
+    git(repositories.daemon, "config", "user.email", "cas@example.invalid")
+    path.write_text("regular\n", encoding="utf-8")
+    git(repositories.daemon, "add", "mode-switch")
+    git(repositories.daemon, "commit", "-q", "-m", "regular-file prior")
+    prior = sha(repositories.daemon)
+    assert prior
+    git(
+        repositories.daemon,
+        "push",
+        "-q",
+        "origin",
+        f"{prior}:refs/heads/main",
+    )
+    path.unlink()
+    path.symlink_to("base.txt")
+    git(repositories.daemon, "add", "mode-switch")
+    git(repositories.daemon, "commit", "-q", "-m", "symlink candidate")
+    candidate = sha(repositories.daemon)
+    assert candidate
+    git(repositories.daemon, "reset", "--hard", "-q", prior)
+    git(repositories.daemon, "config", "core.symlinks", "false")
+
+    forward = invoke(
+        repositories,
+        "forward",
+        from_sha=prior,
+        to_sha=candidate,
+    )
+
+    assert forward.returncode == 0, forward.stderr
+    assert path.is_symlink()
+    observed_head = sha(repositories.daemon)
+    observed_remote = remote_sha(repositories.daemon)
+    assert observed_head and observed_head == candidate
+    assert observed_remote and observed_remote == candidate
+
+    restore = invoke(
+        repositories,
+        "restore",
+        from_sha=candidate,
+        to_sha=prior,
+    )
+
+    assert restore.returncode == 0, restore.stderr
+    assert not path.is_symlink()
+    assert path.read_text(encoding="utf-8") == "regular\n"
+    observed_head = sha(repositories.daemon)
+    observed_remote = remote_sha(repositories.daemon)
+    assert observed_head and observed_head == prior
+    assert observed_remote and observed_remote == prior
+
+
+def test_runbook_describes_forward_cas_without_destructive_ref_moves():
+    documentation = (ROOT / "docs" / "day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+    assert "`forward` requires" in documentation
+    forward_description = documentation.split("`forward` requires", 1)[1]
+    assert forward_description
+
+    for required_text in (
+        "raw commit object",
+        "`update-ref refs/heads/main <candidate> <prior>`",
+        "before and after aligning",
+        "`read-tree -m -u <candidate>`",
+        "Before mutation it snapshots the complete visible remote ref map",
+        "after-state `ls-remote --refs`",
+        "only visible remote-ref change",
+    ):
+        assert required_text in forward_description
+    assert "merge --ff-only" not in forward_description
+    assert "reset --hard" not in forward_description
 
 
 def test_dry_run_refuses_remote_race_before_final_readback(

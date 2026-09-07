@@ -315,6 +315,8 @@ def _require_exact_cleanliness(
             "core.fsmonitor=false",
             "-c",
             "core.fileMode=true",
+            "-c",
+            "core.symlinks=true",
             "status",
             "--porcelain",
             "--untracked-files=all",
@@ -338,6 +340,8 @@ def _require_exact_cleanliness(
                 "core.hooksPath=/dev/null",
                 "-c",
                 "core.fileMode=true",
+                "-c",
+                "core.symlinks=true",
                 "read-tree",
                 "HEAD",
             ],
@@ -350,6 +354,8 @@ def _require_exact_cleanliness(
             [
                 "-c",
                 "core.fileMode=true",
+                "-c",
+                "core.symlinks=true",
                 "diff-index",
                 "--cached",
                 "--quiet",
@@ -368,6 +374,8 @@ def _require_exact_cleanliness(
                 "core.hooksPath=/dev/null",
                 "-c",
                 "core.fileMode=true",
+                "-c",
+                "core.symlinks=true",
                 "update-index",
                 "--really-refresh",
             ],
@@ -378,7 +386,15 @@ def _require_exact_cleanliness(
         )
         files = _run_git(
             operation,
-            ["-c", "core.fileMode=true", "diff-files", "--quiet", "--"],
+            [
+                "-c",
+                "core.fileMode=true",
+                "-c",
+                "core.symlinks=true",
+                "diff-files",
+                "--quiet",
+                "--",
+            ],
             stage="tracked worktree content comparison",
             check=False,
             cwd=repository,
@@ -426,29 +442,32 @@ def _require_final_state(
 
 
 def _require_one_commit_transition(operation: Operation, prior: str, candidate: str) -> None:
-    resolved = _run_git(
+    object_type = _run_git(
         operation,
-        ["rev-parse", "--verify", f"{candidate}^{{commit}}"],
+        ["cat-file", "-t", candidate],
         stage="candidate commit validation",
     ).stdout.strip()
-    if resolved != candidate:
+    if not object_type or object_type != "commit":
         raise CasError("candidate is not the exact commit object")
 
-    parent_line = _run_git(
+    raw_commit = _run_git(
         operation,
-        ["rev-list", "--parents", "-n", "1", candidate],
-        stage="candidate parent validation",
-    ).stdout.strip()
-    if parent_line.split() != [candidate, prior]:
+        ["cat-file", "commit", candidate],
+        stage="raw candidate parent validation",
+    ).stdout
+    headers, separator, _message = raw_commit.partition("\n\n")
+    if not raw_commit or not separator:
         raise CasError("candidate must have exactly one parent equal to the prior SHA")
-
-    count = _run_git(
-        operation,
-        ["rev-list", "--count", f"{prior}..{candidate}"],
-        stage="candidate commit-count validation",
-    ).stdout.strip()
-    if count != "1":
-        raise CasError("prior-to-candidate range is not exactly one commit")
+    parents: list[str] = []
+    for header in headers.splitlines():
+        if not header.startswith("parent "):
+            continue
+        parent = header.removeprefix("parent ")
+        if not parent or not SHA_RE.fullmatch(parent):
+            raise CasError("candidate must have exactly one parent equal to the prior SHA")
+        parents.append(parent)
+    if not parents or parents != [prior]:
+        raise CasError("candidate must have exactly one parent equal to the prior SHA")
 
 
 def _require_clean_fresh_candidate(operation: Operation, candidate: str) -> None:
@@ -489,6 +508,8 @@ def _require_clean_fresh_candidate(operation: Operation, candidate: str) -> None
                 [
                     "-c",
                     "core.hooksPath=/dev/null",
+                    "-c",
+                    "core.symlinks=true",
                     "checkout",
                     "--quiet",
                     "--detach",
@@ -626,6 +647,8 @@ def _cas_local_main_and_align(operation: Operation, mutations: list[str]) -> Non
         [
             "-c",
             "core.hooksPath=/dev/null",
+            "-c",
+            "core.symlinks=true",
             "read-tree",
             "-m",
             "-u",

@@ -327,15 +327,21 @@ python3 tools/canonical_ref_cas.py forward \
 
 `forward` requires clean checked-out local `main`, worktree `HEAD`, and remote
 `main` all to equal the exact prior SHA; requires the candidate's sole parent to
-be that prior SHA and `prior..candidate` to contain exactly one commit; and
+be that prior SHA in the raw commit object; and
 requires the named remote to resolve to one identical fetch and push URL. It
 checks the candidate in a fresh standalone exact clone, rejects hidden index
-flags, proves tracked content against `HEAD` with a disposable index, and uses
-`merge --ff-only` with repository hooks disabled. It pins the validated remote
-URL and pushes an immutable source with
+flags, and proves tracked content and file types against `HEAD` with a
+disposable index. It moves local `main` with the three-argument
+`update-ref refs/heads/main <candidate> <prior>` CAS, checks local `main` and
+worktree `HEAD` at the candidate before and after aligning the index and
+worktree with `read-tree -m -u <candidate>`, and pins the validated remote URL.
+Before mutation it snapshots the complete visible remote ref map with
+`ls-remote --refs`; it then pushes an immutable source with
 `--force-with-lease=main:<prior-sha>`, explicit
 `refs/heads/main:refs/heads/main`, and tag following disabled. It succeeds only
 after a final symbolic-HEAD, exact-cleanliness, remote-configuration, and
-local/remote/worktree SHA proof. This migration-specific command replaces the
-generic `merge --no-ff` example in `docs/direct-apply-daemon.md`, which must not
-be used for Day Zero.
+local/remote/worktree SHA proof followed by an after-state `ls-remote --refs`
+readback that proves the only visible remote-ref change was the exact
+`refs/heads/main` transition. This migration-specific command replaces the
+generic merge example in `docs/direct-apply-daemon.md`, which must not be used
+for Day Zero.
