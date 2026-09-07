@@ -1,5 +1,6 @@
-import importlib.util
+import datetime
 import http.client
+import importlib.util
 import io
 import json
 import pathlib
@@ -14,6 +15,17 @@ queues = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(queues)
 
 LEDGER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev"
+WINDOW_OWNER = "packet-d-test-window"
+EMPTY_OPERATION_FRONTIER = {
+    "blocked_state": "unblocked",
+    "pending_operation_count": 0,
+}
+EMPTY_FRONTIER = {
+    "active_release": None,
+    "base_sha": None,
+    "batches": [],
+    "operation_frontier": EMPTY_OPERATION_FRONTIER,
+}
 
 
 class Response:
@@ -52,26 +64,39 @@ def write_observer_env(path):
     path.chmod(0o600)
 
 
-def injected_opener(review_rows, frontier_context=None):
+def injected_opener(review_rows, frontier_context=None, *, event_log=None):
     calls = []
-    frontier_context = frontier_context or {"active_release": None, "batches": []}
+    frontier_context = frontier_context or EMPTY_FRONTIER
 
     def open_request(request, timeout):
         calls.append((request, timeout))
         if request.full_url.endswith("/review"):
+            if event_log is not None:
+                event_log.append("GET(review)")
             return Response({"ok": True, "items": review_rows})
         if request.full_url.endswith("/prod/releases/frontier"):
+            if event_log is not None:
+                event_log.append("GET(frontier)")
             return Response({"ok": True, "context": frontier_context})
         raise AssertionError("unexpected HTTP request")
 
     return open_request, calls
 
 
-def injected_systemctl(*, enabled=False, active=False):
+def injected_systemctl(
+    *,
+    production_enabled=False,
+    production_active=False,
+    apply_enabled=True,
+    apply_active=False,
+):
     calls = []
 
     def run(argv, **kwargs):
         calls.append((argv, kwargs))
+        is_apply = queues.APPLY_TIMER_UNIT in argv
+        enabled = apply_enabled if is_apply else production_enabled
+        active = apply_active if is_apply else production_active
         if "is-enabled" in argv:
             return SimpleNamespace(
                 stdout="enabled\n" if enabled else "disabled\n",
@@ -91,26 +116,55 @@ def run_main(
     opener,
     observer=True,
     timer_enabled=False,
+    apply_timer_enabled=True,
+    apply_timer_active=False,
+    fence=True,
+    apply_timer_asserted=True,
+    window_owner=WINDOW_OWNER,
     ledger_origin=LEDGER_ORIGIN,
+    event_log=None,
 ):
     apply_env = tmp_path / "apply.env"
     observer_env = tmp_path / "observer.env"
     write_apply_env(apply_env)
     if observer:
         write_observer_env(observer_env)
-    systemctl, systemctl_calls = injected_systemctl(enabled=timer_enabled)
-    output = io.StringIO()
-    code = queues.main(
+    systemctl, systemctl_calls = injected_systemctl(
+        production_enabled=timer_enabled,
+        apply_enabled=apply_timer_enabled,
+        apply_active=apply_timer_active,
+    )
+    timestamps = iter(
         [
-            "--ledger-origin",
-            ledger_origin,
-            "--apply-env-file",
-            str(apply_env),
-            "--observer-env-file",
-            str(observer_env),
-        ],
+            datetime.datetime(2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc),
+            datetime.datetime(2026, 9, 7, 15, 0, 1, tzinfo=datetime.timezone.utc),
+        ]
+    )
+    output = io.StringIO()
+    argv = [
+        "--ledger-origin",
+        ledger_origin,
+        "--apply-env-file",
+        str(apply_env),
+        "--observer-env-file",
+        str(observer_env),
+    ]
+    if fence and apply_timer_asserted:
+        argv.append("--apply-timer-stopped")
+    if fence and window_owner is not None:
+        argv.extend(["--window-owner", window_owner])
+
+    def utc_now():
+        timestamp = next(timestamps)
+        if event_log is not None:
+            event_log.append(f"clock({timestamp.isoformat()})")
+        return timestamp
+
+    code = queues.main(
+        argv,
         opener=opener,
         run_systemctl=systemctl,
+        utc_now=utc_now,
         stdout=output,
     )
     return code, json.loads(output.getvalue()), systemctl_calls
@@ -123,20 +177,25 @@ def invoke(
     observer=True,
     timer_enabled=False,
     frontier_context=None,
+    event_log=None,
 ):
-    opener, http_calls = injected_opener(review_rows, frontier_context)
+    opener, http_calls = injected_opener(
+        review_rows, frontier_context, event_log=event_log
+    )
     code, receipt, systemctl_calls = run_main(
         tmp_path,
         opener=opener,
         observer=observer,
         timer_enabled=timer_enabled,
+        event_log=event_log,
     )
     return code, receipt, http_calls, systemctl_calls
 
 
 def test_all_empty_returns_true_and_zero(tmp_path):
+    event_log = []
     code, receipt, http_calls, systemctl_calls = invoke(
-        tmp_path, review_rows=[]
+        tmp_path, review_rows=[], event_log=event_log
     )
 
     assert code == 0
@@ -149,17 +208,37 @@ def test_all_empty_returns_true_and_zero(tmp_path):
             "pending": 0,
         },
         "ledger_host": "sonsteng-chat.damienriehl.workers.dev",
+        "first_get_utc": "2026-09-07T15:00:00Z",
+        "last_get_utc": "2026-09-07T15:00:01Z",
+        "fence": {
+            "apply_timer": {
+                "active": False,
+                "available": True,
+                "enabled": True,
+            },
+            "apply_timer_stopped": True,
+            "proved": True,
+            "window_owner": WINDOW_OWNER,
+        },
         "publication": "observer-frontier",
         "publication_fallback": None,
         "publication_frontier": {
             "queue_count": 0,
             "reason": "unprepared",
             "releases": [],
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
         },
         "timer": {"active": False, "available": True, "enabled": False},
     }
     assert [call[0].get_method() for call in http_calls] == ["GET", "GET"]
     assert all(timeout == 20 for _, timeout in http_calls)
+    assert event_log == [
+        "clock(2026-09-07T15:00:00+00:00)",
+        "GET(review)",
+        "clock(2026-09-07T15:00:01+00:00)",
+        "GET(frontier)",
+    ]
+    assert len(systemctl_calls) == 4
     assert all(call[1]["timeout"] == 20 for call in systemctl_calls)
     serialized = json.dumps(receipt)
     assert "admin-secret" not in serialized
@@ -239,16 +318,41 @@ def test_unknown_status_is_counted_as_non_terminal_and_returns_false(tmp_path):
 
 
 def test_nonempty_publication_frontiers_fail_without_leaking_ids(tmp_path):
+    active_release = {
+        "id": "private-release",
+        "state": "prepared",
+        "target_batch_id": "private-target",
+        "base_sha": "a" * 40,
+        "candidate_sha": "b" * 40,
+        "generator_id": "private-generator",
+        "evidence_hash": "private-evidence",
+        "manifest_hash": "private-manifest",
+        "membership_hash": "private-membership",
+        "schema_version": 1,
+    }
     cases = [
         (
-            {"active_release": {"id": "private-release"}, "batches": []},
+            {
+                "active_release": active_release,
+                "batches": [],
+                "operation_frontier": EMPTY_OPERATION_FRONTIER,
+            },
             "active_release",
             0,
         ),
         (
             {
                 "active_release": None,
-                "batches": [{"batch_id": "private-batch"}],
+                "base_sha": "a" * 40,
+                "batches": [
+                    {
+                        "batch_id": "private-batch",
+                        "commit_sha": "b" * 40,
+                        "generator_id": "private-generator",
+                        "member_count": 1,
+                    }
+                ],
+                "operation_frontier": EMPTY_OPERATION_FRONTIER,
             },
             "ready_to_prepare",
             1,
@@ -256,8 +360,10 @@ def test_nonempty_publication_frontiers_fail_without_leaking_ids(tmp_path):
         (
             {
                 "active_release": None,
-                "blocked_reason": "private-blocked-reason",
                 "batches": [],
+                "blocked_reason": "missing_batch_evidence",
+                "blocked_batch_id": "private-batch",
+                "operation_frontier": EMPTY_OPERATION_FRONTIER,
             },
             "blocked",
             0,
@@ -274,7 +380,7 @@ def test_nonempty_publication_frontiers_fail_without_leaking_ids(tmp_path):
         serialized = json.dumps(receipt)
         assert "private-release" not in serialized
         assert "private-batch" not in serialized
-        assert "private-blocked-reason" not in serialized
+        assert "missing_batch_evidence" not in serialized
 
 
 def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
@@ -296,9 +402,15 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
             str(apply_env),
             "--observer-env-file",
             str(observer_env),
+            "--apply-timer-stopped",
+            "--window-owner",
+            WINDOW_OWNER,
         ],
         opener=lambda _request, timeout: IncompleteResponse({}),
         run_systemctl=injected_systemctl()[0],
+        utc_now=lambda: datetime.datetime(
+            2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc
+        ),
         stdout=output,
     )
     receipt = json.loads(output.getvalue())
@@ -309,13 +421,14 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
     assert "private partial body" not in json.dumps(receipt)
 
 
-def test_observer_absent_and_timer_disabled_uses_fallback(tmp_path):
+def test_observer_absent_and_timer_disabled_fails_closed(tmp_path):
     code, receipt, http_calls, _systemctl_calls = invoke(
         tmp_path, review_rows=[], observer=False
     )
 
-    assert code == 0
-    assert receipt["all_queues_empty"] is True
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "environment-unavailable"
     assert receipt["publication"] == "observer-env-absent"
     assert receipt["publication_frontier"] is None
     assert (
@@ -423,8 +536,30 @@ def test_conflicting_review_list_keys_are_a_proof_error(tmp_path):
     assert receipt["proof_error"] == "review-response-malformed"
 
 
-def test_frontier_omitting_required_key_is_a_proof_error(tmp_path):
-    for context in ({"batches": []}, {"active_release": None}):
+def test_frontier_omitting_union_required_key_is_a_proof_error(tmp_path):
+    for context in (
+        {
+            "active_release": None,
+            "base_sha": None,
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
+        },
+        {
+            "base_sha": None,
+            "batches": [],
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
+        },
+        {
+            "active_release": None,
+            "batches": [],
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
+        },
+        {
+            "active_release": None,
+            "batches": [],
+            "blocked_reason": "missing_batch_evidence",
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
+        },
+    ):
         code, receipt, _http_calls, _systemctl_calls = invoke(
             tmp_path,
             review_rows=[],
@@ -470,3 +605,217 @@ def test_duplicate_nested_frontier_key_is_a_proof_error(tmp_path):
     assert receipt["proof_error"] == "http-response-malformed"
     assert calls == 2
     assert "private" not in json.dumps(receipt)
+
+
+def test_frontier_variants_reject_unknown_or_incoherent_fields(tmp_path):
+    impossible = [
+        {**EMPTY_FRONTIER, "unknown": False},
+        {
+            **EMPTY_FRONTIER,
+            "blocked_reason": "missing_batch_evidence",
+            "blocked_batch_id": "batch-1",
+        },
+        {
+            **EMPTY_FRONTIER,
+            "active_release": {
+                "id": "release-1",
+                "state": "prepared",
+                "target_batch_id": "batch-1",
+                "base_sha": "a" * 40,
+                "candidate_sha": "b" * 40,
+                "generator_id": "generator",
+                "evidence_hash": "evidence",
+                "manifest_hash": "manifest",
+                "membership_hash": "membership",
+                "schema_version": 1,
+            },
+        },
+    ]
+    for context in impossible:
+        code, receipt, _http_calls, _systemctl_calls = invoke(
+            tmp_path, review_rows=[], frontier_context=context
+        )
+
+        assert code == 1
+        assert receipt["proof_error"] == "frontier-response-malformed"
+
+
+def test_current_eligible_operation_wire_response_fails_named_closed(tmp_path):
+    context = {
+        "active_release": None,
+        "base_sha": "a" * 40,
+        "batches": [],
+    }
+
+    code, receipt, _http_calls, _systemctl_calls = invoke(
+        tmp_path, review_rows=[], frontier_context=context
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "operation-frontier-missing"
+
+
+def test_current_blocked_operation_wire_response_fails_named_closed(tmp_path):
+    # observerPreparationSummary() currently drops both eligible and held/stale
+    # operation projections, so their source-faithful observer wires coincide.
+    context = {
+        "active_release": None,
+        "base_sha": "a" * 40,
+        "batches": [],
+    }
+
+    code, receipt, _http_calls, _systemctl_calls = invoke(
+        tmp_path, review_rows=[], frontier_context=context
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "operation-frontier-missing"
+
+
+def test_nonempty_or_blocked_operation_frontier_is_not_empty(tmp_path):
+    for operation_frontier in (
+        {"pending_operation_count": 1, "blocked_state": "unblocked"},
+        {"pending_operation_count": 0, "blocked_state": "blocked"},
+    ):
+        code, receipt, _http_calls, _systemctl_calls = invoke(
+            tmp_path,
+            review_rows=[],
+            frontier_context={
+                **EMPTY_FRONTIER,
+                "operation_frontier": operation_frontier,
+            },
+        )
+
+        assert code == 1
+        assert receipt["all_queues_empty"] is False
+        assert receipt["publication_frontier"]["operation_frontier"] == operation_frontier
+
+
+def test_operation_frontier_is_exact_typed_and_bounded(tmp_path):
+    malformed = [
+        {"pending_operation_count": True, "blocked_state": "unblocked"},
+        {"pending_operation_count": -1, "blocked_state": "unblocked"},
+        {"pending_operation_count": 100_001, "blocked_state": "unblocked"},
+        {"pending_operation_count": 0, "blocked_state": "unknown"},
+        {
+            "pending_operation_count": 0,
+            "blocked_state": "unblocked",
+            "extra": False,
+        },
+    ]
+    for operation_frontier in malformed:
+        code, receipt, _http_calls, _systemctl_calls = invoke(
+            tmp_path,
+            review_rows=[],
+            frontier_context={
+                **EMPTY_FRONTIER,
+                "operation_frontier": operation_frontier,
+            },
+        )
+
+        assert code == 1
+        assert receipt["proof_error"] == "operation-frontier-malformed"
+
+
+def test_missing_fence_assertions_emit_unproven_without_gets(tmp_path):
+    cases = [
+        {"fence": False},
+        {"apply_timer_asserted": False},
+        {"window_owner": None},
+    ]
+    for kwargs in cases:
+        opener, http_calls = injected_opener([])
+        code, receipt, _systemctl_calls = run_main(
+            tmp_path, opener=opener, **kwargs
+        )
+
+        assert code == 1
+        assert receipt["all_queues_empty"] is False
+        assert receipt["fence"] == "unproven"
+        assert receipt["proof_error"] == "fence-assertion-missing"
+        assert receipt["first_get_utc"] is None
+        assert receipt["last_get_utc"] is None
+        assert http_calls == []
+
+
+def test_invalid_window_owner_emits_unproven_without_gets(tmp_path):
+    opener, http_calls = injected_opener([])
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path, opener=opener, window_owner="invalid owner"
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["fence"] == "unproven"
+    assert receipt["proof_error"] == "fence-assertion-invalid"
+    assert receipt["first_get_utc"] is None
+    assert receipt["last_get_utc"] is None
+    assert http_calls == []
+
+
+def test_apply_timer_must_be_inactive_with_known_enabled_state(tmp_path):
+    opener, http_calls = injected_opener([])
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path, opener=opener, apply_timer_active=True
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "fence-apply-timer-not-stopped"
+    assert receipt["fence"] == {
+        "apply_timer": {"active": True, "available": True, "enabled": True},
+        "apply_timer_stopped": False,
+        "proved": False,
+        "window_owner": WINDOW_OWNER,
+    }
+    assert http_calls == []
+
+
+def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
+    opener, http_calls = injected_opener([])
+    apply_env = tmp_path / "apply.env"
+    observer_env = tmp_path / "observer.env"
+    write_apply_env(apply_env)
+    write_observer_env(observer_env)
+    output = io.StringIO()
+
+    def unavailable_systemctl(_argv, **_kwargs):
+        raise OSError("systemctl unavailable")
+
+    code = queues.main(
+        [
+            "--ledger-origin",
+            LEDGER_ORIGIN,
+            "--apply-env-file",
+            str(apply_env),
+            "--observer-env-file",
+            str(observer_env),
+            "--apply-timer-stopped",
+            "--window-owner",
+            WINDOW_OWNER,
+        ],
+        opener=opener,
+        run_systemctl=unavailable_systemctl,
+        utc_now=lambda: datetime.datetime(
+            2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc
+        ),
+        stdout=output,
+    )
+    receipt = json.loads(output.getvalue())
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "fence-apply-timer-not-stopped"
+    assert receipt["fence"] == {
+        "apply_timer": {"active": None, "available": False, "enabled": None},
+        "apply_timer_stopped": False,
+        "proved": False,
+        "window_owner": WINDOW_OWNER,
+    }
+    assert receipt["first_get_utc"] is None
+    assert receipt["last_get_utc"] is None
+    assert http_calls == []

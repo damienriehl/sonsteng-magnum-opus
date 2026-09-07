@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import http.client
 import json
 import os
@@ -18,13 +19,43 @@ import urllib.request
 TIMEOUT_SECONDS = 20
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_ENV_BYTES = 64 * 1024
+MAX_FRONTIER_ITEMS = 1000
+MAX_OPERATION_COUNT = 100_000
+MAX_BOUND_VALUE_BYTES = 256
 TIMER_UNIT = "sonsteng-prod-release.timer"
+APPLY_TIMER_UNIT = "sonsteng-apply.timer"
 USER_AGENT = "sonsteng-queue-proof/1.0"
 ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+WINDOW_OWNER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 ALLOWED_LEDGER_ORIGINS = frozenset(
     {"https://sonsteng-chat.damienriehl.workers.dev"}
 )
 REVIEW_ENVELOPE_KEYS = frozenset({"ok", "items"})
+FRONTIER_ENVELOPE_KEYS = frozenset({"ok", "context"})
+OPERATION_FRONTIER_KEYS = frozenset(
+    {"pending_operation_count", "blocked_state"}
+)
+OPERATION_BLOCKED_STATES = frozenset({"unblocked", "blocked"})
+ACTIVE_RELEASE_REQUIRED_KEYS = frozenset(
+    {
+        "id",
+        "state",
+        "target_batch_id",
+        "base_sha",
+        "candidate_sha",
+        "generator_id",
+        "evidence_hash",
+        "manifest_hash",
+        "membership_hash",
+        "schema_version",
+    }
+)
+ACTIVE_RELEASE_V2_KEYS = frozenset(
+    {"review_receipt_hash", "projection_identity"}
+)
+BATCH_KEYS = frozenset(
+    {"batch_id", "commit_sha", "generator_id", "member_count"}
+)
 
 
 class ProofError(RuntimeError):
@@ -175,46 +206,143 @@ def _review_counts(payload):
     return counts
 
 
+def _bounded_string(value):
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        return len(value.encode("utf-8")) <= MAX_BOUND_VALUE_BYTES
+    except UnicodeError:
+        return False
+
+
+def _valid_active_release(release):
+    if not isinstance(release, dict):
+        return False
+    schema_version = release.get("schema_version")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+        return False
+    expected_keys = ACTIVE_RELEASE_REQUIRED_KEYS
+    if schema_version == 2:
+        expected_keys |= ACTIVE_RELEASE_V2_KEYS
+    elif schema_version != 1:
+        return False
+    if set(release) != expected_keys:
+        return False
+    return all(
+        _bounded_string(release[key])
+        for key in expected_keys - {"schema_version"}
+    )
+
+
+def _valid_batch(batch):
+    return (
+        isinstance(batch, dict)
+        and set(batch) == BATCH_KEYS
+        and all(
+            _bounded_string(batch[key])
+            for key in ("batch_id", "commit_sha", "generator_id")
+        )
+        and isinstance(batch["member_count"], int)
+        and not isinstance(batch["member_count"], bool)
+        and 0 <= batch["member_count"] <= 100_000
+    )
+
+
+def _operation_frontier(context):
+    if "operation_frontier" not in context:
+        raise ProofError("operation-frontier-missing")
+    frontier = context["operation_frontier"]
+    if not isinstance(frontier, dict) or set(frontier) != OPERATION_FRONTIER_KEYS:
+        raise ProofError("operation-frontier-malformed")
+    pending = frontier["pending_operation_count"]
+    blocked_state = frontier["blocked_state"]
+    if (
+        not isinstance(pending, int)
+        or isinstance(pending, bool)
+        or not 0 <= pending <= MAX_OPERATION_COUNT
+        or not isinstance(blocked_state, str)
+        or blocked_state not in OPERATION_BLOCKED_STATES
+    ):
+        raise ProofError("operation-frontier-malformed")
+    return {
+        "blocked_state": blocked_state,
+        "pending_operation_count": pending,
+    }
+
+
 def _frontier_summary(payload):
-    if payload.get("ok") is not True or not isinstance(payload.get("context"), dict):
+    if (
+        set(payload) != FRONTIER_ENVELOPE_KEYS
+        or payload.get("ok") is not True
+        or not isinstance(payload.get("context"), dict)
+    ):
         raise ProofError("frontier-response-malformed")
     context = payload["context"]
+    operation_frontier = _operation_frontier(context)
     if "active_release" not in context or "batches" not in context:
         raise ProofError("frontier-response-malformed")
     batches = context["batches"]
     active_release = context["active_release"]
     if (
         not isinstance(batches, list)
-        or len(batches) > 1000
-        or any(not isinstance(batch, dict) for batch in batches)
-        or (active_release is not None and not isinstance(active_release, dict))
+        or len(batches) > MAX_FRONTIER_ITEMS
+        or any(not _valid_batch(batch) for batch in batches)
     ):
         raise ProofError("frontier-response-malformed")
-    releases = [] if active_release is None else [{"present": True}]
+
+    common_keys = {"active_release", "batches", "operation_frontier"}
     if active_release is not None:
+        valid_variant = (
+            set(context) == common_keys
+            and not batches
+            and _valid_active_release(active_release)
+        )
         reason = "active_release"
-    elif context.get("blocked_reason") is not None:
+    elif "blocked_reason" in context or "blocked_batch_id" in context:
+        valid_variant = (
+            set(context)
+            == common_keys | {"blocked_reason", "blocked_batch_id"}
+            and not batches
+            and context.get("blocked_reason") == "missing_batch_evidence"
+            and _bounded_string(context.get("blocked_batch_id"))
+        )
         reason = "blocked"
-    elif batches:
-        reason = "ready_to_prepare"
     else:
-        reason = "unprepared"
-    summary = {"queue_count": len(batches), "reason": reason, "releases": releases}
-    return summary, reason == "unprepared"
+        base_sha = context.get("base_sha")
+        valid_variant = (
+            set(context) == common_keys | {"base_sha"}
+            and (base_sha is None or _bounded_string(base_sha))
+        )
+        reason = "ready_to_prepare" if batches else "unprepared"
+    if not valid_variant:
+        raise ProofError("frontier-response-malformed")
+
+    releases = [] if active_release is None else [{"present": True}]
+    summary = {
+        "operation_frontier": operation_frontier,
+        "queue_count": len(batches),
+        "reason": reason,
+        "releases": releases,
+    }
+    operation_empty = (
+        operation_frontier["pending_operation_count"] == 0
+        and operation_frontier["blocked_state"] == "unblocked"
+    )
+    return summary, reason == "unprepared" and operation_empty
 
 
-def timer_state(run=subprocess.run):
+def _timer_state(unit, run):
     """Read timer state without mutating the unit."""
     try:
         enabled = run(
-            ["systemctl", "--user", "is-enabled", TIMER_UNIT],
+            ["systemctl", "--user", "is-enabled", unit],
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
             check=False,
         )
         active = run(
-            ["systemctl", "--user", "is-active", TIMER_UNIT],
+            ["systemctl", "--user", "is-active", unit],
             capture_output=True,
             text=True,
             timeout=TIMEOUT_SECONDS,
@@ -241,15 +369,33 @@ def timer_state(run=subprocess.run):
     }
 
 
+def timer_state(run=subprocess.run):
+    """Read the production release timer state without mutating the unit."""
+    return _timer_state(TIMER_UNIT, run)
+
+
+def _utc_timestamp(utc_now):
+    observed = utc_now()
+    if not isinstance(observed, datetime.datetime) or observed.tzinfo is None:
+        raise ProofError("timestamp-unavailable")
+    return (
+        observed.astimezone(datetime.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+
 def prove(
     ledger_origin,
     apply_env_file,
     observer_env_file,
     *,
+    apply_timer_stopped,
+    window_owner,
     opener,
     run_systemctl,
+    utc_now,
 ):
-    timer = timer_state(run_systemctl)
     receipt = {
         "all_queues_empty": False,
         "apply": {"accepted": None},
@@ -258,18 +404,43 @@ def prove(
             "other_non_terminal": None,
             "pending": None,
         },
+        "fence": "unproven",
+        "first_get_utc": None,
+        "last_get_utc": None,
         "ledger_host": None,
         "publication": "unproved",
         "publication_fallback": None,
         "publication_frontier": None,
-        "timer": timer,
+        "timer": {"active": None, "available": False, "enabled": None},
     }
     try:
+        if not apply_timer_stopped or window_owner is None:
+            raise ProofError("fence-assertion-missing")
+        if not WINDOW_OWNER_RE.fullmatch(window_owner):
+            raise ProofError("fence-assertion-invalid")
+        apply_timer = _timer_state(APPLY_TIMER_UNIT, run_systemctl)
+        apply_stopped = (
+            apply_timer["available"] is True
+            and apply_timer["active"] is False
+        )
+        receipt["fence"] = {
+            "apply_timer": apply_timer,
+            "apply_timer_stopped": apply_stopped,
+            "proved": apply_stopped,
+            "window_owner": window_owner,
+        }
+        if not apply_stopped:
+            raise ProofError("fence-apply-timer-not-stopped")
+
+        timer = timer_state(run_systemctl)
+        receipt["timer"] = timer
         review_url, frontier_url, ledger_host = _api_coordinates(
             ledger_origin
         )
         receipt["ledger_host"] = ledger_host
         apply_env = _protected_env(apply_env_file, {"EDIT_SERVICE_TOKEN"})
+        receipt["first_get_utc"] = _utc_timestamp(utc_now)
+        receipt["last_get_utc"] = receipt["first_get_utc"]
         review_payload = _get_json(
             review_url, apply_env["EDIT_SERVICE_TOKEN"], opener, review=True
         )
@@ -283,6 +454,7 @@ def prove(
             missing_ok=True,
         )
         if observer_env is not None:
+            receipt["last_get_utc"] = _utc_timestamp(utc_now)
             frontier_payload = _get_json(
                 frontier_url,
                 observer_env["SONSTENG_PROD_OBSERVER_BEARER"],
@@ -303,7 +475,7 @@ def prove(
                 if timer_off
                 else "systemd timer not proved off"
             )
-            publication_empty = timer_off
+            raise ProofError("environment-unavailable")
 
         receipt["all_queues_empty"] = (
             all(value == 0 for value in counts.values()) and publication_empty
@@ -318,6 +490,7 @@ def main(
     *,
     opener=None,
     run_systemctl=subprocess.run,
+    utc_now=None,
     stdout=None,
 ):
     parser = argparse.ArgumentParser(
@@ -326,15 +499,22 @@ def main(
     parser.add_argument("--ledger-origin", required=True)
     parser.add_argument("--apply-env-file", required=True)
     parser.add_argument("--observer-env-file", required=True)
+    parser.add_argument("--apply-timer-stopped", action="store_true")
+    parser.add_argument("--window-owner")
     args = parser.parse_args(argv)
     if opener is None:
         opener = urllib.request.build_opener(_NoRedirect).open
+    if utc_now is None:
+        utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
     receipt = prove(
         args.ledger_origin,
         args.apply_env_file,
         args.observer_env_file,
+        apply_timer_stopped=args.apply_timer_stopped,
+        window_owner=args.window_owner,
         opener=opener,
         run_systemctl=run_systemctl,
+        utc_now=utc_now,
     )
     print(
         json.dumps(receipt, sort_keys=True, separators=(",", ":")),

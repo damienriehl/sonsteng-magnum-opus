@@ -229,27 +229,39 @@ does not authorize or execute production work.
 Damien must perform the production window at the keyboard under the Cloudflare
 PROD principal described in `docs/prod-release-operations.md`:
 
-1. notify John and independently prove all three queues empty with the one
+1. notify John, establish pencils-down, stop the apply timer, prove both
+   services quiescent, take the daemon lock, and establish the six-actor
+   exclusive change window;
+2. at window open, independently prove all three queues empty with the one
    text-free, read-only receipt:
 
    ```bash
    python3 tools/prove_queues_empty.py \
      --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
      --apply-env-file ~/.config/sonsteng-apply/env \
-     --observer-env-file ~/.config/sonsteng-release-observer/env
+     --observer-env-file ~/.config/sonsteng-release-observer/env \
+     --apply-timer-stopped \
+     --window-owner <opaque-Packet-D-window-id>
    ```
 
    Require exit `0` and `"all_queues_empty":true`. The tool performs only the
    daemon's admin review GET and the observer's readiness-frontier GET, emits
-   counts rather than authored rows or IDs, and names only the ledger host. If
-   the observer environment file does not exist, the receipt instead reports
-   `"publication":"observer-env-absent"` and passes that queue only when
-   `sonsteng-prod-release.timer` is proved disabled and inactive; the receipt
-   states that fallback explicitly. Never put environment-file values on the
-   command line;
-2. stop the apply timer, prove both services quiescent, take the daemon lock,
-   and establish the six-actor exclusive change window; then rerun item 1's
-   queue-proof command and require a fresh passing receipt before item 3;
+   counts rather than authored rows or IDs, and names only the ledger host. It
+   verifies `sonsteng-apply.timer` is inactive, records its recognized
+   enabled/disabled state, records the named window and the UTC times of the
+   first and last GET, and fails with `"fence":"unproven"` when either fence
+   assertion is absent. The receipt is valid only inside the exact window named
+   by `window_owner`; use the same opaque ID for the opening and closing proof.
+
+   Publication emptiness additionally requires the observer context to expose
+   exactly `operation_frontier:{pending_operation_count,blocked_state}`, with a
+   zero count and `blocked_state:"unblocked"`. Until the observer endpoint
+   exposes that field, a source-faithful response fails closed with
+   `operation-frontier-missing`. If the observer environment file does not
+   exist, the receipt reports `"publication":"observer-env-absent"` and fails
+   closed with `environment-unavailable`; production-timer state is retained
+   only as diagnostic metadata and cannot substitute for the observer proof.
+   Never put environment-file values on the command line;
 3. capture and verify the exact prior pair and both live SHA headers;
 4. rehearse, then materialize and commit the combined rewrite plus generated
    artifacts exactly once; merge only that commit;
@@ -259,7 +271,14 @@ PROD principal described in `docs/prod-release-operations.md`:
 8. deploy/rebuild DEV/editor from the same SHA;
 9. reactivate and prove the prior pair, then the intended new pair;
 10. prove canonical `main`, production, DEV, and editor all name the candidate;
-    only then release the window and restore the apply timer's prior policy.
+11. at window close, rerun item 2's queue-proof command with the same
+    `--window-owner`, and preserve this fresh passing receipt as the durable
+    queue evidence. Only then release the window and restore the apply timer's
+    prior policy.
+
+The opening receipt is a go/no-go check for entering Packet D work. It does not
+remain authoritative after later actions in the window. The closing rerun,
+still inside the fence, is the durable evidence for that named window.
 
 If any step is ambiguous, run complete compensation and keep the window fenced
 until the prior state is proved. Do not infer a provider ID, fall forward to
