@@ -1046,9 +1046,22 @@ function observerReleaseSummary(release) {
     .map((key) => [key,release[key]]));
 }
 
+function observerOperationFrontier(context) {
+  const eligible = context?.projection?.eligible_operation_count;
+  const held = context?.projection?.held_operation_count;
+  if (!Number.isSafeInteger(eligible) || eligible < 0 ||
+      !Number.isSafeInteger(held) || held < 0)
+    return { pending_operation_count:0,blocked_state:"blocked" };
+  const pending = eligible + held;
+  if (!Number.isSafeInteger(pending) || pending > 100_000)
+    return { pending_operation_count:0,blocked_state:"blocked" };
+  return { pending_operation_count:pending,blocked_state:"unblocked" };
+}
+
 function observerPreparationSummary(context) {
   return {
     active_release:context?.active_release ? observerReleaseSummary(context.active_release) : null,
+    operation_frontier:observerOperationFrontier(context),
     ...(context?.base_sha !== undefined ? { base_sha:context.base_sha } : {}),
     ...(context?.blocked_reason !== undefined ? { blocked_reason:context.blocked_reason } : {}),
     ...(context?.blocked_batch_id !== undefined ? { blocked_batch_id:context.blocked_batch_id } : {}),
@@ -1100,8 +1113,11 @@ export async function productionPreparationContextEndpoint(request, env, auth) {
   if (env.PROD_RELEASE_LEDGER !== "true") return editError("not_found", "Not found.", 404);
   if (!releaseService(auth) && !releaseObserver(auth))
     return editError("forbidden", "Release read scope required.", 403);
-  const context = await editorStub(env).productionPreparationContext();
-  return json({ ok:true, context:releaseObserver(auth) ? observerPreparationSummary(context) : context });
+  const observer = releaseObserver(auth);
+  const context = observer ? await editorStub(env).productionPreparationContext({
+    tolerateOperationProjectionFailure:true,
+  }) : await editorStub(env).productionPreparationContext();
+  return json({ ok:true, context:observer ? observerPreparationSummary(context) : context });
 }
 
 export async function productionAuditEndpoint(request, env, auth) {

@@ -869,6 +869,202 @@ const scopes = ({ publisher = false, admin = false, releaseService = false,
   instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher},
   release_service:{granted:releaseService}, release_observer:{granted:releaseObserver} });
 
+async function observerFrontier(context) {
+  const env = { PROD_RELEASE_LEDGER:"true",EDITOR:{ getByName:() => ({
+    productionPreparationContext:async () => context,
+  }) } };
+  const response = await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,{
+      editor:"service:observer",credential_channel:"bearer",
+      scopes:scopes({ releaseObserver:true }),
+    });
+  assert.equal(response.status,200);
+  return (await response.json()).context;
+}
+
+function assertObserverOperationFrontier(actual, expected) {
+  assert.deepEqual(Object.keys(actual).sort(),["blocked_state","pending_operation_count"]);
+  assert.deepEqual(actual,expected);
+}
+
+function seedReviewedHeldOperation(core) {
+  const sourceRef = "data/copy/home.json#structural";
+  const operations = [{ id:"held-operation",decision_id:"held-operation",kind:"merge",op:"merge",
+    source_ref:sourceRef,op_arg:"data/copy/home.json#dependent",
+    source_revision:"dev-held",prod_base:"prod-base" }];
+  assert.equal(core.recordReviewRevision({ id:"revision-held",source_ref:sourceRef,
+    source_revision:"dev-held",prod_base:"prod-base",commit_sha:"dev-held",
+    original_hash:"old",proposed_hash:"new",original_text:"A",proposed_text:"A B",
+    suggestion_ids:["suggestion-held"],operations }).ok,true);
+  const decisions = [{ operation_id:"held-operation",decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-held",source_revision:"dev-held",prod_base:"prod-base",
+    decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-held",idempotency_key:"review-held",
+    request_digest:"review-held",actor:"slot:damien",sources:[{
+      review_revision_id:"revision-held",source_revision:"dev-held",prod_base:"prod-base",
+      decisions }] }).ok,true);
+}
+
+test("observer operation frontier is present and empty stores are zero and unblocked", async () => {
+  const core = makeCore(() => 9000);
+  const context = await observerFrontier(core.productionPreparationContext());
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"unblocked",
+  });
+});
+
+test("observer operation frontier reports eligible-only operation work", async () => {
+  const core = makeCore(() => 9010);
+  reviewedProjection(core);
+  const context = await observerFrontier(core.productionPreparationContext());
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  assert.equal("projection" in context,false);
+});
+
+test("observer operation frontier reports the sum of eligible and held operation work", async () => {
+  const context = await observerFrontier({ projection:{
+    eligible_operation_count:3,held_operation_count:4,
+  } });
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:7,blocked_state:"unblocked",
+  });
+});
+
+test("observer operation frontier blocks invalid or missing held operation counts", async () => {
+  for (const projection of [
+    { eligible_operation_count:0 },
+    { eligible_operation_count:0,held_operation_count:-1 },
+    { eligible_operation_count:0,held_operation_count:0.5 },
+    { eligible_operation_count:0,held_operation_count:Number.MAX_SAFE_INTEGER + 1 },
+  ]) {
+    const context = await observerFrontier({ projection });
+    assertObserverOperationFrontier(context.operation_frontier,{
+      pending_operation_count:0,blocked_state:"blocked",
+    });
+  }
+});
+
+test("observer operation frontier blocks rather than truncates sums over the consumer count bound", async () => {
+  const bounded = await observerFrontier({ projection:{
+    eligible_operation_count:60_000,held_operation_count:40_000,
+  } });
+  assertObserverOperationFrontier(bounded.operation_frontier,{
+    pending_operation_count:100_000,blocked_state:"unblocked",
+  });
+  const overflow = await observerFrontier({ projection:{
+    eligible_operation_count:60_000,held_operation_count:40_001,
+  } });
+  assertObserverOperationFrontier(overflow.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+});
+
+test("observer operation frontier reports bounded blockage when projection is unavailable", async () => {
+  const core = makeCore(() => 9015);
+  reviewedProjection(core);
+  core.sql.exec("UPDATE production_review_revisions SET operations_json=? WHERE id=?",
+    "{malformed","revision-v2");
+  const calls = [];
+  const env = { PROD_RELEASE_LEDGER:"true",EDITOR:{ getByName:() => ({
+    productionPreparationContext:async (...args) => {
+      calls.push(args);
+      return core.productionPreparationContext(...args);
+    },
+  }) } };
+  const request = () => new Request("https://edit.example/edit/v1/prod/releases/frontier");
+  const releaseService = { editor:"service:release",credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }) };
+  await assert.rejects(productionPreparationContextEndpoint(request(),env,releaseService),
+    SyntaxError,"the trusted release-service projection must still fail loudly");
+
+  const response = await productionPreparationContextEndpoint(request(),env,{
+    editor:"service:observer",credential_channel:"bearer",
+    scopes:scopes({ releaseObserver:true }),
+  });
+  assert.equal(response.status,200);
+  const context = (await response.json()).context;
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal(context.operation_frontier.pending_operation_count === 0 &&
+    context.operation_frontier.blocked_state === "unblocked",false,
+    "a blocked zero count must fail closed rather than prove the frontier empty");
+  assert.deepEqual(calls,[[],[{ tolerateOperationProjectionFailure:true }]],
+    "release service must use the default path while observers request tolerant projection");
+});
+
+test("observer operation frontier reports held-only operation work", async () => {
+  const core = makeCore(() => 9020);
+  seedReviewedHeldOperation(core);
+  const context = await observerFrontier(core.productionPreparationContext());
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+});
+
+test("observer operation frontier survives an active release with truthful counts", async () => {
+  const core = makeCore(() => 9030);
+  reviewedProjection(core);
+  seedApplied(core,"batch-observer-active",["suggestion-observer-active"],9031);
+  const prepared = core.prepareProductionRelease(release({
+    target_batch_id:"batch-observer-active",candidate_sha:"commit-batch-observer-active",
+  }));
+  assert.equal(prepared.ok,true);
+  const releaseServiceContext = core.productionPreparationContext();
+  assert.equal("projection" in releaseServiceContext,false,
+    "the release-service early-return shape must remain unchanged");
+
+  const context = await observerFrontier(core.productionPreparationContext({
+    tolerateOperationProjectionFailure:true,
+  }));
+  assert.equal(context.active_release.id,prepared.release.id);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+});
+
+test("observer operation frontier survives missing batch evidence with truthful held counts", async () => {
+  const core = makeCore(() => 9040);
+  seedReviewedHeldOperation(core);
+  seedApplied(core,"batch-blocked",["suggestion-blocked"],9041);
+  core.sql.exec("UPDATE apply_batches SET phase='evidence_missing' WHERE batch_id=?",
+    "batch-blocked");
+  const releaseServiceContext = core.productionPreparationContext();
+  assert.equal(releaseServiceContext.blocked_reason,"missing_batch_evidence");
+  assert.equal("projection" in releaseServiceContext,false,
+    "the release-service early-return shape must remain unchanged");
+
+  const context = await observerFrontier(core.productionPreparationContext({
+    tolerateOperationProjectionFailure:true,
+  }));
+  assert.equal(context.blocked_reason,"missing_batch_evidence");
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+});
+
+test("observer operation frontier preserves every legacy observer key byte-for-byte", async () => {
+  const legacy = { active_release:null,base_sha:"a".repeat(40),
+    blocked_reason:"missing_batch_evidence",blocked_batch_id:"batch-blocked",
+    batches:[{ batch_id:"batch-1",commit_sha:"c".repeat(40),generator_id:"generator-1",
+      suggestion_ids:["private-id"] }] };
+  const context = await observerFrontier({ ...legacy,projection:{
+    eligible_operation_count:2,held_operation_count:0,
+  } });
+  const { operation_frontier,...otherKeys } = context;
+  const expected = { active_release:null,base_sha:"a".repeat(40),
+    blocked_reason:"missing_batch_evidence",blocked_batch_id:"batch-blocked",
+    batches:[{ batch_id:"batch-1",commit_sha:"c".repeat(40),generator_id:"generator-1",
+      member_count:1 }] };
+  assert.equal(JSON.stringify(otherKeys),JSON.stringify(expected));
+  assertObserverOperationFrontier(operation_frontier,{
+    pending_operation_count:2,blocked_state:"unblocked",
+  });
+});
+
 test("only a human Access Publisher can authorize; bearer and admin-only cannot", async () => {
   let calls = 0;
   const env = { EDIT_ORIGIN:"https://edit.example", PROD_RELEASE_LEDGER:"true",
@@ -972,7 +1168,8 @@ test("release observer can read only status frontier and audit", async () => {
     productionPreparationContext:async () => (calls.push(["frontier"]),
       { active_release:null,base_sha:"a".repeat(40),batches:[{ batch_id:"batch-1",
         commit_sha:"c".repeat(40),generator_id:"generator-1",suggestion_ids:["private-id"] }],
-        projection:{ sources:[{ original_text:"secret prose" }] } }),
+        projection:{ eligible_operation_count:0,held_operation_count:0,
+          sources:[{ original_text:"secret prose" }] } }),
     productionReleaseAudit:async () => (calls.push(["audit"]),
       { counts:{},invariants:{},active_releases:[] }),
     prepareProductionRelease:async () => { throw new Error("observer reached mutation"); },
@@ -996,7 +1193,9 @@ test("release observer can read only status frontier and audit", async () => {
     "https://edit.example/edit/v1/prod/releases/frontier"),env,observer);
   assert.equal(frontierResponse.status,200);
   const frontierBody = await frontierResponse.json();
-  assert.deepEqual(frontierBody.context,{ active_release:null,base_sha:"a".repeat(40),
+  assert.deepEqual(frontierBody.context,{ active_release:null,
+    operation_frontier:{ pending_operation_count:0,blocked_state:"unblocked" },
+    base_sha:"a".repeat(40),
     batches:[{ batch_id:"batch-1",commit_sha:"c".repeat(40),generator_id:"generator-1",
       member_count:1 }] });
   assert.doesNotMatch(JSON.stringify(frontierBody),/secret|private|projection|suggestion_ids/);

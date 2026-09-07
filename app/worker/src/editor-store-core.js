@@ -2073,7 +2073,8 @@ export class EditorStoreCore {
       JOIN production_review_submission_sources x ON x.review_revision_id=r.id
       JOIN production_review_submissions s ON s.id=x.review_id
       ORDER BY r.source_ref,s.created_at,s.id,r.id)`);
-    if (!submittedRows.length) return { review_receipts:[],sources:[],eligible_operation_count:0 };
+    if (!submittedRows.length) return { review_receipts:[],sources:[],
+      eligible_operation_count:0,held_operation_count:0 };
 
     const revisionIds = [...new Set(submittedRows.map((row) => row.review_revision_id))];
     const revisionMarks = revisionIds.map(() => "?").join(",");
@@ -2233,14 +2234,25 @@ export class EditorStoreCore {
   // Minimal, text-free projection for the trusted candidate builder.  The
   // service receives immutable IDs and commit evidence; edited copy remains
   // confined to the human Publisher preview.
-  productionPreparationContext() {
+  productionPreparationContext({ tolerateOperationProjectionFailure=false } = {}) {
+    const projectionForContext = () => {
+      let projection;
+      try {
+        projection = this._operationFrontierProjection();
+      } catch (error) {
+        if (!tolerateOperationProjectionFailure) throw error;
+      }
+      return { projection };
+    };
     const activeRow = this._one(
       "SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 1");
-    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
+    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[],
+      ...(tolerateOperationProjectionFailure ? projectionForContext() : {}) };
     const missing = this._one(
       "SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' ORDER BY created_at,batch_id LIMIT 1");
     if (missing) return { active_release:null, batches:[], blocked_reason:"missing_batch_evidence",
-      blocked_batch_id:missing.batch_id };
+      blocked_batch_id:missing.batch_id,
+      ...(tolerateOperationProjectionFailure ? projectionForContext() : {}) };
     const frontier = this._one(
       "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
     const allDone = this._all(
@@ -2260,8 +2272,8 @@ export class EditorStoreCore {
         batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
         "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
         .map((row) => row.id)] }));
-    const projection = this._operationFrontierProjection();
-    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches, projection };
+    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches,
+      ...projectionForContext() };
   }
 
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is
