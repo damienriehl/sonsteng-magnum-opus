@@ -4,7 +4,10 @@
 bypass. It has two intentionally different paths: a write-bearing
 materialization rehearsal and a write-free verification of the exact committed
 candidate. The dependency-injected production state machine consumes only the
-second path. No CLI production adapter exists.
+second path. No full CLI production adapter exists. The separate,
+Git-only `tools/canonical_ref_cas.py` supplies the bounded canonical `main`
+forward and compensation operations documented below; it does not connect
+`--execute` to any other production surface.
 
 ## Phase 1: rehearse the one-time materialization
 
@@ -185,6 +188,50 @@ rewrite. Its protected-ref authority is bounded to that one candidate-to-prior
 compare-and-swap while the six-actor fence is held. A mismatched current ref,
 failed atomic update, or non-exact readback fails compensation.
 
+With the daemon lock and the entire six-actor window still held, first prove
+the exact Git compensation preconditions without mutation:
+
+```bash
+python3 tools/canonical_ref_cas.py restore \
+  --repo "$DAEMON_REPO" \
+  --remote origin \
+  --branch main \
+  --from "$CANDIDATE_SHA" \
+  --to "$PRIOR_SHA" \
+  --dry-run
+```
+
+Then perform that same exact candidate-to-prior CAS:
+
+```bash
+python3 tools/canonical_ref_cas.py restore \
+  --repo "$DAEMON_REPO" \
+  --remote origin \
+  --branch main \
+  --from "$CANDIDATE_SHA" \
+  --to "$PRIOR_SHA"
+```
+
+The command refuses unless checked-out, clean local `main`, worktree `HEAD`,
+and remote `main` all equal the exact `--from` candidate, and the candidate is
+an exact commit whose sole parent is the `--to` prior SHA. The named remote must
+resolve to one identical fetch and push URL. The command first pushes the prior
+SHA with `--force-with-lease=main:<candidate-sha>`, then compare-and-swaps local `main`
+only if it still equals the candidate, aligns the daemon worktree, and reads
+back local `main`, remote `main` via `ls-remote`, and worktree `HEAD`. Its JSON
+receipt contains only operation labels and SHA values, including best-effort
+readback after a failure so partial state is never silent. Any nonzero result is
+failed compensation and requires the fenced handling below; never replace it
+with a generic force push.
+
+An injected production adapter can implement the state machine method by
+delegating to
+`canonical_ref_cas.CanonicalRefCasAdapter(...).restore_canonical_ref_exact`.
+That method returns the exact prior SHA only after all three readbacks match,
+which satisfies the check in `day_zero_migration._restore_canonical_ref_exact`.
+It deliberately supplies no adapter for the other `--execute` production
+methods.
+
 The adapter attempts every compensation surface even if an earlier step fails.
 If the complete prior state cannot be proved, it requires the persistent-freeze
 hook to return an affirmative proof, leaves the apply timer stopped, leaves the
@@ -234,7 +281,8 @@ PROD principal described in `docs/prod-release-operations.md`:
    and establish the six-actor exclusive change window;
 3. capture and verify the exact prior pair and both live SHA headers;
 4. rehearse, then materialize and commit the combined rewrite plus generated
-   artifacts exactly once; merge only that commit;
+   artifacts exactly once; advance canonical `main` by running the exact
+   one-commit compare-and-swap below;
 5. verify the exact committed tree with the write-free phase list;
 6. upload only the Pages artifact and named production Worker version;
 7. read back and atomically record the exact new provider pair;
@@ -247,3 +295,37 @@ If any step is ambiguous, run complete compensation and keep the window fenced
 until the prior state is proved. Do not infer a provider ID, fall forward to
 `HEAD`, alter DNS or Access, or substitute normal Publisher authorization for
 this migration-only KTD6 waiver.
+
+For act 4, after the candidate commit and review have passed and while the
+daemon lock and six-actor window remain held, rehearse the Git-only transition:
+
+```bash
+python3 tools/canonical_ref_cas.py forward \
+  --repo "$DAEMON_REPO" \
+  --remote origin \
+  --branch main \
+  --from "$PRIOR_SHA" \
+  --to "$CANDIDATE_SHA" \
+  --dry-run
+```
+
+Then perform the exact same transition without `--dry-run`:
+
+```bash
+python3 tools/canonical_ref_cas.py forward \
+  --repo "$DAEMON_REPO" \
+  --remote origin \
+  --branch main \
+  --from "$PRIOR_SHA" \
+  --to "$CANDIDATE_SHA"
+```
+
+`forward` requires clean checked-out local `main`, worktree `HEAD`, and remote
+`main` all to equal the exact prior SHA; requires the candidate's sole parent to
+be that prior SHA and `prior..candidate` to contain exactly one commit; and
+requires the named remote to resolve to one identical fetch and push URL. It
+checks the candidate in a fresh standalone exact clone, uses `merge
+--ff-only`, pushes with `--force-with-lease=main:<prior-sha>`, and succeeds only
+after local, remote, and worktree readback all equal the candidate. This
+migration-specific command replaces the generic `merge --no-ff` example in
+`docs/direct-apply-daemon.md`, which must not be used for Day Zero.

@@ -789,6 +789,12 @@ def _compensate_to_prior(production, request: MigrationRequest) -> bool:
 
 
 def _restore_canonical_ref_exact(production, request: MigrationRequest) -> None:
+    """Restore through the injected adapter and require its exact SHA readback.
+
+    A production adapter may satisfy this one method with
+    ``canonical_ref_cas.CanonicalRefCasAdapter``.  That narrow Git seam does
+    not make this module's deliberately absent ``--execute`` adapter complete.
+    """
     observed = production.restore_canonical_ref_exact(
         request.candidate_sha, request.prior_pair.sha,
     )
