@@ -36,6 +36,11 @@ def remote_sha(repo: Path) -> str:
     return line.split()[0]
 
 
+def remote_refs(repo: Path) -> dict[str, str]:
+    lines = git(repo, "ls-remote", "--refs", "origin").stdout.splitlines()
+    return {ref: value for value, ref in (line.split() for line in lines)}
+
+
 @dataclass(frozen=True)
 class Repositories:
     remote: Path
@@ -59,7 +64,8 @@ def repositories(tmp_path: Path) -> Repositories:
     git(seed, "add", "base.txt")
     git(seed, "commit", "-q", "-m", "ancestor")
     (seed / "state.txt").write_text("prior\n", encoding="utf-8")
-    git(seed, "add", "state.txt")
+    (seed / "removed-by-candidate.txt").write_text("restore me\n", encoding="utf-8")
+    git(seed, "add", "state.txt", "removed-by-candidate.txt")
     git(seed, "commit", "-q", "-m", "prior")
     prior = sha(seed)
     git(seed, "remote", "add", "origin", str(remote))
@@ -67,7 +73,10 @@ def repositories(tmp_path: Path) -> Repositories:
 
     git(tmp_path, "clone", "-q", "--branch", "main", str(remote), str(daemon))
     (seed / "state.txt").write_text("candidate\n", encoding="utf-8")
-    git(seed, "commit", "-q", "-am", "candidate")
+    (seed / "removed-by-candidate.txt").unlink()
+    (seed / "added-by-candidate.txt").write_text("remove me\n", encoding="utf-8")
+    git(seed, "add", "--all")
+    git(seed, "commit", "-q", "-m", "candidate")
     candidate = sha(seed)
     git(daemon, "fetch", "-q", str(seed), candidate)
 
@@ -237,7 +246,11 @@ def test_restore_happy(repositories: Repositories):
     assert receipt(completed) == {
         "dry_run": False,
         "expected": {"from": repositories.candidate, "to": repositories.prior},
-        "mutations": ["remote-main-cas", "local-main-cas", "worktree-reset"],
+        "mutations": [
+            "remote-main-cas",
+            "local-main-cas",
+            "worktree-alignment",
+        ],
         "readback": {
             "head": repositories.prior,
             "local": repositories.prior,
@@ -247,6 +260,10 @@ def test_restore_happy(repositories: Repositories):
         "verb": "restore",
     }
     assert git(repositories.daemon, "status", "--porcelain", "--untracked-files=all").stdout == ""
+    assert not (repositories.daemon / "added-by-candidate.txt").exists()
+    assert (repositories.daemon / "removed-by-candidate.txt").read_text(
+        encoding="utf-8"
+    ) == "restore me\n"
 
 
 def test_restore_adapter_satisfies_migration_contract(repositories: Repositories):
@@ -307,6 +324,347 @@ def test_dry_run_mutates_nothing(repositories: Repositories):
     assert receipt(restore)["mutations"] == []
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+@pytest.mark.parametrize("verb", ["forward", "restore"])
+@pytest.mark.parametrize(
+    "index_option",
+    [
+        pytest.param("--assume-unchanged", id="assume-unchanged"),
+        pytest.param("--skip-worktree", id="skip-worktree"),
+    ],
+)
+def test_hidden_index_entry_is_refused(
+    repositories: Repositories,
+    verb: str,
+    index_option: str,
+):
+    if verb == "restore":
+        assert invoke(repositories, "forward").returncode == 0
+    git(repositories.daemon, "update-index", index_option, "state.txt")
+    (repositories.daemon / "state.txt").write_text("hidden edit\n", encoding="utf-8")
+
+    completed = invoke(repositories, verb, dry_run=True)
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "daemon index contains hidden tracked entries"
+    assert failure["mutations"] == []
+
+
+def test_dry_run_refuses_remote_race_before_final_readback(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_readback = cas._readback
+    readbacks = 0
+    moved = None
+
+    def racing_readback(operation, remote_url):
+        nonlocal readbacks, moved
+        readbacks += 1
+        if readbacks == 2:
+            moved = advance_remote(repositories)
+        return original_readback(operation, remote_url)
+
+    monkeypatch.setattr(cas, "_readback", racing_readback)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            dry_run=True,
+        )
+
+    assert moved is not None
+    assert captured.value.receipt["error"] == "exact canonical ref readback mismatch"
+    assert captured.value.receipt["readback"]["remote"] == moved
+
+
+def test_dry_run_refuses_local_race_before_final_readback(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    (repositories.seed / "state.txt").write_text("competitor\n", encoding="utf-8")
+    git(repositories.seed, "commit", "-q", "-am", "competing local update")
+    competitor = sha(repositories.seed)
+    git(repositories.daemon, "fetch", "-q", str(repositories.seed), competitor)
+    original_readback = cas._readback
+    readbacks = 0
+
+    def racing_readback(operation, remote_url):
+        nonlocal readbacks
+        readbacks += 1
+        if readbacks == 2:
+            git(
+                repositories.daemon,
+                "update-ref",
+                "refs/heads/main",
+                competitor,
+                repositories.prior,
+            )
+        return original_readback(operation, remote_url)
+
+    monkeypatch.setattr(cas, "_readback", racing_readback)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            dry_run=True,
+        )
+
+    assert captured.value.receipt["error"] == "exact canonical ref readback mismatch"
+    assert captured.value.receipt["readback"]["local"] == competitor
+
+
+def test_dry_run_rechecks_symbolic_head_before_success(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_readback = cas._readback
+    readbacks = 0
+
+    def racing_readback(operation, remote_url):
+        nonlocal readbacks
+        readbacks += 1
+        observed = original_readback(operation, remote_url)
+        if readbacks == 2:
+            git(repositories.daemon, "checkout", "-q", "--detach", repositories.prior)
+        return observed
+
+    monkeypatch.setattr(cas, "_readback", racing_readback)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            dry_run=True,
+        )
+
+    assert captured.value.receipt["error"] == (
+        "daemon worktree must have main checked out"
+    )
+
+
+def test_dry_run_rechecks_cleanliness_before_success(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_readback = cas._readback
+    readbacks = 0
+
+    def racing_readback(operation, remote_url):
+        nonlocal readbacks
+        readbacks += 1
+        observed = original_readback(operation, remote_url)
+        if readbacks == 2:
+            (repositories.daemon / "late-race.txt").write_text(
+                "late untracked change\n", encoding="utf-8"
+            )
+        return observed
+
+    monkeypatch.setattr(cas, "_readback", racing_readback)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            dry_run=True,
+        )
+
+    assert captured.value.receipt["error"] == "daemon worktree must be clean"
+
+
+@pytest.mark.parametrize("verb", ["forward", "restore"])
+def test_push_changes_only_remote_main_when_follow_tags_is_enabled(
+    repositories: Repositories, verb: str
+):
+    if verb == "restore":
+        assert invoke(repositories, "forward").returncode == 0
+        tag_target = repositories.prior
+    else:
+        tag_target = repositories.candidate
+    git(repositories.daemon, "config", "user.name", "CAS Test")
+    git(repositories.daemon, "config", "user.email", "cas@example.invalid")
+    git(
+        repositories.daemon,
+        "tag",
+        "-a",
+        "candidate-tag",
+        tag_target,
+        "-m",
+        "reachable annotated tag",
+    )
+    git(repositories.daemon, "config", "push.followTags", "true")
+    before = remote_refs(repositories.daemon)
+
+    completed = invoke(repositories, verb)
+
+    assert completed.returncode == 0, completed.stderr
+    after = remote_refs(repositories.daemon)
+    expected = dict(before)
+    expected["refs/heads/main"] = (
+        repositories.candidate if verb == "forward" else repositories.prior
+    )
+    assert after == expected
+
+
+def test_post_merge_hook_cannot_retarget_forward_push(repositories: Repositories):
+    decoy = repositories.remote.parent / "decoy.git"
+    git(decoy.parent, "init", "-q", "--bare", str(decoy))
+    git(
+        repositories.seed,
+        "push",
+        "-q",
+        str(decoy),
+        f"{repositories.prior}:refs/heads/main",
+    )
+    hook = repositories.daemon / ".git" / "hooks" / "post-merge"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"git remote set-url origin {decoy}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 0, completed.stderr
+    assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
+    assert sha(decoy, "refs/heads/main") == repositories.prior
+    assert (
+        git(repositories.daemon, "remote", "get-url", "origin").stdout.strip()
+        == str(repositories.remote)
+    )
+
+
+def test_push_uses_pinned_url_and_fully_qualified_main_refspec(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_run_git = cas._run_git
+    push_args = None
+
+    def recording_run_git(operation, args, *, stage, check=True, cwd=None, env=None):
+        nonlocal push_args
+        if stage == "remote main compare-and-swap":
+            push_args = list(args)
+        return original_run_git(
+            operation, args, stage=stage, check=check, cwd=cwd, env=env
+        )
+
+    monkeypatch.setattr(cas, "_run_git", recording_run_git)
+
+    result = cas.forward(
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+    )
+
+    assert result["result"] == "success"
+    assert push_args is not None
+    assert "--no-follow-tags" in push_args
+    assert "push.followTags=false" in push_args
+    assert "push.default=nothing" in push_args
+    assert str(repositories.remote) in push_args
+    assert "origin" not in push_args
+    assert "refs/heads/main:refs/heads/main" in push_args
+
+
+def test_remote_url_change_is_detected_without_retargeting_push(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    decoy = repositories.remote.parent / "decoy.git"
+    git(decoy.parent, "init", "-q", "--bare", str(decoy))
+    git(
+        repositories.seed,
+        "push",
+        "-q",
+        str(decoy),
+        f"{repositories.prior}:refs/heads/main",
+    )
+    original_run_git = cas._run_git
+    retargeted = False
+
+    def racing_run_git(operation, args, *, stage, check=True, cwd=None, env=None):
+        nonlocal retargeted
+        if stage == "remote main compare-and-swap" and not retargeted:
+            retargeted = True
+            git(repositories.daemon, "remote", "set-url", "origin", str(decoy))
+        return original_run_git(
+            operation, args, stage=stage, check=check, cwd=cwd, env=env
+        )
+
+    monkeypatch.setattr(cas, "_run_git", racing_run_git)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+        )
+
+    assert retargeted
+    assert captured.value.receipt["error"] == (
+        "validated remote URL changed during operation"
+    )
+    assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
+    assert sha(decoy, "refs/heads/main") == repositories.prior
+
+
+def test_restore_alignment_does_not_overwrite_raced_local_main(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    assert invoke(repositories, "forward").returncode == 0
+    (repositories.seed / "state.txt").write_text("competitor\n", encoding="utf-8")
+    git(repositories.seed, "commit", "-q", "-am", "competing local update")
+    competitor = sha(repositories.seed)
+    git(repositories.daemon, "fetch", "-q", str(repositories.seed), competitor)
+    original_run_git = cas._run_git
+    raced = False
+
+    def racing_run_git(operation, args, *, stage, check=True, cwd=None, env=None):
+        nonlocal raced
+        if stage == "daemon worktree alignment" and not raced:
+            raced = True
+            git(
+                repositories.daemon,
+                "update-ref",
+                "refs/heads/main",
+                competitor,
+                repositories.prior,
+            )
+        return original_run_git(
+            operation, args, stage=stage, check=check, cwd=cwd, env=env
+        )
+
+    monkeypatch.setattr(cas, "_run_git", racing_run_git)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.restore(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.candidate,
+            repositories.prior,
+        )
+
+    assert raced
+    assert captured.value.receipt["error"] == "local main changed during worktree alignment"
+    assert sha(repositories.daemon, "refs/heads/main") == competitor
+    assert remote_sha(repositories.daemon) == repositories.prior
 
 
 def test_readback_mismatch_reported(repositories: Repositories):
@@ -383,7 +741,7 @@ def test_forward_pushes_immutable_candidate_during_local_ref_race(
     original_run_git = cas._run_git
     raced = False
 
-    def racing_run_git(operation, args, *, stage, check=True, cwd=None):
+    def racing_run_git(operation, args, *, stage, check=True, cwd=None, env=None):
         nonlocal raced
         if stage == "remote main compare-and-swap" and not raced:
             raced = True
@@ -395,7 +753,7 @@ def test_forward_pushes_immutable_candidate_during_local_ref_race(
                 repositories.candidate,
             )
         return original_run_git(
-            operation, args, stage=stage, check=check, cwd=cwd
+            operation, args, stage=stage, check=check, cwd=cwd, env=env
         )
 
     monkeypatch.setattr(cas, "_run_git", racing_run_git)
@@ -438,7 +796,31 @@ def test_invalid_sha_fails_before_readback(repositories: Repositories):
     assert completed.returncode != 0
     failure = receipt(completed)
     assert failure["error"] == "--from must be an exact lowercase 40-character SHA"
+    assert failure["error_code"] == "invalid-coordinate"
+    assert failure["expected"] == {"from": None, "to": None}
     assert failure["mutations"] == []
     assert failure["readback"] == {"head": None, "local": None, "remote": None}
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
+
+
+@pytest.mark.parametrize(
+    ("coordinate", "value"),
+    [
+        ("from_sha", "/tmp/not-a-sha"),
+        ("to_sha", "../../private/not-a-sha"),
+        ("from_sha", "super-secret-token-value"),
+        ("to_sha", "credential=super-secret-value"),
+    ],
+)
+def test_invalid_coordinate_is_redacted_from_receipt(
+    repositories: Repositories, coordinate: str, value: str
+):
+    completed = invoke(repositories, "forward", **{coordinate: value})
+
+    assert completed.returncode != 0
+    assert value not in completed.stdout
+    assert value not in completed.stderr
+    failure = receipt(completed)
+    assert failure["error_code"] == "invalid-coordinate"
+    assert failure["expected"] == {"from": None, "to": None}

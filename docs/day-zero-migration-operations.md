@@ -215,14 +215,19 @@ python3 tools/canonical_ref_cas.py restore \
 The command refuses unless checked-out, clean local `main`, worktree `HEAD`,
 and remote `main` all equal the exact `--from` candidate, and the candidate is
 an exact commit whose sole parent is the `--to` prior SHA. The named remote must
-resolve to one identical fetch and push URL. The command first pushes the prior
-SHA with `--force-with-lease=main:<candidate-sha>`, then compare-and-swaps local `main`
-only if it still equals the candidate, aligns the daemon worktree, and reads
-back local `main`, remote `main` via `ls-remote`, and worktree `HEAD`. Its JSON
-receipt contains only operation labels and SHA values, including best-effort
-readback after a failure so partial state is never silent. Any nonzero result is
-failed compensation and requires the fenced handling below; never replace it
-with a generic force push.
+resolve to one identical fetch and push URL, which is pinned for all remote
+reads and writes and revalidated before success. Cleanliness rejects hidden
+index flags and compares tracked content with `HEAD` through a disposable
+index. The command first pushes the prior SHA from an immutable disposable
+source with `--force-with-lease=main:<candidate-sha>`, explicit
+`refs/heads/main:refs/heads/main`, and tag following disabled. It then
+compare-and-swaps local `main` only if it still equals the candidate and aligns
+the index and worktree with ref-nonmutating plumbing—never `reset --hard`.
+Finally it rechecks symbolic `HEAD`, exact cleanliness, remote configuration,
+and local, remote, and worktree SHAs. Its JSON receipt contains only operation
+labels and validated SHA values, including best-effort readback after a failure
+so partial state is never silent. Any nonzero result is failed compensation and
+requires the fenced handling below; never replace it with a generic force push.
 
 An injected production adapter can implement the state machine method by
 delegating to
@@ -324,8 +329,13 @@ python3 tools/canonical_ref_cas.py forward \
 `main` all to equal the exact prior SHA; requires the candidate's sole parent to
 be that prior SHA and `prior..candidate` to contain exactly one commit; and
 requires the named remote to resolve to one identical fetch and push URL. It
-checks the candidate in a fresh standalone exact clone, uses `merge
---ff-only`, pushes with `--force-with-lease=main:<prior-sha>`, and succeeds only
-after local, remote, and worktree readback all equal the candidate. This
-migration-specific command replaces the generic `merge --no-ff` example in
-`docs/direct-apply-daemon.md`, which must not be used for Day Zero.
+checks the candidate in a fresh standalone exact clone, rejects hidden index
+flags, proves tracked content against `HEAD` with a disposable index, and uses
+`merge --ff-only` with repository hooks disabled. It pins the validated remote
+URL and pushes an immutable source with
+`--force-with-lease=main:<prior-sha>`, explicit
+`refs/heads/main:refs/heads/main`, and tag following disabled. It succeeds only
+after a final symbolic-HEAD, exact-cleanliness, remote-configuration, and
+local/remote/worktree SHA proof. This migration-specific command replaces the
+generic `merge --no-ff` example in `docs/direct-apply-daemon.md`, which must not
+be used for Day Zero.
