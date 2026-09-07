@@ -118,6 +118,39 @@ def _head_sha(operation: Operation) -> str:
     return value
 
 
+def _remote_ref_map(operation: Operation, remote_url: str) -> dict[str, str]:
+    completed = _run_git(
+        operation,
+        ["ls-remote", "--refs", remote_url],
+        stage="remote visible ref map readback",
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise CasError("remote refs could not be read exactly")
+
+    refs: dict[str, str] = {}
+    for line in completed.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            raise CasError("remote refs could not be read exactly")
+        value, ref = fields
+        if (
+            not SHA_RE.fullmatch(value)
+            or not ref.startswith("refs/")
+            or ref in refs
+        ):
+            raise CasError("remote refs could not be read exactly")
+        refs[ref] = value
+    return refs
+
+
+def _remote_sha_from_map(operation: Operation, refs: Mapping[str, str]) -> str:
+    value = refs.get(operation.local_ref)
+    if value is None or not SHA_RE.fullmatch(value):
+        raise CasError("remote main readback was not an exact SHA")
+    return value
+
+
 def _remote_sha(operation: Operation, remote_url: str) -> str:
     completed = _run_git(
         operation,
@@ -134,11 +167,37 @@ def _remote_sha(operation: Operation, remote_url: str) -> str:
     return value
 
 
-def _readback(operation: Operation, remote_url: str) -> dict[str, str]:
+def _require_remote_ref_delta(
+    operation: Operation,
+    before: Mapping[str, str],
+    after: Mapping[str, str],
+) -> None:
+    changed_or_removed = any(
+        ref != operation.local_ref and after.get(ref) != sha
+        for ref, sha in before.items()
+    )
+    added = any(
+        ref != operation.local_ref and ref not in before for ref in after
+    )
+    if changed_or_removed or added:
+        raise CasError("remote ref map changed outside canonical main")
+
+
+def _readback(
+    operation: Operation,
+    remote_url: str,
+    *,
+    baseline_remote_refs: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    head = _head_sha(operation)
+    local = _local_sha(operation)
+    remote_refs = _remote_ref_map(operation, remote_url)
+    if baseline_remote_refs is not None:
+        _require_remote_ref_delta(operation, baseline_remote_refs, remote_refs)
     return {
-        "head": _head_sha(operation),
-        "local": _local_sha(operation),
-        "remote": _remote_sha(operation, remote_url),
+        "head": head,
+        "local": local,
+        "remote": _remote_sha_from_map(operation, remote_refs),
     }
 
 
@@ -254,6 +313,8 @@ def _require_exact_cleanliness(
         [
             "-c",
             "core.fsmonitor=false",
+            "-c",
+            "core.fileMode=true",
             "status",
             "--porcelain",
             "--untracked-files=all",
@@ -272,14 +333,29 @@ def _require_exact_cleanliness(
         index_environment = {"GIT_INDEX_FILE": str(index_path)}
         _run_git(
             operation,
-            ["-c", "core.hooksPath=/dev/null", "read-tree", "HEAD"],
+            [
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "core.fileMode=true",
+                "read-tree",
+                "HEAD",
+            ],
             stage="temporary HEAD index construction",
             cwd=repository,
             env=index_environment,
         )
         cached = _run_git(
             operation,
-            ["diff-index", "--cached", "--quiet", "HEAD", "--"],
+            [
+                "-c",
+                "core.fileMode=true",
+                "diff-index",
+                "--cached",
+                "--quiet",
+                "HEAD",
+                "--",
+            ],
             stage="temporary index HEAD comparison",
             check=False,
             cwd=repository,
@@ -290,6 +366,8 @@ def _require_exact_cleanliness(
             [
                 "-c",
                 "core.hooksPath=/dev/null",
+                "-c",
+                "core.fileMode=true",
                 "update-index",
                 "--really-refresh",
             ],
@@ -300,7 +378,7 @@ def _require_exact_cleanliness(
         )
         files = _run_git(
             operation,
-            ["diff-files", "--quiet", "--"],
+            ["-c", "core.fileMode=true", "diff-files", "--quiet", "--"],
             stage="tracked worktree content comparison",
             check=False,
             cwd=repository,
@@ -329,14 +407,21 @@ def _require_checked_out_clean_main(
 
 
 def _require_final_state(
-    operation: Operation, expected_sha: str, remote_url: str
+    operation: Operation,
+    expected_sha: str,
+    remote_url: str,
+    baseline_remote_refs: Mapping[str, str],
 ) -> dict[str, str]:
-    observed = _readback(operation, remote_url)
-    if any(value != expected_sha for value in observed.values()):
-        raise CasError("exact canonical ref readback mismatch")
     _require_symbolic_main(operation)
     _require_exact_cleanliness(operation)
     _require_remote_url_unchanged(operation, remote_url)
+    observed = _readback(
+        operation,
+        remote_url,
+        baseline_remote_refs=baseline_remote_refs,
+    )
+    if any(value != expected_sha for value in observed.values()):
+        raise CasError("exact canonical ref readback mismatch")
     return observed
 
 
@@ -507,6 +592,55 @@ def _push_main(
         raise CasError("remote main compare-and-swap preparation failed") from None
 
 
+def _cas_local_main_and_align(operation: Operation, mutations: list[str]) -> None:
+    before_error = (
+        "local main changed before compensation CAS"
+        if operation.verb == "restore"
+        else "local main changed before forward CAS"
+    )
+    if (
+        _local_sha(operation) != operation.from_sha
+        or _head_sha(operation) != operation.from_sha
+    ):
+        raise CasError(before_error)
+    _run_git(
+        operation,
+        [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "update-ref",
+            operation.local_ref,
+            operation.to_sha,
+            operation.from_sha,
+        ],
+        stage="local main compare-and-swap",
+    )
+    mutations.append("local-main-cas")
+    if (
+        _local_sha(operation) != operation.to_sha
+        or _head_sha(operation) != operation.to_sha
+    ):
+        raise CasError("local main changed before worktree alignment")
+    _run_git(
+        operation,
+        [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "read-tree",
+            "-m",
+            "-u",
+            operation.to_sha,
+        ],
+        stage="daemon worktree alignment",
+    )
+    mutations.append("worktree-alignment")
+    if (
+        _local_sha(operation) != operation.to_sha
+        or _head_sha(operation) != operation.to_sha
+    ):
+        raise CasError("local main changed during worktree alignment")
+
+
 def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
     return {
         "dry_run": operation.dry_run,
@@ -536,30 +670,25 @@ def _execute(operation: Operation) -> dict:
         if operation.verb == "forward":
             _require_clean_fresh_candidate(operation, candidate)
 
+        baseline_remote_refs = _remote_ref_map(operation, remote_url)
+        if (
+            _remote_sha_from_map(operation, baseline_remote_refs)
+            != operation.from_sha
+        ):
+            raise CasError("remote main does not equal --from")
+
         if operation.dry_run:
-            observed = _require_final_state(operation, operation.from_sha, remote_url)
+            observed = _require_final_state(
+                operation,
+                operation.from_sha,
+                remote_url,
+                baseline_remote_refs,
+            )
             receipt.update(result="success", readback=observed)
             return receipt
 
         if operation.verb == "forward":
-            _run_git(
-                operation,
-                [
-                    "-c",
-                    "core.hooksPath=/dev/null",
-                    "merge",
-                    "--ff-only",
-                    "--no-edit",
-                    "--no-verify",
-                    operation.to_sha,
-                ],
-                stage="local main fast-forward",
-            )
-            mutations.append("local-main-fast-forward")
-            local = _local_sha(operation)
-            head = _head_sha(operation)
-            if local != operation.to_sha or head != operation.to_sha:
-                raise CasError("local main fast-forward readback mismatch")
+            _cas_local_main_and_align(operation, mutations)
 
         _push_main(
             operation,
@@ -572,49 +701,14 @@ def _execute(operation: Operation) -> dict:
         if operation.verb == "restore":
             # The remote CAS happens first.  The local ref then gets its own CAS;
             # update-ref cannot move main unless it still equals the candidate.
-            if (
-                _local_sha(operation) != operation.from_sha
-                or _head_sha(operation) != operation.from_sha
-            ):
-                raise CasError("local main changed before compensation CAS")
-            _run_git(
-                operation,
-                [
-                    "-c",
-                    "core.hooksPath=/dev/null",
-                    "update-ref",
-                    operation.local_ref,
-                    operation.to_sha,
-                    operation.from_sha,
-                ],
-                stage="local main compare-and-swap",
-            )
-            mutations.append("local-main-cas")
-            if (
-                _local_sha(operation) != operation.to_sha
-                or _head_sha(operation) != operation.to_sha
-            ):
-                raise CasError("local main changed before worktree alignment")
-            _run_git(
-                operation,
-                [
-                    "-c",
-                    "core.hooksPath=/dev/null",
-                    "read-tree",
-                    "-m",
-                    "-u",
-                    operation.to_sha,
-                ],
-                stage="daemon worktree alignment",
-            )
-            mutations.append("worktree-alignment")
-            if (
-                _local_sha(operation) != operation.to_sha
-                or _head_sha(operation) != operation.to_sha
-            ):
-                raise CasError("local main changed during worktree alignment")
+            _cas_local_main_and_align(operation, mutations)
 
-        observed = _require_final_state(operation, operation.to_sha, remote_url)
+        observed = _require_final_state(
+            operation,
+            operation.to_sha,
+            remote_url,
+            baseline_remote_refs,
+        )
         receipt.update(result="success", readback=observed)
         return receipt
     except CasError as exc:
