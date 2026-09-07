@@ -47,3 +47,14 @@ Pages provenance: 200 + sha on /, /platform/, /platform/matters/
 DEV/production parity: SAME spine-build 3c6cab1f6a10220c; DEV redeployed from origin/main by deploy/deploy-dev.sh at 21:22
 Operator: orchestrating agent under Damien's 2026-09-02 authority (Wrangler permission granted inline at ~21:05Z); preconditions verified: clean worktree at origin/main, full preflight 21/21 on the candidate, production dry-run clean
 ```
+
+```
+Date (UTC): 2026-09-07 13:25–13:27
+Candidate SHA: 8601b327e74dd915d1cc5e1008cd7f9791a42a41 (main after PR #55; carries the 2026-09-03 decision cycle: PR #45 revalidation tool, #46 preflight gate 22 + DEV clean URLs, #47 red-team harness and H1 classifier, #48 apply-daemon stale-deploy guard, #49 + #51 debrief truncation and Gemini thinking budget, #52 tests, #53 UAT record, #54 solutions)
+Previous Worker version / Pages deployment: 6932fea4-cf7f-48fe-9d94-679eda21eca2 / 37a2f2f0 (49e24f4)
+New Worker version / Pages deployment: 5410598b-dbcd-4ed0-88f4-e07cf86fcd05 / 256a9d6d (https://256a9d6d.sonsteng.pages.dev)
+Worker provenance: 204 + sha
+Pages provenance: 200 + sha on /, /platform/, /platform/matters/
+DEV/production parity: SAME spine-build 3c6cab1f6a10220c; DEV Worker at 3fe1050 (2026-09-06) and DEV compose at 6c6ae09 (2026-09-06)
+Operator: orchestrating agent under Damien's 2026-09-02 authority, on his inline 2026-09-07 answer to ask sonsteng-magnum-opus-2026-09-07-1315-prod-promotion (J1); preconditions verified: clean worktree at origin/main, full preflight 22/22 with 44/44 persona journeys on the candidate, production dry-run clean
+```
