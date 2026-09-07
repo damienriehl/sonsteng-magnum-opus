@@ -256,6 +256,36 @@ def materialized_git_repo(tmp_path):
     return repo, prior_sha, git(repo, "rev-parse", "HEAD")
 
 
+def amend_materialized_stamp(repo, stamp_text):
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    stamp.write_text(stamp_text, encoding="utf-8")
+    git(repo, "add", str(migration.BUILD_STAMP_RELATIVE_PATH))
+    git(repo, "commit", "--amend", "--no-edit")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def assert_generated_stamp_rejected_and_restored(repo, candidate_sha, regenerated_text):
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_bytes = stamp.read_bytes()
+    stamp.write_text(regenerated_text, encoding="utf-8")
+    runner = migration.LocalRehearsalPhases(
+        repo, allow_traceability_stamp_refresh=True,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: generated-artifact-cleanliness$"):
+        migration._run_phases(
+            runner,
+            candidate_sha,
+            context="verify-only",
+            phase_names=("generated-artifact-cleanliness",),
+        )
+
+    assert stamp.read_bytes() == committed_bytes
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def candidate_history_repo(tmp_path):
     repo = git_repo(tmp_path)
     prior_sha = git(repo, "rev-parse", "HEAD")
@@ -444,6 +474,71 @@ def test_verify_materialized_rejects_other_generated_artifact_diff(tmp_path, mon
             migration.MigrationError,
             match="verify-only phase failed: generated-artifact-cleanliness"):
         migration.verify_materialized(repo, candidate_sha)
+
+
+def test_generated_artifact_cleanliness_rejects_integer_vs_boolean(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = 1
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = True
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+def test_generated_artifact_cleanliness_rejects_string_vs_integer(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = "1"
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = 1
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+def test_generated_artifact_cleanliness_rejects_nested_list_order_change(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = {"nested": ["first", "second"]}
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = {"nested": ["second", "first"]}
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+@pytest.mark.parametrize("duplicate_side", ["committed", "regenerated"])
+def test_generated_artifact_cleanliness_rejects_duplicate_key_in_either_stamp(
+        tmp_path, duplicate_side):
+    repo, prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    valid_stamp = (
+        f'{{"schema_version":1,"spine_build_id":"spine-build-id",'
+        f'"git_base_sha":"{prior_sha}","extra_contract_field":1}}'
+    )
+    duplicate_stamp = valid_stamp[:-1] + ',"extra_contract_field":1}'
+    committed_text = duplicate_stamp if duplicate_side == "committed" else valid_stamp
+    candidate_sha = amend_materialized_stamp(repo, committed_text)
+    regenerated_text = (
+        duplicate_stamp if duplicate_side == "regenerated" else valid_stamp
+    )
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, regenerated_text,
+    )
 
 
 def test_candidate_cleanliness_phase_requires_exact_head_and_no_changes(tmp_path):

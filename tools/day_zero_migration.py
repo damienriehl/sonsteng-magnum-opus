@@ -96,6 +96,30 @@ class BoundedArgumentParser(argparse.ArgumentParser):
         raise MigrationError("invalid command arguments")
 
 
+def _json_object_without_duplicate_keys(pairs):
+    value = {}
+    for key, member in pairs:
+        if key in value:
+            raise ValueError
+        value[key] = member
+    return value
+
+
+def _json_values_identical(left, right) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _json_values_identical(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _json_values_identical(left_member, right_member)
+            for left_member, right_member in zip(left, right)
+        )
+    return left == right
+
+
 @dataclasses.dataclass(frozen=True)
 class TimerState:
     enabled: bool
@@ -642,8 +666,14 @@ class LocalRehearsalPhases:
 
         comparison_error = None
         try:
-            committed_stamp = json.loads(committed_bytes)
-            regenerated_stamp = json.loads(regenerated_bytes)
+            committed_stamp = json.loads(
+                committed_bytes,
+                object_pairs_hook=_json_object_without_duplicate_keys,
+            )
+            regenerated_stamp = json.loads(
+                regenerated_bytes,
+                object_pairs_hook=_json_object_without_duplicate_keys,
+            )
             if not isinstance(committed_stamp, dict) or not isinstance(regenerated_stamp, dict):
                 raise ValueError
             committed_spine_build_id = committed_stamp.get("spine_build_id")
@@ -661,7 +691,10 @@ class LocalRehearsalPhases:
             regenerated_without_traceability.pop("git_base_sha", None)
             if (
                 comparison_error is None
-                and committed_without_traceability != regenerated_without_traceability
+                and not _json_values_identical(
+                    committed_without_traceability,
+                    regenerated_without_traceability,
+                )
             ):
                 comparison_error = MigrationError(
                     "regenerated build stamp differed beyond git_base_sha"
