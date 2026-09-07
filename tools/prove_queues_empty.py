@@ -70,7 +70,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 def _protected_env(path, required_keys, *, missing_ok=False):
     """Read required values from an owned, regular, mode-0600 environment file."""
     target = pathlib.Path(path)
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
     try:
         descriptor = os.open(target, flags)
     except FileNotFoundError:
@@ -152,6 +157,13 @@ def _get_json(url, bearer, opener, *, review=False):
     try:
         request = urllib.request.Request(url, method="GET", headers=headers)
         with opener(request, timeout=TIMEOUT_SECONDS) as response:
+            status = response.getcode()
+            if (
+                not isinstance(status, int)
+                or isinstance(status, bool)
+                or status != 200
+            ):
+                raise ProofError("http-status-invalid")
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except (
         TimeoutError,
@@ -169,7 +181,7 @@ def _get_json(url, bearer, opener, *, review=False):
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_json_keys,
         )
-    except (UnicodeError, json.JSONDecodeError, TypeError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, TypeError) as exc:
         raise ProofError("http-response-malformed") from exc
     if not isinstance(payload, dict):
         raise ProofError("http-response-malformed")
@@ -375,14 +387,19 @@ def timer_state(run=subprocess.run):
 
 
 def _utc_timestamp(utc_now):
-    observed = utc_now()
-    if not isinstance(observed, datetime.datetime) or observed.tzinfo is None:
-        raise ProofError("timestamp-unavailable")
-    return (
-        observed.astimezone(datetime.timezone.utc)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
+    try:
+        observed = utc_now()
+        if not isinstance(observed, datetime.datetime) or observed.tzinfo is None:
+            raise ProofError("timestamp-unavailable")
+        return (
+            observed.astimezone(datetime.timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
+    except ProofError:
+        raise
+    except Exception as exc:
+        raise ProofError("timestamp-unavailable") from exc
 
 
 def prove(

@@ -3,8 +3,11 @@ import http.client
 import importlib.util
 import io
 import json
+import os
 import pathlib
 from types import SimpleNamespace
+
+import pytest
 
 
 TOOLS = pathlib.Path(__file__).parents[1]
@@ -29,8 +32,10 @@ EMPTY_FRONTIER = {
 
 
 class Response:
-    def __init__(self, payload):
+    def __init__(self, payload, *, status=200):
         self._body = json.dumps(payload).encode("utf-8")
+        self._status = status
+        self.read_calls = 0
 
     def __enter__(self):
         return self
@@ -39,12 +44,18 @@ class Response:
         return False
 
     def read(self, _size=-1):
+        self.read_calls += 1
         return self._body
+
+    def getcode(self):
+        return self._status
 
 
 class RawResponse(Response):
-    def __init__(self, body):
+    def __init__(self, body, *, status=200):
         self._body = body
+        self._status = status
+        self.read_calls = 0
 
 
 def write_apply_env(path):
@@ -66,7 +77,8 @@ def write_observer_env(path):
 
 def injected_opener(review_rows, frontier_context=None, *, event_log=None):
     calls = []
-    frontier_context = frontier_context or EMPTY_FRONTIER
+    if frontier_context is None:
+        frontier_context = EMPTY_FRONTIER
 
     def open_request(request, timeout):
         calls.append((request, timeout))
@@ -383,6 +395,57 @@ def test_nonempty_publication_frontiers_fail_without_leaking_ids(tmp_path):
         assert "missing_batch_evidence" not in serialized
 
 
+def test_review_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
+    for status in (201, 202, 206):
+        response = Response({"ok": True, "items": []}, status=status)
+
+        code, receipt, _systemctl_calls = run_main(
+            tmp_path,
+            opener=lambda _request, timeout: response,
+        )
+
+        assert code != 0
+        assert receipt["all_queues_empty"] is False
+        assert receipt["proof_error"] == "http-status-invalid"
+        assert response.read_calls == 0
+
+
+def test_frontier_non_200_2xx_statuses_fail_closed_before_body_read(tmp_path):
+    for status in (201, 202, 206):
+        review_response = Response({"ok": True, "items": []})
+        frontier_response = Response(
+            {"ok": True, "context": EMPTY_FRONTIER}, status=status
+        )
+
+        def opener(request, timeout):
+            if request.full_url.endswith("/review"):
+                return review_response
+            return frontier_response
+
+        code, receipt, _systemctl_calls = run_main(
+            tmp_path,
+            opener=opener,
+        )
+
+        assert code != 0
+        assert receipt["all_queues_empty"] is False
+        assert receipt["proof_error"] == "http-status-invalid"
+        assert review_response.read_calls == 1
+        assert frontier_response.read_calls == 0
+
+
+def test_explicit_empty_frontier_context_is_not_replaced_by_default(tmp_path):
+    code, receipt, _http_calls, _systemctl_calls = invoke(
+        tmp_path,
+        review_rows=[],
+        frontier_context={},
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "operation-frontier-missing"
+
+
 def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
     apply_env = tmp_path / "apply.env"
     observer_env = tmp_path / "observer.env"
@@ -419,6 +482,84 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "http-unavailable"
     assert "private partial body" not in json.dumps(receipt)
+
+
+def test_deeply_nested_json_returns_one_bounded_receipt(tmp_path, monkeypatch):
+    raw = b"[" * 1100 + b"]" * 1100
+    apply_env = tmp_path / "apply.env"
+    observer_env = tmp_path / "observer.env"
+    write_apply_env(apply_env)
+    write_observer_env(observer_env)
+
+    def reject_excessive_nesting(*_args, **_kwargs):
+        raise RecursionError("private deeply nested response detail")
+
+    monkeypatch.setattr(
+        queues,
+        "json",
+        SimpleNamespace(
+            JSONDecodeError=json.JSONDecodeError,
+            loads=reject_excessive_nesting,
+        ),
+    )
+    receipt = queues.prove(
+        LEDGER_ORIGIN,
+        apply_env,
+        observer_env,
+        apply_timer_stopped=True,
+        window_owner=WINDOW_OWNER,
+        opener=lambda _request, timeout: RawResponse(raw),
+        run_systemctl=injected_systemctl()[0],
+        utc_now=lambda: datetime.datetime(
+            2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc
+        ),
+    )
+
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-malformed"
+
+
+def test_clock_provider_exception_returns_one_bounded_receipt(tmp_path):
+    apply_env = tmp_path / "apply.env"
+    observer_env = tmp_path / "observer.env"
+    write_apply_env(apply_env)
+    write_observer_env(observer_env)
+    output = io.StringIO()
+
+    def unavailable_clock():
+        raise RuntimeError("private clock-provider detail")
+
+    code = queues.main(
+        [
+            "--ledger-origin",
+            LEDGER_ORIGIN,
+            "--apply-env-file",
+            str(apply_env),
+            "--observer-env-file",
+            str(observer_env),
+            "--apply-timer-stopped",
+            "--window-owner",
+            WINDOW_OWNER,
+        ],
+        opener=lambda _request, timeout: Response({"ok": True, "items": []}),
+        run_systemctl=injected_systemctl()[0],
+        utc_now=unavailable_clock,
+        stdout=output,
+    )
+    receipt = json.loads(output.getvalue())
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "timestamp-unavailable"
+    assert "private clock-provider detail" not in json.dumps(receipt)
+
+
+def test_fifo_environment_path_fails_without_reading(tmp_path):
+    fifo = tmp_path / "observer.fifo"
+    os.mkfifo(fifo, 0o600)
+
+    with pytest.raises(queues.ProofError, match="^environment-unavailable$"):
+        queues._protected_env(fifo, {"SONSTENG_PROD_OBSERVER_BEARER"})
 
 
 def test_observer_absent_and_timer_disabled_fails_closed(tmp_path):
