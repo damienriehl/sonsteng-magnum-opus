@@ -45,12 +45,18 @@ only candidate that may proceed.
 The repository-side helper `verify_materialized(repo, candidate_sha)` runs in a
 fresh standalone exact-SHA clone. The injected production state machine uses
 the same verification-only phase contract. That phase list never contains
-`governed-write`. It performs:
+`governed-write`. Its exact phases are `candidate-commit`,
+`governed-verification`, `generated-build`, `generated-artifact-cleanliness`,
+`build-parity`, `strict-day-zero-enforcement`, `preflight`, and
+`final-tree-cleanliness`. It performs:
 
 1. exact detached `HEAD` and clean-tree proof;
 2. governed dry-run verification;
-3. deterministic generated builds followed by clean-tree proof, proving the
-   committed artifacts match their generators;
+3. deterministic generated builds followed by generated-artifact cleanliness.
+   Every tracked byte must match except that the committed and regenerated
+   `.build-stamp.json` objects are compared without `git_base_sha`, which is
+   traceability-only. Their `spine_build_id` and every other field must match;
+   the committed stamp bytes are then restored before an exact clean-tree proof;
 4. generated-bundle parity;
 5. strict Day Zero and `legalpracticum.org` identifier enforcement;
 6. full headless preflight; and
@@ -104,8 +110,35 @@ python3 tools/day_zero_migration.py \
 
 Normal inspection output contains the shared SHA, digests of the two recovery
 IDs, and `production_mutations: 0`. Exact provider IDs are non-secret but are
-not printed in the ordinary receipt. To place the inspected exact IDs directly
-into the explicitly requested supervised operator sheet, add
+not printed in the ordinary receipt.
+
+To capture exact non-secret recovery coordinates before a candidate exists,
+add `--print-recovery-ids`, `--ack-john-notified`, and `--ack-queue-empty`, with
+`SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true`:
+
+```bash
+credential-helper-that-prints-only-the-token | \
+SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
+python3 tools/day_zero_migration.py \
+  --inspect-cloudflare-pair \
+  --print-recovery-ids \
+  --cloudflare-account-id <32-character-lowercase-account-ID> \
+  --pages-project <Pages-project-name> \
+  --worker-script sonsteng-chat-production \
+  --pages-provenance-url https://legalpracticum.org/ \
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/ \
+  --ack-john-notified \
+  --ack-queue-empty
+```
+
+Only after the stable two-read proof, this mode prints the exact Pages
+canonical deployment ID, Worker version ID, shared SHA, and
+`production_mutations: 0`. It requires no candidate or recovery registry and
+cannot be combined with `--print-operator-plan`; it never prints the token or
+provider bodies.
+
+To place the inspected exact IDs directly into the explicitly requested
+supervised operator sheet, add
 `--print-operator-plan` and all of its candidate, registry, enablement, and
 acknowledgement inputs:
 
@@ -121,6 +154,7 @@ python3 tools/day_zero_migration.py \
   --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
   --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/ \
+  --repo <trusted-repository-path> \
   --candidate-sha <committed-migration-SHA> \
   --recovery-registry "$HOME/.local/state/sonsteng-prod-release/known-good-pairs.json" \
   --ack-john-notified \
@@ -203,14 +237,19 @@ compensation succeeds.
 
 After the controlled worktree has produced and merged the exact migration
 commit, generate the non-secret checklist while the same exclusive window
-remains held. The generated sheet is strictly post-materialization: its supplied
-candidate must already be canonical, clean, and based on the prior SHA.
+remains held. The generated sheet is strictly post-materialization. Supplying
+`--repo` makes generation fail closed unless the candidate exists, a fresh
+exact-candidate clone is clean, its first parent is exactly `--prior-sha`, and
+`prior..candidate` contains exactly one commit. These checks do not prove that
+canonical `main` names the candidate or that materialization was reviewed;
+those remain explicit operator checks.
 
 ```bash
 SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
 SONSTENG_PROD_RELEASE_ENABLED=false \
 python3 tools/day_zero_migration.py \
   --print-operator-plan \
+  --repo <trusted-repository-path> \
   --candidate-sha <committed-migration-SHA> \
   --prior-sha <prior-live-SHA> \
   --prior-pages-deployment-id <exact-Pages-deployment-ID> \
@@ -219,6 +258,10 @@ python3 tools/day_zero_migration.py \
   --ack-john-notified \
   --ack-queue-empty
 ```
+
+If `--repo` is omitted, the sheet explicitly says that candidate existence,
+fresh-clone cleanliness, first-parent identity, and the one-commit range were
+not checked; it does not assert those facts.
 
 Do not put credentials in these arguments. Provider IDs are non-secret recovery
 coordinates; credentials stay in protected process state. Generating the sheet
