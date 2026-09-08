@@ -10,7 +10,7 @@ import {
   lookupBlock, lookupBlocks, validateJsonScalar, projectPendingItems, projectReviewAnnotations, MAP_VERSION,
   enumerateScope, EDITOR_MAP_FACTS, EDITOR_MAP,
 } from "./editor-map.js";
-import { STRUCTURAL_KINDS } from "./editor-store-core.js";
+import { OBSERVER_OPERATION_MAX, STRUCTURAL_KINDS } from "./editor-store-core.js";
 import { mintScopedConfirmation, verifyScopedConfirmation } from "./scoped-confirmation.js";
 import { sha256Hex } from "./text-norm.js";
 
@@ -1053,7 +1053,7 @@ function observerOperationFrontier(context) {
       !Number.isSafeInteger(held) || held < 0)
     return { pending_operation_count:0,blocked_state:"blocked" };
   const pending = eligible + held;
-  if (!Number.isSafeInteger(pending) || pending > 100_000)
+  if (!Number.isSafeInteger(pending) || pending > OBSERVER_OPERATION_MAX)
     return { pending_operation_count:0,blocked_state:"blocked" };
   return { pending_operation_count:pending,blocked_state:"unblocked" };
 }

@@ -16,6 +16,7 @@
 //   * Status machine + terminal enforcement is centralized in _transition().
 
 import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-status.js";
+import { integrityDigest } from "./integrity-digest.js";
 
 // Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
 // rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
@@ -25,6 +26,7 @@ import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-s
 export const STRUCTURAL_KINDS = new Set([
   "insert_after", "delete", "split", "merge", "move",
 ]);
+export const OBSERVER_OPERATION_MAX = 100_000;
 
 function classifyProductionScope(sources = []) {
   const structuralGroups = new Set(), structuralRefs = new Set();
@@ -544,20 +546,18 @@ export class EditorStoreCore {
     } catch { /* column already present — nothing to do */ }
   }
 
+  _digest(value) {
+    return integrityDigest(value);
+  }
+
   // Payload fingerprint for the idempotency guard (SL — mirror of the fence fix):
-  // a stable, order-sensitive digest of the CLIENT-authored payload (source_ref +
-  // new_text + comment). Same id + same fingerprint = a true idempotent replay;
-  // same id + DIFFERENT fingerprint = a client-id collision that must NOT be
-  // silently swallowed (would lose the newer edit). FNV-1a 32-bit hex — no crypto,
-  // synchronous (the DO forbids awaits inside a method).
+  // SHA-256 over a typed, length-prefixed tuple of the CLIENT-authored fields.
+  // Same id + same fingerprint = a true idempotent replay; same id + DIFFERENT
+  // fingerprint = a client-id collision that must NOT be silently swallowed.
   _fingerprint(source_ref, new_text, comment) {
-    const s = `${source_ref || ""}\u0000${new_text == null ? "" : new_text}\u0000${comment == null ? "" : comment}`;
-    let h = 0x811c9dc5;
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-    }
-    return ("0000000" + h.toString(16)).slice(-8);
+    return this._digest({ digest_type:"client-payload-fingerprint-v2",
+      source_ref:source_ref || "",new_text:new_text == null ? "" : new_text,
+      comment:comment == null ? "" : comment });
   }
 
   _day(ms) {
@@ -578,8 +578,6 @@ export class EditorStoreCore {
       `${JSON.stringify(key)}:${this._canonical(value[key])}`).join(",")}}`;
     return JSON.stringify(value);
   }
-
-  _digest(value) { return this._fingerprint("review-v1", this._canonical(value), null); }
 
   _get(id) {
     return this._one(`SELECT ${SELECT_COLS} FROM suggestions WHERE id=?`, id);
@@ -1147,8 +1145,10 @@ export class EditorStoreCore {
     if (input.expected_suggestion_ids &&
         JSON.stringify([...input.expected_suggestion_ids].sort()) !== JSON.stringify([...memberIds].sort()))
       return { ok:false, reason:"membership_mismatch" };
-    const membershipHash = this._fingerprint(JSON.stringify(batchIds), JSON.stringify(memberIds),
-      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash].join("\0"));
+    const membershipHash = this._digest({ digest_type:"production-batch-membership-v2",
+      batch_ids:batchIds,member_ids:memberIds,binding:{ base_sha:input.base_sha,
+        candidate_sha:input.candidate_sha,generator_id:input.generator_id,
+        evidence_hash:input.evidence_hash,manifest_hash:input.manifest_hash } });
     const now = this.now();
     this.transactionSync(() => {
     this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1181,6 +1181,14 @@ export class EditorStoreCore {
     }
     if (fencing) binding.fencing_token = release.fencing_token;
     return binding;
+  }
+
+  _operationReleaseMembershipDigest(members,held,release) {
+    return this._digest({ digest_type:"production-operation-membership-v2",members,held,
+      binding:{ base_sha:release.base_sha,candidate_sha:release.candidate_sha,
+        generator_id:release.generator_id,evidence_hash:release.evidence_hash,
+        manifest_hash:release.manifest_hash,review_receipt_hash:release.review_receipt_hash,
+        projection_identity:release.projection_identity } });
   }
 
   _prepareOperationRelease(input) {
@@ -1252,9 +1260,7 @@ export class EditorStoreCore {
       if (JSON.stringify(supplied) !== JSON.stringify(authoritative))
         return { ok:false,reason:"held_exclusion_mismatch" };
     }
-    const membershipHash = this._fingerprint(JSON.stringify(members),JSON.stringify(held),
-      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash,
-        input.review_receipt_hash,input.projection_identity].join("\0"));
+    const membershipHash = this._operationReleaseMembershipDigest(members,held,input);
     const now = this.now();
     this.transactionSync(() => {
       this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at,schema_version,review_receipt_hash,projection_identity) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1359,7 +1365,8 @@ export class EditorStoreCore {
         return !revision || this._reviewStaleReason(revision);
       })) return { ok:false,reason:"stale_review" };
     }
-    const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
+    const token = this._digest({ digest_type:"production-release-fence-v2",
+      release_id:release.id,manifest_hash:release.manifest_hash,issued_at:now,actor:input.actor });
     const lease = now + Math.max(1000, Math.min(
       input.lease_ms || CEILINGS.leaseMs, CEILINGS.productionLeaseMs));
     this.sql.exec("UPDATE production_releases SET state=?,fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
@@ -1382,8 +1389,9 @@ export class EditorStoreCore {
       return { ok:false,reason:"lease_active" };
     if (!['failed_fenced','restoring'].includes(release.state))
       return { ok:false,reason:"not_fenced" };
-    const token = this._fingerprint(release.id,release.fencing_token || "",
-      `${now}:${input.actor}:restore`);
+    const token = this._digest({ digest_type:"production-restore-fence-v2",
+      release_id:release.id,prior_fencing_token:release.fencing_token || "",issued_at:now,
+      actor:input.actor });
     const lease = now + Math.max(1000,Math.min(
       input.lease_ms || CEILINGS.productionLeaseMs,CEILINGS.productionLeaseMs));
     this.transactionSync(() => {
@@ -2408,9 +2416,7 @@ export class EditorStoreCore {
       if (rows.length < 5000) break;
       afterHeldId = rows.at(-1).operation_id;
     }
-    const membershipHash = this._fingerprint(JSON.stringify(members),JSON.stringify(held),
-      [release.base_sha,release.candidate_sha,release.generator_id,release.evidence_hash,
-        release.manifest_hash,release.review_receipt_hash,release.projection_identity].join("\0"));
+    const membershipHash = this._operationReleaseMembershipDigest(members,held,release);
     if (!members.length || membershipHash !== release.membership_hash)
       throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
 
@@ -2476,6 +2482,8 @@ export class EditorStoreCore {
     }
   }
 
+  // This store-wide proof fails closed on any incompatible or malformed evidence. The digest
+  // clean-break and operator response are documented in docs/day-zero-migration-operations.md.
   _assertOperationFrontierIntegrity() {
     if (this._one(`SELECT 1 AS invalid FROM production_review_operations
       WHERE lifecycle_state NOT IN ('unpublished','superseded','published') LIMIT 1`))
@@ -2801,7 +2809,7 @@ export class EditorStoreCore {
 
   _operationFrontierSummaryProjection({ operationLimit=null } = {}) {
     if (operationLimit && this._operationFrontierIntegrityExceedsLimit(operationLimit))
-      return { eligible_operation_count:0,held_operation_count:operationLimit };
+      return { eligible_operation_count:null,held_operation_count:null };
     this._assertOperationFrontierIntegrity();
     const pageSize = 5_000;
     const legacyProd = this._one(`SELECT candidate_sha FROM production_releases
@@ -3075,15 +3083,12 @@ export class EditorStoreCore {
       let projection;
       try {
         projection = tolerateOperationProjectionFailure ?
-          this._operationFrontierSummaryProjection({ operationLimit:100_001 }) :
+          this._operationFrontierSummaryProjection({ operationLimit:OBSERVER_OPERATION_MAX+1 }) :
           this._operationFrontierProjection();
       } catch (error) {
         if (!tolerateOperationProjectionFailure) throw error;
       }
       if (!projection) return {};
-      if (tolerateOperationProjectionFailure &&
-          !Object.hasOwn(projection,"held_operation_count"))
-        projection = { ...projection,held_operation_count:0 };
       return { projection };
     };
     const activeRow = this._one(

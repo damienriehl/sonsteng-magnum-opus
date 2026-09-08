@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,7 @@ import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepare
   productionRenewEndpoint, productionTransitionEndpoint,
   productionRestoreClaimEndpoint, productionAuditEndpoint } from "../src/editor-endpoints.js";
 import { editorFetch } from "../src/editor.js";
+import { integrityDigest, serializeDigestValue, sha256HexSync } from "../src/integrity-digest.js";
 
 function seedApplied(core, batchId, ids, at) {
   core.now = () => at;
@@ -29,6 +31,89 @@ function release(over = {}) {
     generator_id:"generator-v1", evidence_hash:"evidence-1", manifest_hash:"manifest-1",
     ancestry_verified:true, ...over };
 }
+
+test("integrity digests use SHA-256 over injective typed serialization", () => {
+  const core = makeCore(() => 1200);
+  for (const value of ["abc","a".repeat(55),"b".repeat(56),"c".repeat(63),
+    "d".repeat(64),"e".repeat(65),"f".repeat(1000),"🙂漢字\u0000"]) {
+    assert.equal(sha256HexSync(value),createHash("sha256").update(value).digest("hex"),
+      `SHA-256 must match the reference implementation for ${value.length} code units`);
+  }
+  const digests = [
+    core._fingerprint("ab","c",null),
+    core._fingerprint("a","bc",null),
+    core._fingerprint("a\u0000b","c",null),
+    core._fingerprint("a","b\u0000c",null),
+    integrityDigest(["ab","c"]),
+    integrityDigest(["a","bc"]),
+    integrityDigest({ value:null }),
+    integrityDigest({ value:"" }),
+    integrityDigest({ value:"\ud800" }),
+    integrityDigest({ value:"\ufffd" }),
+  ];
+  assert.equal(digests.every((digest) => /^[0-9a-f]{64}$/.test(digest)),true);
+  assert.notEqual(digests[0],digests[1],"fingerprint field boundaries must be unambiguous");
+  assert.notEqual(digests[2],digests[3],"embedded NULs must not collapse field boundaries");
+  assert.notEqual(digests[4],digests[5],"array field boundaries must be unambiguous");
+  assert.notEqual(digests[6],digests[7],"null and empty string must remain distinct");
+  assert.notEqual(digests[8],digests[9],"lone surrogates and replacement characters must differ");
+  assert.equal(integrityDigest({ b:2,a:1 }),integrityDigest({ a:1,b:2 }),
+    "object key order must not change the canonical digest");
+  assert.throws(() => serializeDigestValue([,undefined]),/dense and property-free/);
+  assert.throws(() => serializeDigestValue([undefined,,]),/dense and property-free/);
+  assert.throws(() => serializeDigestValue(new Map([["key","value"]])),
+    /unsupported digest object prototype/);
+  assert.throws(() => serializeDigestValue({ [Symbol("key")]:"value" }),
+    /symbol digest keys/);
+  assert.throws(() => serializeDigestValue(Object.defineProperty({},"key",{ value:"value" })),
+    /enumerable properties/);
+  assert.throws(() => serializeDigestValue(Object.defineProperty({},"key",{
+    enumerable:true,get:() => "value",
+  })),/enumerable data properties/);
+  assert.throws(() => serializeDigestValue(Object.setPrototypeOf([],null)),
+    /nonstandard digest arrays/);
+});
+
+test("FNV-era suggestion fingerprints fail closed without mutating the row", () => {
+  const core = makeCore(() => 1201);
+  const input = { id:"legacy-fingerprint",editor:"slot:john",scope:"edit",origin:"human",
+    kind:"prose",source_ref:"data/copy/home.json#legacy-fingerprint",
+    original_text:"old",original_hash:"old-hash",new_text:"new",map_version:"v1" };
+  assert.equal(core.suggest(input,{},{}).ok,true);
+  core.sql.exec("UPDATE suggestions SET client_fp='b49d20cf' WHERE id=?",input.id);
+  const before = core._one("SELECT * FROM suggestions WHERE id=?",input.id);
+  const replay = core.suggest(input,{},{});
+  assert.equal(replay.ok,false);
+  assert.equal(replay.reason,"id_conflict");
+  assert.deepEqual(core._one("SELECT * FROM suggestions WHERE id=?",input.id),before);
+});
+
+test("FNV-era publisher draft digests fail closed without submitting", () => {
+  const core = makeCore(() => 1202);
+  const sourceRef = "data/copy/home.json#legacy-draft";
+  const operation = { id:"legacy-draft-operation",decision_id:"legacy-draft-operation",
+    kind:"replace",source_ref:sourceRef,source_revision:"dev-legacy-draft",
+    prod_base:"prod-base",old_text:"old",new_text:"new" };
+  assert.equal(core.recordReviewRevision({ id:"legacy-draft-revision",source_ref:sourceRef,
+    source_revision:"dev-legacy-draft",prod_base:"prod-base",commit_sha:"dev-legacy-draft",
+    original_hash:"old",proposed_hash:"new",original_text:"old",proposed_text:"new",
+    suggestion_ids:[],operations:[operation] }).ok,true);
+  const decisions = [{ operation_id:operation.id,decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"legacy-draft-revision",source_revision:"dev-legacy-draft",
+    prod_base:"prod-base",decisions }).ok,true);
+  core.sql.exec(`UPDATE production_review_drafts SET payload_digest='b49d20cf'
+    WHERE review_revision_id='legacy-draft-revision'`);
+  const result = core.submitPublisherReview({ id:"legacy-draft-review",
+    idempotency_key:"legacy-draft-review",request_digest:"legacy-draft-review",
+    actor:"slot:damien",review_revision_id:"legacy-draft-revision",
+    source_revision:"dev-legacy-draft",prod_base:"prod-base",decisions });
+  assert.equal(result.ok,false);
+  assert.equal(result.reason,"draft_mismatch");
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_submissions").count,0);
+  assert.equal(core._one(`SELECT payload_digest FROM production_review_drafts
+    WHERE review_revision_id='legacy-draft-revision'`).payload_digest,"b49d20cf");
+});
 
 test("production audit is text-free and reports migration integrity", async () => {
   const core = makeCore(() => 1250);
@@ -1236,11 +1321,43 @@ test("operation frontier rejects coordinated decision mutation against the immut
   await assertOperationProjectionCorruptionFailsClosed(core,"receipt_decision_set_mismatch");
 });
 
+test("operation frontier recomputes receipt decisions from immutable revision evidence", async () => {
+  const core = makeCore(() => 9013);
+  reviewedProjection(core);
+  const row = core._one("SELECT receipt_json FROM production_review_submissions WHERE id=?",
+    "review-v2");
+  const receipt = JSON.parse(row.receipt_json);
+  for (const source of receipt.sources)
+    for (const decision of source.decisions) decision.operation_digest = "forged-digest";
+  core.sql.exec(`UPDATE production_review_submissions SET receipt_json=?,receipt_hash=?
+    WHERE id=?`,core._canonical(receipt),core._digest(receipt),"review-v2");
+  core.sql.exec(`UPDATE production_review_submission_decisions SET operation_digest=?
+    WHERE review_id=?`,"forged-digest","review-v2");
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_decision_set_mismatch");
+});
+
+test("operation frontier rejects empty receipt-row identities before pagination", async () => {
+  const core = makeCore(() => 9013);
+  reviewedProjection(core);
+  const row = core._one("SELECT receipt_json FROM production_review_submissions WHERE id=?",
+    "review-v2");
+  const receipt = JSON.parse(row.receipt_json);
+  receipt.review_id = "";
+  core.sql.exec(`UPDATE production_review_submissions SET id=?,receipt_json=?,receipt_hash=?
+    WHERE id=?`,"",core._canonical(receipt),core._digest(receipt),"review-v2");
+  for (const table of ["production_review_submission_sources",
+    "production_review_submission_decisions","production_review_operations"])
+    core.sql.exec(`UPDATE ${table} SET review_id=? WHERE review_id=?`,"","review-v2");
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_metadata_mismatch");
+});
+
 test("operation frontier validates canonical receipt JSON and receipt hash", async (t) => {
-  await t.test("hash divergence",async () => {
+  await t.test("old 32-bit digest fails closed",async () => {
     const core = makeCore(() => 9014);
     reviewedProjection(core);
-    core.sql.exec("UPDATE production_review_submissions SET receipt_hash='changed'");
+    core.sql.exec("UPDATE production_review_submissions SET receipt_hash='b49d20cf'");
     await assertOperationProjectionCorruptionFailsClosed(core,"receipt_hash_mismatch");
   });
   await t.test("non-canonical JSON",async () => {
@@ -1328,6 +1445,18 @@ test("observer operation frontier blocks invalid or missing held operation count
       pending_operation_count:0,blocked_state:"blocked",
     });
   }
+});
+
+test("tolerant projection never invents a missing held-operation count", async () => {
+  const core = makeCore(() => 9014);
+  core._operationFrontierSummaryProjection = () => ({ eligible_operation_count:0 });
+  const raw = core.productionPreparationContext({ tolerateOperationProjectionFailure:true });
+  assert.equal(Object.hasOwn(raw.projection,"held_operation_count"),false,
+    "a missing count must remain unknown instead of being fabricated as zero");
+  const context = await observerFrontier(raw);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
 });
 
 test("observer operation frontier blocks rather than truncates sums over the contract count bound", async () => {
@@ -1697,6 +1826,56 @@ function completedOperationFrontierRelease(suffix,{ reclaimBeforeDeployment = fa
   return { core,releaseId:prepared.id,candidateSha,completionTime,
     firstFence:firstClaim.fencing_token,currentFence:claimed.fencing_token };
 }
+
+test("operation frontier rejects duplicate and unknown completed-release events", async (t) => {
+  await t.test("duplicate complete event",async () => {
+    const { core,releaseId } = completedOperationFrontierRelease("duplicate-complete");
+    const event = core._one(`SELECT * FROM production_release_events
+      WHERE release_id=? AND type='complete'`,releaseId);
+    core.sql.exec(`INSERT INTO production_release_events
+      (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)`,releaseId,
+    "complete",event.actor,event.detail_json,event.created_at);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+
+  await t.test("unknown event type",async () => {
+    const { core,releaseId } = completedOperationFrontierRelease("unknown-event");
+    const event = core._one(`SELECT * FROM production_release_events
+      WHERE release_id=? AND type='complete'`,releaseId);
+    core.sql.exec(`INSERT INTO production_release_events
+      (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)`,releaseId,
+    "rolled_back",event.actor,event.detail_json,event.created_at);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+});
+
+test("operation frontier binds every completed-release event to frozen evidence", async (t) => {
+  for (const [type,field] of [
+    ["prepared","base_sha"],
+    ["authorized","authorization_digest"],
+    ["verified","membership_hash"],
+  ]) await t.test(`${type} ${field}`,async () => {
+    const { core,releaseId } = completedOperationFrontierRelease(`binding-${type}`);
+    const event = core._one(`SELECT id,detail_json FROM production_release_events
+      WHERE release_id=? AND type=?`,releaseId,type);
+    const detail = JSON.parse(event.detail_json);
+    detail[field] = `attacker-${field}`;
+    core.sql.exec("UPDATE production_release_events SET detail_json=? WHERE id=?",
+      JSON.stringify(detail),event.id);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+});
+
+test("completed release membership binds the attacker-controlled held reason", async () => {
+  const { core,releaseId } = completedOperationFrontierRelease("held-reason-binding");
+  core.sql.exec(`UPDATE production_release_held_exclusions SET reason=? WHERE release_id=?`,
+    "attacker-controlled-second-preimage-input",releaseId);
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
+});
 
 test("operation frontier rejects publication rows dated after real completion", async (t) => {
   for (const table of ["production_published_operations",
@@ -2119,9 +2298,11 @@ function seedRejectedAndPublishedHistory(core,{ rejectedCount,publishedCount,pre
     operation_id:operation.id,decision:"rejected",reason:"rejected",
   }));
   const membershipMembers = members.map(({ ordinal,...member }) => member);
-  const membershipHash = core._fingerprint(JSON.stringify(membershipMembers),JSON.stringify(held),
-    ["prod-base",`candidate-${prefix}`,"generator","evidence","manifest",receiptHash,
-      `projection-${prefix}`].join("\0"));
+  const membershipHash = core._operationReleaseMembershipDigest(membershipMembers,held,{
+    base_sha:"prod-base",candidate_sha:`candidate-${prefix}`,generator_id:"generator",
+    evidence_hash:"evidence",manifest_hash:"manifest",review_receipt_hash:receiptHash,
+    projection_identity:`projection-${prefix}`,
+  });
   core.sql.exec(`INSERT INTO production_releases
     (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
      target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
@@ -2230,16 +2411,56 @@ function seedManySmallPendingRevisions(core,{ revisionCount,prefix }) {
   reviewId);
 }
 
+test("operation frontier sentinel excludes already-published normalized rows", () => {
+  const core = makeCore(() => 9044);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+     lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,"published-sentinel-operation",
+  "published-sentinel-operation","published-sentinel-review","published-sentinel-revision",
+  "data/copy/published-sentinel.json#lead",null,"accepted","","unpublished");
+  core.sql.exec(`INSERT INTO production_published_operations
+    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
+     published_at) VALUES (?,?,?,?,?,?,?)`,"published-sentinel-operation",
+  "published-sentinel-release","published-sentinel-revision",
+  "data/copy/published-sentinel.json#lead","published-sentinel-source","candidate",9044);
+
+  assert.equal(core._operationFrontierIntegrityExceedsLimit(1),false,
+    "published history must not trigger the pending-operation work bound");
+});
+
+test("operation frontier sentinel excludes rejected normalized rows", () => {
+  const core = makeCore(() => 9044);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+     lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,"rejected-sentinel-operation",
+  "rejected-sentinel-operation","rejected-sentinel-review","rejected-sentinel-revision",
+  "data/copy/rejected-sentinel.json#lead",null,"rejected","","unpublished");
+
+  assert.equal(core._operationFrontierIntegrityExceedsLimit(1),false,
+    "rejected history must not trigger the pending-operation work bound");
+});
+
 test("observer operation frontier bounds normalized and evidence high-cardinality projections", async () => {
   const core = makeCore(() => 9042);
   seedHighCardinalityReview(core,{ operationCount:100_001,prefix:"high-normalized" });
 
   const projectionQueries = [];
   const all = core._all.bind(core);
+  const assertIntegrity = core._assertOperationFrontierIntegrity.bind(core);
+  let integrityCalls = 0;
+  core._assertOperationFrontierIntegrity = (...args) => {
+    integrityCalls += 1;
+    return assertIntegrity(...args);
+  };
   core._all = (sql,...args) => {
     projectionQueries.push({ sql,args });
     return all(sql,...args);
   };
+  assert.deepEqual(core._operationFrontierSummaryProjection({ operationLimit:100_001 }),{
+    eligible_operation_count:null,held_operation_count:null,
+  },"overflow must use an explicit unknown-count sentinel");
+  assert.equal(integrityCalls,0,
+    "the 100001-row sentinel must return before full integrity validation");
   const context = await observerFrontierFromCore(core);
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:0,blocked_state:"blocked",
