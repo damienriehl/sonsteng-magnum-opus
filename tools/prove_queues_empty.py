@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -59,8 +60,40 @@ BATCH_KEYS = frozenset(
 )
 
 
+def _resolve_systemctl_path():
+    """Resolve systemctl once from the OS-defined trusted utility path."""
+    try:
+        system_path = os.confstr("CS_PATH")
+    except (AttributeError, OSError, ValueError):
+        return None
+    if not system_path or any(
+        not entry or not os.path.isabs(entry)
+        for entry in system_path.split(os.pathsep)
+    ):
+        return None
+    candidate = shutil.which("systemctl", path=system_path)
+    if candidate is None:
+        return None
+    try:
+        return str(pathlib.Path(candidate).resolve(strict=True))
+    except OSError:
+        return None
+
+
+SYSTEMCTL_PATH = _resolve_systemctl_path()
+
+
 class ProofError(RuntimeError):
     """A bounded proof failure whose details must never enter the receipt."""
+
+
+class _ArgumentsInvalid(RuntimeError):
+    """A private, bounded command-line parsing failure."""
+
+
+class _ProofArgumentParser(argparse.ArgumentParser):
+    def error(self, _message):
+        raise _ArgumentsInvalid from None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -173,6 +206,7 @@ def _declared_content_length(headers):
     content_lengths = []
     transfer_encodings = []
     content_encodings = []
+    content_ranges = []
     for header in headers:
         if not isinstance(header, tuple) or len(header) != 2:
             raise ProofError("http-response-framing-invalid")
@@ -186,11 +220,18 @@ def _declared_content_length(headers):
             transfer_encodings.append(value)
         elif normalized_name == "content-encoding":
             content_encodings.append(value)
+        elif normalized_name == "content-range":
+            content_ranges.append(value)
 
     # This proof accepts only an identity body with one explicit length. That
     # excludes ambiguous duplicate lengths, chunked framing, and transforms
     # whose wire length would not describe the JSON bytes being validated.
-    if transfer_encodings or content_encodings or len(content_lengths) != 1:
+    if (
+        transfer_encodings
+        or content_encodings
+        or content_ranges
+        or len(content_lengths) != 1
+    ):
         raise ProofError("http-response-framing-invalid")
     value = content_lengths[0]
     if not value or not CONTENT_LENGTH_RE.fullmatch(value):
@@ -215,7 +256,38 @@ def _read_response(manager):
             raise ProofError("http-status-invalid")
         headers = _response_call(lambda: list(response.getheaders()))
         declared_length = _declared_content_length(headers)
-        raw = _response_call(lambda: response.read(MAX_RESPONSE_BYTES + 1))
+        if isinstance(response, http.client.HTTPResponse):
+            wire_body = response.fp
+            if wire_body is None:
+                raise ProofError("http-response-framing-invalid")
+        else:
+            # Injectable test responses have no transport stream. Production
+            # responses use HTTPResponse.fp so Content-Length cannot clip the
+            # EOF observation.
+            wire_body = response
+        if isinstance(response, http.client.HTTPResponse):
+            chunks = []
+            remaining = declared_length
+            while remaining:
+                chunk = _response_call(lambda: wire_body.read(remaining))
+                if not isinstance(chunk, bytes):
+                    raise ProofError("http-response-malformed")
+                if not chunk:
+                    raise ProofError("http-response-framing-invalid")
+                if len(chunk) > remaining:
+                    raise ProofError("http-response-framing-invalid")
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            eof_probe = _response_call(lambda: wire_body.read(1))
+            if not isinstance(eof_probe, bytes):
+                raise ProofError("http-response-malformed")
+            if eof_probe:
+                raise ProofError("http-response-framing-invalid")
+            raw = b"".join(chunks)
+        else:
+            raw = _response_call(
+                lambda: wire_body.read(MAX_RESPONSE_BYTES + 1)
+            )
         if not isinstance(raw, bytes):
             raise ProofError("http-response-malformed")
         if len(raw) > MAX_RESPONSE_BYTES:
@@ -242,6 +314,7 @@ def _get_json(url, bearer, opener, *, review=False):
     headers = {
         "Accept": "application/json",
         "Authorization": "Bearer " + bearer,
+        "Connection": "close",
         "User-Agent": USER_AGENT,
     }
     if review:
@@ -427,22 +500,34 @@ def _frontier_summary(payload):
 
 def _timer_state(unit, run):
     """Read timer state without mutating the unit."""
+    if SYSTEMCTL_PATH is None:
+        return {"active": None, "available": False, "enabled": None}
+    environment = {
+        "LC_ALL": "C",
+        "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}",
+    }
     try:
         enabled = run(
-            ["systemctl", "--user", "is-enabled", unit],
+            [SYSTEMCTL_PATH, "--user", "is-enabled", unit],
             capture_output=True,
+            encoding="utf-8",
+            env=environment,
+            errors="strict",
             text=True,
             timeout=TIMEOUT_SECONDS,
             check=False,
         )
         active = run(
-            ["systemctl", "--user", "is-active", unit],
+            [SYSTEMCTL_PATH, "--user", "is-active", unit],
             capture_output=True,
+            encoding="utf-8",
+            env=environment,
+            errors="strict",
             text=True,
             timeout=TIMEOUT_SECONDS,
             check=False,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, UnicodeError):
         return {"active": None, "available": False, "enabled": None}
     enabled_text = enabled.stdout.strip()
     active_text = active.stdout.strip()
@@ -484,18 +569,8 @@ def _utc_timestamp(utc_now):
         raise ProofError("timestamp-unavailable") from exc
 
 
-def prove(
-    ledger_origin,
-    apply_env_file,
-    observer_env_file,
-    *,
-    apply_timer_stopped,
-    window_owner,
-    opener,
-    run_systemctl,
-    utc_now,
-):
-    receipt = {
+def _new_receipt():
+    return {
         "all_queues_empty": False,
         "apply": {"accepted": None},
         "editor_review": {
@@ -512,6 +587,20 @@ def prove(
         "publication_frontier": None,
         "timer": {"active": None, "available": False, "enabled": None},
     }
+
+
+def prove(
+    ledger_origin,
+    apply_env_file,
+    observer_env_file,
+    *,
+    apply_timer_stopped,
+    window_owner,
+    opener,
+    run_systemctl,
+    utc_now,
+):
+    receipt = _new_receipt()
     try:
         if not apply_timer_stopped or window_owner is None:
             raise ProofError("fence-assertion-missing")
@@ -592,7 +681,8 @@ def main(
     utc_now=None,
     stdout=None,
 ):
-    parser = argparse.ArgumentParser(
+    receipt = _new_receipt()
+    parser = _ProofArgumentParser(
         description="Emit a text-free proof that all Day Zero queues are empty"
     )
     parser.add_argument("--ledger-origin", required=True)
@@ -600,21 +690,25 @@ def main(
     parser.add_argument("--observer-env-file", required=True)
     parser.add_argument("--apply-timer-stopped", action="store_true")
     parser.add_argument("--window-owner")
-    args = parser.parse_args(argv)
-    if opener is None:
-        opener = urllib.request.build_opener(_NoRedirect).open
-    if utc_now is None:
-        utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
-    receipt = prove(
-        args.ledger_origin,
-        args.apply_env_file,
-        args.observer_env_file,
-        apply_timer_stopped=args.apply_timer_stopped,
-        window_owner=args.window_owner,
-        opener=opener,
-        run_systemctl=run_systemctl,
-        utc_now=utc_now,
-    )
+    try:
+        args = parser.parse_args(argv)
+    except _ArgumentsInvalid:
+        receipt["proof_error"] = "arguments-invalid"
+    else:
+        if opener is None:
+            opener = urllib.request.build_opener(_NoRedirect).open
+        if utc_now is None:
+            utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
+        receipt = prove(
+            args.ledger_origin,
+            args.apply_env_file,
+            args.observer_env_file,
+            apply_timer_stopped=args.apply_timer_stopped,
+            window_owner=args.window_owner,
+            opener=opener,
+            run_systemctl=run_systemctl,
+            utc_now=utc_now,
+        )
     print(
         json.dumps(receipt, sort_keys=True, separators=(",", ":")),
         file=stdout or sys.stdout,

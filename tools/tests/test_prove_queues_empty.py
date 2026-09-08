@@ -5,6 +5,7 @@ import io
 import json
 import os
 import pathlib
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -79,15 +80,44 @@ class BytesSocket:
         return self._stream
 
 
-def real_http_response(body, *, declared_length):
+class CountingHTTPResponse(http.client.HTTPResponse):
+    def __init__(self, sock):
+        super().__init__(sock)
+        self.read_calls = 0
+
+    def read(self, amount=None):
+        self.read_calls += 1
+        return super().read(amount)
+
+
+class TimeoutInsteadOfEof(io.RawIOBase):
+    def __init__(self, body):
+        self._body = body
+
+    def read(self, _amount=-1):
+        if self._body is not None:
+            body, self._body = self._body, None
+            return body
+        raise TimeoutError("private response remained open")
+
+    def readable(self):
+        return True
+
+
+def real_http_response(body, *, declared_length, extra_headers=()):
+    encoded_extra_headers = b"".join(
+        f"{name}: {value}\r\n".encode("ascii")
+        for name, value in extra_headers
+    )
     wire = (
         b"HTTP/1.1 200 OK\r\n"
         b"Content-Type: application/json\r\n"
         + f"Content-Length: {declared_length}\r\n".encode("ascii")
+        + encoded_extra_headers
         + b"\r\n"
         + body
     )
-    response = http.client.HTTPResponse(BytesSocket(wire))
+    response = CountingHTTPResponse(BytesSocket(wire))
     response.begin()
     return response
 
@@ -170,17 +200,22 @@ def run_main(
     ledger_origin=LEDGER_ORIGIN,
     event_log=None,
     raw_output=False,
+    run_systemctl=None,
 ):
     apply_env = tmp_path / "apply.env"
     observer_env = tmp_path / "observer.env"
     write_apply_env(apply_env)
     if observer:
         write_observer_env(observer_env)
-    systemctl, systemctl_calls = injected_systemctl(
-        production_enabled=timer_enabled,
-        apply_enabled=apply_timer_enabled,
-        apply_active=apply_timer_active,
-    )
+    if run_systemctl is None:
+        systemctl, systemctl_calls = injected_systemctl(
+            production_enabled=timer_enabled,
+            apply_enabled=apply_timer_enabled,
+            apply_active=apply_timer_active,
+        )
+    else:
+        systemctl = run_systemctl
+        systemctl_calls = []
     timestamps = iter(
         [
             datetime.datetime(2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc),
@@ -280,6 +315,7 @@ def test_all_empty_returns_true_and_zero(tmp_path):
         "timer": {"active": False, "available": True, "enabled": False},
     }
     assert [call[0].get_method() for call in http_calls] == ["GET", "GET"]
+    assert all(call[0].get_header("Connection") == "close" for call in http_calls)
     assert all(timeout == 20 for _, timeout in http_calls)
     assert event_log == [
         "clock(2026-09-07T15:00:00+00:00)",
@@ -289,6 +325,14 @@ def test_all_empty_returns_true_and_zero(tmp_path):
     ]
     assert len(systemctl_calls) == 4
     assert all(call[1]["timeout"] == 20 for call in systemctl_calls)
+    assert all(pathlib.Path(call[0][0]).is_absolute() for call in systemctl_calls)
+    expected_systemctl_env = {
+        "LC_ALL": "C",
+        "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}",
+    }
+    assert all(
+        call[1]["env"] == expected_systemctl_env for call in systemctl_calls
+    )
     serialized = json.dumps(receipt)
     assert "admin-secret" not in serialized
     assert "observer-secret" not in serialized
@@ -518,6 +562,155 @@ def test_frontier_early_eof_with_real_http_response_returns_one_bounded_receipt(
     assert output.count("\n") == 1
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "http-response-framing-invalid"
+
+
+def test_review_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_path):
+    body = json.dumps({"ok": True, "items": []}).encode("utf-8")
+    response = real_http_response(
+        body + b'{"status":"pending","private":"row"}',
+        declared_length=len(body),
+    )
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return response
+        return Response({"ok": True, "context": EMPTY_FRONTIER})
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+    assert "private" not in output
+
+
+def test_frontier_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_path):
+    body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
+    review_response = Response({"ok": True, "items": []})
+    frontier_response = real_http_response(
+        body + b'{"status":"pending","private":"row"}',
+        declared_length=len(body),
+    )
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return review_response
+        return frontier_response
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+    assert "private" not in output
+
+
+def test_review_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
+    body = json.dumps({"ok": True, "items": []}).encode("utf-8")
+    response = real_http_response(body, declared_length=len(body))
+    response.fp = TimeoutInsteadOfEof(body)
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return response
+        return Response({"ok": True, "context": EMPTY_FRONTIER})
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-unavailable"
+    assert "private response remained open" not in output
+
+
+def test_frontier_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
+    review_response = Response({"ok": True, "items": []})
+    body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
+    frontier_response = real_http_response(body, declared_length=len(body))
+    frontier_response.fp = TimeoutInsteadOfEof(body)
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return review_response
+        return frontier_response
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+        raw_output=True,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-unavailable"
+    assert "private response remained open" not in output
+
+
+def test_review_content_range_fails_before_real_response_body_read(tmp_path):
+    body = json.dumps({"ok": True, "items": []}).encode("utf-8")
+    response = real_http_response(
+        body,
+        declared_length=len(body),
+        extra_headers=[("Content-Range", f"bytes 0-{len(body) - 1}/{len(body) + 64}")],
+    )
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return response
+        return Response({"ok": True, "context": EMPTY_FRONTIER})
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path,
+        opener=opener,
+    )
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+    assert response.read_calls == 0
+
+
+def test_frontier_content_range_fails_before_real_response_body_read(tmp_path):
+    review_response = Response({"ok": True, "items": []})
+    body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
+    frontier_response = real_http_response(
+        body,
+        declared_length=len(body),
+        extra_headers=[("Content-Range", f"bytes 0-{len(body) - 1}/{len(body) + 64}")],
+    )
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return review_response
+        return frontier_response
+
+    code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-response-framing-invalid"
+    assert review_response.read_calls == 1
+    assert frontier_response.read_calls == 0
 
 
 @pytest.mark.parametrize(
@@ -1175,3 +1368,145 @@ def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
     assert receipt["first_get_utc"] is None
     assert receipt["last_get_utc"] is None
     assert http_calls == []
+
+
+def test_timer_state_ignores_inherited_path_systemctl_shim(tmp_path, monkeypatch):
+    trusted_systemctl = tmp_path / "trusted-systemctl"
+    trusted_systemctl.write_text(
+        "#!/bin/sh\n"
+        'if [ "$2" = "is-enabled" ]; then\n'
+        "  printf 'enabled\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'inactive\\n'\n"
+        "exit 3\n",
+        encoding="utf-8",
+    )
+    trusted_systemctl.chmod(0o700)
+
+    shim_dir = tmp_path / "shim"
+    shim_dir.mkdir()
+    shim_marker = tmp_path / "path-shim-invoked"
+    path_shim = shim_dir / "systemctl"
+    path_shim.write_text(
+        "#!/bin/sh\n"
+        f": > {shim_marker}\n"
+        "printf 'enabled\\n'\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    path_shim.chmod(0o700)
+    monkeypatch.setenv("PATH", str(shim_dir))
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "private-counterfeit-bus")
+    monkeypatch.setattr(queues, "SYSTEMCTL_PATH", str(trusted_systemctl.resolve()))
+
+    state = queues._timer_state(queues.APPLY_TIMER_UNIT, subprocess.run)
+
+    assert state == {"active": False, "available": True, "enabled": True}
+    assert not shim_marker.exists()
+
+
+def test_apply_timer_decode_failure_returns_one_bounded_false_receipt(tmp_path):
+    base_run, _calls = injected_systemctl()
+
+    def decode_failure(argv, **kwargs):
+        if queues.APPLY_TIMER_UNIT in argv:
+            raise UnicodeDecodeError(
+                "utf-8", b"\xff", 0, 1, "private apply timer bytes"
+            )
+        return base_run(argv, **kwargs)
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: Response({"ok": True, "items": []}),
+        raw_output=True,
+        run_systemctl=decode_failure,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert len(output) < 2048
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "fence-apply-timer-not-stopped"
+    assert "private apply timer bytes" not in output
+
+
+def test_production_timer_decode_failure_returns_one_bounded_false_receipt(
+    tmp_path,
+):
+    base_run, _calls = injected_systemctl()
+
+    def decode_failure(argv, **kwargs):
+        if queues.TIMER_UNIT in argv:
+            raise UnicodeDecodeError(
+                "utf-8", b"\xff", 0, 1, "private production timer bytes"
+            )
+        return base_run(argv, **kwargs)
+
+    code, output, _systemctl_calls = run_main(
+        tmp_path,
+        opener=lambda _request, timeout: Response({"ok": True, "items": []}),
+        observer=False,
+        raw_output=True,
+        run_systemctl=decode_failure,
+    )
+    receipt = json.loads(output)
+
+    assert code == 1
+    assert output.count("\n") == 1
+    assert len(output) < 2048
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "environment-unavailable"
+    assert receipt["timer"] == {
+        "active": None,
+        "available": False,
+        "enabled": None,
+    }
+    assert "private production timer bytes" not in output
+
+
+def _assert_invalid_arguments_receipt(argv):
+    output = io.StringIO()
+
+    code = queues.main(argv, stdout=output)
+    serialized = output.getvalue()
+    receipt = json.loads(serialized)
+
+    assert code == 1
+    assert serialized.count("\n") == 1
+    assert len(serialized) < 2048
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "arguments-invalid"
+    return serialized
+
+
+def test_missing_required_arguments_return_one_bounded_false_receipt(capsys):
+    _assert_invalid_arguments_receipt([])
+
+    assert capsys.readouterr().err == ""
+
+
+def test_missing_argument_value_returns_one_bounded_false_receipt(capsys):
+    _assert_invalid_arguments_receipt(["--ledger-origin"])
+
+    assert capsys.readouterr().err == ""
+
+
+def test_unknown_argument_returns_one_bounded_false_receipt(capsys):
+    serialized = _assert_invalid_arguments_receipt(
+        ["--unknown-option", "private-argv-value"]
+    )
+
+    assert "private-argv-value" not in serialized
+    assert capsys.readouterr().err == ""
+
+
+def test_help_preserves_argparse_success_exit(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        queues.main(["--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--ledger-origin" in captured.out
+    assert captured.err == ""
