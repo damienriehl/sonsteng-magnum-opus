@@ -297,16 +297,82 @@ or nonzero result as a stop before the window.
    The checkout, Git, env, Python, verifier, nonce-file, and receipt paths are
    absolute.
 
-   The launcher's Bash `builtin exec -c` is the loader-isolation boundary: it
-   gives the dynamic loader of the first `/usr/bin/env` an empty environment.
-   The nested `/usr/bin/env -i` then removes the launcher's non-secret scrub
-   canary and gives Python the exact sole allowlisted entry `LC_ALL=C`. Removing
-   the nested `env -i` is a tested verifier failure (`environment-hostile`).
-   Removing `exec -c` is not detectable by the verifier because the loader has
-   already run; the behavioral test instead proves that a preload constructor
-   runs without it. The verifier's exact environment allowlist and isolated-mode
-   check are secondary, post-start guards. They cannot fire if a dynamic loader
-   pre-empts the interpreter.
+   The following machine-readable block is the normative contract for the
+   loader boundary, closed-stdout, signal, and stdout-write guarantees used by
+   this procedure. Tests parse every expected field and compare it with an
+   execution of the named mechanism. Surrounding prose explains the mechanism;
+   it does not widen these guarantees.
+
+   <!-- queue-proof-controlled-claims:start -->
+   <!-- queue-proof-executable-claims:start -->
+   ```json
+   {
+     "schema": "queue-proof-executable-claims/v1",
+     "claims": {
+       "loader_boundary": {
+         "statement": "With the launcher's `exec -c` boundary the preload constructor does not run; without `exec -c` it runs. Removing `exec -c` is not detectable by the verifier because the loader has already run.",
+         "preload_constructor_ran_with_exec_c": false,
+         "preload_constructor_ran_without_exec_c": true,
+         "verifier_detected_missing_exec_c": false
+       },
+       "launcher_closed_stdout": {
+         "statement": "The launcher returns 68 for a closed stdout before it reserves a receipt path.",
+         "returncode": 68,
+         "receipt_path_reserved": false
+       },
+       "verifier_closed_stdout": {
+         "statement": "The verifier returns 1 for a shell-level closed stdout and preserves the durable receipt.",
+         "returncode": 1,
+         "durable_receipt": true,
+         "diagnostic": "queue proof stdout mirror was unavailable; receipt is at the required path"
+       },
+       "sigint": {
+         "statement": "SIGINT before receipt finalization returns 130, mirrors one bounded receipt with all_queues_empty false and proof_error verifier-interrupted, preserves the established proof state, and releases the receipt path for retry.",
+         "returncode": 130,
+         "bounded_receipt": true,
+         "all_queues_empty": false,
+         "proof_error": "verifier-interrupted",
+         "proof_state_preserved": true,
+         "receipt_path_reusable": true
+       },
+       "sigterm": {
+         "statement": "SIGTERM before receipt finalization returns 143, mirrors one bounded receipt with all_queues_empty false and proof_error verifier-interrupted, preserves the established proof state, and releases the receipt path for retry.",
+         "returncode": 143,
+         "bounded_receipt": true,
+         "all_queues_empty": false,
+         "proof_error": "verifier-interrupted",
+         "proof_state_preserved": true,
+         "receipt_path_reusable": true
+       },
+       "post_finalization_signal": {
+         "statement": "A signal during or after receipt finalization returns 0, preserves the committed receipt, and its stdout mirror matches that receipt.",
+         "returncode": 0,
+         "durable_receipt": true,
+         "receipt_matches_stdout": true
+       },
+       "dev_full": {
+         "statement": "A /dev/full stdout returns 1 and preserves the durable receipt.",
+         "returncode": 1,
+         "durable_receipt": true,
+         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       },
+       "epipe": {
+         "statement": "An EPIPE stdout returns 1 and preserves the durable receipt.",
+         "returncode": 1,
+         "durable_receipt": true,
+         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       }
+     }
+   }
+   ```
+   <!-- queue-proof-executable-claims:end -->
+   <!-- queue-proof-controlled-claims:end -->
+
+   Claim `loader_boundary` is the complete operational guarantee for dynamic
+   loader isolation; do not infer a wider loader guarantee from explanatory
+   prose. The nested `/usr/bin/env -i` removes the launcher's non-secret scrub
+   canary and gives Python the exact sole allowlisted entry `LC_ALL=C`; its
+   removal is a tested verifier failure (`environment-hostile`).
    Invoking the verifier outside this documented readonly launcher is unsupported,
    and no receipt from such an invocation is acceptable. Python isolated mode
    ignores user-site and Python environment path injection. The Bash builtin
@@ -321,6 +387,18 @@ or nonzero result as a stop before the window.
    that same descriptor. Python then reads its own `/proc/self/fd/9` source path, hashes those bytes as
    a Git blob (`SHA-1("blob " + ASCII byte length + NUL + file bytes)`), and
    compares that measurement with the independently recorded expected blob.
+   The in-tool `hashlib.sha1(..., usedforsecurity=False)` is ordinary,
+   unhardened SHA-1. `usedforsecurity=False` changes policy availability, not
+   the digest or its collision resistance. The in-tool self-measurement
+   therefore does not itself supply collision resistance. Under this procedure,
+   protection against recognized practical SHA-1 collision attacks is supplied
+   by the deployment Git build's `SHA1_DC` collision-detection hardening when
+   the launcher runs `git hash-object --stdin` over the same open descriptor;
+   this is not a claim of general SHA-1 collision resistance. This is a
+   deployment-specific property, not a portable property of Git or Python:
+   before the window, confirm that
+   `/usr/bin/git version --build-options` reports `SHA-1: SHA1_DC`; otherwise
+   stop.
    The shell rejects a mismatch before Python starts; Python rejects a mismatch
    or unreadable self path with a bounded receipt.
 
@@ -569,23 +647,19 @@ or nonzero result as a stop before the window.
    verifier retries partial writes, syncs the receipt file, verifies the opened
    inode still names that regular file, and syncs the parent directory before
    mirroring the same bytes to stdout. Failure to open, write, flush, or sync the
-   durable receipt returns nonzero with a bounded diagnostic. `/dev/full` or a
-   broken stdout pipe also returns nonzero; when the durable write completed,
-   the receipt remains at the required path and the diagnostic says the stdout
-   mirror failed. The documented launcher refuses a closed stdout with return
-   code `68` before the verifier starts or reserves a receipt path; stdout is a
-   convenience mirror, while the durable receipt plus supervised return code
-   are the evidence. Preserve any existing or partial receipt and use a new
-   path for a supervised retry.
-   SIGINT and SIGTERM received before receipt finalization produce one bounded
-   `verifier-interrupted` receipt with the proof state established before the
-   signal and return `130` or `143`. Receipt finalization is the linearization
-   point: signals arriving after it begins are treated as post-completion so
-   they cannot split or contradict a committed receipt. After an interrupted
-   receipt is mirrored and its reservation is released successfully, a
-   supervised retry can reuse the required path. A bounded release-failure
-   diagnostic and rc `1` instead require preserving the path for inspection
-   and selecting a fresh absolute create-new path for any retry.
+   durable receipt returns nonzero with a bounded diagnostic. Claims
+   `dev_full`, `epipe`, `verifier_closed_stdout`, and
+   `launcher_closed_stdout` are the complete operational guarantees for those
+   stdout conditions, including their return codes, receipt disposition, and
+   diagnostics. Stdout is a convenience mirror, while the durable receipt plus
+   supervised return code are the evidence. Preserve any existing or partial
+   receipt and use a new path for a supervised retry.
+   Claims `sigint`, `sigterm`, and `post_finalization_signal` are the complete
+   operational guarantees for those signal timings, including return code,
+   receipt verdict and disposition, preserved proof state, and retryability.
+   Receipt finalization is the linearization point used by those claims. If
+   reservation release reports failure, stop, preserve the path for
+   inspection, and select a fresh absolute create-new path for any retry.
 
    The verifier deliberately uses the host's full distribution-managed CA
    store rather than a private issuer pin. The allowlisted origin is a

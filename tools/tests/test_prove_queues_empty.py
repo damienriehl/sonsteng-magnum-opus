@@ -1,4 +1,5 @@
 import datetime
+import errno
 import hashlib
 import http.client
 import importlib.util
@@ -30,6 +31,159 @@ LEDGER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev"
 WINDOW_OWNER = "packet-d-test-window"
 RELEASE_COMMIT = "a" * 40
 GENERATE_WINDOW_NONCE = object()
+
+
+def _controlled_claim_statement(claim_id, outcome):
+    if claim_id == "loader_boundary":
+        with_exec = (
+            "runs"
+            if outcome["preload_constructor_ran_with_exec_c"]
+            else "does not run"
+        )
+        without_exec = (
+            "runs"
+            if outcome["preload_constructor_ran_without_exec_c"]
+            else "does not run"
+        )
+        detection = (
+            "is detectable"
+            if outcome["verifier_detected_missing_exec_c"]
+            else "is not detectable"
+        )
+        reason = (
+            ""
+            if outcome["verifier_detected_missing_exec_c"]
+            else " because the loader has already run"
+        )
+        return (
+            "With the launcher's `exec -c` boundary the preload constructor "
+            f"{with_exec}; without `exec -c` it {without_exec}. Removing "
+            f"`exec -c` {detection} by the verifier{reason}."
+        )
+    if claim_id == "launcher_closed_stdout":
+        reservation = (
+            "after it reserves"
+            if outcome["receipt_path_reserved"]
+            else "before it reserves"
+        )
+        return (
+            f"The launcher returns {outcome['returncode']} for a closed stdout "
+            f"{reservation} a receipt path."
+        )
+    if claim_id == "verifier_closed_stdout":
+        receipt = (
+            "preserves"
+            if outcome["durable_receipt"]
+            else "does not preserve"
+        )
+        return (
+            f"The verifier returns {outcome['returncode']} for a shell-level "
+            f"closed stdout and {receipt} the durable receipt."
+        )
+    if claim_id in {"sigint", "sigterm"}:
+        verdict = "false" if not outcome["all_queues_empty"] else "true"
+        preservation = (
+            "preserves" if outcome["proof_state_preserved"] else "does not preserve"
+        )
+        reuse = (
+            "releases the receipt path for retry"
+            if outcome["receipt_path_reusable"]
+            else "keeps the receipt path reserved"
+        )
+        return (
+            f"{claim_id.upper()} before receipt finalization returns "
+            f"{outcome['returncode']}, mirrors one bounded receipt with "
+            f"all_queues_empty {verdict} and proof_error "
+            f"{outcome['proof_error']}, {preservation} the established proof "
+            f"state, and {reuse}."
+        )
+    if claim_id == "post_finalization_signal":
+        durable = "preserves" if outcome["durable_receipt"] else "does not preserve"
+        match = "matches" if outcome["receipt_matches_stdout"] else "differs from"
+        return (
+            "A signal during or after receipt finalization returns "
+            f"{outcome['returncode']}, {durable} the committed receipt, and "
+            f"its stdout mirror {match} that receipt."
+        )
+    if claim_id in {"dev_full", "epipe"}:
+        subject = "A /dev/full" if claim_id == "dev_full" else "An EPIPE"
+        receipt = (
+            "preserves"
+            if outcome["durable_receipt"]
+            else "does not preserve"
+        )
+        return (
+            f"{subject} stdout returns {outcome['returncode']} and {receipt} "
+            "the durable receipt."
+        )
+    raise AssertionError(f"unrecognized executable claim: {claim_id}")
+
+
+def runbook_executable_claims(runbook_path=None):
+    if runbook_path is None:
+        runbook_path = TOOLS.parent / "docs/day-zero-migration-operations.md"
+    runbook = pathlib.Path(runbook_path).read_text(encoding="utf-8")
+    controlled = runbook.split(
+        "<!-- queue-proof-controlled-claims:start -->", 1
+    )[1].split("<!-- queue-proof-controlled-claims:end -->", 1)[0]
+    marked = controlled.split(
+        "<!-- queue-proof-executable-claims:start -->", 1
+    )[1].split("<!-- queue-proof-executable-claims:end -->", 1)[0]
+    expected_controlled = (
+        "<!-- queue-proof-executable-claims:start -->"
+        + marked
+        + "<!-- queue-proof-executable-claims:end -->"
+    )
+    assert controlled.strip() == expected_controlled.strip(), (
+        "the controlled claims region may contain only the executable contract"
+    )
+    fenced = textwrap.dedent(marked).strip()
+    assert fenced.startswith("```json\n") and fenced.endswith("\n```")
+    contract = json.loads(
+        fenced.removeprefix("```json\n").removesuffix("\n```")
+    )
+    assert contract["schema"] == "queue-proof-executable-claims/v1"
+    assert set(contract) == {"schema", "claims"}
+    assert set(contract["claims"]) == {
+        "loader_boundary",
+        "launcher_closed_stdout",
+        "verifier_closed_stdout",
+        "sigint",
+        "sigterm",
+        "post_finalization_signal",
+        "dev_full",
+        "epipe",
+    }
+    outcomes = {}
+    for claim_id, claim in contract["claims"].items():
+        outcome = {key: value for key, value in claim.items() if key != "statement"}
+        assert claim.get("statement") == _controlled_claim_statement(
+            claim_id, outcome
+        )
+        outcomes[claim_id] = outcome
+    return outcomes
+
+
+def test_controlled_claim_contract_rejects_negated_exec_c_claim(tmp_path):
+    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+    true_claim = (
+        "Removing `exec -c` is not detectable by the verifier because the "
+        "loader has already run."
+    )
+    false_claim = (
+        "Removing `exec -c` is detected by the verifier's own dynamic-loader "
+        "check, so the isolation cannot silently be dropped."
+    )
+    assert runbook.count(true_claim) == 1
+    negated_runbook = tmp_path / "negated-runbook.md"
+    negated_runbook.write_text(
+        runbook.replace(true_claim, false_claim), encoding="utf-8"
+    )
+
+    with pytest.raises(AssertionError):
+        runbook_executable_claims(negated_runbook)
 
 
 def git_blob_oid(raw):
@@ -1609,18 +1763,46 @@ def test_malformed_or_duplicate_server_date_fails_closed(
     assert receipt["proof_error"] == "http-server-date-invalid"
 
 
-def test_server_date_outside_clock_skew_bound_fails_closed(tmp_path):
-    opener = lambda _request, timeout: Response(
-        {"ok": True, "items": []},
-        server_date="Tue, 07 Jan 2020 03:00:00 GMT",
-    )
+@pytest.mark.parametrize(
+    "skewed_endpoint",
+    [
+        pytest.param("review", id="D10-review-clock-skew-call"),
+        pytest.param(
+            "publication_frontier",
+            id="D10-publication-frontier-clock-skew-call",
+        ),
+    ],
+)
+def test_server_date_outside_clock_skew_bound_fails_closed(
+    tmp_path, skewed_endpoint
+):
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return Response(
+                {"ok": True, "items": []},
+                server_date=(
+                    "Mon, 07 Sep 2026 14:00:00 GMT"
+                    if skewed_endpoint == "review"
+                    else "Mon, 07 Sep 2026 15:00:00 GMT"
+                ),
+            )
+        return Response(
+            {"ok": True, "context": EMPTY_FRONTIER},
+            server_date=(
+                "Mon, 07 Sep 2026 16:00:01 GMT"
+                if skewed_endpoint == "publication_frontier"
+                else "Mon, 07 Sep 2026 15:00:01 GMT"
+            ),
+        )
 
     code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
 
     assert code == 1
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "http-server-date-skew"
-    assert abs(receipt["server_date_skew_seconds"]["review"]) > 300
+    assert (
+        abs(receipt["server_date_skew_seconds"][skewed_endpoint]) > 300
+    )
 
 
 @pytest.mark.parametrize("skew", [-300, 300])
@@ -2227,6 +2409,30 @@ def test_invalid_release_identity_fails_before_systemctl_or_network(tmp_path):
     }
 
 
+@pytest.mark.parametrize("identity_field", ["release_commit", "verifier_blob"])
+@pytest.mark.parametrize(
+    "invalid_value",
+    [pytest.param("a" * 39, id="39-lowercase-hex"),
+     pytest.param("a" * 41, id="41-lowercase-hex"),
+     pytest.param("A" * 40, id="40-uppercase-hex")],
+)
+def test_D07_release_identity_requires_exactly_40_lowercase_hex_characters(
+    identity_field, invalid_value
+):
+    identity = {
+        "release_commit": RELEASE_COMMIT,
+        "verifier_blob": VERIFIER_BLOB,
+    }
+    identity[identity_field] = invalid_value
+
+    with pytest.raises(
+        queues.ProofError, match="^release-identity-invalid$"
+    ):
+        queues._release_identity(
+            identity["release_commit"], identity["verifier_blob"]
+        )
+
+
 def test_release_identity_measures_its_own_git_blob():
     identity = queues._release_identity(RELEASE_COMMIT, VERIFIER_BLOB)
 
@@ -2248,6 +2454,49 @@ def test_release_identity_refuses_when_own_source_is_unreadable(
         queues.ProofError, match="^verifier-identity-unreadable$"
     ):
         queues._release_identity(RELEASE_COMMIT, VERIFIER_BLOB)
+
+
+def test_N02_interrupt_during_proof_retains_established_verifier_identity(
+    monkeypatch,
+):
+    args = SimpleNamespace(
+        release_commit=RELEASE_COMMIT,
+        verifier_blob=VERIFIER_BLOB,
+        preflight=False,
+        ledger_origin=LEDGER_ORIGIN,
+        apply_env_file=None,
+        observer_env_file=None,
+        apply_timer_stopped=True,
+        window_owner=WINDOW_OWNER,
+        window_nonce_file=None,
+        window_phase="opening",
+    )
+
+    def interrupt_during_proof(*_args, **_kwargs):
+        raise queues._SignalInterrupted(signal.SIGINT)
+
+    monkeypatch.setattr(queues, "prove", interrupt_during_proof)
+
+    with pytest.raises(queues._ProofInterrupted) as interrupted:
+        queues._run_proof(
+            args,
+            opener=object(),
+            run_systemctl=None,
+            utc_now=lambda: None,
+            systemctl_path=queues.SYSTEMCTL_PATH,
+            read_host_identity=None,
+            process_environment={"LC_ALL": "C"},
+            isolated=True,
+            tls_handshake=None,
+        )
+
+    assert interrupted.value.returncode == 130
+    assert interrupted.value.receipt["all_queues_empty"] is False
+    assert interrupted.value.receipt["proof_error"] == "verifier-interrupted"
+    assert interrupted.value.receipt["verifier_identity"] == {
+        "release_commit": RELEASE_COMMIT,
+        "verifier_blob": VERIFIER_BLOB,
+    }
 
 
 @pytest.mark.parametrize(
@@ -2627,6 +2876,9 @@ def test_trusted_systemctl_is_available_on_test_host():
 
 
 def test_documented_invocation_ignores_shell_path_and_cwd_or_refuses(tmp_path):
+    executable_claims = runbook_executable_claims()
+    loader_claim = executable_claims["loader_boundary"]
+    closed_stdout_claim = executable_claims["launcher_closed_stdout"]
     checkout = tmp_path / "trusted-checkout"
     checkout.mkdir()
     verifier = checkout / "tools/prove_queues_empty.py"
@@ -2786,15 +3038,18 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
     assert receipt["fence"]["window_nonce_sha256"] == nonce_digest
     assert receipt["fence"]["window_phase"] == "opening"
     assert not poison_marker.exists()
-    assert not loader_marker.exists()
+    preload_constructor_ran_with_exec_c = loader_marker.exists()
+    assert preload_constructor_ran_with_exec_c is False
 
     receipt_path.unlink()
     closed_stdout = invoke_launcher(close_stdout=True)
 
-    assert closed_stdout.returncode == 68
+    assert {
+        "returncode": closed_stdout.returncode,
+        "receipt_path_reserved": receipt_path.exists(),
+    } == closed_stdout_claim
     assert closed_stdout.stdout == ""
     assert closed_stdout.stderr == ""
-    assert not receipt_path.exists()
     assert not poison_marker.exists()
     assert not loader_marker.exists()
 
@@ -2846,9 +3101,20 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
         "builtin exec /usr/bin/env QUEUE_PROOF_ENV_SCRUB_REQUIRED=1",
     )
     no_loader_clear = invoke_launcher(no_loader_clear_launcher)
+    no_loader_clear_receipt = json.loads(
+        receipt_path.read_text(encoding="utf-8")
+    )
 
     assert no_loader_clear.returncode == 1
-    assert loader_marker.exists()
+    assert {
+        "preload_constructor_ran_with_exec_c": (
+            preload_constructor_ran_with_exec_c
+        ),
+        "preload_constructor_ran_without_exec_c": loader_marker.exists(),
+        "verifier_detected_missing_exec_c": (
+            no_loader_clear_receipt["proof_error"] != receipt["proof_error"]
+        ),
+    } == loader_claim
     assert not poison_marker.exists()
     receipt_path.unlink()
     loader_marker.unlink()
@@ -2915,26 +3181,11 @@ builtin readonly -f run_queue_proof
     assert not loader_marker.exists()
 
 
-def test_runbook_loader_claims_are_scoped_to_the_launcher_mechanism():
+def test_runbook_launcher_keeps_structural_loader_and_path_guards():
+    runbook_executable_claims()
     runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
         encoding="utf-8"
     )
-    normalized = " ".join(runbook.split())
-    sentences = re.split(r"(?<=[.!?])\s+", normalized)
-    loader_sentences = [
-        sentence
-        for sentence in sentences
-        if re.search(r"loader|LD_|OPENSSL_CONF", sentence, re.IGNORECASE)
-    ]
-    universal_claim = re.compile(
-        r"regardless of how|no matter how|all invocations|any invocation|"
-        r"independently (?:refuses|rejects|protects)|"
-        r"outside .{0,40}(?:refuses|rejects|protects)",
-        re.IGNORECASE,
-    )
-    assert loader_sentences
-    assert all(not universal_claim.search(sentence) for sentence in loader_sentences)
-
     marked = runbook.split("<!-- queue-proof-launcher:start -->", 1)[1].split(
         "<!-- queue-proof-launcher:end -->", 1
     )[0]
@@ -2948,21 +3199,6 @@ def test_runbook_loader_claims_are_scoped_to_the_launcher_mechanism():
         marked,
     )
     assert "builtin test -e /proc/self/fd/1 || return 68" in marked
-
-
-def test_runbook_scopes_closed_stdout_refusal_to_launcher():
-    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
-        encoding="utf-8"
-    )
-    sentences = re.split(r"(?<=[.!?])\s+", " ".join(runbook.split()))
-    closed_stdout_sentences = [
-        sentence
-        for sentence in sentences
-        if "stdout" in sentence.casefold() and "closed" in sentence.casefold()
-    ]
-
-    assert closed_stdout_sentences
-    assert all("launcher" in sentence.casefold() for sentence in closed_stdout_sentences)
 
 
 def test_runbook_structurally_requires_absolute_create_new_receipt_path():
@@ -2983,9 +3219,7 @@ def test_runbook_structurally_requires_absolute_create_new_receipt_path():
     )
 
 
-def test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt(
-    tmp_path,
-):
+def _documented_receipt_validator():
     runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
         encoding="utf-8"
     )
@@ -2994,7 +3228,33 @@ def test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt(
     )[1].split("<!-- queue-proof-receipt-validator:end -->", 1)[0]
     fenced = textwrap.dedent(marked).strip()
     assert fenced.startswith("```bash\n") and fenced.endswith("\n```")
-    validator = fenced.removeprefix("```bash\n").removesuffix("\n```")
+    return fenced.removeprefix("```bash\n").removesuffix("\n```")
+
+
+def _validate_documented_receipt(validator, path):
+    return subprocess.run(
+        [
+            "/bin/bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            validator.replace(
+                "<absolute-opening-receipt-path>.json", str(path)
+            )
+            + '\nexit "$opening_receipt_validation_rc"\n',
+        ],
+        capture_output=True,
+        check=False,
+    )
+
+
+_ADD_UNEXPECTED_KEY = object()
+
+
+def test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt(
+    tmp_path,
+):
+    validator = _documented_receipt_validator()
     valid_path = tmp_path / "valid-receipt.json"
     code, valid_receipt, _http_calls, _systemctl_calls = invoke(
         tmp_path, review_rows=[]
@@ -3002,23 +3262,7 @@ def test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt(
     assert code == 0
     valid_path.write_text(json.dumps(valid_receipt), encoding="utf-8")
 
-    def validate(path):
-        return subprocess.run(
-            [
-                "/bin/bash",
-                "--noprofile",
-                "--norc",
-                "-c",
-                validator.replace(
-                    "<absolute-opening-receipt-path>.json", str(path)
-                )
-                + '\nexit "$opening_receipt_validation_rc"\n',
-            ],
-            capture_output=True,
-            check=False,
-        )
-
-    accepted = validate(valid_path)
+    accepted = _validate_documented_receipt(validator, valid_path)
     assert accepted.returncode == 0
     assert accepted.stdout == accepted.stderr == b""
 
@@ -3040,9 +3284,223 @@ def test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt(
     for index, payload in enumerate(incomplete_receipts):
         invalid_path = tmp_path / f"invalid-receipt-{index}.json"
         invalid_path.write_bytes(payload)
-        rejected = validate(invalid_path)
+        rejected = _validate_documented_receipt(validator, invalid_path)
         assert rejected.returncode == 75
         assert rejected.stdout == rejected.stderr == b""
+
+
+@pytest.mark.parametrize(
+    ("property_path", "invalid_value"),
+    [
+        pytest.param(("all_queues_empty",), False, id="V01-all-queues-empty"),
+        pytest.param(
+            ("apply",), _ADD_UNEXPECTED_KEY, id="V02-apply-exact-shape"
+        ),
+        pytest.param(("apply", "accepted"), 1, id="V02-apply-accepted"),
+        pytest.param(
+            ("editor_review",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-review-exact-shape",
+        ),
+        pytest.param(
+            ("editor_review", "pending"), 1, id="V02-review-counts-zero"
+        ),
+        pytest.param(
+            ("fence",), _ADD_UNEXPECTED_KEY, id="V02-fence-exact-shape"
+        ),
+        pytest.param(
+            ("publication_frontier",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-frontier-exact-shape",
+        ),
+        pytest.param(
+            ("host_identity",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-host-identity-exact-shape",
+        ),
+        pytest.param(
+            ("host_identity", "boot_id_sha256"),
+            "g" * 64,
+            id="V02-host-identity-digests",
+        ),
+        pytest.param(
+            ("ledger_state_hash",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-ledger-hash-exact-shape",
+        ),
+        pytest.param(
+            ("ledger_state_hash", "algorithm"),
+            "sha1",
+            id="V02-ledger-hash-algorithm",
+        ),
+        pytest.param(
+            ("ledger_state_hash", "combined"),
+            "g" * 64,
+            id="V02-ledger-hash-digests",
+        ),
+        pytest.param(
+            ("server_dates",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-server-dates-exact-shape",
+        ),
+        pytest.param(
+            ("server_dates", "review"), "", id="V02-server-dates-nonempty"
+        ),
+        pytest.param(
+            ("server_date_skew_seconds",),
+            _ADD_UNEXPECTED_KEY,
+            id="V02-server-skews-exact-shape",
+        ),
+        pytest.param(
+            ("server_date_skew_seconds", "review"),
+            True,
+            id="V02-server-skews-integer-not-bool",
+        ),
+        pytest.param(
+            ("timer",), _ADD_UNEXPECTED_KEY, id="V03-timer-exact-shape"
+        ),
+        pytest.param(
+            ("timer", "enabled"),
+            True,
+            id="V03-timer-exact-state",
+        ),
+        pytest.param(
+            ("verifier_identity",),
+            _ADD_UNEXPECTED_KEY,
+            id="V07-verifier-identity-exact-shape",
+        ),
+        pytest.param(
+            ("verifier_identity", "release_commit"),
+            "a" * 39,
+            id="V07-release-commit-digest",
+        ),
+        pytest.param(
+            ("fence", "apply_timer"),
+            _ADD_UNEXPECTED_KEY,
+            id="V08-apply-timer-exact-shape",
+        ),
+        pytest.param(
+            ("fence", "apply_timer", "enabled"),
+            False,
+            id="V08-apply-timer-exact-state",
+        ),
+        pytest.param(
+            (
+                "publication_frontier",
+                "operation_frontier",
+                "pending_operation_count",
+            ),
+            1,
+            id="V04-operation-pending-count",
+        ),
+        pytest.param(
+            (
+                "publication_frontier",
+                "operation_frontier",
+                "blocked_state",
+            ),
+            "blocked",
+            id="V04-operation-blocked-state",
+        ),
+        pytest.param(
+            ("publication_frontier", "operation_frontier"),
+            _ADD_UNEXPECTED_KEY,
+            id="V04-operation-frontier-exact-shape",
+        ),
+        pytest.param(
+            ("publication_frontier", "queue_count"),
+            1,
+            id="V05-frontier-queue-count",
+        ),
+        pytest.param(
+            ("publication_frontier", "reason"), "", id="V05-frontier-reason"
+        ),
+        pytest.param(
+            ("publication_frontier", "releases"),
+            [{}],
+            id="V05-frontier-releases-empty",
+        ),
+        pytest.param(
+            ("publication",),
+            "observer-env-absent",
+            id="V06-publication-observer-frontier",
+        ),
+        pytest.param(
+            ("publication_fallback",), {}, id="V06-publication-fallback-none"
+        ),
+        pytest.param(("preflight",), {}, id="V06-preflight-none"),
+        pytest.param(("first_get_utc",), "", id="V06-first-get-nonempty"),
+        pytest.param(("last_get_utc",), "", id="V06-last-get-nonempty"),
+        pytest.param(
+            ("ledger_host",), "example.invalid", id="V06-ledger-host"
+        ),
+        pytest.param(
+            ("verifier_identity", "verifier_blob"),
+            "a" * 39,
+            id="V07-verifier-blob-digest-length",
+        ),
+        pytest.param(
+            ("verifier_identity", "verifier_blob"),
+            "g" * 40,
+            id="V07-verifier-blob-digest-format",
+        ),
+        pytest.param(
+            ("fence", "apply_timer_stopped"),
+            False,
+            id="V08-fence-apply-timer-stopped",
+        ),
+        pytest.param(
+            ("fence", "proved"),
+            False,
+            id="V08-fence-proved",
+        ),
+        pytest.param(
+            ("fence", "window_nonce_sha256"),
+            "g" * 64,
+            id="V08-fence-nonce-digest",
+        ),
+        pytest.param(
+            ("fence", "window_owner"), "", id="V08-fence-window-owner"
+        ),
+        pytest.param(
+            ("fence", "window_phase"), "middle", id="V08-fence-window-phase"
+        ),
+        pytest.param(
+            ("verifier_identity", "verifier_blob"),
+            "A" * 40,
+            id="V09-lowercase-only-hex",
+        ),
+    ],
+)
+def test_documented_receipt_validator_rejects_each_acceptance_conjunct(
+    tmp_path, property_path, invalid_value
+):
+    validator = _documented_receipt_validator()
+    code, valid_receipt, _http_calls, _systemctl_calls = invoke(
+        tmp_path, review_rows=[]
+    )
+    assert code == 0
+
+    valid_path = tmp_path / "valid-receipt.json"
+    valid_path.write_text(json.dumps(valid_receipt), encoding="utf-8")
+    accepted = _validate_documented_receipt(validator, valid_path)
+    assert accepted.returncode == 0
+    assert accepted.stdout == accepted.stderr == b""
+
+    invalid_receipt = json.loads(json.dumps(valid_receipt))
+    parent = invalid_receipt
+    for key in property_path[:-1]:
+        parent = parent[key]
+    if invalid_value is _ADD_UNEXPECTED_KEY:
+        parent[property_path[-1]]["unexpected"] = None
+    else:
+        parent[property_path[-1]] = invalid_value
+
+    invalid_path = tmp_path / "one-fault-receipt.json"
+    invalid_path.write_text(json.dumps(invalid_receipt), encoding="utf-8")
+    rejected = _validate_documented_receipt(validator, invalid_path)
+    assert rejected.returncode == 75
+    assert rejected.stdout == rejected.stderr == b""
 
 
 def test_runbook_records_self_hash_limits_and_load_bearing_script_route():
@@ -3066,6 +3524,27 @@ def test_runbook_records_self_hash_limits_and_load_bearing_script_route():
     assert "-I -B --check-hash-based-pycs always /proc/self/fd/9" in normalized
     assert (
         "A `-m` invocation, import, wrapper, or ordinary path substitution is unsupported"
+        in normalized
+    )
+    assert (
+        "`hashlib.sha1(..., usedforsecurity=False)` is ordinary, unhardened SHA-1"
+        in normalized
+    )
+    assert (
+        "`usedforsecurity=False` changes policy availability, not the digest or its collision resistance"
+        in normalized
+    )
+    assert (
+        "protection against recognized practical SHA-1 collision attacks is supplied by the deployment Git build's `SHA1_DC` collision-detection hardening"
+        in normalized
+    )
+    assert "this is not a claim of general SHA-1 collision resistance" in normalized
+    assert (
+        "This is a deployment-specific property, not a portable property of Git or Python"
+        in normalized
+    )
+    assert (
+        "confirm that `/usr/bin/git version --build-options` reports `SHA-1: SHA1_DC`; otherwise stop"
         in normalized
     )
 
@@ -3227,6 +3706,31 @@ def test_json_encoder_defect_returns_literal_bounded_receipt(monkeypatch):
     assert "private encoder defect" not in serialized
 
 
+def test_N15_nonserializable_receipt_fallback_is_false_verifier_defect():
+    payload, failed = queues._serialize_receipt({"not_json": object()})
+    receipt = json.loads(payload)
+
+    assert failed is True
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "verifier-defect"
+
+
+def test_standard_stream_reservation_reraises_non_ebadf(monkeypatch):
+    real_fstat = queues.os.fstat
+
+    def fail_stdout_fstat(file_descriptor):
+        if file_descriptor == 1:
+            raise OSError(errno.EIO, "private descriptor failure")
+        return real_fstat(file_descriptor)
+
+    monkeypatch.setattr(queues.os, "fstat", fail_stdout_fstat)
+
+    with pytest.raises(OSError) as raised:
+        queues._reserve_standard_streams()
+
+    assert raised.value.errno == errno.EIO
+
+
 def test_receipt_serialization_is_canonical_key_order():
     payload, failed = queues._serialize_receipt({"z": 0, "a": 1})
 
@@ -3373,6 +3877,74 @@ def test_relative_receipt_path_is_refused_without_creation(
     assert not (tmp_path / "relative-receipt.json").exists()
 
 
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "trailing-slash",
+        "terminal-dot",
+        "dot-segment",
+        "repeated-separator",
+        "parent-segment",
+    ],
+)
+def test_F7_noncanonical_receipt_path_is_refused_without_creation(
+    tmp_path, capfd, spelling
+):
+    normalized_target = tmp_path / "not-the-requested-receipt"
+    existing_parent = tmp_path / "existing-parent"
+    existing_parent.mkdir()
+    receipt_path = {
+        "trailing-slash": f"{normalized_target}/",
+        "terminal-dot": f"{normalized_target}/.",
+        "dot-segment": f"{tmp_path}/./{normalized_target.name}",
+        "repeated-separator": f"{tmp_path}//{normalized_target.name}",
+        "parent-segment": (
+            f"{existing_parent}/../{normalized_target.name}"
+        ),
+    }[spelling]
+
+    code = call_main(
+        [
+            *preflight_args(),
+            "--receipt-path",
+            receipt_path,
+        ],
+        systemctl_path=queues.SYSTEMCTL_PATH,
+    )
+    captured = capfd.readouterr()
+
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err == "queue proof receipt file could not be opened\n"
+    assert not normalized_target.exists()
+
+
+def test_N16_durable_invocation_without_receipt_path_is_bounded_refusal(capfd):
+    code = call_main(preflight_args(), systemctl_path=queues.SYSTEMCTL_PATH)
+    captured = capfd.readouterr()
+
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err == "queue proof receipt file could not be opened\n"
+    assert len(captured.err.encode("utf-8")) < 2048
+
+
+def test_N14_open_receipt_baseexception_releases_create_new_reservation(
+    tmp_path, monkeypatch
+):
+    receipt_path = tmp_path / "baseexception-reservation.json"
+
+    def interrupt_after_create(_descriptor, _mode):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(queues.os, "fchmod", interrupt_after_create)
+
+    with pytest.raises(KeyboardInterrupt):
+        queues._open_receipt(str(receipt_path))
+
+    assert not receipt_path.exists()
+
+
 def test_durable_receipt_write_failure_returns_nonzero_diagnostic(
     tmp_path, monkeypatch, capfd
 ):
@@ -3437,33 +4009,107 @@ def test_interrupt_during_receipt_write_emits_once_and_releases_path(
     assert_durable_preflight_receipt(receipt_path)
 
 
-def test_signal_after_receipt_creation_is_deferred_until_cleanup_owns_path(
+def test_N13_interrupt_before_stdout_starts_forces_true_receipt_false(
     tmp_path, monkeypatch, capfd
 ):
-    receipt_path = tmp_path / "reservation-interrupted-receipt.json"
-    real_fchmod = queues.os.fchmod
-    signaled = False
+    receipt_path = tmp_path / "pre-mirror-interrupted-receipt.json"
+    true_receipt = queues._new_receipt(
+        {
+            "release_commit": RELEASE_COMMIT,
+            "verifier_blob": VERIFIER_BLOB,
+        }
+    )
+    true_receipt["all_queues_empty"] = True
+    monkeypatch.setattr(
+        queues, "_run_proof", lambda *_args, **_kwargs: true_receipt
+    )
+    real_serialize = queues._serialize_receipt
+    serialize_calls = 0
 
-    def signal_after_create(file_descriptor, mode):
-        nonlocal signaled
-        real_fchmod(file_descriptor, mode)
-        if not signaled:
-            signaled = True
-            os.kill(os.getpid(), signal.SIGINT)
+    def interrupt_first_serialization(receipt):
+        nonlocal serialize_calls
+        serialize_calls += 1
+        if serialize_calls == 1:
+            assert receipt["all_queues_empty"] is True
+            raise queues._SignalInterrupted(signal.SIGINT)
+        return real_serialize(receipt)
 
-    monkeypatch.setattr(queues.os, "fchmod", signal_after_create)
+    monkeypatch.setattr(queues, "_serialize_receipt", interrupt_first_serialization)
+
+    code = call_main(
+        [
+            *release_identity_args(),
+            "--ledger-origin",
+            LEDGER_ORIGIN,
+            "--apply-env-file",
+            str(tmp_path / "unused-apply.env"),
+            "--observer-env-file",
+            str(tmp_path / "unused-observer.env"),
+            "--receipt-path",
+            str(receipt_path),
+        ],
+        systemctl_path=queues.SYSTEMCTL_PATH,
+    )
+    captured = capfd.readouterr()
+    interrupted_receipt = json.loads(captured.out)
+
+    assert code == 130
+    assert serialize_calls == 2
+    assert interrupted_receipt["all_queues_empty"] is False
+    assert interrupted_receipt["proof_error"] == "verifier-interrupted"
+    assert captured.err == ""
+    assert not receipt_path.exists()
+
+
+def test_N10_interrupt_during_durable_stdout_mirror_preserves_receipt(
+    tmp_path, monkeypatch, capfd
+):
+    receipt_path = tmp_path / "durable-mirror-interrupted-receipt.json"
+    real_write_all = queues._write_all
+    stdout_attempts = 0
+
+    def interrupt_first_stdout_write(file_descriptor, payload):
+        nonlocal stdout_attempts
+        if file_descriptor == 1:
+            stdout_attempts += 1
+            if stdout_attempts == 1:
+                raise queues._SignalInterrupted(signal.SIGTERM)
+        return real_write_all(file_descriptor, payload)
+
+    monkeypatch.setattr(queues, "_write_all", interrupt_first_stdout_write)
 
     code = call_main(
         [*preflight_args(), "--receipt-path", str(receipt_path)],
         systemctl_path=queues.SYSTEMCTL_PATH,
     )
     captured = capfd.readouterr()
-    receipt = json.loads(captured.out)
 
-    assert code == 130
-    assert captured.out.count("\n") == 1
-    assert len(captured.out) < 2048
-    assert captured.err == ""
+    assert code == 143
+    assert receipt_path.exists()
+    assert stdout_attempts == 1
+    assert captured.out == ""
+    assert captured.err == (
+        "queue proof interrupted during receipt mirror; "
+        "receipt is at the required path\n"
+    )
+    assert_durable_preflight_receipt(receipt_path)
+
+
+def test_signal_after_receipt_creation_is_deferred_until_cleanup_owns_path(
+    tmp_path,
+):
+    receipt_path = tmp_path / "reservation-interrupted-receipt.json"
+    completed = subprocess.run(
+        signal_hazard_child(receipt_path, "after-receipt-create"),
+        capture_output=True,
+        check=False,
+    )
+    receipt = json.loads(completed.stdout)
+
+    assert completed.returncode == 130
+    assert completed.stdout.count(b"\n") == 1
+    assert len(completed.stdout) < 2048
+    assert completed.stderr == b""
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "verifier-interrupted"
     assert not receipt_path.exists()
@@ -3479,58 +4125,47 @@ def test_signal_after_receipt_creation_is_deferred_until_cleanup_owns_path(
 
 
 def test_signal_during_committed_stdout_mirror_does_not_split_receipt(
-    tmp_path, monkeypatch, capfd
+    tmp_path,
 ):
+    claim = runbook_executable_claims()["post_finalization_signal"]
     receipt_path = tmp_path / "mirror-signaled-receipt.json"
-    real_write_all = queues._write_all
-    signaled = False
-
-    def write_then_signal(file_descriptor, payload):
-        nonlocal signaled
-        real_write_all(file_descriptor, payload)
-        if file_descriptor == 1 and not signaled:
-            signaled = True
-            os.kill(os.getpid(), signal.SIGTERM)
-
-    monkeypatch.setattr(queues, "_write_all", write_then_signal)
-
-    code = call_main(
-        [*preflight_args(), "--receipt-path", str(receipt_path)],
-        systemctl_path=queues.SYSTEMCTL_PATH,
+    completed = subprocess.run(
+        signal_hazard_child(receipt_path, "during-committed-mirror"),
+        capture_output=True,
+        check=False,
     )
-    captured = capfd.readouterr()
-    stdout_receipt = json.loads(captured.out)
+    stdout_receipt = json.loads(completed.stdout)
 
-    assert code == 0
-    assert captured.out.count("\n") == 1
-    assert captured.err == ""
+    assert {
+        "returncode": completed.returncode,
+        "durable_receipt": receipt_path.exists(),
+        "receipt_matches_stdout": receipt_path.read_bytes() == completed.stdout,
+    } == claim
+    assert completed.stdout.count(b"\n") == 1
+    assert completed.stderr == b""
     assert stdout_receipt["preflight"]["ready"] is True
     assert_durable_preflight_receipt(receipt_path)
 
 
 def test_signal_after_inner_main_commit_does_not_append_receipt(
-    tmp_path, monkeypatch, capfd
+    tmp_path,
 ):
+    claim = runbook_executable_claims()["post_finalization_signal"]
     receipt_path = tmp_path / "post-commit-signaled-receipt.json"
-    real_main = queues._main
-
-    def signal_after_commit(*args, **kwargs):
-        result = real_main(*args, **kwargs)
-        os.kill(os.getpid(), signal.SIGINT)
-        return result
-
-    monkeypatch.setattr(queues, "_main", signal_after_commit)
-
-    code = call_main(
-        [*preflight_args(), "--receipt-path", str(receipt_path)],
-        systemctl_path=queues.SYSTEMCTL_PATH,
+    completed = subprocess.run(
+        signal_hazard_child(receipt_path, "after-inner-main-commit"),
+        capture_output=True,
+        check=False,
     )
-    captured = capfd.readouterr()
 
-    assert code == 0
-    assert captured.out.count("\n") == 1
-    assert captured.err == ""
-    assert json.loads(captured.out)["preflight"]["ready"] is True
+    assert {
+        "returncode": completed.returncode,
+        "durable_receipt": receipt_path.exists(),
+        "receipt_matches_stdout": receipt_path.read_bytes() == completed.stdout,
+    } == claim
+    assert completed.stdout.count(b"\n") == 1
+    assert completed.stderr == b""
+    assert json.loads(completed.stdout)["preflight"]["ready"] is True
     assert_durable_preflight_receipt(receipt_path)
 
 
@@ -3616,13 +4251,14 @@ def test_tls_context_explicitly_disables_key_logging(monkeypatch):
     assert produced.keylog_filename is None
 
 
-def receipt_writer_child(receipt_path):
+def receipt_writer_child(receipt_path, *, before_main=""):
     source_path = TOOLS / "prove_queues_empty.py"
     child = f"""
 import hashlib
 import importlib.util
 import os
 import pathlib
+import signal
 
 source_path = pathlib.Path({str(source_path)!r})
 spec = importlib.util.spec_from_file_location("queue_receipt_child", source_path)
@@ -3634,6 +4270,7 @@ blob = hashlib.sha1(
     f"blob {{len(raw)}}\\0".encode("ascii") + raw,
     usedforsecurity=False,
 ).hexdigest()
+{before_main}
 raise SystemExit(module.main(
     [
         "--release-commit", "a" * 40,
@@ -3653,6 +4290,52 @@ raise SystemExit(module.main(
 ))
 """
     return [sys.executable, "-c", child]
+
+
+def signal_hazard_child(receipt_path, scenario):
+    setups = {
+        "after-receipt-create": """
+    real_fchmod = module.os.fchmod
+    signaled = False
+
+    def signal_after_create(file_descriptor, mode):
+        global signaled
+        real_fchmod(file_descriptor, mode)
+        if not signaled:
+            signaled = True
+            os.kill(os.getpid(), signal.SIGINT)
+
+    module.os.fchmod = signal_after_create
+""",
+        "during-committed-mirror": """
+    real_write_all = module._write_all
+    signaled = False
+
+    def write_then_signal(file_descriptor, payload):
+        global signaled
+        real_write_all(file_descriptor, payload)
+        if file_descriptor == 1 and not signaled:
+            signaled = True
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    module._write_all = write_then_signal
+""",
+        "after-inner-main-commit": """
+    real_main = module._main
+
+    def signal_after_commit(*args, **kwargs):
+        result = real_main(*args, **kwargs)
+        os.kill(os.getpid(), signal.SIGINT)
+        return result
+
+    module._main = signal_after_commit
+""",
+    }
+    try:
+        before_main = textwrap.dedent(setups[scenario])
+    except KeyError:
+        raise AssertionError(f"unknown signal hazard scenario: {scenario}") from None
+    return receipt_writer_child(receipt_path, before_main=before_main)
 
 
 def interrupted_receipt_writer_child(tmp_path, receipt_path):
@@ -3743,6 +4426,7 @@ def assert_durable_preflight_receipt(receipt_path):
 
 
 def test_full_stdout_returns_nonzero_but_preserves_durable_receipt(tmp_path):
+    claim = runbook_executable_claims()["dev_full"]
     receipt_path = tmp_path / "full-stdout-receipt.json"
     with open("/dev/full", "wb") as full_sink:
         completed = subprocess.run(
@@ -3753,16 +4437,18 @@ def test_full_stdout_returns_nonzero_but_preserves_durable_receipt(tmp_path):
             check=False,
         )
 
-    assert completed.returncode == 1
-    assert completed.stderr == (
-        b"queue proof stdout mirror failed; receipt is at the required path\n"
-    )
+    assert {
+        "returncode": completed.returncode,
+        "durable_receipt": receipt_path.exists(),
+        "diagnostic": completed.stderr.decode("utf-8").rstrip("\n"),
+    } == claim
     assert_durable_preflight_receipt(receipt_path)
 
 
 def test_broken_stdout_pipe_returns_nonzero_but_preserves_durable_receipt(
     tmp_path,
 ):
+    claim = runbook_executable_claims()["epipe"]
     receipt_path = tmp_path / "broken-pipe-receipt.json"
     read_descriptor, write_descriptor = os.pipe()
     os.close(read_descriptor)
@@ -3776,20 +4462,50 @@ def test_broken_stdout_pipe_returns_nonzero_but_preserves_durable_receipt(
         os.close(write_descriptor)
     _stdout, stderr = child.communicate(timeout=5)
 
-    assert child.returncode == 1
-    assert stderr == (
-        b"queue proof stdout mirror failed; receipt is at the required path\n"
+    assert {
+        "returncode": child.returncode,
+        "durable_receipt": receipt_path.exists(),
+        "diagnostic": stderr.decode("utf-8").rstrip("\n"),
+    } == claim
+    assert_durable_preflight_receipt(receipt_path)
+
+
+def test_shell_closed_stdout_returns_nonzero_but_preserves_durable_receipt(
+    tmp_path,
+):
+    claim = runbook_executable_claims()["verifier_closed_stdout"]
+    receipt_path = tmp_path / "closed-stdout-receipt.json"
+    child_source = receipt_writer_child(receipt_path)[2]
+    completed = subprocess.run(
+        [
+            "/bin/bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            'exec 1>&-\n/usr/bin/python3 -c "$1"',
+            "queue-proof-closed-stdout",
+            child_source,
+        ],
+        stderr=subprocess.PIPE,
+        check=False,
     )
+
+    assert {
+        "returncode": completed.returncode,
+        "durable_receipt": receipt_path.exists(),
+        "diagnostic": completed.stderr.decode("utf-8").rstrip("\n"),
+    } == claim
     assert_durable_preflight_receipt(receipt_path)
 
 
 @pytest.mark.parametrize(
-    ("interrupt_signal", "expected_returncode"),
-    [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
+    ("interrupt_signal", "claim_id"),
+    [(signal.SIGINT, "sigint"), (signal.SIGTERM, "sigterm")],
 )
 def test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries(
-    tmp_path, interrupt_signal, expected_returncode
+    tmp_path, interrupt_signal, claim_id
 ):
+    claim = runbook_executable_claims()[claim_id]
     receipt_path = tmp_path / "interrupted-receipt.json"
     child = subprocess.Popen(
         interrupted_receipt_writer_child(tmp_path, receipt_path),
@@ -3802,10 +4518,8 @@ def test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries(
     stdout, stderr = child.communicate(timeout=5)
     receipt = json.loads(stdout)
 
-    assert child.returncode == expected_returncode
     assert stderr == b""
-    assert stdout.count(b"\n") == 1
-    assert len(stdout) < 2048
+    bounded_receipt = stdout.count(b"\n") == 1 and len(stdout) < 2048
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "verifier-interrupted"
     assert receipt["first_get_utc"] == "2026-09-07T15:00:00Z"
@@ -3823,6 +4537,24 @@ def test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries(
         capture_output=True,
         check=False,
     )
+    assert {
+        "returncode": child.returncode,
+        "bounded_receipt": bounded_receipt,
+        "all_queues_empty": receipt["all_queues_empty"],
+        "proof_error": receipt["proof_error"],
+        "proof_state_preserved": (
+            receipt["first_get_utc"] == "2026-09-07T15:00:00Z"
+            and receipt["fence"]["proved"] is True
+            and receipt["verifier_identity"]
+            == {
+                "release_commit": RELEASE_COMMIT,
+                "verifier_blob": git_blob_oid(
+                    (TOOLS / "prove_queues_empty.py").read_bytes()
+                ),
+            }
+        ),
+        "receipt_path_reusable": retry.returncode == 0,
+    } == claim
     assert retry.returncode == 0
     assert retry.stderr == b""
     assert_durable_preflight_receipt(receipt_path)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import email.utils
+import errno
 import hashlib
 import http.client
 import json
@@ -1164,7 +1165,10 @@ def _write_all(file_descriptor, payload):
 
 
 def _open_receipt(path):
-    target = pathlib.Path(path)
+    raw_path = os.fspath(path)
+    if os.path.normpath(raw_path) != raw_path:
+        raise OSError
+    target = pathlib.Path(raw_path)
     if not target.is_absolute():
         raise OSError
     directory_descriptor = os.open(
@@ -1217,6 +1221,25 @@ def _best_effort_diagnostic(message):
         _write_all(2, (message + "\n").encode("utf-8"))
     except OSError:
         pass
+
+
+def _reserve_standard_streams():
+    stdout_was_available = True
+    for target_descriptor in (1, 2):
+        try:
+            os.fstat(target_descriptor)
+        except OSError as exc:
+            if exc.errno != errno.EBADF:
+                raise
+            if target_descriptor == 1:
+                stdout_was_available = False
+            null_descriptor = os.open(os.devnull, os.O_WRONLY)
+            if null_descriptor != target_descriptor:
+                try:
+                    os.dup2(null_descriptor, target_descriptor)
+                finally:
+                    os.close(null_descriptor)
+    return stdout_was_available
 
 
 def _release_receipt_reservation(
@@ -1315,7 +1338,9 @@ def _main(
     interrupted_returncode = None
     bootstrap_interrupt_mask = None
     durable_receipt = stdout is None
+    stdout_was_available = True
     if durable_receipt:
+        stdout_was_available = _reserve_standard_streams()
         bootstrap = _ProofArgumentParser(add_help=False)
         bootstrap.add_argument("--receipt-path", required=True)
         try:
@@ -1459,6 +1484,13 @@ def _main(
                 )
                 return 1
             try:
+                if not stdout_was_available:
+                    final_returncode = 1
+                    _best_effort_diagnostic(
+                        "queue proof stdout mirror was unavailable; "
+                        "receipt is at the required path"
+                    )
+                    return 1
                 stdout_started = True
                 _invocation_state["stdout_started"] = True
                 _write_all(1, payload)
