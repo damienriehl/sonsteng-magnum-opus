@@ -634,14 +634,19 @@ test("normalized frontier backfills existing submitted reviews and drives the fi
   assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,2);
 });
 
-test("publisher summary cannot bypass receipt integrity after all normalized rows vanish", () => {
-  const core = makeCore(() => 1286);
-  reviewedProjection(core);
-  core.sql.exec("DELETE FROM production_review_operations");
-  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_submissions").count,1,
-    "the immutable receipt parent must remain as the operation-frontier mode signal");
-  assert.throws(() => core.publisherSummary(),
-    /operation_frontier_integrity:missing_normalized_row/);
+test("publisher summary cannot bypass receipt integrity after all normalized rows vanish", async (t) => {
+  for (const [suffix,legacy,parentTable] of [
+    ["modern",false,"production_review_submissions"],
+    ["legacy",true,"production_reviews"],
+  ]) await t.test(suffix,() => {
+    const core = makeCore(() => 1286);
+    seedSingleOperationProjectionCase(core,{ suffix:`publisher-vanished-${suffix}`,legacy });
+    core.sql.exec("DELETE FROM production_review_operations");
+    assert.equal(core._one(`SELECT COUNT(*) AS count FROM ${parentTable}`).count,1,
+      "the immutable receipt parent must remain as the operation-frontier mode signal");
+    assert.throws(() => core.publisherSummary(),
+      /operation_frontier_integrity:missing_normalized_row/);
+  });
 });
 
 test("History revert batches are first-class production frontier members", () => {
@@ -1652,36 +1657,50 @@ test("operation frontier requires exact source-publication children from real co
     "publication_release_evidence_mismatch");
 });
 
-test("operation frontier binds deployment evidence to a preceding real execution claim", async (t) => {
-  const completed = (suffix) => {
-    const core = makeCore(() => 9032);
-    const projection = reviewedProjection(core);
-    const receipt = projection.review_receipts[0].receipt_hash;
-    const prepared = core.prepareProductionRelease(release({ id:`release-claim-${suffix}`,
-      idempotency_key:`release-claim-${suffix}`,request_digest:`release-claim-${suffix}`,
-      schema_version:2,target_batch_id:"operation-frontier",
-      candidate_sha:`candidate-claim-${suffix}`,review_receipt_hash:receipt,
-      review_receipts:[receipt],projection_identity:`claim-${suffix}`,
-      accepted_operation_ids:["op-accepted"],held_exclusions:[{
-        operation_id:"op-held",decision:"rejected",reason:"rejected",
-      }],
-    })).release;
-    const authorized = core.authorizeProductionRelease(authorize(prepared,{
-      id:prepared.id,idempotency_key:`authorize-claim-${suffix}`,
-      request_digest:`authorize-claim-${suffix}`,review_receipt_hash:receipt,
-      projection_identity:`claim-${suffix}`,
-    })).release;
-    const claimed = core.claimAuthorizedProductionRelease({ id:authorized.id,
-      actor:"service:release",credential_channel:"bearer" }).release;
-    for (const state of ["pages_deployed","worker_deployed","verified","complete"])
-      assert.equal(core.transitionProductionRelease({ id:claimed.id,state,
-        actor:"service:release",credential_channel:"bearer",fencing_token:claimed.fencing_token,
-        detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
-    return { core,releaseId:prepared.id };
-  };
+function completedOperationFrontierRelease(suffix,{ reclaimBeforeDeployment = false } = {}) {
+  let now = 9032;
+  const core = makeCore(() => now);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const candidateSha = `candidate-claim-${suffix}`;
+  const prepared = core.prepareProductionRelease(release({ id:`release-claim-${suffix}`,
+    idempotency_key:`release-claim-${suffix}`,request_digest:`release-claim-${suffix}`,
+    schema_version:2,target_batch_id:"operation-frontier",
+    candidate_sha:candidateSha,review_receipt_hash:receipt,
+    review_receipts:[receipt],projection_identity:`claim-${suffix}`,
+    accepted_operation_ids:["op-accepted"],held_exclusions:[{
+      operation_id:"op-held",decision:"rejected",reason:"rejected",
+    }],
+  })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    id:prepared.id,idempotency_key:`authorize-claim-${suffix}`,
+    request_digest:`authorize-claim-${suffix}`,review_receipt_hash:receipt,
+    projection_identity:`claim-${suffix}`,
+  })).release;
+  const claimInput = { id:authorized.id,actor:"service:release",
+    credential_channel:"bearer",lease_ms:1000 };
+  const firstClaim = core.claimAuthorizedProductionRelease(claimInput).release;
+  let claimed = firstClaim;
+  if (reclaimBeforeDeployment) {
+    now += 1000;
+    claimed = core.claimAuthorizedProductionRelease(claimInput).release;
+    assert.ok(firstClaim.fencing_token);
+    assert.ok(claimed.fencing_token);
+    assert.notEqual(claimed.fencing_token,firstClaim.fencing_token);
+  }
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,
+      actor:"service:release",credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
+  const completionTime = core._one(`SELECT created_at FROM production_release_events
+    WHERE release_id=? AND type='complete'`,prepared.id).created_at;
+  return { core,releaseId:prepared.id,candidateSha,completionTime,
+    firstFence:firstClaim.fencing_token,currentFence:claimed.fencing_token };
+}
 
+test("operation frontier binds deployment evidence to a preceding real execution claim", async (t) => {
   await t.test("deployment before claim",async () => {
-    const { core,releaseId } = completed("ordering");
+    const { core,releaseId } = completedOperationFrontierRelease("ordering");
     core.sql.exec(`UPDATE production_release_events SET type='event-swap'
       WHERE release_id=? AND type='executing'`,releaseId);
     core.sql.exec(`UPDATE production_release_events SET type='executing'
@@ -1692,24 +1711,58 @@ test("operation frontier binds deployment evidence to a preceding real execution
       "publication_release_evidence_mismatch");
   });
 
-  await t.test("deployment with unissued fence",async () => {
-    const { core,releaseId } = completed("fence");
+  await t.test("post-reclaim deployment rejects the first issued fence",async () => {
+    const { core,releaseId,firstFence,currentFence } =
+      completedOperationFrontierRelease("nearest-claim",{ reclaimBeforeDeployment:true });
+    assert.notEqual(firstFence,currentFence,
+      "the fixture must contain two genuinely issued claim fences");
     const event = core._one(`SELECT id,detail_json FROM production_release_events
       WHERE release_id=? AND type='pages_deployed'`,releaseId);
     const detail = JSON.parse(event.detail_json);
-    detail.fencing_token = "unissued-fence";
+    assert.equal(detail.fencing_token,currentFence,
+      "the valid fixture must initially bind deployment to the second claim");
+    detail.fencing_token = firstFence;
     core.sql.exec("UPDATE production_release_events SET detail_json=? WHERE id=?",
       JSON.stringify(detail),event.id);
     await assertOperationProjectionCorruptionFailsClosed(core,
       "publication_release_evidence_mismatch");
   });
 
+  for (const type of ["pages_deployed","worker_deployed","verified","complete"])
+    await t.test(`${type} with unissued fence`,async () => {
+      const { core,releaseId } = completedOperationFrontierRelease(`fence-${type}`);
+      const event = core._one(`SELECT id,detail_json FROM production_release_events
+        WHERE release_id=? AND type=?`,releaseId,type);
+      const detail = JSON.parse(event.detail_json);
+      detail.fencing_token = "unissued-fence";
+      core.sql.exec("UPDATE production_release_events SET detail_json=? WHERE id=?",
+        JSON.stringify(detail),event.id);
+      await assertOperationProjectionCorruptionFailsClosed(core,
+        "publication_release_evidence_mismatch");
+    });
 });
 
 test("operation frontier rejects source publications without completed v2 operation parents", async (t) => {
+  await t.test("missing operation publication with valid completed release",async () => {
+    const { core,releaseId,candidateSha,completionTime } =
+      completedOperationFrontierRelease("source-orphan-missing-operation");
+    core.sql.exec(`INSERT INTO production_published_operation_sources
+      (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)`,
+    "operation-source-orphan-missing-operation",
+    "data/copy/source-orphan-missing-operation.json#lead",
+    releaseId,candidateSha,completionTime);
+    assert.throws(() => core.publisherSummary(),{
+      message:"operation_frontier_integrity:publication_source_missing_operation",
+    });
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_source_missing_operation");
+  });
+
   for (const [suffix,state,schemaVersion] of [
-    ["missing",null,null],["incomplete","prepared",2],["legacy","complete",1],
-  ]) await t.test(suffix,async () => {
+    ["missing-release",null,null],
+    ["incomplete-release","prepared",2],
+    ["legacy-release","complete",1],
+  ]) await t.test(suffix,() => {
     const core = makeCore(() => 9033);
     const releaseId = `release-source-orphan-${suffix}`;
     if (state) core.sql.exec(`INSERT INTO production_releases
@@ -1719,12 +1772,17 @@ test("operation frontier rejects source publications without completed v2 operat
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,releaseId,releaseId,state,
     "service:release","bearer","production","operation-frontier","base","candidate",
     "generator","evidence","manifest","membership",9033,9033,schemaVersion);
+    core.sql.exec(`INSERT INTO production_published_operations
+      (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
+       published_at) VALUES (?,?,?,?,?,?,?)`,`operation-source-orphan-${suffix}`,releaseId,
+    `revision-source-orphan-${suffix}`,`data/copy/source-orphan-${suffix}.json#lead`,
+    `source-revision-orphan-${suffix}`,"candidate",9033);
     core.sql.exec(`INSERT INTO production_published_operation_sources
       (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)`,
     `operation-source-orphan-${suffix}`,`data/copy/source-orphan-${suffix}.json#lead`,
     releaseId,"candidate",9033);
     assert.throws(() => core._operationFrontierSummaryProjection(),
-      /operation_frontier_integrity:publication_source_missing_operation/);
+      /operation_frontier_integrity:publication_source_missing_completed_release/);
   });
 });
 

@@ -2579,6 +2579,20 @@ export class EditorStoreCore {
 
     this._assertReviewReceiptIntegrity();
 
+    const sourceOrphans = this._one(`SELECT
+        MAX(CASE WHEN published.operation_id IS NULL THEN 1 ELSE 0 END) AS missing_operation,
+        MAX(CASE WHEN release.id IS NULL OR release.state<>'complete'
+          OR COALESCE(release.schema_version,1)<2 THEN 1 ELSE 0 END) AS missing_completed_release
+      FROM production_published_operation_sources source
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=source.operation_id AND published.release_id=source.release_id
+      LEFT JOIN production_releases release ON release.id=source.release_id`);
+    if (sourceOrphans?.missing_operation)
+      throw this._operationFrontierIntegrityError("publication_source_missing_operation");
+    if (sourceOrphans?.missing_completed_release)
+      throw this._operationFrontierIntegrityError(
+        "publication_source_missing_completed_release");
+
     if (this._one(`SELECT 1 AS mismatched FROM (
       SELECT operation.operation_id FROM production_review_operations operation
       LEFT JOIN production_published_operations published
@@ -2610,14 +2624,6 @@ export class EditorStoreCore {
         OR member.review_revision_id<>published.review_revision_id
         OR member.source_ref<>published.source_ref LIMIT 1`))
       throw this._operationFrontierIntegrityError("publication_release_mismatch");
-    if (this._one(`SELECT 1 AS orphaned FROM production_published_operation_sources source
-      LEFT JOIN production_published_operations published
-        ON published.operation_id=source.operation_id AND published.release_id=source.release_id
-      LEFT JOIN production_releases release ON release.id=source.release_id
-      WHERE published.operation_id IS NULL OR release.id IS NULL OR release.state<>'complete'
-        OR COALESCE(release.schema_version,1)<2 LIMIT 1`))
-      throw this._operationFrontierIntegrityError("publication_source_missing_operation");
-
     this._assertPublicationReleaseEvidence();
 
     if (this._one(`SELECT 1 AS orphaned FROM production_review_operations operation
@@ -2994,7 +3000,8 @@ export class EditorStoreCore {
   publisherSummary() {
     if (this._one(`SELECT 1 AS operation_frontier FROM production_review_operations
       UNION ALL SELECT 1 FROM production_review_submissions
-      UNION ALL SELECT 1 FROM production_reviews LIMIT 1`))
+      UNION ALL SELECT 1 FROM production_reviews
+      UNION ALL SELECT 1 FROM production_published_operation_sources LIMIT 1`))
       return { eligible:this._operationFrontierSummaryProjection().eligible_operation_count };
     const frontier = this._one(
       "SELECT b.created_at,b.batch_id FROM production_releases r JOIN apply_batches b ON b.batch_id=r.target_batch_id WHERE r.state IN ('verified','complete') ORDER BY r.updated_at DESC,r.id DESC LIMIT 1");
