@@ -33,6 +33,27 @@ RELEASE_COMMIT = "a" * 40
 GENERATE_WINDOW_NONCE = object()
 
 
+def _test_subprocess_environment(**updates):
+    environment = {
+        "LC_ALL": "C",
+        "PATH": os.defpath,
+    }
+    environment.update(updates)
+    return environment
+
+
+def _test_git_environment(**updates):
+    environment = _test_subprocess_environment(**updates)
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_SYSTEM": os.devnull,
+        }
+    )
+    return environment
+
+
 EXECUTABLE_CLAIM_IDS = {
     "apply_timer_fence",
     "bootstrap_signal_mask",
@@ -3001,8 +3022,14 @@ def test_documented_invocation_ignores_shell_path_and_cwd_or_refuses(tmp_path):
     verifier.parent.mkdir()
     verifier.write_bytes((TOOLS / "prove_queues_empty.py").read_bytes())
     git = ["/usr/bin/git", "-C", str(checkout)]
-    subprocess.run([*git, "init", "-q"], check=True)
-    subprocess.run([*git, "add", "tools/prove_queues_empty.py"], check=True)
+    subprocess.run(
+        [*git, "init", "-q"], check=True, env=_test_git_environment()
+    )
+    subprocess.run(
+        [*git, "add", "tools/prove_queues_empty.py"],
+        check=True,
+        env=_test_git_environment(),
+    )
     subprocess.run(
         [
             *git,
@@ -3015,6 +3042,7 @@ def test_documented_invocation_ignores_shell_path_and_cwd_or_refuses(tmp_path):
             "test fixture",
         ],
         check=True,
+        env=_test_git_environment(),
     )
     wrong_cwd = tmp_path / "wrong-cwd"
     wrong_cwd.mkdir()
@@ -3049,6 +3077,7 @@ __attribute__((constructor)) static void mark_loader_execution(void) {
             str(preload_source),
         ],
         check=True,
+        env=_test_subprocess_environment(),
     )
     for command_name in ("python3", "git"):
         shim = shim_dir / command_name
@@ -3065,12 +3094,14 @@ __attribute__((constructor)) static void mark_loader_execution(void) {
         check=True,
         capture_output=True,
         encoding="utf-8",
+        env=_test_git_environment(),
     ).stdout.strip()
     verifier_blob = subprocess.run(
         [*git, "rev-parse", f"{release_commit}:tools/prove_queues_empty.py"],
         check=True,
         capture_output=True,
         encoding="utf-8",
+        env=_test_git_environment(),
     ).stdout.strip()
     runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
         encoding="utf-8"
@@ -3112,10 +3143,10 @@ function /usr/bin/git { : > "$POISON_MARKER"; }
 builtin export LD_PRELOAD=<preload-object> LD_LIBRARY_PATH=/private/loader LD_AUDIT=
 builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
 '''.replace("<preload-object>", str(preload_object))
-    environment = {
-        "PATH": str(shim_dir),
-        "POISON_MARKER": str(poison_marker),
-    }
+    environment = _test_subprocess_environment(
+        PATH=str(shim_dir),
+        POISON_MARKER=str(poison_marker),
+    )
 
     def invoke_launcher(
         rendered_launcher=launcher, prelude=poison, *, close_stdout=False
@@ -3256,7 +3287,11 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
 
     receipt_path.unlink(missing_ok=True)
     (checkout / "later-commit.txt").write_text("later\n", encoding="utf-8")
-    subprocess.run([*git, "add", "later-commit.txt"], check=True)
+    subprocess.run(
+        [*git, "add", "later-commit.txt"],
+        check=True,
+        env=_test_git_environment(),
+    )
     subprocess.run(
         [
             *git,
@@ -3269,6 +3304,7 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
             "later fixture commit",
         ],
         check=True,
+        env=_test_git_environment(),
     )
     wrong_head = invoke_launcher()
 
@@ -3358,6 +3394,7 @@ def test_launcher_script_route_executes_open_inode_across_path_swap(tmp_path):
         ],
         capture_output=True,
         check=False,
+        env=_test_subprocess_environment(),
         timeout=5,
     )
 
@@ -3413,6 +3450,7 @@ def _validate_documented_receipt(validator, path):
         ],
         capture_output=True,
         check=False,
+        env=_test_subprocess_environment(),
     )
 
 
@@ -3711,6 +3749,7 @@ def test_runbook_records_self_hash_limits_and_load_bearing_script_route():
         ["/usr/bin/git", "version", "--build-options"],
         capture_output=True,
         encoding="utf-8",
+        env=_test_git_environment(),
         check=True,
     ).stdout
     _assert_measured_claim("sha1_attribution", {
@@ -3940,6 +3979,7 @@ module.os.fsync = lambda _descriptor: (_ for _ in ()).throw(OSError())
             "queue-proof-closed-streams",
             child_source,
         ],
+        env=_test_subprocess_environment(),
         check=False,
     )
     payload = receipt_path.read_bytes()
@@ -4303,6 +4343,7 @@ def test_interrupt_during_receipt_write_emits_once_and_releases_path(
     retry = subprocess.run(
         receipt_writer_child(receipt_path),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
     assert retry.returncode == 0
@@ -4403,6 +4444,7 @@ def test_signal_after_receipt_creation_is_deferred_until_cleanup_owns_path(
     completed = subprocess.run(
         signal_hazard_child(receipt_path, "after-receipt-create"),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
     receipt = json.loads(completed.stdout)
@@ -4418,6 +4460,7 @@ def test_signal_after_receipt_creation_is_deferred_until_cleanup_owns_path(
     retry = subprocess.run(
         receipt_writer_child(receipt_path),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
     assert retry.returncode == 0
@@ -4432,6 +4475,7 @@ def test_signal_during_committed_stdout_mirror_does_not_split_receipt(
     completed = subprocess.run(
         signal_hazard_child(receipt_path, "during-committed-mirror"),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
     stdout_receipt = json.loads(completed.stdout)
@@ -4454,6 +4498,7 @@ def test_signal_after_inner_main_commit_does_not_append_receipt(
     completed = subprocess.run(
         signal_hazard_child(receipt_path, "after-inner-main-commit"),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
 
@@ -4497,6 +4542,11 @@ def test_runtime_requires_only_allowlisted_environment_and_isolated_mode():
         {"LC_ALL": "C"}, isolated=True
     )
 
+    for hostile_environment in ({}, {"LC_ALL": "zz_ZZ.UTF-8"}):
+        with pytest.raises(queues.ProofError, match="^environment-hostile$"):
+            queues._assert_clean_process_environment(
+                hostile_environment, isolated=True
+            )
     with pytest.raises(queues.ProofError, match="^environment-hostile$"):
         queues._assert_clean_process_environment(
             {"LC_ALL": "C", "UNEXPECTED": "value"}, isolated=True
@@ -4507,6 +4557,109 @@ def test_runtime_requires_only_allowlisted_environment_and_isolated_mode():
         queues._assert_clean_process_environment(
             {"LC_ALL": "C"}, isolated=False
         )
+
+
+def test_representative_subset_is_identical_under_polluted_environment():
+    selection = (
+        "test_documented_receipt_validator_rejects_truncated_or_incomplete_receipt "
+        "or test_shell_closed_stdout_measures_bare_and_documented_invocation_forms "
+        "or test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries"
+    )
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(pathlib.Path(__file__).resolve()),
+        "-qq",
+        "--tb=no",
+        "-k",
+        selection,
+    ]
+    locale_probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                """
+                import json
+                import locale
+                import sys
+
+                for requested in sys.argv[1:]:
+                    try:
+                        active = locale.setlocale(locale.LC_ALL, requested)
+                    except locale.Error:
+                        continue
+                    print(json.dumps({"requested": requested, "active": active}))
+                    break
+                else:
+                    raise SystemExit("no installed non-C locale")
+                """
+            ),
+            "en_DK.UTF-8",
+            "en_GB.UTF-8",
+            "en_US.UTF-8",
+            "tr_TR.UTF-8",
+            "de_DE.UTF-8",
+            "fr_FR.UTF-8",
+        ],
+        capture_output=True,
+        check=False,
+        encoding="utf-8",
+        env=_test_subprocess_environment(),
+    )
+    assert locale_probe.returncode == 0, locale_probe.stderr
+    activated_locale = json.loads(locale_probe.stdout)
+    pollution = {
+        "LC_ALL": activated_locale["requested"],
+        "LD_LIBRARY_PATH": "/tmp/queue-proof-hostile-library-path",
+        "PYTHONPATH": "/tmp/queue-proof-hostile-python-path",
+        "PYTHONWARNINGS": "error",
+        "TZ": "Pacific/Chatham",
+    }
+    polluted_environment = _test_subprocess_environment(**pollution)
+    pollution_control = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import json, locale, os, sys; "
+                "print(json.dumps({"
+                "'environment': {name: os.environ[name] for name in sys.argv[1:]}, "
+                "'locale': locale.setlocale(locale.LC_ALL, '')"
+                "}, sort_keys=True))"
+            ),
+            *pollution,
+        ],
+        capture_output=True,
+        check=True,
+        encoding="utf-8",
+        env=polluted_environment,
+    )
+    assert json.loads(pollution_control.stdout) == {
+        "environment": pollution,
+        "locale": activated_locale["active"],
+    }
+
+    clean = subprocess.run(
+        command,
+        cwd=TOOLS.parent,
+        capture_output=True,
+        check=False,
+        env=_test_subprocess_environment(),
+    )
+    polluted = subprocess.run(
+        command,
+        cwd=TOOLS.parent,
+        capture_output=True,
+        check=False,
+        env=polluted_environment,
+    )
+
+    assert clean.returncode == polluted.returncode == 0, (
+        clean.stdout + clean.stderr + polluted.stdout + polluted.stderr
+    )
+    assert (clean.stdout, clean.stderr) == (polluted.stdout, polluted.stderr)
 
 
 def test_self_blob_refuses_a_bytecode_cache_route(monkeypatch):
@@ -4731,6 +4884,7 @@ def test_full_stdout_returns_nonzero_but_preserves_durable_receipt(tmp_path):
             receipt_writer_child(receipt_path),
             stdout=full_sink,
             stderr=subprocess.PIPE,
+            env=_test_subprocess_environment(),
             text=False,
             check=False,
         )
@@ -4768,6 +4922,7 @@ def test_broken_stdout_pipe_returns_nonzero_but_preserves_durable_receipt(
             receipt_writer_child(receipt_path),
             stdout=write_descriptor,
             stderr=subprocess.PIPE,
+            env=_test_subprocess_environment(),
         )
     finally:
         os.close(write_descriptor)
@@ -4818,6 +4973,7 @@ pathlib.Path({str(stdout_target_path)!r}).write_text(
             str(child_path),
         ],
         stderr=subprocess.PIPE,
+        env=_test_subprocess_environment(),
         check=False,
     )
     return {
@@ -4833,6 +4989,7 @@ def _documented_env_implementation():
         ["/usr/bin/env", "--version"],
         capture_output=True,
         encoding="utf-8",
+        env=_test_subprocess_environment(),
         check=True,
     ).stdout.splitlines()[0]
     match = re.fullmatch(r"env \(uutils coreutils\) ([0-9.]+)", version_line)
@@ -4935,6 +5092,7 @@ def test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries(
         interrupted_receipt_writer_child(tmp_path, receipt_path),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=_test_subprocess_environment(),
     )
     assert child.stderr.readline() == b"ready\n"
 
@@ -4949,6 +5107,7 @@ def test_documented_launcher_signal_interrupt_emits_partial_receipt_and_retries(
     retry = subprocess.run(
         receipt_writer_child(receipt_path),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
     _assert_measured_claim(claim_id, {
@@ -4991,6 +5150,7 @@ def test_existing_receipt_path_is_refused_without_overwrite(tmp_path):
     completed = subprocess.run(
         receipt_writer_child(receipt_path),
         capture_output=True,
+        env=_test_subprocess_environment(),
         check=False,
     )
 
