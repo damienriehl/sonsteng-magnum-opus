@@ -1173,7 +1173,9 @@ def _open_receipt(path):
         raise OSError
     directory_descriptor = os.open(
         target.parent,
-        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
     )
     receipt_descriptor = -1
     try:

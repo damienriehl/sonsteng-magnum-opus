@@ -297,11 +297,11 @@ or nonzero result as a stop before the window.
    The checkout, Git, env, Python, verifier, nonce-file, and receipt paths are
    absolute.
 
-   The following machine-readable block is the normative contract for the
-   loader boundary, closed-stdout, signal, and stdout-write guarantees used by
-   this procedure. Tests parse every expected field and compare it with an
-   execution of the named mechanism. Surrounding prose explains the mechanism;
-   it does not widen these guarantees.
+   The following machine-readable block is the normative contract for every
+   executable operational guarantee used by this procedure. Each named test
+   measures its mechanism, compares every field with that observation, and
+   requires the statement to encode those same observed propositions.
+   Surrounding prose is explanatory only and does not widen these guarantees.
 
    <!-- queue-proof-controlled-claims:start -->
    <!-- queue-proof-executable-claims:start -->
@@ -309,25 +309,105 @@ or nonzero result as a stop before the window.
    {
      "schema": "queue-proof-executable-claims/v1",
      "claims": {
+       "apply_timer_fence": {
+         "statement": "Apply-timer fence measurements: `required_active=false`; `active_state_refused=true`; `inactive_state_accepted=true`.",
+         "required_active": false,
+         "active_state_refused": true,
+         "inactive_state_accepted": true
+       },
+       "bootstrap_signal_mask": {
+         "statement": "Receipt bootstrap measured `blocked_signals=[\"SIGINT\",\"SIGTERM\"]`, `mask_installed_before_receipt_reservation=true`, and `mask_restored_after_reservation_attempt=true`.",
+         "blocked_signals": ["SIGINT", "SIGTERM"],
+         "mask_installed_before_receipt_reservation": true,
+         "mask_restored_after_reservation_attempt": true
+       },
+       "clock_skew_bound": {
+         "statement": "Server-date validation measured `max_abs_skew_seconds=300`, `boundary_accepted=true`, and `one_second_outside_refused=true`.",
+         "max_abs_skew_seconds": 300,
+         "boundary_accepted": true,
+         "one_second_outside_refused": true
+       },
+       "dev_full": {
+         "statement": "A /dev/full mirror measured `returncode=1`, `durable_receipt=true`, and `diagnostic=queue proof stdout mirror failed; receipt is at the required path`.",
+         "returncode": 1,
+         "durable_receipt": true,
+         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       },
+       "environment_file": {
+         "statement": "Protected environment parsing measured `max_bytes=65536`, `oversized_refused=true`, `duplicate_required_key_refused=true`, and `empty_required_value_refused=true`.",
+         "max_bytes": 65536,
+         "oversized_refused": true,
+         "duplicate_required_key_refused": true,
+         "empty_required_value_refused": true
+       },
+       "epipe": {
+         "statement": "An EPIPE mirror measured `returncode=1`, `durable_receipt=true`, and `diagnostic=queue proof stdout mirror failed; receipt is at the required path`.",
+         "returncode": 1,
+         "durable_receipt": true,
+         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       },
+       "evidence_and_mirror": {
+         "statement": "Evidence and mirror measurements: `stdout_role=convenience_mirror`; `authoritative_evidence=[\"durable_receipt\",\"supervised_returncode\"]`; `mirror_failure_returncode=1`; `durable_receipt_preserved_on_mirror_failure=true`.",
+         "stdout_role": "convenience_mirror",
+         "authoritative_evidence": ["durable_receipt", "supervised_returncode"],
+         "mirror_failure_returncode": 1,
+         "durable_receipt_preserved_on_mirror_failure": true
+       },
+       "frontier_envelope": {
+         "statement": "The frontier response measured `exact_keys=[\"context\",\"ok\"]` and `unexpected_key_refused=true`.",
+         "exact_keys": ["context", "ok"],
+         "unexpected_key_refused": true
+       },
+       "host_identity_input": {
+         "statement": "Host-identity input measured `max_bytes=256` and `oversized_refused=true` even under a permissive value pattern.",
+         "max_bytes": 256,
+         "oversized_refused": true
+       },
+       "http_redirects": {
+         "statement": "The production HTTP handler measured `redirect_followed=false`.",
+         "redirect_followed": false
+       },
        "loader_boundary": {
-         "statement": "With the launcher's `exec -c` boundary the preload constructor does not run; without `exec -c` it runs. Removing `exec -c` is not detectable by the verifier because the loader has already run.",
+         "statement": "The loader experiment measured `preload_constructor_ran_with_exec_c=false`, `preload_constructor_ran_without_exec_c=true`, and `verifier_detected_missing_exec_c=false`.",
          "preload_constructor_ran_with_exec_c": false,
          "preload_constructor_ran_without_exec_c": true,
          "verifier_detected_missing_exec_c": false
        },
        "launcher_closed_stdout": {
-         "statement": "The launcher returns 68 for a closed stdout before it reserves a receipt path.",
+         "statement": "Shell-level launcher closed-stdout measurements: `returncode=68`; `receipt_path_reserved=false`.",
          "returncode": 68,
          "receipt_path_reserved": false
        },
+       "launcher_script_route": {
+         "statement": "The documented launcher measured `script_path=/proc/self/fd/9` and `path_swap_executes_open_inode=true`.",
+         "script_path": "/proc/self/fd/9",
+         "path_swap_executes_open_inode": true
+       },
+       "nonce_format": {
+         "statement": "The protected window nonce measured `exact_length=64`, `lowercase_only=true`, `short_refused=true`, and `uppercase_refused=true`.",
+         "exact_length": 64,
+         "lowercase_only": true,
+         "short_refused": true,
+         "uppercase_refused": true
+       },
        "verifier_closed_stdout": {
-         "statement": "The verifier returns 1 for a shell-level closed stdout and preserves the durable receipt.",
-         "returncode": 1,
-         "durable_receipt": true,
-         "diagnostic": "queue proof stdout mirror was unavailable; receipt is at the required path"
+         "statement": "Verifier closed-stdout invocation measurements: `bare_interpreter_returncode=1`; `bare_interpreter_durable_receipt=true`; `bare_interpreter_diagnostic=queue proof stdout mirror was unavailable; receipt is at the required path`; `bare_interpreter_stdout_target=closed`; `bare_interpreter_guard_reached=true`; `documented_chain_returncode=0`; `documented_chain_durable_receipt=true`; `documented_chain_diagnostic=`; `documented_chain_stdout_target=/dev/null`; `documented_chain_env_implementation=uutils coreutils 0.8.0`; `documented_chain_env_reopens_stdout_to_devnull=true`; `documented_chain_guard_reached=false`; `in_verifier_guard_retained=true`.",
+         "bare_interpreter_returncode": 1,
+         "bare_interpreter_durable_receipt": true,
+         "bare_interpreter_diagnostic": "queue proof stdout mirror was unavailable; receipt is at the required path",
+         "bare_interpreter_stdout_target": "closed",
+         "bare_interpreter_guard_reached": true,
+         "documented_chain_returncode": 0,
+         "documented_chain_durable_receipt": true,
+         "documented_chain_diagnostic": "",
+         "documented_chain_stdout_target": "/dev/null",
+         "documented_chain_env_implementation": "uutils coreutils 0.8.0",
+         "documented_chain_env_reopens_stdout_to_devnull": true,
+         "documented_chain_guard_reached": false,
+         "in_verifier_guard_retained": true
        },
        "sigint": {
-         "statement": "SIGINT before receipt finalization returns 130, mirrors one bounded receipt with all_queues_empty false and proof_error verifier-interrupted, preserves the established proof state, and releases the receipt path for retry.",
+         "statement": "The SIGINT experiment measured `returncode=130`, `bounded_receipt=true`, `all_queues_empty=false`, `proof_error=verifier-interrupted`, `proof_state_preserved=true`, and `receipt_path_reusable=true`.",
          "returncode": 130,
          "bounded_receipt": true,
          "all_queues_empty": false,
@@ -336,7 +416,7 @@ or nonzero result as a stop before the window.
          "receipt_path_reusable": true
        },
        "sigterm": {
-         "statement": "SIGTERM before receipt finalization returns 143, mirrors one bounded receipt with all_queues_empty false and proof_error verifier-interrupted, preserves the established proof state, and releases the receipt path for retry.",
+         "statement": "The SIGTERM experiment measured `returncode=143`, `bounded_receipt=true`, `all_queues_empty=false`, `proof_error=verifier-interrupted`, `proof_state_preserved=true`, and `receipt_path_reusable=true`.",
          "returncode": 143,
          "bounded_receipt": true,
          "all_queues_empty": false,
@@ -345,22 +425,27 @@ or nonzero result as a stop before the window.
          "receipt_path_reusable": true
        },
        "post_finalization_signal": {
-         "statement": "A signal during or after receipt finalization returns 0, preserves the committed receipt, and its stdout mirror matches that receipt.",
+         "statement": "The post-finalization signal experiment measured `returncode=0`, `durable_receipt=true`, and `receipt_matches_stdout=true`.",
          "returncode": 0,
          "durable_receipt": true,
          "receipt_matches_stdout": true
        },
-       "dev_full": {
-         "statement": "A /dev/full stdout returns 1 and preserves the durable receipt.",
-         "returncode": 1,
-         "durable_receipt": true,
-         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       "receipt_parent": {
+         "statement": "Receipt creation measured `symlink_parent_followed=false`.",
+         "symlink_parent_followed": false
        },
-       "epipe": {
-         "statement": "An EPIPE stdout returns 1 and preserves the durable receipt.",
-         "returncode": 1,
-         "durable_receipt": true,
-         "diagnostic": "queue proof stdout mirror failed; receipt is at the required path"
+       "sha1_attribution": {
+         "statement": "SHA-1 mechanism measurements: `self_hash_algorithm=sha1`; `launcher_git_hashes_open_descriptor=true`; `deployment_git_capability=SHA-1: SHA1_DC`; `host_capability_present=true`.",
+         "self_hash_algorithm": "sha1",
+         "launcher_git_hashes_open_descriptor": true,
+         "deployment_git_capability": "SHA-1: SHA1_DC",
+         "host_capability_present": true
+       },
+       "standard_stream_reservation": {
+         "statement": "With fd 1 and fd 2 closed, bootstrap measured `closed_descriptors_reserved_to=/dev/null`, `diagnostic_appended_to_receipt=false`, and `failed_write_receipt_remains_single_json=true`.",
+         "closed_descriptors_reserved_to": "/dev/null",
+         "diagnostic_appended_to_receipt": false,
+         "failed_write_receipt_remains_single_json": true
        }
      }
    }
@@ -387,18 +472,10 @@ or nonzero result as a stop before the window.
    that same descriptor. Python then reads its own `/proc/self/fd/9` source path, hashes those bytes as
    a Git blob (`SHA-1("blob " + ASCII byte length + NUL + file bytes)`), and
    compares that measurement with the independently recorded expected blob.
-   The in-tool `hashlib.sha1(..., usedforsecurity=False)` is ordinary,
-   unhardened SHA-1. `usedforsecurity=False` changes policy availability, not
-   the digest or its collision resistance. The in-tool self-measurement
-   therefore does not itself supply collision resistance. Under this procedure,
-   protection against recognized practical SHA-1 collision attacks is supplied
-   by the deployment Git build's `SHA1_DC` collision-detection hardening when
-   the launcher runs `git hash-object --stdin` over the same open descriptor;
-   this is not a claim of general SHA-1 collision resistance. This is a
-   deployment-specific property, not a portable property of Git or Python:
-   before the window, confirm that
-   `/usr/bin/git version --build-options` reports `SHA-1: SHA1_DC`; otherwise
-   stop.
+   Claim `sha1_attribution` is limited to the measurable digest mechanism,
+   open-descriptor Git gate, and host capability. The host capability is
+   deployment-specific, not a portable property of Git or Python; a mismatch
+   with that measured claim is a stop.
    The shell rejects a mismatch before Python starts; Python rejects a mismatch
    or unreadable self path with a bounded receipt.
 
@@ -630,12 +707,13 @@ or nonzero result as a stop before the window.
    The tool performs only the
    daemon's admin review GET and the observer's readiness-frontier GET, emits
    counts rather than authored rows or IDs, and names only the ledger host. It
-   verifies `sonsteng-apply.timer` is inactive, records its recognized
-   enabled/disabled state, records the named window, phase, and nonce digest,
+   checks `sonsteng-apply.timer` against controlled claim `apply_timer_fence`,
+   records its recognized enabled/disabled state, records the named window,
+   phase, and nonce digest,
    the local UTC times and server-authenticated HTTP `Date` values of both GETs,
-   and the signed skew in seconds (`server Date - local clock`). Each skew must
-   be within 300 seconds, and the frontier server date must not precede the
-   review server date. It also records SHA-256s of
+   and the signed skew in seconds (`server Date - local clock`). The exclusive
+   quantitative acceptance bound is controlled claim `clock_skew_bound`; the
+   frontier server date must not precede the review server date. It also records SHA-256s of
    the canonical JSON form of both validated response bodies plus a
    domain-separated combined ledger-state hash, and SHA-256s of this host's
    machine ID and boot ID. It
@@ -651,8 +729,8 @@ or nonzero result as a stop before the window.
    `dev_full`, `epipe`, `verifier_closed_stdout`, and
    `launcher_closed_stdout` are the complete operational guarantees for those
    stdout conditions, including their return codes, receipt disposition, and
-   diagnostics. Stdout is a convenience mirror, while the durable receipt plus
-   supervised return code are the evidence. Preserve any existing or partial
+   diagnostics. Claim `evidence_and_mirror` exclusively assigns the evidence
+   and mirror roles. Preserve any existing or partial
    receipt and use a new path for a supervised retry.
    Claims `sigint`, `sigterm`, and `post_finalization_signal` are the complete
    operational guarantees for those signal timings, including return code,
