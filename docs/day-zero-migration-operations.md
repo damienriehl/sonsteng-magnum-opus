@@ -224,10 +224,12 @@ source with `--force-with-lease=main:<candidate-sha>`, explicit
 compare-and-swaps local `main` only if it still equals the candidate and aligns
 the index and worktree with ref-nonmutating plumbing—never `reset --hard`.
 Finally it rechecks symbolic `HEAD`, exact cleanliness, remote configuration,
-and local, remote, and worktree SHAs. Its JSON receipt contains only operation
-labels and validated SHA values, including best-effort readback after a failure
-so partial state is never silent. Any nonzero result is failed compensation and
-requires the fenced handling below; never replace it with a generic force push.
+and local, remote, and worktree SHAs. Its JSON receipt includes operation
+labels, validated SHA values, a credential-redacted validated remote URL, and a
+SHA-256 fingerprint of the exact validated URL. It also includes best-effort
+readback after a failure so partial state is never silent. Any nonzero result is
+failed compensation and requires the fenced handling below; never replace it
+with a generic force push.
 
 An injected production adapter can implement the state machine method by
 delegating to
@@ -325,23 +327,31 @@ python3 tools/canonical_ref_cas.py forward \
   --to "$CANDIDATE_SHA"
 ```
 
-`forward` requires clean checked-out local `main`, worktree `HEAD`, and remote
-`main` all to equal the exact prior SHA; requires the candidate's sole parent to
-be that prior SHA in the raw commit object; and
-requires the named remote to resolve to one identical fetch and push URL. It
-checks the candidate in a fresh standalone exact clone, rejects hidden index
-flags, and proves tracked content and file types against `HEAD` with a
-disposable index. It moves local `main` with the three-argument
+`forward` requires a non-shallow daemon repository with no other worktree
+holding `main`; clean checked-out local `main`, worktree `HEAD`, remote-tracking
+`origin/main`, and remote `main` all at the exact prior SHA; the candidate's
+sole parent to be that prior SHA in the raw commit object; and the named remote
+to resolve to one non-empty, identical fetch and push URL. It refuses Git
+configuration injected through the environment, invokes Git from an explicit
+environment allowlist with global and system Git configuration disabled, and
+records a credential-redacted version and SHA-256 fingerprint of the validated
+remote URL in its receipt. It checks the candidate in a fresh standalone exact
+clone, rejects hidden index flags, and proves tracked content and file types
+against `HEAD` with a disposable index. It moves local `main` with the
+three-argument
 `update-ref refs/heads/main <candidate> <prior>` CAS, checks local `main` and
 worktree `HEAD` at the candidate before and after aligning the index and
 worktree with `read-tree -m -u <candidate>`, and pins the validated remote URL.
-Before mutation it snapshots the complete visible remote ref map with
-`ls-remote --refs`; it then pushes an immutable source with
+Before mutation it snapshots the full local ref map, the advertised non-hidden
+remote ref map, and the remote symbolic `HEAD` from one `ls-remote --symref`
+advertisement; it then pushes a verified non-shallow immutable source with
 `--force-with-lease=main:<prior-sha>`, explicit
 `refs/heads/main:refs/heads/main`, and tag following disabled. It succeeds only
-after a final symbolic-HEAD, exact-cleanliness, remote-configuration, and
-local/remote/worktree SHA proof followed by an after-state `ls-remote --refs`
-readback that proves the only visible remote-ref change was the exact
-`refs/heads/main` transition. This migration-specific command replaces the
-generic merge example in `docs/direct-apply-daemon.md`, which must not be used
-for Day Zero.
+after CAS-updating `refs/remotes/origin/main`, a final local symbolic-HEAD,
+exact-cleanliness, remote-configuration, local-ref-map, remote symbolic-HEAD,
+and local/remote/worktree SHA proof. The after-state `ls-remote --symref`
+comparison proves that the only change among the remote's advertised
+non-hidden `refs/*` was the exact `refs/heads/main` transition; the separate
+symref comparison proves remote `HEAD` did not change. This migration-specific
+command replaces the generic merge example in `docs/direct-apply-daemon.md`,
+which must not be used for Day Zero.

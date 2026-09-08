@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -41,6 +43,15 @@ def remote_refs(repo: Path) -> dict[str, str]:
     return {ref: value for value, ref in (line.split() for line in lines)}
 
 
+def local_refs(repo: Path) -> dict[str, str]:
+    lines = git(
+        repo,
+        "for-each-ref",
+        "--format=%(refname) %(objectname)",
+    ).stdout.splitlines()
+    return {ref: value for ref, value in (line.split() for line in lines)}
+
+
 @dataclass(frozen=True)
 class Repositories:
     remote: Path
@@ -73,6 +84,7 @@ def repositories(tmp_path: Path) -> Repositories:
     prior = sha(seed)
     git(seed, "remote", "add", "origin", str(remote))
     git(seed, "push", "-q", "-u", "origin", "main")
+    git(remote, "symbolic-ref", "HEAD", "refs/heads/main")
 
     git(tmp_path, "clone", "-q", "--branch", "main", str(remote), str(daemon))
     (seed / "state.txt").write_text("candidate\n", encoding="utf-8")
@@ -93,6 +105,7 @@ def invoke(
     dry_run: bool = False,
     from_sha: str | None = None,
     to_sha: str | None = None,
+    env: dict[str, str] | None = None,
 ):
     command = [
         sys.executable,
@@ -113,7 +126,13 @@ def invoke(
     ]
     if dry_run:
         command.append("--dry-run")
-    return subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 def receipt(completed: subprocess.CompletedProcess[str]) -> dict:
@@ -145,12 +164,17 @@ def test_happy_forward(repositories: Repositories):
             "local-main-cas",
             "worktree-alignment",
             "remote-main-cas",
+            "remote-tracking-main-cas",
         ],
         "readback": {
             "head": repositories.candidate,
             "local": repositories.candidate,
             "remote": repositories.candidate,
         },
+        "remote_url": str(repositories.remote),
+        "remote_url_sha256": hashlib.sha256(
+            str(repositories.remote).encode("utf-8")
+        ).hexdigest(),
         "result": "success",
         "verb": "forward",
     }
@@ -169,6 +193,7 @@ def test_forward_refused_when_remote_moved(repositories: Repositories):
     assert failure["result"] == "error"
     assert failure["error"] == "remote main does not equal --from"
     assert failure["mutations"] == []
+    assert failure["remote_url"] == str(repositories.remote)
     assert failure["readback"] == {
         "head": repositories.prior,
         "local": repositories.prior,
@@ -387,12 +412,17 @@ def test_restore_happy(repositories: Repositories):
             "remote-main-cas",
             "local-main-cas",
             "worktree-alignment",
+            "remote-tracking-main-cas",
         ],
         "readback": {
             "head": repositories.prior,
             "local": repositories.prior,
             "remote": repositories.prior,
         },
+        "remote_url": str(repositories.remote),
+        "remote_url_sha256": hashlib.sha256(
+            str(repositories.remote).encode("utf-8")
+        ).hexdigest(),
         "result": "success",
         "verb": "restore",
     }
@@ -401,6 +431,7 @@ def test_restore_happy(repositories: Repositories):
     assert (repositories.daemon / "removed-by-candidate.txt").read_text(
         encoding="utf-8"
     ) == "restore me\n"
+    assert sha(repositories.daemon, "refs/remotes/origin/main") == repositories.prior
 
 
 def test_restore_adapter_satisfies_migration_contract(repositories: Repositories):
@@ -624,9 +655,13 @@ def test_runbook_describes_forward_cas_without_destructive_ref_moves():
         "`update-ref refs/heads/main <candidate> <prior>`",
         "before and after aligning",
         "`read-tree -m -u <candidate>`",
-        "Before mutation it snapshots the complete visible remote ref map",
-        "after-state `ls-remote --refs`",
-        "only visible remote-ref change",
+        "Before mutation it snapshots the full local ref map",
+        "advertised non-hidden",
+        "one `ls-remote --symref`",
+        "remote symbolic `HEAD`",
+        "after-state `ls-remote --symref`",
+        "only change among the remote's advertised",
+        "`refs/remotes/origin/main`",
     ):
         assert required_text in forward_description
     assert "merge --ff-only" not in forward_description
@@ -699,7 +734,7 @@ def test_dry_run_refuses_local_race_before_final_readback(
             dry_run=True,
         )
 
-    assert captured.value.receipt["error"] == "exact canonical ref readback mismatch"
+    assert captured.value.receipt["error"] == "daemon worktree must be clean"
     assert captured.value.receipt["readback"]["local"] == competitor
 
 
@@ -721,12 +756,12 @@ def test_validated_readback_is_last_git_interaction_before_success(
         assert invoke(repositories, "forward").returncode == 0
     original_run_git = cas._run_git
     stages: list[str] = []
-    remote_map_args: list[list[str]] = []
+    remote_snapshot_args: list[list[str]] = []
 
     def recording_run_git(operation, args, *, stage, check=True, cwd=None, env=None):
         stages.append(stage)
-        if stage == "remote visible ref map readback":
-            remote_map_args.append(list(args))
+        if stage == "remote ref snapshot readback":
+            remote_snapshot_args.append(list(args))
         return original_run_git(
             operation, args, stage=stage, check=check, cwd=cwd, env=env
         )
@@ -743,11 +778,12 @@ def test_validated_readback_is_last_git_interaction_before_success(
     )
 
     assert result["result"] == "success"
-    assert stages[-1] == "remote visible ref map readback"
-    assert remote_map_args
+    assert stages[-1] == "local main readback"
+    assert remote_snapshot_args
+    assert stages.index("remote ref snapshot readback") < len(stages) - 1
     assert all(
-        args == ["ls-remote", "--refs", str(repositories.remote)]
-        for args in remote_map_args
+        args == ["ls-remote", "--symref", "--exit-code", str(repositories.remote)]
+        for args in remote_snapshot_args
     )
 
 
@@ -821,6 +857,7 @@ def test_post_receive_hook_non_main_remote_ref_delta_is_reported(
         "local-main-cas",
         "worktree-alignment",
         "remote-main-cas",
+        "remote-tracking-main-cas",
     ]
     after = remote_refs(repositories.daemon)
     if delta == "removed":
@@ -1034,6 +1071,7 @@ def test_readback_mismatch_reported(repositories: Repositories):
         "local-main-cas",
         "worktree-alignment",
         "remote-main-cas",
+        "remote-tracking-main-cas",
     ]
     assert failure["readback"] == {
         "head": repositories.candidate,
@@ -1126,6 +1164,7 @@ def test_forward_pushes_immutable_candidate_during_local_ref_race(
         "local-main-cas",
         "worktree-alignment",
         "remote-main-cas",
+        "remote-tracking-main-cas",
     ]
     assert failure["readback"] == {
         "head": competitor,
@@ -1180,3 +1219,545 @@ def test_invalid_coordinate_is_redacted_from_receipt(
     failure = receipt(completed)
     assert failure["error_code"] == "invalid-coordinate"
     assert failure["expected"] == {"from": None, "to": None}
+
+
+def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    captured_environment = None
+
+    def fake_run(*args, **kwargs):
+        nonlocal captured_environment
+        captured_environment = kwargs["env"]
+        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+    monkeypatch.setenv("CAS_UNRELATED_SENTINEL", "must-not-reach-git")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/tmp/hostile-global-config")
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/tmp/hostile-system-config")
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "uploadpack.hideRefs")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "refs/heads/side")
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'uploadpack.hideRefs=refs/heads/side'")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    operation = cas.Operation(
+        "forward",
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+        False,
+    )
+
+    cas._run_git(operation, ["version"], stage="environment test")
+
+    assert captured_environment is not None
+    assert "CAS_UNRELATED_SENTINEL" not in captured_environment
+    assert "GIT_CONFIG_KEY_0" not in captured_environment
+    assert "GIT_CONFIG_VALUE_0" not in captured_environment
+    assert "GIT_CONFIG_PARAMETERS" not in captured_environment
+    assert captured_environment["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert captured_environment["GIT_CONFIG_SYSTEM"] == os.devnull
+    assert captured_environment["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert captured_environment["GIT_CONFIG_COUNT"] == "0"
+
+
+def test_forward_refuses_global_pack_objects_hook_before_mutation(
+    repositories: Repositories,
+):
+    hook_log = repositories.remote.parent / "pack-hook.log"
+    hook = repositories.remote.parent / "pack-hook.sh"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"git --git-dir={repositories.daemon / '.git'} update-ref "
+        f"refs/heads/side {repositories.candidate}\n"
+        f"printf ran >> {hook_log}\n"
+        'exec "$@"\n',
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    global_config = repositories.remote.parent / "hostile-pack.config"
+    global_config.write_text(
+        f"[uploadpack]\n\tpackObjectsHook = {hook}\n",
+        encoding="utf-8",
+    )
+    hostile_environment = dict(os.environ)
+    hostile_environment["GIT_CONFIG_GLOBAL"] = str(global_config)
+
+    completed = invoke(repositories, "forward", env=hostile_environment)
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["result"] == "error"
+    assert failure["mutations"] == []
+    assert "refs/heads/side" not in local_refs(repositories.daemon)
+    assert not hook_log.exists()
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_refuses_global_url_instead_of_before_mutation(
+    repositories: Repositories,
+):
+    decoy = repositories.remote.parent / "decoy-instead-of.git"
+    git(decoy.parent, "init", "-q", "--bare", str(decoy))
+    git(
+        repositories.seed,
+        "push",
+        "-q",
+        str(decoy),
+        f"{repositories.prior}:refs/heads/main",
+    )
+    configured_url = "https://prod.invalid/repo.git"
+    git(repositories.daemon, "remote", "set-url", "origin", configured_url)
+    global_config = repositories.remote.parent / "hostile-url.config"
+    global_config.write_text(
+        f'[url "{decoy}"]\n\tinsteadOf = {configured_url}\n',
+        encoding="utf-8",
+    )
+    hostile_environment = dict(os.environ)
+    hostile_environment["GIT_CONFIG_GLOBAL"] = str(global_config)
+
+    completed = invoke(repositories, "forward", env=hostile_environment)
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["result"] == "error"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(decoy, "refs/heads/main") == repositories.prior
+
+
+def test_forward_refuses_global_uploadpack_hide_refs_before_mutation(
+    repositories: Repositories,
+):
+    git(
+        repositories.remote,
+        "update-ref",
+        "refs/heads/side",
+        repositories.prior,
+    )
+    hook = repositories.remote / "hooks" / "post-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"git update-ref refs/heads/side {repositories.candidate}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    global_config = repositories.remote.parent / "hostile-hide-refs.config"
+    global_config.write_text(
+        "[uploadpack]\n\thideRefs = refs/heads/side\n",
+        encoding="utf-8",
+    )
+    hostile_environment = dict(os.environ)
+    hostile_environment["GIT_CONFIG_GLOBAL"] = str(global_config)
+
+    completed = invoke(repositories, "forward", env=hostile_environment)
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["result"] == "error"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(repositories.remote, "refs/heads/main") == repositories.prior
+    assert sha(repositories.remote, "refs/heads/side") == repositories.prior
+
+
+def test_forward_refuses_local_non_main_ref_delta_before_owned_mutation(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_proof = cas._require_clean_fresh_candidate
+
+    def mutating_candidate_proof(operation, candidate):
+        original_proof(operation, candidate)
+        git(
+            repositories.daemon,
+            "update-ref",
+            "refs/heads/side",
+            repositories.candidate,
+        )
+
+    monkeypatch.setattr(cas, "_require_clean_fresh_candidate", mutating_candidate_proof)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+        )
+
+    assert captured.value.receipt["error"] == (
+        "local ref map changed outside allowed transitions"
+    )
+    assert captured.value.receipt["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_reports_local_non_main_ref_delta_before_success(
+    repositories: Repositories,
+):
+    hook = repositories.remote / "hooks" / "post-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"git --git-dir={repositories.daemon / '.git'} update-ref "
+        f"refs/heads/side {repositories.candidate}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "local ref map changed outside allowed transitions"
+    assert failure["result"] == "error"
+    assert sha(repositories.daemon, "refs/heads/side") == repositories.candidate
+
+
+def test_forward_reports_remote_head_symref_change(
+    repositories: Repositories,
+):
+    git(
+        repositories.remote,
+        "update-ref",
+        "refs/heads/side",
+        repositories.prior,
+    )
+    hook = repositories.remote / "hooks" / "post-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        "git symbolic-ref HEAD refs/heads/side\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["result"] == "error"
+    assert failure["error"] == "remote HEAD changed during operation"
+    assert git(repositories.remote, "symbolic-ref", "HEAD").stdout.strip() == (
+        "refs/heads/side"
+    )
+
+
+def test_forward_preserves_annotated_remote_tag_in_combined_snapshot(
+    repositories: Repositories,
+):
+    git(
+        repositories.seed,
+        "tag",
+        "-a",
+        "preserved",
+        repositories.prior,
+        "-m",
+        "preserved annotated tag",
+    )
+    git(repositories.seed, "push", "-q", "origin", "refs/tags/preserved")
+    tag_before = sha(repositories.remote, "refs/tags/preserved")
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 0, completed.stderr
+    tag_after = sha(repositories.remote, "refs/tags/preserved")
+    assert tag_before and tag_after and tag_after == tag_before
+
+
+def test_forward_refuses_shallow_daemon_before_mutation(
+    repositories: Repositories,
+):
+    shallow_path = Path(
+        git(repositories.daemon, "rev-parse", "--git-path", "shallow").stdout.strip()
+    )
+    if not shallow_path.is_absolute():
+        shallow_path = repositories.daemon / shallow_path
+    shallow_path.write_text(f"{repositories.prior}\n", encoding="utf-8")
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "daemon repository must not be shallow"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_refuses_second_worktree_holding_main_before_mutation(
+    repositories: Repositories,
+):
+    second = repositories.remote.parent / "second-main-worktree"
+    git(repositories.daemon, "worktree", "add", "-q", "-f", str(second), "main")
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "main must not be checked out in another worktree"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(second) == repositories.prior
+    assert git(second, "status", "--porcelain").stdout == ""
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_success_updates_remote_tracking_main_and_records_validated_url(
+    repositories: Repositories,
+):
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 0, completed.stderr
+    result = receipt(completed)
+    assert result["remote_url"] == str(repositories.remote)
+    assert result["remote_url_sha256"] == hashlib.sha256(
+        str(repositories.remote).encode("utf-8")
+    ).hexdigest()
+    tracking = sha(repositories.daemon, "refs/remotes/origin/main")
+    assert tracking and tracking == repositories.candidate
+    assert git(repositories.daemon, "status", "--short", "--branch").stdout == (
+        "## main...origin/main\n"
+    )
+
+
+def test_push_source_is_verified_non_shallow_after_fetch(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_check = cas._require_non_shallow
+    checked_paths: list[Path] = []
+
+    def recording_check(operation, *, cwd=None, error):
+        checked_paths.append(cwd or operation.repo)
+        return original_check(operation, cwd=cwd, error=error)
+
+    monkeypatch.setattr(cas, "_require_non_shallow", recording_check)
+
+    result = cas.forward(
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+    )
+
+    assert result["result"] == "success"
+    assert checked_paths[0] == repositories.daemon
+    assert checked_paths[1].name == "source.git"
+
+
+def test_forward_refuses_stale_remote_tracking_main_before_mutation(
+    repositories: Repositories,
+):
+    stale = sha(repositories.daemon, f"{repositories.prior}^")
+    assert stale and stale != repositories.prior
+    git(
+        repositories.daemon,
+        "update-ref",
+        "refs/remotes/origin/main",
+        stale,
+        repositories.prior,
+    )
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "remote-tracking main does not equal --from"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_refuses_malformed_local_ref_before_mutation(
+    repositories: Repositories,
+):
+    broken = repositories.daemon / ".git" / "refs" / "heads" / "broken"
+    broken.write_text("f" * 40 + "\n", encoding="utf-8")
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "local refs could not be read exactly"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_refuses_dangling_symbolic_local_ref_before_mutation(
+    repositories: Repositories,
+):
+    git(
+        repositories.daemon,
+        "symbolic-ref",
+        "refs/heads/dangling",
+        "refs/heads/missing",
+    )
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "local refs could not be read exactly"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_reports_malformed_local_ref_before_success(
+    repositories: Repositories,
+):
+    broken = repositories.daemon / ".git" / "refs" / "heads" / "broken"
+    hook = repositories.remote / "hooks" / "post-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"printf '%s\\n' {'f' * 40} > {broken}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "local refs could not be read exactly"
+    assert failure["result"] == "error"
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_restore_refuses_stale_remote_tracking_main_before_mutation(
+    repositories: Repositories,
+):
+    assert invoke(repositories, "forward").returncode == 0
+    stale = sha(repositories.daemon, f"{repositories.prior}^")
+    assert stale and stale != repositories.candidate
+    git(
+        repositories.daemon,
+        "update-ref",
+        "refs/remotes/origin/main",
+        stale,
+        repositories.candidate,
+    )
+
+    completed = invoke(repositories, "restore")
+
+    assert completed.returncode != 0
+    failure = receipt(completed)
+    assert failure["error"] == "remote-tracking main does not equal --from"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_forward_refuses_second_main_worktree_race_before_owned_mutation(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    second = repositories.remote.parent / "racing-main-worktree"
+    original_snapshot = cas._remote_snapshot
+    snapshots = 0
+
+    def racing_snapshot(operation, remote_url):
+        nonlocal snapshots
+        snapshots += 1
+        observed = original_snapshot(operation, remote_url)
+        if snapshots == 2:
+            git(
+                repositories.daemon,
+                "worktree",
+                "add",
+                "-q",
+                "-f",
+                str(second),
+                "main",
+            )
+        return observed
+
+    monkeypatch.setattr(cas, "_remote_snapshot", racing_snapshot)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+        )
+
+    assert snapshots == 2
+    failure = captured.value.receipt
+    assert failure["error"] == "main must not be checked out in another worktree"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(second) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_forward_reports_local_main_race_during_final_remote_snapshot(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    original_snapshot = cas._remote_snapshot
+    snapshots = 0
+
+    def racing_snapshot(operation, remote_url):
+        nonlocal snapshots
+        snapshots += 1
+        observed = original_snapshot(operation, remote_url)
+        if snapshots == 3:
+            git(
+                repositories.daemon,
+                "update-ref",
+                "refs/heads/main",
+                repositories.prior,
+                repositories.candidate,
+            )
+        return observed
+
+    monkeypatch.setattr(cas, "_remote_snapshot", racing_snapshot)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+        )
+
+    assert snapshots == 3
+    failure = captured.value.receipt
+    assert failure["result"] == "error"
+    assert failure["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+        "remote-tracking-main-cas",
+    ]
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+@pytest.mark.parametrize("remote_moved", [False, True])
+def test_receipt_redacts_remote_url_credentials(
+    repositories: Repositories, remote_moved: bool
+):
+    exact_url = f"file://operator:super-secret@localhost{repositories.remote}"
+    redacted_url = f"file://localhost{repositories.remote}"
+    git(repositories.daemon, "remote", "set-url", "origin", exact_url)
+    if remote_moved:
+        advance_remote(repositories)
+
+    completed = invoke(repositories, "forward")
+
+    assert (completed.returncode != 0) is remote_moved
+    assert "super-secret" not in completed.stdout
+    assert "super-secret" not in completed.stderr
+    result = receipt(completed)
+    assert result["remote_url"] == redacted_url
+    assert result["remote_url_sha256"] == hashlib.sha256(
+        exact_url.encode("utf-8")
+    ).hexdigest()
+    assert result["result"] == ("error" if remote_moved else "success")
