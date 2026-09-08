@@ -52,14 +52,7 @@ PROCESS_INJECTION_ENV_NAMES = frozenset(
         "PYTHONUSERBASE",
     }
 )
-GIT_CONFIG_PINS = (
-    "-c",
-    "uploadpack.packObjectsHook=",
-    "-c",
-    "uploadpack.hideRefs=",
-    "-c",
-    "transfer.hideRefs=",
-)
+PROCESS_INJECTION_ENV_PREFIXES = ("LD_",)
 TOOL_PATH = str(pathlib.Path(__file__).resolve(strict=True))
 TOOL_SHA256 = hashlib.sha256(pathlib.Path(TOOL_PATH).read_bytes()).hexdigest()
 REMOTE_QUERY_ROOT = pathlib.Path(os.devnull).parent
@@ -89,9 +82,32 @@ class TransitionOutcome(enum.StrEnum):
     NOT_LANDED = "not-landed"
     SUCCEEDED = "succeeded"
     TARGET_ALREADY_PRESENT = "target-already-present"
+    UNDETERMINED = "undetermined"
+
+
+class TransitionOutcomeSource(enum.StrEnum):
+    FAILURE_HANDLER_FALLBACK = "failure-handler-fallback"
+    OUTERMOST_FALLBACK = "outermost-fallback"
+    POST_FAILURE_READBACK = "post-failure-readback"
+    PRE_OPERATION_EVIDENCE = "pre-operation-evidence"
 
 
 TRANSITION_OUTCOMES = frozenset(outcome.value for outcome in TransitionOutcome)
+
+
+def _undetermined_failure_fields(
+    exc: BaseException, source: TransitionOutcomeSource
+) -> dict[str, str]:
+    interrupted = isinstance(exc, (KeyboardInterrupt, SystemExit))
+    return {
+        "result": "error",
+        "error": (
+            "operation interrupted" if interrupted else "unexpected internal failure"
+        ),
+        "error_code": "interrupted" if interrupted else "unexpected-exception",
+        "transition_outcome": TransitionOutcome.UNDETERMINED.value,
+        "transition_outcome_source": source.value,
+    }
 
 
 def _resolve_git_path() -> str | None:
@@ -181,7 +197,8 @@ def _require_no_external_git_config_environment() -> None:
 def _require_safe_process_environment() -> None:
     _require_no_external_git_config_environment()
     if any(
-        name.startswith("LD_") or name in PROCESS_INJECTION_ENV_NAMES
+        name.startswith(PROCESS_INJECTION_ENV_PREFIXES)
+        or name in PROCESS_INJECTION_ENV_NAMES
         for name in os.environ
     ):
         raise CasError(
@@ -220,7 +237,7 @@ def _run_git(
     )
     try:
         completed = subprocess.run(
-            [GIT_PATH, *GIT_CONFIG_PINS, *args],
+            [GIT_PATH, *args],
             cwd=cwd or operation.repo,
             check=False,
             capture_output=True,
@@ -1207,7 +1224,7 @@ def _cas_remote_tracking_main(
         raise CasError("remote-tracking main compare-and-swap mismatch")
 
 
-def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
+def _base_receipt(operation: Operation, mutations: list[str] | None) -> dict:
     return {
         "branch": None,
         "dry_run": operation.dry_run,
@@ -1419,48 +1436,64 @@ def _execute(operation: Operation) -> dict:
             message = "unexpected internal failure"
             error_code = "unexpected-exception"
 
-    if operation_validated and remote_url is not None:
-        readback, readback_errors = _best_effort_readback(operation, remote_url)
-        outcome_source = "post-failure-readback"
-    else:
-        readback = {"head": None, "local": None, "remote": None}
-        readback_errors = {}
-        outcome_source = "pre-operation-evidence"
-    if (
-        remote_main_attempted
-        and MUTATION_REMOTE_MAIN_CAS not in mutations
-        and readback["remote"] == operation.to_sha
-    ):
-        mutations.append(MUTATION_REMOTE_MAIN_CAS)
-        receipt["mutation_reconciliation"] = {
-            MUTATION_REMOTE_MAIN_CAS: "confirmed-by-post-failure-readback"
-        }
-    transition_outcome = _transition_outcome(
-        operation,
-        mutations,
-        readback,
-        unexpected_observation=True,
-        remote_main_attempted=remote_main_attempted,
-    )
-    if transition_outcome == TransitionOutcome.LANDED_VERIFICATION_INCOMPLETE:
-        receipt.update(
-            result="warning",
-            warning=message,
-            readback=readback,
-            transition_outcome=transition_outcome,
+    readback: dict[str, str | None] = {
+        "head": None,
+        "local": None,
+        "remote": None,
+    }
+    readback_errors: dict[str, str] = {}
+    try:
+        if operation_validated and remote_url is not None:
+            readback, readback_errors = _best_effort_readback(operation, remote_url)
+            outcome_source = TransitionOutcomeSource.POST_FAILURE_READBACK.value
+        else:
+            outcome_source = TransitionOutcomeSource.PRE_OPERATION_EVIDENCE.value
+        if (
+            remote_main_attempted
+            and MUTATION_REMOTE_MAIN_CAS not in mutations
+            and readback["remote"] == operation.to_sha
+        ):
+            mutations.append(MUTATION_REMOTE_MAIN_CAS)
+            receipt["mutation_reconciliation"] = {
+                MUTATION_REMOTE_MAIN_CAS: "confirmed-by-post-failure-readback"
+            }
+        transition_outcome = _transition_outcome(
+            operation,
+            mutations,
+            readback,
+            unexpected_observation=True,
+            remote_main_attempted=remote_main_attempted,
         )
-    else:
+        if transition_outcome == TransitionOutcome.LANDED_VERIFICATION_INCOMPLETE:
+            receipt.update(
+                result="warning",
+                warning=message,
+                readback=readback,
+                transition_outcome=transition_outcome,
+            )
+        else:
+            receipt.update(
+                result="error",
+                error=message,
+                readback=readback,
+                transition_outcome=transition_outcome,
+            )
+        receipt["transition_outcome_source"] = outcome_source
+        if readback_errors:
+            receipt["readback_errors"] = readback_errors
+        if error_code is not None:
+            receipt["error_code"] = error_code
+    except BaseException as handler_exc:
+        receipt.pop("warning", None)
         receipt.update(
-            result="error",
-            error=message,
             readback=readback,
-            transition_outcome=transition_outcome,
+            **_undetermined_failure_fields(
+                handler_exc,
+                TransitionOutcomeSource.FAILURE_HANDLER_FALLBACK,
+            ),
         )
-    receipt["transition_outcome_source"] = outcome_source
-    if readback_errors:
-        receipt["readback_errors"] = readback_errors
-    if error_code is not None:
-        receipt["error_code"] = error_code
+        if readback_errors:
+            receipt["readback_errors"] = readback_errors
     raise CasFailure(receipt) from None
 
 
@@ -1813,28 +1846,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.expect_remote_url_sha256,
                 args.window_owner,
             )
-            result = _base_receipt(fallback_operation, [])
-            interrupted = isinstance(exc, (KeyboardInterrupt, SystemExit))
+            result = _base_receipt(fallback_operation, None)
             readback = {"head": None, "local": None, "remote": None}
             result.update(
-                result="error",
-                error=(
-                    "operation interrupted"
-                    if interrupted
-                    else "unexpected internal failure"
-                ),
-                error_code=(
-                    "interrupted" if interrupted else "unexpected-exception"
-                ),
                 readback=readback,
-                transition_outcome=_transition_outcome(
-                    fallback_operation,
-                    [],
-                    readback,
-                    unexpected_observation=True,
+                **_undetermined_failure_fields(
+                    exc,
+                    TransitionOutcomeSource.OUTERMOST_FALLBACK,
                 ),
-                transition_outcome_source="pre-operation-evidence",
             )
+            interrupted = isinstance(exc, (KeyboardInterrupt, SystemExit))
             result_code = 130 if interrupted else 1
             mirror_descriptor = 2
         else:

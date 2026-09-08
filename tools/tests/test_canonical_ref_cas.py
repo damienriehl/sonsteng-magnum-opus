@@ -24,6 +24,19 @@ WINDOW_OWNER = "packet-d-window-test"
 sys.path.insert(0, str(CLI.parent))
 import canonical_ref_cas as cas
 
+EXPECTED_PROCESS_INJECTION_ENV_NAMES = frozenset(
+    {
+        "OPENSSL_CONF",
+        "OPENSSL_MODULES",
+        "PYTHONHOME",
+        "PYTHONINSPECT",
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
+    }
+)
+EXPECTED_PROCESS_INJECTION_ENV_PREFIXES = ("LD_",)
+
 
 def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -330,19 +343,18 @@ def test_malformed_remote_url_expectation_is_refused_before_mutation(
 
 @pytest.mark.parametrize(
     "environment_name",
-    [
-        "LD_PRELOAD",
-        "LD_AUDIT",
-        "LD_LIBRARY_PATH",
-        "LD_ARBITRARY_FAMILY_MEMBER",
-        "OPENSSL_CONF",
-        "OPENSSL_MODULES",
-        "PYTHONPATH",
-        "PYTHONHOME",
-        "PYTHONINSPECT",
-        "PYTHONSTARTUP",
-        "PYTHONUSERBASE",
-    ],
+    sorted(cas.PROCESS_INJECTION_ENV_NAMES)
+    + sorted(
+        {
+            "LD_PRELOAD",
+            "LD_AUDIT",
+            "LD_LIBRARY_PATH",
+            *(
+                f"{prefix}ARBITRARY_FAMILY_MEMBER"
+                for prefix in cas.PROCESS_INJECTION_ENV_PREFIXES
+            ),
+        }
+    ),
 )
 def test_forward_refuses_process_injection_environment_before_mutation(
     repositories: Repositories,
@@ -369,6 +381,14 @@ def test_forward_refuses_process_injection_environment_before_mutation(
     assert failure["mutations"] == []
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_process_injection_environment_contract_matches_behavior_matrix():
+    assert cas.PROCESS_INJECTION_ENV_NAMES == EXPECTED_PROCESS_INJECTION_ENV_NAMES
+    assert (
+        cas.PROCESS_INJECTION_ENV_PREFIXES
+        == EXPECTED_PROCESS_INJECTION_ENV_PREFIXES
+    )
 
 
 @pytest.mark.parametrize("field", ["repo", "remote", "branch"])
@@ -617,6 +637,62 @@ def test_write_all_refuses_nonprogressing_write(
         cas._write_all(123, b"receipt")
 
 
+def test_receipt_publish_refuses_replaced_private_temp_inode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    target = tmp_path / "receipt.json"
+    (
+        receipt_descriptor,
+        directory_descriptor,
+        temporary_filename,
+        filename,
+    ) = cas._open_receipt(str(target))
+    original_fsync = cas.os.fsync
+    swapped = False
+
+    def replace_temp_after_file_sync(file_descriptor: int) -> None:
+        nonlocal swapped
+        original_fsync(file_descriptor)
+        if file_descriptor != receipt_descriptor or swapped:
+            return
+        cas.os.unlink(temporary_filename, dir_fd=directory_descriptor)
+        replacement_descriptor = cas.os.open(
+            temporary_filename,
+            cas.os.O_WRONLY | cas.os.O_CREAT | cas.os.O_EXCL,
+            0o600,
+            dir_fd=directory_descriptor,
+        )
+        try:
+            cas.os.write(replacement_descriptor, b'{"forged":true}\n')
+            original_fsync(replacement_descriptor)
+        finally:
+            cas.os.close(replacement_descriptor)
+        swapped = True
+
+    monkeypatch.setattr(cas.os, "fsync", replace_temp_after_file_sync)
+
+    try:
+        with pytest.raises(OSError):
+            cas._write_receipt(
+                receipt_descriptor,
+                directory_descriptor,
+                temporary_filename,
+                filename,
+                b'{"authentic":true}\n',
+            )
+    finally:
+        try:
+            cas.os.unlink(temporary_filename, dir_fd=directory_descriptor)
+        except FileNotFoundError:
+            pass
+        cas.os.close(receipt_descriptor)
+        cas.os.close(directory_descriptor)
+
+    assert swapped
+    assert not target.exists()
+
+
 def test_unwritable_receipt_path_fails_before_mutation(
     repositories: Repositories,
 ):
@@ -636,24 +712,21 @@ def test_unwritable_receipt_path_fails_before_mutation(
     assert remote_sha(repositories.daemon) == repositories.prior
 
 
-def test_unexpected_operation_error_closes_receipt_descriptor(
+def test_outermost_fallback_does_not_assert_state_after_landed_operation(
     repositories: Repositories,
     monkeypatch: pytest.MonkeyPatch,
 ):
     receipt_path = repositories.remote.parent / "unexpected-error-receipt.json"
     expected_remote_url_sha256 = remote_url_sha256(repositories)
-    closed_descriptors: list[int] = []
-    original_close = cas.os.close
 
-    def raising_forward(*_args, **_kwargs):
+    original_forward = cas.forward
+
+    def raising_forward(*args, **kwargs):
+        landed = original_forward(*args, **kwargs)
+        assert landed["transition_outcome"] == "succeeded"
         raise RuntimeError("unexpected test failure")
 
-    def recording_close(file_descriptor: int) -> None:
-        closed_descriptors.append(file_descriptor)
-        original_close(file_descriptor)
-
     monkeypatch.setattr(cas, "forward", raising_forward)
-    monkeypatch.setattr(cas.os, "close", recording_close)
 
     result_code = cas.main(
         [
@@ -682,9 +755,12 @@ def test_unexpected_operation_error_closes_receipt_descriptor(
     assert failure["result"] == "error"
     assert failure["error"] == "unexpected internal failure"
     assert failure["error_code"] == "unexpected-exception"
-    assert failure["mutations"] == []
+    assert failure["transition_outcome"] == "undetermined"
+    assert failure["transition_outcome_source"] == "outermost-fallback"
+    assert failure["mutations"] is None
     assert failure["readback"] == {"head": None, "local": None, "remote": None}
-    assert len(closed_descriptors) == 2
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
 
 
 @pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
@@ -762,7 +838,9 @@ def test_main_writes_receipt_for_interruption_without_traceback(
     assert result["result"] == "error"
     assert result["error"] == "operation interrupted"
     assert result["error_code"] == "interrupted"
-    assert result["transition_outcome"] == "not-landed"
+    assert result["transition_outcome"] == "undetermined"
+    assert result["transition_outcome_source"] == "outermost-fallback"
+    assert result["mutations"] is None
 
 
 @pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
@@ -864,6 +942,72 @@ def test_unexpected_post_mutation_exception_writes_complete_warning_receipt(
         "remote-main-cas",
         "remote-tracking-main-cas",
     ]
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": repositories.candidate,
+    }
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_failure_handler_fallback_preserves_landed_mutation_evidence(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    receipt_path = repositories.remote.parent / "failure-handler-interrupt.json"
+    original_push_main = cas._push_main
+    original_transition_outcome = cas._transition_outcome
+
+    def committed_then_client_failure(*args, **kwargs):
+        original_push_main(*args, **kwargs)
+        raise cas.CasError("Git operation failed during remote main compare-and-swap")
+
+    def interrupt_failure_classification(*args, **kwargs):
+        if kwargs.get("unexpected_observation"):
+            raise KeyboardInterrupt
+        return original_transition_outcome(*args, **kwargs)
+
+    monkeypatch.setattr(cas, "_push_main", committed_then_client_failure)
+    monkeypatch.setattr(cas, "_transition_outcome", interrupt_failure_classification)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            remote_url_sha256(repositories),
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    assert result_code == 130
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result["result"] == "error"
+    assert result["error"] == "operation interrupted"
+    assert result["error_code"] == "interrupted"
+    assert result["transition_outcome"] == "undetermined"
+    assert result["transition_outcome_source"] == "failure-handler-fallback"
+    assert result["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+    ]
+    assert result["mutation_reconciliation"] == {
+        "remote-main-cas": "confirmed-by-post-failure-readback"
+    }
     assert result["readback"] == {
         "head": repositories.candidate,
         "local": repositories.candidate,
@@ -1857,6 +2001,8 @@ def test_runbook_pins_cas_release_identity_invocation_and_receipt_acceptance():
         "`verb` equals the command verb",
         "`dry_run` is `true` exactly for a rehearsal",
         '`transition_outcome_source` is `"post-failure-readback"`',
+        '`"failure-handler-fallback"`',
+        '`"outermost-fallback"`',
         '`mutation_reconciliation.remote-main-cas`',
         '`"confirmed-by-post-failure-readback"`',
         "`readback_errors`",
@@ -1868,8 +2014,19 @@ def test_runbook_pins_cas_release_identity_invocation_and_receipt_acceptance():
     assert "the production window must not open" in normalized_prose
     assert documentation.count('--window-owner "$WINDOW_OWNER"') == 4
     assert "python3 tools/canonical_ref_cas.py" not in documentation
-    for outcome in cas.TRANSITION_OUTCOMES:
-        assert f"`{outcome}`" in documentation
+    outcome_rules = documentation.split(
+        "Every possible `transition_outcome` has an operator rule:", 1
+    )[1].split(
+        "\nOn any normally handled failure after operation validation", 1
+    )[0]
+    documented_outcomes = set(
+        re.findall(r"^- `([^`]+)`:", outcome_rules, flags=re.MULTILINE)
+    )
+    assert documented_outcomes == cas.TRANSITION_OUTCOMES
+    assert (
+        "If the remote readback is neither `--from` nor `--to`, a third party "
+        "moved production after this command's CAS"
+    ) in normalized_prose
 
 
 def test_dry_run_refuses_remote_race_before_final_readback(
@@ -2555,7 +2712,7 @@ def test_invalid_coordinate_is_redacted_from_receipt(
     assert failure["expected"] == {"from": None, "to": None}
 
 
-def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
+def test_run_git_uses_allowlisted_environment_and_disables_external_config(
     repositories: Repositories, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
@@ -2619,7 +2776,7 @@ def test_run_git_without_resolved_git_carries_stage_and_starts_no_subprocess(
     assert str(captured.value) == "Git operation failed during supplied fail-closed stage"
 
 
-def test_run_git_enforces_subprocess_timeout(
+def test_run_git_bounds_real_hanging_subprocess(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     operation = cas.Operation(
@@ -2632,14 +2789,11 @@ def test_run_git_enforces_subprocess_timeout(
         False,
     )
 
-    def timing_out_run(*_args, timeout, **_kwargs):
-        assert timeout == cas.TIMEOUT_SECONDS
-        raise subprocess.TimeoutExpired([cas.GIT_PATH, "version"], timeout)
-
-    monkeypatch.setattr(cas.subprocess, "run", timing_out_run)
+    monkeypatch.setattr(cas, "GIT_PATH", "/bin/sleep")
+    monkeypatch.setattr(cas, "TIMEOUT_SECONDS", 0.05)
 
     with pytest.raises(cas.CasError) as captured:
-        cas._run_git(operation, ["version"], stage="bounded timeout test")
+        cas._run_git(operation, ["0.25"], stage="bounded timeout test")
 
     assert str(captured.value) == "Git operation failed during bounded timeout test"
 
@@ -2943,7 +3097,7 @@ def test_forward_refuses_ssh_remote_before_network_or_mutation(
     assert sha(repositories.remote, "refs/heads/main") == repositories.prior
 
 
-def test_forward_refuses_global_pack_objects_hook_before_mutation(
+def test_forward_refuses_git_config_environment_with_pack_objects_hook(
     repositories: Repositories,
 ):
     hook_log = repositories.remote.parent / "pack-hook.log"
@@ -2970,45 +3124,14 @@ def test_forward_refuses_global_pack_objects_hook_before_mutation(
     assert completed.returncode != 0
     failure = receipt(completed)
     assert failure["result"] == "error"
+    assert failure["error"] == (
+        "external Git configuration environment is not permitted"
+    )
     assert failure["mutations"] == []
     assert "refs/heads/side" not in local_refs(repositories.daemon)
     assert not hook_log.exists()
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
-
-
-def test_run_git_pins_upload_pack_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
-    operation = cas.Operation(
-        "forward",
-        tmp_path,
-        "origin",
-        "main",
-        "1" * 40,
-        "2" * 40,
-        False,
-    )
-    command: list[str] = []
-
-    def recording_run(args, **_kwargs):
-        command.extend(args)
-        return subprocess.CompletedProcess(args, 0, "", "")
-
-    monkeypatch.setattr(cas.subprocess, "run", recording_run)
-
-    cas._run_git(operation, ["version"], stage="configuration pin test")
-
-    assert command == [
-        cas.GIT_PATH,
-        "-c",
-        "uploadpack.packObjectsHook=",
-        "-c",
-        "uploadpack.hideRefs=",
-        "-c",
-        "transfer.hideRefs=",
-        "version",
-    ]
 
 
 def test_remote_queries_ignore_daemon_repository_transport_config(
@@ -3057,7 +3180,7 @@ def test_post_failure_remote_reread_ignores_daemon_transport_config(
     assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
 
 
-def test_forward_refuses_global_url_instead_of_before_mutation(
+def test_forward_refuses_git_config_environment_with_url_rewrite(
     repositories: Repositories,
 ):
     decoy = repositories.remote.parent / "decoy-instead-of.git"
@@ -3093,7 +3216,7 @@ def test_forward_refuses_global_url_instead_of_before_mutation(
     assert sha(decoy, "refs/heads/main") == repositories.prior
 
 
-def test_forward_refuses_global_uploadpack_hide_refs_before_mutation(
+def test_forward_refuses_git_config_environment_with_hidden_refs(
     repositories: Repositories,
 ):
     git(
@@ -3122,10 +3245,111 @@ def test_forward_refuses_global_uploadpack_hide_refs_before_mutation(
     assert completed.returncode != 0
     failure = receipt(completed)
     assert failure["result"] == "error"
+    assert failure["error"] == (
+        "external Git configuration environment is not permitted"
+    )
     assert failure["mutations"] == []
     assert sha(repositories.daemon) == repositories.prior
     assert sha(repositories.remote, "refs/heads/main") == repositories.prior
     assert sha(repositories.remote, "refs/heads/side") == repositories.prior
+
+
+def test_serving_repository_hidden_main_fails_closed_before_mutation(
+    repositories: Repositories,
+):
+    git(
+        repositories.remote,
+        "config",
+        "uploadpack.hideRefs",
+        "refs/heads/main",
+    )
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 1
+    failure = receipt(completed)
+    assert failure["error"] == "remote ref snapshot could not be read exactly"
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(repositories.remote, "refs/heads/main") == repositories.prior
+
+
+def test_fresh_candidate_proof_refuses_dirty_exact_clone(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    operation = cas.Operation(
+        "forward",
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+        False,
+    )
+    original_run_git = cas._run_git
+    dirtied_checkout: Path | None = None
+
+    def dirty_after_head_readback(operation, args, **kwargs):
+        nonlocal dirtied_checkout
+        completed = original_run_git(operation, args, **kwargs)
+        if kwargs["stage"] == "fresh candidate HEAD readback":
+            dirtied_checkout = kwargs["cwd"]
+            (dirtied_checkout / "state.txt").write_text(
+                "dirty after checkout\n",
+                encoding="utf-8",
+            )
+        return completed
+
+    monkeypatch.setattr(cas, "_run_git", dirty_after_head_readback)
+
+    with pytest.raises(
+        cas.CasError,
+        match="candidate tree could not be proved clean in a fresh exact clone",
+    ):
+        cas._require_clean_fresh_candidate(operation, repositories.candidate)
+
+    assert dirtied_checkout is not None
+
+
+def test_fresh_candidate_proof_refuses_mismatched_checked_out_head(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    operation = cas.Operation(
+        "forward",
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+        False,
+    )
+    original_run_git = cas._run_git
+    falsified_head = False
+
+    def report_wrong_head(operation, args, **kwargs):
+        nonlocal falsified_head
+        completed = original_run_git(operation, args, **kwargs)
+        if kwargs["stage"] == "fresh candidate HEAD readback":
+            falsified_head = True
+            return subprocess.CompletedProcess(
+                completed.args,
+                completed.returncode,
+                repositories.prior + "\n",
+                completed.stderr,
+            )
+        return completed
+
+    monkeypatch.setattr(cas, "_run_git", report_wrong_head)
+
+    with pytest.raises(
+        cas.CasError,
+        match="candidate tree is not clean in a fresh exact clone",
+    ):
+        cas._require_clean_fresh_candidate(operation, repositories.candidate)
+
+    assert falsified_head
 
 
 def test_forward_refuses_local_non_main_ref_delta_before_owned_mutation(
@@ -3401,6 +3625,81 @@ def test_success_updates_remote_tracking_main_and_records_validated_url(
     assert git(repositories.daemon, "status", "--short", "--branch").stdout == (
         "## main...origin/main\n"
     )
+
+
+def test_remote_tracking_cas_refuses_stale_old_value_without_later_delta_guard(
+    repositories: Repositories,
+):
+    operation = cas.Operation(
+        "forward",
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+        False,
+    )
+    third_sha = sha(repositories.daemon, f"{repositories.prior}^")
+    git(
+        repositories.daemon,
+        "update-ref",
+        operation.remote_tracking_ref,
+        third_sha,
+        repositories.prior,
+    )
+    mutations: list[str] = []
+
+    with pytest.raises(
+        cas.CasError,
+        match="Git operation failed during remote-tracking main compare-and-swap",
+    ):
+        cas._cas_remote_tracking_main(operation, mutations)
+
+    assert mutations == []
+    assert sha(repositories.daemon, operation.remote_tracking_ref) == third_sha
+
+
+def test_remote_tracking_cas_readback_detects_race_without_later_delta_guard(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    operation = cas.Operation(
+        "forward",
+        repositories.daemon,
+        "origin",
+        "main",
+        repositories.prior,
+        repositories.candidate,
+        False,
+    )
+    third_sha = sha(repositories.daemon, f"{repositories.prior}^")
+    original_remote_tracking_sha = cas._remote_tracking_sha
+    raced = False
+
+    def race_before_readback(current_operation):
+        nonlocal raced
+        git(
+            repositories.daemon,
+            "update-ref",
+            current_operation.remote_tracking_ref,
+            third_sha,
+            repositories.candidate,
+        )
+        raced = True
+        return original_remote_tracking_sha(current_operation)
+
+    monkeypatch.setattr(cas, "_remote_tracking_sha", race_before_readback)
+    mutations: list[str] = []
+
+    with pytest.raises(
+        cas.CasError,
+        match="remote-tracking main compare-and-swap mismatch",
+    ):
+        cas._cas_remote_tracking_main(operation, mutations)
+
+    assert raced
+    assert mutations == ["remote-tracking-main-cas"]
+    assert sha(repositories.daemon, operation.remote_tracking_ref) == third_sha
 
 
 def test_push_source_is_verified_non_shallow_after_fetch(

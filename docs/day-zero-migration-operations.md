@@ -445,8 +445,12 @@ to resolve to one non-empty, identical fetch and push URL. It refuses Git
 configuration injected through the environment, invokes Git from an explicit
 environment with no inherited variables, `LC_ALL=C`, global and system Git
 configuration disabled, replacement objects disabled, prompts disabled, and
-SSH transport disabled. Only the tool-created temporary-index and optional-lock
-controls are added for the calls that need them. It independently refuses any
+SSH transport disabled. It does not use client-side `-c` values that purport to
+override serving-repository `uploadpack` or `transfer` settings: those values
+cannot neutralize the server's own configuration. Instead, required remote
+`main` and symbolic-`HEAD` advertisements fail closed when the server hides
+them. Only the tool-created temporary-index and optional-lock controls are added
+for the calls that need them. It independently refuses any
 `LD_*`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `PYTHONHOME`, `PYTHONINSPECT`,
 `PYTHONPATH`, `PYTHONSTARTUP`, or `PYTHONUSERBASE` variable in its own
 environment. This is the same family and named-variable set cleared in the
@@ -524,17 +528,29 @@ Every possible `transition_outcome` has an operator rule:
   ref CAS landed: do not repeat or reverse it merely from this label; repair
   remaining local bookkeeping only under a new exact plan. If the remote
   readback is absent, re-read it out of band before deciding any production
-  move.
+  move. If the remote readback is neither `--from` nor `--to`, a third party
+  moved production after this command's CAS; keep the window fenced and
+  escalate, and do not treat even a complete mutation ledger as authority to
+  compensate.
 - `not-landed`: no mutation was confirmed and the target was not fully
   observed. This is not proof that an unreadable remote stayed at `--from`,
   especially when validation failed before readback. Keep the window fenced,
   directly re-read the remote, and do not treat the label alone as authority to
   move production.
+- `undetermined`: a bounded fallback could not establish a transition state.
+  Keep the window fenced, directly read all three surfaces, and escalate; this
+  label never authorizes retry, reversal, compensation, or any other production
+  move. A `failure-handler-fallback` source retains any mutations already
+  recorded, while an `outermost-fallback` source reports mutation evidence as
+  unavailable rather than asserting an empty ledger.
 
-On any failure after operation validation, `transition_outcome_source` is
-`"post-failure-readback"`. A push reported failed by the client is reconciled
-against that fresh remote observation; when it equals `--to`, the receipt adds
-`remote-main-cas` to the confirmed mutation ledger and records
+On any normally handled failure after operation validation,
+`transition_outcome_source` is `"post-failure-readback"`. If the failure handler
+itself cannot finish, the source is `"failure-handler-fallback"`; if an
+exception escapes the operation entrypoint entirely, it is
+`"outermost-fallback"`. A push reported failed by the client is reconciled
+against the fresh remote observation when available; when it equals `--to`, the
+receipt adds `remote-main-cas` to the confirmed mutation ledger and records
 `mutation_reconciliation.remote-main-cas` as
 `"confirmed-by-post-failure-readback"`. Observation failures appear separately
 in `readback_errors`; an unavailable observation is not a contradictory SHA.
