@@ -12,6 +12,7 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import socket
 import ssl
 import stat
@@ -101,6 +102,59 @@ class ProofError(RuntimeError):
 
 class _ArgumentsInvalid(RuntimeError):
     """A private, bounded command-line parsing failure."""
+
+
+class _ProofInterrupted(BaseException):
+    """Carry bounded partial proof state out to the receipt writer."""
+
+    def __init__(self, receipt, returncode):
+        super().__init__()
+        self.receipt = receipt
+        self.returncode = returncode
+
+
+class _SignalInterrupted(BaseException):
+    """Convert a terminating signal into a receipted interruption."""
+
+    def __init__(self, signum):
+        super().__init__()
+        self.signum = signum
+
+
+def _interrupt_returncode(exception):
+    if isinstance(exception, _SignalInterrupted):
+        return 128 + exception.signum
+    if isinstance(exception, KeyboardInterrupt):
+        return 128 + signal.SIGINT
+    return 1
+
+
+def _raise_signal_interruption(signum, _frame):
+    raise _SignalInterrupted(signum)
+
+
+def _install_interrupt_handlers():
+    previous = {}
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous[signum] = signal.getsignal(signum)
+        signal.signal(signum, _raise_signal_interruption)
+    return previous
+
+
+def _restore_interrupt_handlers(previous):
+    for signum, handler in previous.items():
+        signal.signal(signum, handler)
+
+
+def _block_interrupt_signals():
+    return signal.pthread_sigmask(
+        signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM}
+    )
+
+
+def _restore_interrupt_mask(previous):
+    if previous is not None:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
 
 
 class _ProofArgumentParser(argparse.ArgumentParser):
@@ -1007,6 +1061,13 @@ def prove(
         )
     except ProofError as exc:
         receipt["proof_error"] = str(exc)
+    except Exception:
+        raise
+    except BaseException as exc:
+        receipt["proof_error"] = "verifier-interrupted"
+        raise _ProofInterrupted(
+            receipt, _interrupt_returncode(exc)
+        ) from None
     return receipt
 
 
@@ -1079,10 +1140,17 @@ def _run_proof(
             read_host_identity=read_host_identity,
             utc_now=utc_now,
         )
+    except _ProofInterrupted:
+        raise
     except ProofError as exc:
         return _failed_receipt(str(exc), verifier_identity)
     except Exception:
         return _failed_receipt("verifier-defect", verifier_identity)
+    except BaseException as exc:
+        raise _ProofInterrupted(
+            _failed_receipt("verifier-interrupted", verifier_identity),
+            _interrupt_returncode(exc),
+        ) from None
 
 
 def _write_all(file_descriptor, payload):
@@ -1112,10 +1180,12 @@ def _open_receipt(path):
             dir_fd=directory_descriptor,
         )
         os.fchmod(receipt_descriptor, 0o600)
-    except OSError:
-        if receipt_descriptor >= 0:
-            os.close(receipt_descriptor)
-        os.close(directory_descriptor)
+    except BaseException:
+        _release_receipt_reservation(
+            receipt_descriptor,
+            directory_descriptor,
+            target.name if receipt_descriptor >= 0 else None,
+        )
         raise
     return receipt_descriptor, directory_descriptor, target.name
 
@@ -1149,21 +1219,52 @@ def _best_effort_diagnostic(message):
         pass
 
 
-def _reserve_standard_streams():
-    stdout_was_available = True
-    for target_descriptor in (1, 2):
+def _release_receipt_reservation(
+    receipt_descriptor, directory_descriptor, filename, expected_identity=None
+):
+    released = True
+    if receipt_descriptor >= 0 and expected_identity is None:
         try:
-            os.fstat(target_descriptor)
+            opened = os.fstat(receipt_descriptor)
+            expected_identity = (opened.st_dev, opened.st_ino)
         except OSError:
-            if target_descriptor == 1:
-                stdout_was_available = False
-            null_descriptor = os.open(os.devnull, os.O_WRONLY)
-            if null_descriptor != target_descriptor:
-                try:
-                    os.dup2(null_descriptor, target_descriptor)
-                finally:
-                    os.close(null_descriptor)
-    return stdout_was_available
+            released = False
+    if receipt_descriptor >= 0:
+        try:
+            os.close(receipt_descriptor)
+        except OSError:
+            released = False
+    if directory_descriptor < 0:
+        return released
+    try:
+        if filename is not None:
+            try:
+                named = os.stat(
+                    filename,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass
+            else:
+                if (
+                    expected_identity is None
+                    or not stat.S_ISREG(named.st_mode)
+                    or (named.st_dev, named.st_ino) != expected_identity
+                ):
+                    released = False
+                else:
+                    os.unlink(filename, dir_fd=directory_descriptor)
+            if released:
+                os.fsync(directory_descriptor)
+    except OSError:
+        released = False
+    finally:
+        try:
+            os.close(directory_descriptor)
+        except OSError:
+            released = False
+    return released
 
 
 def _serialize_receipt(receipt):
@@ -1190,7 +1291,7 @@ def _serialize_receipt(receipt):
         ), True
 
 
-def main(
+def _main(
     argv=None,
     *,
     opener=None,
@@ -1202,30 +1303,74 @@ def main(
     process_environment=None,
     isolated=None,
     tls_handshake=None,
+    _invocation_state=None,
 ):
+    if _invocation_state is None:
+        _invocation_state = {}
     command_line = list(sys.argv[1:] if argv is None else argv)
     receipt_descriptor = -1
     receipt_directory_descriptor = -1
     receipt_filename = None
-    stdout_was_available = True
+    receipt_identity = None
+    interrupted_returncode = None
+    bootstrap_interrupt_mask = None
     durable_receipt = stdout is None
     if durable_receipt:
-        stdout_was_available = _reserve_standard_streams()
         bootstrap = _ProofArgumentParser(add_help=False)
         bootstrap.add_argument("--receipt-path", required=True)
         try:
             bootstrap_args, _unknown = bootstrap.parse_known_args(command_line)
+        except _ArgumentsInvalid:
+            _best_effort_diagnostic(
+                "queue proof receipt file could not be opened"
+            )
+            return 1
+        try:
+            bootstrap_interrupt_mask = _block_interrupt_signals()
             (
                 receipt_descriptor,
                 receipt_directory_descriptor,
                 receipt_filename,
             ) = _open_receipt(bootstrap_args.receipt_path)
-        except (_ArgumentsInvalid, OSError):
+            opened_receipt = os.fstat(receipt_descriptor)
+            receipt_identity = (
+                opened_receipt.st_dev,
+                opened_receipt.st_ino,
+            )
+        except OSError:
+            _release_receipt_reservation(
+                receipt_descriptor,
+                receipt_directory_descriptor,
+                receipt_filename,
+                receipt_identity,
+            )
+            receipt_descriptor = -1
+            receipt_directory_descriptor = -1
+            try:
+                _restore_interrupt_mask(bootstrap_interrupt_mask)
+            finally:
+                bootstrap_interrupt_mask = None
             _best_effort_diagnostic(
                 "queue proof receipt file could not be opened"
             )
             return 1
+        except BaseException:
+            _release_receipt_reservation(
+                receipt_descriptor,
+                receipt_directory_descriptor,
+                receipt_filename,
+                receipt_identity,
+            )
+            receipt_descriptor = -1
+            receipt_directory_descriptor = -1
+            try:
+                _restore_interrupt_mask(bootstrap_interrupt_mask)
+            finally:
+                bootstrap_interrupt_mask = None
+            raise
     try:
+        _restore_interrupt_mask(bootstrap_interrupt_mask)
+        bootstrap_interrupt_mask = None
         parser = _ProofArgumentParser(
             description=(
                 "Emit a text-free proof that all Day Zero queues are empty"
@@ -1273,61 +1418,190 @@ def main(
             isinstance(receipt.get("preflight"), dict)
             and receipt["preflight"].get("ready") is True
         )
+    except _ProofInterrupted as interruption:
+        receipt = interruption.receipt
+        successful = False
+        interrupted_returncode = interruption.returncode
     except Exception:
         receipt = _failed_receipt("verifier-defect")
         successful = False
-    payload, serialization_failed = _serialize_receipt(receipt)
-    if serialization_failed:
+    except BaseException as exc:
+        receipt = _failed_receipt("verifier-interrupted")
         successful = False
-    if durable_receipt:
-        try:
-            _write_receipt(
+        interrupted_returncode = _interrupt_returncode(exc)
+    stdout_started = False
+    final_returncode = (
+        interrupted_returncode
+        if interrupted_returncode is not None
+        else (0 if successful else 1)
+    )
+    finalization_interrupt_mask = None
+    try:
+        payload, serialization_failed = _serialize_receipt(receipt)
+        if serialization_failed:
+            successful = False
+            final_returncode = 1
+        if durable_receipt:
+            finalization_interrupt_mask = _block_interrupt_signals()
+            try:
+                _write_receipt(
+                    receipt_descriptor,
+                    receipt_directory_descriptor,
+                    receipt_filename,
+                    payload,
+                )
+                os.close(receipt_descriptor)
+                receipt_descriptor = -1
+            except OSError:
+                final_returncode = 1
+                _best_effort_diagnostic(
+                    "queue proof receipt file could not be written"
+                )
+                return 1
+            try:
+                stdout_started = True
+                _invocation_state["stdout_started"] = True
+                _write_all(1, payload)
+            except OSError:
+                final_returncode = 1
+                _best_effort_diagnostic(
+                    "queue proof stdout mirror failed; receipt is at the required path"
+                )
+                return 1
+            if interrupted_returncode is not None:
+                if not _release_receipt_reservation(
+                    -1,
+                    receipt_directory_descriptor,
+                    receipt_filename,
+                    receipt_identity,
+                ):
+                    final_returncode = 1
+                    _best_effort_diagnostic(
+                        "queue proof interrupted receipt could not be released"
+                    )
+                    return 1
+                receipt_directory_descriptor = -1
+            else:
+                os.close(receipt_directory_descriptor)
+                receipt_directory_descriptor = -1
+        else:
+            try:
+                stdout_started = True
+                _invocation_state["stdout_started"] = True
+                stdout.write(payload.decode("utf-8"))
+                stdout.flush()
+            except Exception:
+                final_returncode = 1
+                _best_effort_diagnostic("queue proof receipt sink failed")
+                return 1
+    except BaseException as exc:
+        interrupted_returncode = _interrupt_returncode(exc)
+        final_returncode = interrupted_returncode
+        receipt["all_queues_empty"] = False
+        receipt["proof_error"] = "verifier-interrupted"
+        if not stdout_started:
+            released = _release_receipt_reservation(
                 receipt_descriptor,
                 receipt_directory_descriptor,
                 receipt_filename,
-                payload,
+                receipt_identity,
             )
-            os.close(receipt_descriptor)
             receipt_descriptor = -1
-            os.close(receipt_directory_descriptor)
             receipt_directory_descriptor = -1
-        except OSError:
+            if not released:
+                _best_effort_diagnostic(
+                    "queue proof interrupted receipt could not be released"
+                )
+            payload, _serialization_failed = _serialize_receipt(receipt)
+            try:
+                if durable_receipt:
+                    _write_all(1, payload)
+                else:
+                    stdout.write(payload.decode("utf-8"))
+                    stdout.flush()
+            except BaseException:
+                _best_effort_diagnostic("queue proof interrupted")
+        else:
             _best_effort_diagnostic(
-                "queue proof receipt file could not be written"
+                "queue proof interrupted during receipt mirror; receipt is at the required path"
             )
-            successful = False
-        finally:
-            for descriptor in (
-                receipt_descriptor,
-                receipt_directory_descriptor,
-            ):
-                if descriptor >= 0:
-                    try:
-                        os.close(descriptor)
-                    except OSError:
-                        pass
-        if receipt_descriptor >= 0 or receipt_directory_descriptor >= 0:
-            return 1
-        if not stdout_was_available:
-            _best_effort_diagnostic(
-                "queue proof stdout mirror was unavailable; receipt is at the required path"
-            )
-            return 1
+        return interrupted_returncode
+    finally:
+        if receipt_descriptor >= 0:
+            try:
+                os.close(receipt_descriptor)
+            except OSError:
+                pass
+        if receipt_directory_descriptor >= 0:
+            try:
+                os.close(receipt_directory_descriptor)
+            except OSError:
+                pass
+        _invocation_state["committed_returncode"] = final_returncode
         try:
-            _write_all(1, payload)
-        except OSError:
-            _best_effort_diagnostic(
-                "queue proof stdout mirror failed; receipt is at the required path"
-            )
-            return 1
-    else:
+            _restore_interrupt_mask(finalization_interrupt_mask)
+        except _SignalInterrupted:
+            # The receipt outcome is already committed. A signal that arrived
+            # after this linearization point is a post-completion event.
+            pass
+    return final_returncode
+
+
+def main(
+    argv=None,
+    *,
+    opener=None,
+    run_systemctl=subprocess.run,
+    utc_now=None,
+    stdout=None,
+    systemctl_path=None,
+    read_host_identity=None,
+    process_environment=None,
+    isolated=None,
+    tls_handshake=None,
+):
+    invocation_state = {
+        "stdout_started": False,
+        "committed_returncode": None,
+    }
+    try:
+        previous_handlers = _install_interrupt_handlers()
+    except (OSError, RuntimeError, ValueError):
+        previous_handlers = {}
+    try:
+        return _main(
+            argv,
+            opener=opener,
+            run_systemctl=run_systemctl,
+            utc_now=utc_now,
+            stdout=stdout,
+            systemctl_path=systemctl_path,
+            read_host_identity=read_host_identity,
+            process_environment=process_environment,
+            isolated=isolated,
+            tls_handshake=tls_handshake,
+            _invocation_state=invocation_state,
+        )
+    except BaseException as exc:
+        if invocation_state["committed_returncode"] is not None:
+            return invocation_state["committed_returncode"]
+        payload, _failed = _serialize_receipt(
+            _failed_receipt("verifier-interrupted")
+        )
         try:
-            stdout.write(payload.decode("utf-8"))
-            stdout.flush()
-        except Exception:
-            _best_effort_diagnostic("queue proof receipt sink failed")
-            return 1
-    return 0 if successful else 1
+            if stdout is None:
+                _write_all(1, payload)
+            else:
+                stdout.write(payload.decode("utf-8"))
+                stdout.flush()
+        except BaseException:
+            _best_effort_diagnostic("queue proof interrupted")
+        return _interrupt_returncode(exc)
+    finally:
+        try:
+            _restore_interrupt_handlers(previous_handlers)
+        except BaseException:
+            pass
 
 
 if __name__ == "__main__":

@@ -300,10 +300,13 @@ or nonzero result as a stop before the window.
    The launcher's Bash `builtin exec -c` is the loader-isolation boundary: it
    gives the dynamic loader of the first `/usr/bin/env` an empty environment.
    The nested `/usr/bin/env -i` then removes the launcher's non-secret scrub
-   canary and gives Python the exact sole allowlisted entry `LC_ALL=C`; removing
-   either isolation mechanism is a tested failure. The verifier's exact
-   environment allowlist and isolated-mode check are secondary, post-start
-   guards. They cannot fire if a dynamic loader pre-empts the interpreter.
+   canary and gives Python the exact sole allowlisted entry `LC_ALL=C`. Removing
+   the nested `env -i` is a tested verifier failure (`environment-hostile`).
+   Removing `exec -c` is not detectable by the verifier because the loader has
+   already run; the behavioral test instead proves that a preload constructor
+   runs without it. The verifier's exact environment allowlist and isolated-mode
+   check are secondary, post-start guards. They cannot fire if a dynamic loader
+   pre-empts the interpreter.
    Invoking the verifier outside this documented readonly launcher is unsupported,
    and no receipt from such an invocation is acceptable. Python isolated mode
    ignores user-site and Python environment path injection. The Bash builtin
@@ -361,6 +364,7 @@ or nonzero result as a stop before the window.
        /*) ;;
        *) return 68 ;;
      esac
+     builtin test -e /proc/self/fd/1 || return 68
      observed_checkout=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --show-toplevel) || return 70
      case "$observed_checkout" in
        "$QUEUE_PROOF_CHECKOUT") ;;
@@ -404,8 +408,120 @@ or nonzero result as a stop before the window.
    ```
    <!-- queue-proof-launcher:end -->
 
-   Require `opening_queue_proof_rc` to be exactly `0`, the receipt to contain
-   `"all_queues_empty":true`, its measured `verifier_identity` values to equal
+   Validate the opening receipt as complete JSON with this fail-closed check;
+   a substring search is not acceptance:
+
+   <!-- queue-proof-receipt-validator:start -->
+   ```bash
+   validate_queue_proof_receipt() {
+     /usr/bin/env -i LC_ALL=C /usr/bin/python3 -I - "$1" <<'PY'
+   import json
+   import sys
+
+   def exact_dict(value, keys):
+       return isinstance(value, dict) and set(value) == set(keys)
+
+   def integer(value):
+       return isinstance(value, int) and not isinstance(value, bool)
+
+   def digest(value, length=64):
+       return (
+           isinstance(value, str)
+           and len(value) == length
+           and all(character in "0123456789abcdef" for character in value)
+       )
+
+   required = {
+       "all_queues_empty", "apply", "editor_review", "fence",
+       "first_get_utc", "host_identity", "last_get_utc", "ledger_host",
+       "ledger_state_hash", "preflight", "publication",
+       "publication_fallback", "publication_frontier",
+       "server_date_skew_seconds", "server_dates", "timer",
+       "verifier_identity",
+   }
+   try:
+       with open(sys.argv[1], encoding="utf-8") as source:
+           receipt = json.load(source)
+   except (OSError, UnicodeError, json.JSONDecodeError):
+       raise SystemExit(75)
+   valid = exact_dict(receipt, required)
+   if valid:
+       apply = receipt["apply"]
+       review = receipt["editor_review"]
+       fence = receipt["fence"]
+       frontier = receipt["publication_frontier"]
+       host = receipt["host_identity"]
+       hashes = receipt["ledger_state_hash"]
+       server_dates = receipt["server_dates"]
+       skews = receipt["server_date_skew_seconds"]
+       timer = receipt["timer"]
+       identity = receipt["verifier_identity"]
+       valid = all((
+           receipt["all_queues_empty"] is True,
+           exact_dict(apply, {"accepted"}) and apply["accepted"] == 0,
+           exact_dict(review, {"accepted", "other_non_terminal", "pending"})
+               and all(value == 0 for value in review.values()),
+           exact_dict(fence, {
+               "apply_timer", "apply_timer_stopped", "proved",
+               "window_nonce_sha256", "window_owner", "window_phase",
+           }),
+           exact_dict(frontier, {
+               "operation_frontier", "queue_count", "reason", "releases",
+           }),
+           exact_dict(host, {"boot_id_sha256", "machine_id_sha256"})
+               and all(digest(value) for value in host.values()),
+           exact_dict(hashes, {
+               "algorithm", "combined", "publication_frontier", "review",
+           }) and hashes.get("algorithm") == "sha256"
+               and all(digest(hashes[key]) for key in (
+                   "combined", "publication_frontier", "review",
+               )),
+           exact_dict(server_dates, {"publication_frontier", "review"})
+               and all(isinstance(value, str) and value for value in server_dates.values()),
+           exact_dict(skews, {"publication_frontier", "review"})
+               and all(integer(value) for value in skews.values()),
+           exact_dict(timer, {"active", "available", "enabled"})
+               and timer == {"active": False, "available": True, "enabled": False},
+           exact_dict(identity, {"release_commit", "verifier_blob"})
+               and digest(identity["release_commit"], 40)
+               and digest(identity["verifier_blob"], 40),
+       ))
+   if valid:
+       apply_timer = fence["apply_timer"]
+       operation = frontier["operation_frontier"]
+       valid = all((
+           exact_dict(apply_timer, {"active", "available", "enabled"})
+               and apply_timer == {"active": False, "available": True, "enabled": True},
+           fence["apply_timer_stopped"] is True,
+           fence["proved"] is True,
+           digest(fence["window_nonce_sha256"]),
+           isinstance(fence["window_owner"], str) and bool(fence["window_owner"]),
+           fence["window_phase"] in {"opening", "closing"},
+           exact_dict(operation, {"blocked_state", "pending_operation_count"})
+               and operation == {"blocked_state": "unblocked", "pending_operation_count": 0},
+           frontier["queue_count"] == 0,
+           isinstance(frontier["reason"], str) and bool(frontier["reason"]),
+           frontier["releases"] == [],
+           receipt["publication"] == "observer-frontier",
+           receipt["publication_fallback"] is None,
+           receipt["preflight"] is None,
+           isinstance(receipt["first_get_utc"], str) and bool(receipt["first_get_utc"]),
+           isinstance(receipt["last_get_utc"], str) and bool(receipt["last_get_utc"]),
+           receipt["ledger_host"] == "sonsteng-chat.damienriehl.workers.dev",
+       ))
+   raise SystemExit(
+       0 if valid else 75
+   )
+   PY
+   }
+
+   validate_queue_proof_receipt '<absolute-opening-receipt-path>.json'
+   opening_receipt_validation_rc=$?
+   ```
+   <!-- queue-proof-receipt-validator:end -->
+
+   Require `opening_receipt_validation_rc` and `opening_queue_proof_rc` to both
+   be exactly `0`. Require the measured `verifier_identity` values to equal
    the two reviewed constants, `fence.window_phase:"opening"`, and its
    `fence.window_nonce_sha256` to equal the digest recorded before the window.
    Receipt contents alone are insufficient. Acceptance also requires the
@@ -453,11 +569,23 @@ or nonzero result as a stop before the window.
    verifier retries partial writes, syncs the receipt file, verifies the opened
    inode still names that regular file, and syncs the parent directory before
    mirroring the same bytes to stdout. Failure to open, write, flush, or sync the
-   durable receipt returns nonzero with a bounded diagnostic. `/dev/full`, a
-   closed stdout, or a broken stdout pipe also returns nonzero; when the durable
-   write completed, the receipt remains at the required path and the diagnostic
-   says the stdout mirror failed. Preserve any existing or partial receipt and
-   use a new path for a supervised retry.
+   durable receipt returns nonzero with a bounded diagnostic. `/dev/full` or a
+   broken stdout pipe also returns nonzero; when the durable write completed,
+   the receipt remains at the required path and the diagnostic says the stdout
+   mirror failed. The documented launcher refuses a closed stdout with return
+   code `68` before the verifier starts or reserves a receipt path; stdout is a
+   convenience mirror, while the durable receipt plus supervised return code
+   are the evidence. Preserve any existing or partial receipt and use a new
+   path for a supervised retry.
+   SIGINT and SIGTERM received before receipt finalization produce one bounded
+   `verifier-interrupted` receipt with the proof state established before the
+   signal and return `130` or `143`. Receipt finalization is the linearization
+   point: signals arriving after it begins are treated as post-completion so
+   they cannot split or contradict a committed receipt. After an interrupted
+   receipt is mirrored and its reservation is released successfully, a
+   supervised retry can reuse the required path. A bounded release-failure
+   diagnostic and rc `1` instead require preserving the path for inspection
+   and selecting a fresh absolute create-new path for any retry.
 
    The verifier deliberately uses the host's full distribution-managed CA
    store rather than a private issuer pin. The allowlisted origin is a
@@ -499,8 +627,9 @@ or nonzero result as a stop before the window.
     closing_queue_proof_rc=$?
     ```
 
-    Require `closing_queue_proof_rc` to be exactly `0`,
-    `"all_queues_empty":true`, the same two `verifier_identity` values, and the
+    Require `closing_queue_proof_rc` and the same complete-JSON validator run
+    against the closing receipt to both return exactly `0`. Require the same
+    two `verifier_identity` values and the
     same pre-recorded fence nonce digest. Require
     `fence.window_phase:"closing"` and require both closing server dates to
     strictly postdate their opening-receipt counterparts. The phase is the
