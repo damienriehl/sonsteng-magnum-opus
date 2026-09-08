@@ -9,14 +9,15 @@ writer.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import pathlib
 import re
 import shutil
+import stat
 import subprocess
-import sys
 import tempfile
 from dataclasses import dataclass
 from typing import Mapping, Sequence
@@ -24,15 +25,9 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 SHA_RE = re.compile(r"[0-9a-f]{40}")
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
 REMOTE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 TIMEOUT_SECONDS = 120
-GIT_ENV_ALLOWLIST = (
-    "LANG",
-    "LANGUAGE",
-    "LC_ALL",
-    "LC_CTYPE",
-    "TZ",
-)
 GIT_INTERNAL_ENV = frozenset({"GIT_INDEX_FILE", "GIT_OPTIONAL_LOCKS"})
 GIT_CONFIG_ENV_NAMES = frozenset(
     {
@@ -52,6 +47,9 @@ GIT_CONFIG_PINS = (
     "-c",
     "transfer.hideRefs=",
 )
+TOOL_PATH = str(pathlib.Path(__file__).resolve(strict=True))
+TOOL_SHA256 = hashlib.sha256(pathlib.Path(TOOL_PATH).read_bytes()).hexdigest()
+REMOTE_QUERY_ROOT = pathlib.Path(os.devnull).parent
 
 
 def _resolve_git_path() -> str | None:
@@ -105,6 +103,7 @@ class Operation:
     from_sha: str
     to_sha: str
     dry_run: bool
+    expected_remote_url_sha256: str | None = None
 
     @property
     def local_ref(self) -> str:
@@ -147,11 +146,7 @@ def _run_git(
 ) -> subprocess.CompletedProcess[str]:
     if GIT_PATH is None:
         raise CasError(f"Git operation failed during {stage}")
-    environment = {
-        name: os.environ[name]
-        for name in GIT_ENV_ALLOWLIST
-        if name in os.environ
-    }
+    environment: dict[str, str] = {}
     if env:
         if any(name not in GIT_INTERNAL_ENV for name in env):
             raise CasError(f"Git operation failed during {stage}")
@@ -165,6 +160,7 @@ def _run_git(
             "GIT_NO_REPLACE_OBJECTS": "1",
             "GIT_SSH_COMMAND": os.devnull,
             "GIT_TERMINAL_PROMPT": "0",
+            "LC_ALL": "C",
         }
     )
     try:
@@ -268,6 +264,7 @@ def _remote_snapshot(operation: Operation, remote_url: str) -> RemoteSnapshot:
         ["ls-remote", "--symref", "--exit-code", remote_url],
         stage="remote ref snapshot readback",
         check=False,
+        cwd=REMOTE_QUERY_ROOT,
     )
     if completed.returncode != 0:
         raise CasError("remote ref snapshot could not be read exactly")
@@ -343,6 +340,7 @@ def _remote_sha(operation: Operation, remote_url: str) -> str:
         ["ls-remote", "--refs", "--exit-code", remote_url, operation.local_ref],
         stage="remote main readback",
         check=False,
+        cwd=REMOTE_QUERY_ROOT,
     )
     lines = [line.split() for line in completed.stdout.splitlines() if line.strip()]
     if completed.returncode != 0 or len(lines) != 1 or len(lines[0]) != 2:
@@ -439,14 +437,9 @@ def _require_local_ref_delta(
                 raise CasError("local ref map changed outside allowed transitions")
         elif before_symref is not None or after_symref is not None:
             if (
-                not before_sha
-                or not after_sha
-                or not before_symref
+                not before_symref
                 or not after_symref
                 or before_symref != after_symref
-                or before_symref not in allowed
-                or before_sha != operation.from_sha
-                or after_sha != expected_sha
             ):
                 raise CasError("local ref map changed outside allowed transitions")
         elif not before_sha or not after_sha or before_sha != after_sha:
@@ -509,6 +502,21 @@ def _validated_coordinates(operation: Operation) -> dict[str, str]:
             "--from and --to must differ", error_code="invalid-coordinate"
         )
     return {"from": operation.from_sha, "to": operation.to_sha}
+
+
+def _validated_remote_expectation(operation: Operation) -> str:
+    expected = operation.expected_remote_url_sha256
+    if expected is None:
+        raise CasError(
+            "--expect-remote-url-sha256 is required",
+            error_code="invalid-remote-expectation",
+        )
+    if not SHA256_RE.fullmatch(expected):
+        raise CasError(
+            "--expect-remote-url-sha256 must be an exact lowercase SHA-256 digest",
+            error_code="invalid-remote-expectation",
+        )
+    return expected
 
 
 def _require_non_shallow(
@@ -600,6 +608,20 @@ def _require_operation(operation: Operation) -> str:
         error="daemon repository must not be shallow",
     )
     _require_no_other_main_worktree(operation)
+    url_rewrites = _run_git(
+        operation,
+        [
+            "config",
+            "--includes",
+            "--local",
+            "--get-regexp",
+            r"^url\..*\.(insteadOf|pushInsteadOf)$",
+        ],
+        stage="remote URL rewrite validation",
+        check=False,
+    )
+    if url_rewrites.returncode not in {0, 1} or url_rewrites.stdout.strip():
+        raise CasError("daemon repository must not configure remote URL rewrites")
     fetch_urls = _run_git(
         operation,
         ["remote", "get-url", "--all", operation.remote],
@@ -686,7 +708,8 @@ def _require_exact_cleanliness(
         raise CasError("daemon worktree must be clean")
 
     with tempfile.TemporaryDirectory(
-        prefix="sonsteng-canonical-ref-cas-index-"
+        prefix="sonsteng-canonical-ref-cas-index-",
+        dir=repository.parent,
     ) as directory:
         index_path = pathlib.Path(directory) / "index"
         index_environment = {"GIT_INDEX_FILE": str(index_path)}
@@ -845,7 +868,10 @@ def _require_one_commit_transition(operation: Operation, prior: str, candidate: 
 
 def _require_clean_fresh_candidate(operation: Operation, candidate: str) -> None:
     try:
-        with tempfile.TemporaryDirectory(prefix="sonsteng-canonical-ref-cas-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="sonsteng-canonical-ref-cas-",
+            dir=operation.repo.parent,
+        ) as directory:
             checkout = pathlib.Path(directory) / "checkout"
             _run_git(
                 operation,
@@ -911,7 +937,8 @@ def _push_main(
 ) -> None:
     try:
         with tempfile.TemporaryDirectory(
-            prefix="sonsteng-canonical-ref-cas-push-"
+            prefix="sonsteng-canonical-ref-cas-push-",
+            dir=operation.repo.parent,
         ) as directory:
             push_source = pathlib.Path(directory) / "source.git"
             _run_git(
@@ -1066,12 +1093,20 @@ def _cas_remote_tracking_main(
 
 def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
     return {
+        "branch": None,
         "dry_run": operation.dry_run,
         "expected": {"from": None, "to": None},
+        "expected_remote_url_sha256": None,
         "git_executable": GIT_PATH,
         "mutations": mutations,
+        "remote": None,
         "remote_url": None,
         "remote_url_sha256": None,
+        "repo": None,
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z"),
+        "tool": {"path": TOOL_PATH, "sha256": TOOL_SHA256},
         "verb": operation.verb,
     }
 
@@ -1093,6 +1128,31 @@ def _receipt_remote_identity(remote_url: str) -> dict[str, str]:
     return {"remote_url": display, "remote_url_sha256": fingerprint}
 
 
+def _require_expected_remote_url(
+    operation: Operation,
+    remote_url: str,
+    remote_url_sha256: str,
+) -> None:
+    if remote_url_sha256 != operation.expected_remote_url_sha256:
+        raise CasError("configured remote URL does not match operator expectation")
+    parsed = urlsplit(remote_url)
+    scheme = parsed.scheme.lower()
+    if scheme == "ssh" or (not scheme and ":" in remote_url):
+        raise CasError("SSH remote transport is not permitted")
+    if scheme:
+        if scheme not in {"file", "http", "https"}:
+            raise CasError("remote URL transport is not permitted")
+        if scheme == "file" and not pathlib.PurePosixPath(parsed.path).is_absolute():
+            raise CasError("local remote URL must be absolute")
+    elif not pathlib.Path(remote_url).is_absolute():
+        raise CasError("local remote URL must be absolute")
+
+
+def _require_remote_head_main(operation: Operation, snapshot: RemoteSnapshot) -> None:
+    if snapshot.head != operation.local_ref:
+        raise CasError("remote HEAD must resolve to refs/heads/main")
+
+
 def _execute(operation: Operation) -> dict:
     mutations: list[str] = []
     receipt = _base_receipt(operation, mutations)
@@ -1100,9 +1160,21 @@ def _execute(operation: Operation) -> dict:
     remote_url: str | None = None
     try:
         receipt["expected"] = _validated_coordinates(operation)
+        receipt["expected_remote_url_sha256"] = _validated_remote_expectation(operation)
         _require_no_external_git_config_environment()
         remote_url = _require_operation(operation)
-        receipt.update(_receipt_remote_identity(remote_url))
+        receipt.update(
+            branch=operation.branch,
+            remote=operation.remote,
+            repo=str(operation.repo),
+        )
+        remote_identity = _receipt_remote_identity(remote_url)
+        receipt.update(remote_identity)
+        _require_expected_remote_url(
+            operation,
+            remote_url,
+            remote_identity["remote_url_sha256"],
+        )
         operation_validated = True
         _require_checked_out_clean_main(operation, operation.from_sha, remote_url)
         baseline_local_refs = _local_ref_map(operation)
@@ -1124,6 +1196,7 @@ def _execute(operation: Operation) -> dict:
         )
 
         baseline_remote = _remote_snapshot(operation, remote_url)
+        _require_remote_head_main(operation, baseline_remote)
         remote_sha = _remote_sha_from_map(operation, baseline_remote.refs)
         if not remote_sha or remote_sha != operation.from_sha:
             raise CasError("remote main does not equal --from")
@@ -1197,6 +1270,7 @@ def forward(
     to_sha: str,
     *,
     dry_run: bool = False,
+    expected_remote_url_sha256: str | None = None,
 ) -> dict:
     """Fast-forward canonical main by one exact commit and CAS-push it."""
     return _execute(
@@ -1208,6 +1282,7 @@ def forward(
             from_sha,
             to_sha,
             dry_run,
+            expected_remote_url_sha256,
         )
     )
 
@@ -1220,6 +1295,7 @@ def restore(
     to_sha: str,
     *,
     dry_run: bool = False,
+    expected_remote_url_sha256: str | None = None,
 ) -> dict:
     """CAS canonical main from one exact candidate back to its exact prior."""
     return _execute(
@@ -1231,6 +1307,7 @@ def restore(
             from_sha,
             to_sha,
             dry_run,
+            expected_remote_url_sha256,
         )
     )
 
@@ -1243,10 +1320,13 @@ class CanonicalRefCasAdapter:
         repo: pathlib.Path | str,
         remote: str = "origin",
         branch: str = "main",
+        *,
+        expected_remote_url_sha256: str,
     ):
         self.repo = pathlib.Path(repo)
         self.remote = remote
         self.branch = branch
+        self.expected_remote_url_sha256 = expected_remote_url_sha256
 
     def restore_canonical_ref_exact(self, candidate_sha: str, prior_sha: str) -> str:
         result = restore(
@@ -1255,6 +1335,7 @@ class CanonicalRefCasAdapter:
             self.branch,
             candidate_sha,
             prior_sha,
+            expected_remote_url_sha256=self.expected_remote_url_sha256,
         )
         return result["readback"]["local"]
 
@@ -1271,27 +1352,139 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--branch", required=True)
         command.add_argument("--from", dest="from_sha", required=True)
         command.add_argument("--to", dest="to_sha", required=True)
+        command.add_argument("--expect-remote-url-sha256")
+        command.add_argument("--receipt-path", required=True)
         command.add_argument("--dry-run", action="store_true")
     return parser
 
 
+def _open_receipt(path: str) -> tuple[int, int, str]:
+    target = pathlib.Path(path)
+    if not target.is_absolute():
+        raise OSError
+    directory_descriptor = os.open(
+        target.parent,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+    )
+    try:
+        receipt_descriptor = os.open(
+            target.name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=directory_descriptor,
+        )
+    except OSError:
+        os.close(directory_descriptor)
+        raise
+    return receipt_descriptor, directory_descriptor, target.name
+
+
+def _write_receipt(
+    file_descriptor: int,
+    directory_descriptor: int,
+    filename: str,
+    receipt: dict,
+) -> bytes:
+    payload = (
+        json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+    _write_all(file_descriptor, payload)
+    os.fsync(file_descriptor)
+    opened = os.fstat(file_descriptor)
+    named = os.stat(
+        filename,
+        dir_fd=directory_descriptor,
+        follow_symlinks=False,
+    )
+    if (
+        not stat.S_ISREG(opened.st_mode)
+        or not stat.S_ISREG(named.st_mode)
+        or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+    ):
+        raise OSError
+    os.fsync(directory_descriptor)
+    return payload
+
+
+def _write_all(file_descriptor: int, payload: bytes) -> None:
+    offset = 0
+    while offset < len(payload):
+        written = os.write(file_descriptor, payload[offset:])
+        if written <= 0:
+            raise OSError
+        offset += written
+
+
+def _best_effort_mirror(file_descriptor: int, payload: bytes) -> None:
+    try:
+        _write_all(file_descriptor, payload)
+    except OSError:
+        pass
+
+
+def _best_effort_diagnostic(message: str) -> None:
+    _best_effort_mirror(2, (message + "\n").encode("utf-8"))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    operation = forward if args.verb == "forward" else restore
     try:
-        result = operation(
-            args.repo,
-            args.remote,
-            args.branch,
-            args.from_sha,
-            args.to_sha,
-            dry_run=args.dry_run,
-        )
-    except CasFailure as exc:
-        print(json.dumps(exc.receipt, sort_keys=True, separators=(",", ":")), file=sys.stderr)
+        (
+            receipt_descriptor,
+            receipt_directory_descriptor,
+            receipt_filename,
+        ) = _open_receipt(args.receipt_path)
+    except OSError:
+        _best_effort_diagnostic("canonical-ref CAS receipt file could not be opened")
         return 1
-    print(json.dumps(result, sort_keys=True, separators=(",", ":")))
-    return 0
+    try:
+        operation = forward if args.verb == "forward" else restore
+        try:
+            result = operation(
+                args.repo,
+                args.remote,
+                args.branch,
+                args.from_sha,
+                args.to_sha,
+                dry_run=args.dry_run,
+                expected_remote_url_sha256=args.expect_remote_url_sha256,
+            )
+        except CasFailure as exc:
+            result = exc.receipt
+            result_code = 1
+            mirror_descriptor = 2
+        else:
+            result_code = 0
+            mirror_descriptor = 1
+        try:
+            payload = _write_receipt(
+                receipt_descriptor,
+                receipt_directory_descriptor,
+                receipt_filename,
+                result,
+            )
+            os.close(receipt_descriptor)
+            receipt_descriptor = -1
+            os.close(receipt_directory_descriptor)
+            receipt_directory_descriptor = -1
+        except OSError:
+            _best_effort_diagnostic(
+                "canonical-ref CAS receipt file could not be written"
+            )
+            return 1
+    finally:
+        if receipt_descriptor >= 0:
+            try:
+                os.close(receipt_descriptor)
+            except OSError:
+                pass
+        if receipt_directory_descriptor >= 0:
+            try:
+                os.close(receipt_directory_descriptor)
+            except OSError:
+                pass
+    _best_effort_mirror(mirror_descriptor, payload)
+    return result_code
 
 
 if __name__ == "__main__":

@@ -188,28 +188,105 @@ rewrite. Its protected-ref authority is bounded to that one candidate-to-prior
 compare-and-swap while the six-actor fence is held. A mismatched current ref,
 failed atomic update, or non-exact readback fails compensation.
 
+### Pin every Day Zero verifier to the reviewed release
+
+Use one trusted operations checkout and one reviewed release identity for every
+Day Zero verifier. Never accept a verifier from the daemon checkout, the current
+directory, ambient `PATH`, or receipt replay. Establish these non-secret values
+before the window from the reviewed release record; in particular,
+`EXPECTED_REMOTE_URL_SHA256` must be the independently recorded digest of the
+canonical remote URL, not a digest read from the daemon checkout being verified.
+
+```bash
+set -eu
+unset LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD
+unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP
+
+OPS_REPO=/absolute/path/to/the/reviewed/operations-checkout
+CAS="$OPS_REPO/tools/canonical_ref_cas.py"
+REVIEWED_OPS_COMMIT=<reviewed-40-character-release-commit>
+REVIEWED_CAS_SHA256=<reviewed-64-character-canonical_ref_cas.py-sha256>
+EXPECTED_REMOTE_URL_SHA256=<independently-recorded-64-character-remote-url-sha256>
+DAEMON_REPO=/absolute/path/to/the/dedicated-daemon-checkout
+WINDOW_OWNER=<opaque-Packet-D-window-id>
+RECEIPT_DIR=/absolute/path/to/a/new-mode-0700-window-evidence-directory
+
+trusted_git() {
+  /usr/bin/env -i \
+    LC_ALL=C \
+    GIT_CONFIG_COUNT=0 \
+    GIT_CONFIG_GLOBAL=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 \
+    GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_TERMINAL_PROMPT=0 \
+    /usr/bin/git "$@"
+}
+
+test "${OPS_REPO#/}" != "$OPS_REPO"
+test "${DAEMON_REPO#/}" != "$DAEMON_REPO"
+test "${RECEIPT_DIR#/}" != "$RECEIPT_DIR"
+test "$(/usr/bin/readlink -f -- "$OPS_REPO")" = "$OPS_REPO"
+test "$(/usr/bin/readlink -f -- "$CAS")" = "$CAS"
+test "$(/usr/bin/readlink -f -- "$DAEMON_REPO")" = "$DAEMON_REPO"
+test "$(trusted_git -C "$OPS_REPO" rev-parse --verify HEAD)" = "$REVIEWED_OPS_COMMIT"
+test -z "$(trusted_git -C "$OPS_REPO" status --porcelain --untracked-files=all)"
+REVIEWED_CAS_BLOB=$(trusted_git -C "$OPS_REPO" rev-parse \
+  "$REVIEWED_OPS_COMMIT:tools/canonical_ref_cas.py")
+ACTUAL_CAS_BLOB=$(trusted_git -C "$OPS_REPO" hash-object -- "$CAS")
+test "$ACTUAL_CAS_BLOB" = "$REVIEWED_CAS_BLOB"
+ACTUAL_CAS_SHA256=$(/usr/bin/sha256sum -- "$CAS")
+ACTUAL_CAS_SHA256=${ACTUAL_CAS_SHA256%% *}
+test "$ACTUAL_CAS_SHA256" = "$REVIEWED_CAS_SHA256"
+test -x /usr/bin/python3
+/usr/bin/env -i /usr/bin/python3 -I -c 'import os,pathlib,shutil,sys; p=os.confstr("CS_PATH"); es=p.split(os.pathsep) if p else []; g=shutil.which("git",path=p) if es and all(os.path.isabs(e) for e in es) else None; q=pathlib.Path(g).resolve(strict=True) if g else None; sys.exit(0 if q and q.is_file() and os.access(q,os.X_OK) else 1)'
+test ! -e "$RECEIPT_DIR"
+umask 077
+/usr/bin/mkdir "$RECEIPT_DIR"
+```
+
+The absolute `/usr/bin/python3 -I` interpreter, absolute `$CAS` path, clean
+checkout commit, Git blob ID, and SHA-256 above are one release-identity rule;
+apply that same rule to the queue verifier when its reviewed release is pinned.
+Rerun all checkout, blob, and SHA-256 comparisons immediately after each
+verifier invocation and before accepting its receipt.
+Run this complete block in a pre-window rehearsal on the daemon host. The
+`set -eu` makes every failed identity comparison abort this block. Clearing the
+native-loader and Python injection variables before its first external command,
+then launching Python with `/usr/bin/env -i`, prevents ambient code injection
+from substituting the pinned interpreter. The `CS_PATH` probe is the go/no-go
+check for the verifier's trusted Git resolver;
+if it is nonzero, the CAS tool is inoperable on that host and the production
+window must not open.
+
 With the daemon lock and the entire six-actor window still held, first prove
 the exact Git compensation preconditions without mutation:
 
 ```bash
-python3 tools/canonical_ref_cas.py restore \
+CAS_RESTORE_DRY_RECEIPT="$RECEIPT_DIR/canonical-ref-restore-dry-run.json"
+/usr/bin/env -i /usr/bin/python3 -I "$CAS" restore \
   --repo "$DAEMON_REPO" \
   --remote origin \
   --branch main \
   --from "$CANDIDATE_SHA" \
   --to "$PRIOR_SHA" \
+  --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --receipt-path "$CAS_RESTORE_DRY_RECEIPT" \
   --dry-run
 ```
 
 Then perform that same exact candidate-to-prior CAS:
 
 ```bash
-python3 tools/canonical_ref_cas.py restore \
+CAS_RESTORE_RECEIPT="$RECEIPT_DIR/canonical-ref-restore.json"
+/usr/bin/env -i /usr/bin/python3 -I "$CAS" restore \
   --repo "$DAEMON_REPO" \
   --remote origin \
   --branch main \
   --from "$CANDIDATE_SHA" \
-  --to "$PRIOR_SHA"
+  --to "$PRIOR_SHA" \
+  --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --receipt-path "$CAS_RESTORE_RECEIPT"
 ```
 
 The command refuses unless checked-out, clean local `main`, worktree `HEAD`,
@@ -224,12 +301,13 @@ source with `--force-with-lease=main:<candidate-sha>`, explicit
 compare-and-swaps local `main` only if it still equals the candidate and aligns
 the index and worktree with ref-nonmutating plumbing—never `reset --hard`.
 Finally it rechecks symbolic `HEAD`, exact cleanliness, remote configuration,
-and local, remote, and worktree SHAs. Its JSON receipt includes operation
-labels, validated SHA values, a credential-redacted validated remote URL, and a
-SHA-256 fingerprint of the exact validated URL. It also includes best-effort
-readback after a failure so partial state is never silent. Any nonzero result is
-failed compensation and requires the fenced handling below; never replace it
-with a generic force push.
+and local, remote, and worktree SHAs. Its mode-`0600`, create-new JSON receipt
+includes the verifier's absolute path and self-hash; the absolute repository;
+remote name and branch; UTC timestamp; operation labels; validated SHA values;
+the operator-supplied remote expectation; a credential-redacted validated
+remote URL; and the SHA-256 fingerprint of the exact validated URL. It also
+includes best-effort readback after a failure so partial state is never silent.
+An inability to open, write, flush, or sync the receipt fails the command.
 
 An injected production adapter can implement the state machine method by
 delegating to
@@ -307,24 +385,30 @@ For act 4, after the candidate commit and review have passed and while the
 daemon lock and six-actor window remain held, rehearse the Git-only transition:
 
 ```bash
-python3 tools/canonical_ref_cas.py forward \
+CAS_FORWARD_DRY_RECEIPT="$RECEIPT_DIR/canonical-ref-forward-dry-run.json"
+/usr/bin/env -i /usr/bin/python3 -I "$CAS" forward \
   --repo "$DAEMON_REPO" \
   --remote origin \
   --branch main \
   --from "$PRIOR_SHA" \
   --to "$CANDIDATE_SHA" \
+  --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --receipt-path "$CAS_FORWARD_DRY_RECEIPT" \
   --dry-run
 ```
 
 Then perform the exact same transition without `--dry-run`:
 
 ```bash
-python3 tools/canonical_ref_cas.py forward \
+CAS_FORWARD_RECEIPT="$RECEIPT_DIR/canonical-ref-forward.json"
+/usr/bin/env -i /usr/bin/python3 -I "$CAS" forward \
   --repo "$DAEMON_REPO" \
   --remote origin \
   --branch main \
   --from "$PRIOR_SHA" \
-  --to "$CANDIDATE_SHA"
+  --to "$CANDIDATE_SHA" \
+  --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --receipt-path "$CAS_FORWARD_RECEIPT"
 ```
 
 `forward` requires a non-shallow daemon repository with no other worktree
@@ -333,9 +417,12 @@ holding `main`; clean checked-out local `main`, worktree `HEAD`, remote-tracking
 sole parent to be that prior SHA in the raw commit object; and the named remote
 to resolve to one non-empty, identical fetch and push URL. It refuses Git
 configuration injected through the environment, invokes Git from an explicit
-environment allowlist with global and system Git configuration disabled, and
-records a credential-redacted version and SHA-256 fingerprint of the validated
-remote URL in its receipt. It checks the candidate in a fresh standalone exact
+environment with no inherited variables, `LC_ALL=C`, global and system Git
+configuration disabled, replacement objects disabled, prompts disabled, and
+SSH transport disabled. Only the tool-created temporary-index and optional-lock
+controls are added for the calls that need them. It records a credential-redacted version
+and SHA-256 fingerprint of the validated remote URL in its receipt. It checks
+the candidate in a fresh standalone exact
 clone, rejects hidden index flags, and proves tracked content and file types
 against `HEAD` with a disposable index. It moves local `main` with the
 three-argument
@@ -344,7 +431,8 @@ worktree `HEAD` at the candidate before and after aligning the index and
 worktree with `read-tree -m -u <candidate>`, and pins the validated remote URL.
 Before mutation it snapshots the full local ref map, the advertised non-hidden
 remote ref map, and the remote symbolic `HEAD` from one `ls-remote --symref`
-advertisement; it then pushes a verified non-shallow immutable source with
+advertisement. The advertised `HEAD` must resolve to `refs/heads/main`; it then
+pushes a verified non-shallow immutable source with
 `--force-with-lease=main:<prior-sha>`, explicit
 `refs/heads/main:refs/heads/main`, and tag following disabled. It succeeds only
 after CAS-updating `refs/remotes/origin/main`, a final local symbolic-HEAD,
@@ -355,3 +443,21 @@ non-hidden `refs/*` was the exact `refs/heads/main` transition; the separate
 symref comparison proves remote `HEAD` did not change. This migration-specific
 command replaces the generic merge example in `docs/direct-apply-daemon.md`,
 which must not be used for Day Zero.
+
+Exit `0` alone never accepts any of the four CAS commands. Open the named
+receipt file only after rerunning the release-identity comparisons above, and
+require all of the following: `result` is `"success"`; `tool.path` is `$CAS`;
+`tool.sha256` is `$REVIEWED_CAS_SHA256`; `repo`, `remote`, and `branch` are the
+absolute `$DAEMON_REPO`, `"origin"`, and `"main"`; `timestamp_utc` falls inside
+the current named window; both remote URL digest fields equal
+`$EXPECTED_REMOTE_URL_SHA256`; `expected.from` and `expected.to` equal the
+command coordinates; and all three `readback` values equal `--from` for a dry
+run or `--to` for a live run. A dry-run mutation list must be empty. A live
+forward list must be exactly `local-main-cas`, `worktree-alignment`,
+`remote-main-cas`, `remote-tracking-main-cas`; a live restore list must be
+exactly `remote-main-cas`, `local-main-cas`, `worktree-alignment`,
+`remote-tracking-main-cas`. Reject an absent, reused, malformed, stale, or
+identity-mismatched receipt and keep the window fenced. A failed live command
+uses its receipt and direct state readback to decide compensation; never
+compensate merely because terminal output was lost when the durable receipt is
+present and valid.
