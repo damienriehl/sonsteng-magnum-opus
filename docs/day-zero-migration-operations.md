@@ -542,7 +542,12 @@ Every possible `transition_outcome` has an operator rule:
   label never authorizes retry, reversal, compensation, or any other production
   move. A `failure-handler-fallback` source retains any mutations already
   recorded, while an `outermost-fallback` source reports mutation evidence as
-  unavailable rather than asserting an empty ledger.
+  unavailable rather than asserting an empty ledger. On an
+  `outermost-fallback` receipt, `expected.from`, `expected.to`, `repo`,
+  `remote`, `branch`, `expected_remote_url_sha256`, and `window_owner` are
+  unvalidated echoes of the command input so the receipt can still be tied to
+  its requested transition and migration window; they are not proof that any
+  repository state or identity was validated.
 
 On any normally handled failure after operation validation,
 `transition_outcome_source` is `"post-failure-readback"`. If the failure handler

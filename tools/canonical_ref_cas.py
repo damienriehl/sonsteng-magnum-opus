@@ -380,9 +380,12 @@ def _remote_snapshot(operation: Operation, remote_url: str) -> RemoteSnapshot:
         not refs
         or not head
         or not head_sha
-        or refs.get(head) != head_sha
         or any(base_ref not in refs for base_ref in peeled)
     ):
+        raise CasError("remote ref snapshot could not be read exactly")
+    # Apply identity only to an advertised symbolic target so presence and
+    # advertised-object identity remain independently testable protections.
+    if head is not None and refs.get(head) != head_sha:
         raise CasError("remote ref snapshot could not be read exactly")
     return RemoteSnapshot(refs=refs, head=head)
 
@@ -708,11 +711,9 @@ def _require_no_other_main_worktree(operation: Operation) -> None:
                 raise CasError("linked worktrees could not be read exactly")
             if branch == operation.local_ref:
                 holders.append(pathlib.Path(worktree).resolve())
-    if (
-        len(holders) != 1
-        or not str(holders[0])
-        or holders[0] != operation.repo
-    ):
+    if not holders:
+        raise CasError("daemon worktree must have main checked out")
+    if holders != [operation.repo]:
         raise CasError("main must not be checked out in another worktree")
 
 
@@ -1849,7 +1850,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = _base_receipt(fallback_operation, None)
             readback = {"head": None, "local": None, "remote": None}
             result.update(
+                branch=args.branch,
+                expected={"from": args.from_sha, "to": args.to_sha},
+                expected_remote_url_sha256=args.expect_remote_url_sha256,
                 readback=readback,
+                remote=args.remote,
+                repo=args.repo,
+                window_owner=args.window_owner,
                 **_undetermined_failure_fields(
                     exc,
                     TransitionOutcomeSource.OUTERMOST_FALLBACK,
