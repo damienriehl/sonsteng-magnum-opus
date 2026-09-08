@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const MAX_DIGEST_DEPTH = 256;
+export const MAX_DIGEST_DEPTH = 256;
 
 export function sha256HexSync(value) {
   return createHash("sha256").update(value,"utf8").digest("hex");

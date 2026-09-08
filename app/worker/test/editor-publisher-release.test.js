@@ -141,6 +141,40 @@ test("integrity digest bounds deep evidence with a named error on write and read
     "the observer must fail closed when stored evidence exceeds the digest depth bound");
 });
 
+test("canonical receipt serialization names deep failures on service and observer paths", async () => {
+  const core = makeCore(() => 1200);
+  reviewedProjection(core);
+  const isNamedDepthError = (error) => {
+    assert.equal(error instanceof RangeError,false,"deep receipts must not overflow the stack");
+    assert.equal(error.name,"TypeError");
+    assert.equal(error.message,"integrity_digest:max_depth_exceeded");
+    return true;
+  };
+  let maximumCanonicalDepth = "leaf";
+  for (let depth=0;depth<256;depth++) maximumCanonicalDepth = [maximumCanonicalDepth];
+  assert.doesNotThrow(() => core._canonical(maximumCanonicalDepth));
+  assert.throws(() => core._canonical([maximumCanonicalDepth]),isNamedDepthError);
+
+  const row = core._one("SELECT id,receipt_json FROM production_review_submissions LIMIT 1");
+  const deeplyNestedJson = `${"[".repeat(3000)}"leaf"${"]".repeat(3000)}`;
+  const receiptJson = `{"a_deep":${deeplyNestedJson},${row.receipt_json.slice(1)}`;
+  core.sql.exec("UPDATE production_review_submissions SET receipt_json=? WHERE id=?",
+    receiptJson,row.id);
+  const env = frontierEnv(async (...args) => core.productionPreparationContext(...args));
+  const request = () => new Request("https://edit.example/edit/v1/prod/releases/frontier");
+  await assert.rejects(productionPreparationContextEndpoint(request(),env,{
+    editor:"service:release",credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }),
+  }),isNamedDepthError);
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal("projection" in context,false,
+    "the observer must fail closed when stored receipt serialization exceeds the depth bound");
+});
+
 test("FNV-era suggestion fingerprints fail closed without mutating the row", () => {
   const core = makeCore(() => 1201);
   const input = { id:"legacy-fingerprint",editor:"slot:john",scope:"edit",origin:"human",
@@ -2610,6 +2644,25 @@ test("observer operation frontier bounds normalized and evidence high-cardinalit
     /json_each\(revision\.operations_json\)[\s\S]*LIMIT 1 OFFSET \?/i.test(sql) &&
       args.includes(100_000)),false,
   "historical evidence must not be mistaken for pending-operation overflow");
+});
+
+test("observer work bound prevents high-cardinality evidence materialization", async () => {
+  const core = makeCore(() => 9042);
+  seedHighCardinalityReview(core,{ operationCount:100_001,prefix:"observer-work-bound" });
+  const summaryRows = core._operationFrontierSummaryRows.bind(core);
+  let materializedRowCount = 0;
+  core._operationFrontierSummaryRows = (...args) => {
+    const rows = summaryRows(...args);
+    materializedRowCount += rows.length;
+    return rows;
+  };
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal(materializedRowCount,0,
+    "the observer must stop at the sentinel before materializing projection evidence");
 });
 
 test("observer operation frontier ignores high-cardinality rejected and published history", async () => {

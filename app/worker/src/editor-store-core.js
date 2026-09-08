@@ -16,7 +16,7 @@
 //   * Status machine + terminal enforcement is centralized in _transition().
 
 import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-status.js";
-import { integrityDigest } from "./integrity-digest.js";
+import { integrityDigest,MAX_DIGEST_DEPTH } from "./integrity-digest.js";
 
 // Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
 // rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
@@ -572,10 +572,13 @@ export class EditorStoreCore {
     return this.sql.exec(query, ...binds).toArray();
   }
 
-  _canonical(value) {
-    if (Array.isArray(value)) return `[${value.map((item) => this._canonical(item)).join(",")}]`;
+  _canonical(value,depth=0) {
+    if (depth > MAX_DIGEST_DEPTH)
+      throw new TypeError("integrity_digest:max_depth_exceeded");
+    if (Array.isArray(value)) return `[${value.map((item) =>
+      this._canonical(item,depth+1)).join(",")}]`;
     if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) =>
-      `${JSON.stringify(key)}:${this._canonical(value[key])}`).join(",")}}`;
+      `${JSON.stringify(key)}:${this._canonical(value[key],depth+1)}`).join(",")}}`;
     return JSON.stringify(value);
   }
 
