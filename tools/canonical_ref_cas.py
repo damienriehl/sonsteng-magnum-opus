@@ -39,6 +39,15 @@ GIT_CONFIG_ENV_NAMES = frozenset(
     }
 )
 GIT_CONFIG_ENV_PREFIXES = ("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
+PROCESS_INJECTION_ENV_NAMES = frozenset(
+    {
+        "OPENSSL_CONF",
+        "OPENSSL_MODULES",
+        "PYTHONHOME",
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+    }
+)
 GIT_CONFIG_PINS = (
     "-c",
     "uploadpack.packObjectsHook=",
@@ -50,6 +59,23 @@ GIT_CONFIG_PINS = (
 TOOL_PATH = str(pathlib.Path(__file__).resolve(strict=True))
 TOOL_SHA256 = hashlib.sha256(pathlib.Path(TOOL_PATH).read_bytes()).hexdigest()
 REMOTE_QUERY_ROOT = pathlib.Path(os.devnull).parent
+HOST_IDENTITY = os.uname().nodename
+MUTATION_LOCAL_MAIN_CAS = "local-main-cas"
+MUTATION_WORKTREE_ALIGNMENT = "worktree-alignment"
+MUTATION_REMOTE_MAIN_CAS = "remote-main-cas"
+MUTATION_REMOTE_TRACKING_MAIN_CAS = "remote-tracking-main-cas"
+FORWARD_MUTATIONS = (
+    MUTATION_LOCAL_MAIN_CAS,
+    MUTATION_WORKTREE_ALIGNMENT,
+    MUTATION_REMOTE_MAIN_CAS,
+    MUTATION_REMOTE_TRACKING_MAIN_CAS,
+)
+RESTORE_MUTATIONS = (
+    MUTATION_REMOTE_MAIN_CAS,
+    MUTATION_LOCAL_MAIN_CAS,
+    MUTATION_WORKTREE_ALIGNMENT,
+    MUTATION_REMOTE_TRACKING_MAIN_CAS,
+)
 
 
 def _resolve_git_path() -> str | None:
@@ -90,7 +116,7 @@ class CasFailure(CasError):
     """A failed operation with a structured JSON receipt."""
 
     def __init__(self, receipt: dict):
-        super().__init__(receipt["error"])
+        super().__init__(receipt.get("error", receipt.get("warning", "CAS failed")))
         self.receipt = receipt
 
 
@@ -104,6 +130,7 @@ class Operation:
     to_sha: str
     dry_run: bool
     expected_remote_url_sha256: str | None = None
+    window_owner: str | None = None
 
     @property
     def local_ref(self) -> str:
@@ -133,6 +160,18 @@ def _require_no_external_git_config_environment() -> None:
         for name in os.environ
     ):
         raise CasError("external Git configuration environment is not permitted")
+
+
+def _require_safe_process_environment() -> None:
+    _require_no_external_git_config_environment()
+    if any(
+        name.startswith("LD_") or name in PROCESS_INJECTION_ENV_NAMES
+        for name in os.environ
+    ):
+        raise CasError(
+            "process injection environment is not permitted",
+            error_code="unsafe-process-environment",
+        )
 
 
 def _run_git(
@@ -481,9 +520,40 @@ def _best_effort_readback(
     ):
         try:
             observed[name] = reader(operation)
-        except CasError:
+        except Exception:
             observed[name] = None
     return observed
+
+
+def _intended_mutations(operation: Operation) -> tuple[str, ...]:
+    return FORWARD_MUTATIONS if operation.verb == "forward" else RESTORE_MUTATIONS
+
+
+def _transition_outcome(
+    operation: Operation,
+    mutations: Sequence[str],
+    readback: Mapping[str, str | None],
+    *,
+    unexpected_observation: bool,
+) -> str:
+    if operation.dry_run:
+        return "not-attempted"
+    target_observed = readback == dict.fromkeys(
+        ("head", "local", "remote"), operation.to_sha
+    )
+    landed = tuple(mutations) == _intended_mutations(operation) and target_observed
+    if landed:
+        return (
+            "succeeded-with-unexpected-observation"
+            if unexpected_observation
+            else "succeeded"
+        )
+    target_already_present = not mutations and target_observed
+    if target_already_present:
+        return "target-already-present"
+    if not mutations:
+        return "not-landed"
+    return "incomplete"
 
 
 def _validated_coordinates(operation: Operation) -> dict[str, str]:
@@ -517,6 +587,28 @@ def _validated_remote_expectation(operation: Operation) -> str:
             error_code="invalid-remote-expectation",
         )
     return expected
+
+
+def _validated_window_owner(operation: Operation) -> str:
+    owner = operation.window_owner
+    if owner is None or not owner:
+        raise CasError(
+            "--window-owner is required",
+            error_code="invalid-window-owner",
+        )
+    if (
+        len(owner) > 256
+        or owner.strip() != owner
+        or any(not character.isprintable() for character in owner)
+    ):
+        raise CasError(
+            "--window-owner must be a non-empty printable value "
+            "of at most 256 characters",
+            error_code="invalid-window-owner",
+        )
+    if not HOST_IDENTITY or len(HOST_IDENTITY) > 255:
+        raise CasError("host identity could not be recorded safely")
+    return owner
 
 
 def _require_non_shallow(
@@ -613,7 +705,6 @@ def _require_operation(operation: Operation) -> str:
         [
             "config",
             "--includes",
-            "--local",
             "--get-regexp",
             r"^url\..*\.(insteadOf|pushInsteadOf)$",
         ],
@@ -710,6 +801,7 @@ def _require_exact_cleanliness(
     with tempfile.TemporaryDirectory(
         prefix="sonsteng-canonical-ref-cas-index-",
         dir=repository.parent,
+        ignore_cleanup_errors=True,
     ) as directory:
         index_path = pathlib.Path(directory) / "index"
         index_environment = {"GIT_INDEX_FILE": str(index_path)}
@@ -871,6 +963,7 @@ def _require_clean_fresh_candidate(operation: Operation, candidate: str) -> None
         with tempfile.TemporaryDirectory(
             prefix="sonsteng-canonical-ref-cas-",
             dir=operation.repo.parent,
+            ignore_cleanup_errors=True,
         ) as directory:
             checkout = pathlib.Path(directory) / "checkout"
             _run_git(
@@ -939,6 +1032,7 @@ def _push_main(
         with tempfile.TemporaryDirectory(
             prefix="sonsteng-canonical-ref-cas-push-",
             dir=operation.repo.parent,
+            ignore_cleanup_errors=True,
         ) as directory:
             push_source = pathlib.Path(directory) / "source.git"
             _run_git(
@@ -1042,7 +1136,7 @@ def _cas_local_main_and_align(operation: Operation, mutations: list[str]) -> Non
         ],
         stage="local main compare-and-swap",
     )
-    mutations.append("local-main-cas")
+    mutations.append(MUTATION_LOCAL_MAIN_CAS)
     if (
         _local_sha(operation) != operation.to_sha
         or _head_sha(operation) != operation.to_sha
@@ -1062,7 +1156,7 @@ def _cas_local_main_and_align(operation: Operation, mutations: list[str]) -> Non
         ],
         stage="daemon worktree alignment",
     )
-    mutations.append("worktree-alignment")
+    mutations.append(MUTATION_WORKTREE_ALIGNMENT)
     if (
         _local_sha(operation) != operation.to_sha
         or _head_sha(operation) != operation.to_sha
@@ -1085,7 +1179,7 @@ def _cas_remote_tracking_main(
         ],
         stage="remote-tracking main compare-and-swap",
     )
-    mutations.append("remote-tracking-main-cas")
+    mutations.append(MUTATION_REMOTE_TRACKING_MAIN_CAS)
     observed = _remote_tracking_sha(operation)
     if not observed or observed != operation.to_sha:
         raise CasError("remote-tracking main compare-and-swap mismatch")
@@ -1098,6 +1192,7 @@ def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
         "expected": {"from": None, "to": None},
         "expected_remote_url_sha256": None,
         "git_executable": GIT_PATH,
+        "host_identity": HOST_IDENTITY,
         "mutations": mutations,
         "remote": None,
         "remote_url": None,
@@ -1108,6 +1203,7 @@ def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
         .replace("+00:00", "Z"),
         "tool": {"path": TOOL_PATH, "sha256": TOOL_SHA256},
         "verb": operation.verb,
+        "window_owner": None,
     }
 
 
@@ -1117,12 +1213,31 @@ def _receipt_remote_identity(remote_url: str) -> dict[str, str]:
     fingerprint = hashlib.sha256(remote_url.encode("utf-8")).hexdigest()
     display = remote_url
     if "://" in remote_url:
-        parsed = urlsplit(remote_url)
-        if parsed.scheme:
-            netloc = parsed.netloc.rsplit("@", 1)[-1]
-            display = urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
-        else:
+        try:
+            parsed = urlsplit(remote_url)
+        except ValueError:
             display = "[redacted]"
+        else:
+            if parsed.scheme:
+                netloc = parsed.netloc.rsplit("@", 1)[-1]
+                display = urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+            else:
+                display = "[redacted]"
+    elif "@" in remote_url:
+        userinfo, scp_target = remote_url.rsplit("@", 1)
+        scp_host, separator, scp_path = scp_target.partition(":")
+        display = "[redacted]"
+        if os.path.isabs(remote_url):
+            display = remote_url
+        elif (
+            separator
+            and userinfo
+            and "/" not in userinfo
+            and scp_host
+            and "/" not in scp_host
+            and scp_path
+        ):
+            display = scp_target
     if not display or not fingerprint:
         raise CasError("validated remote URL could not be recorded safely")
     return {"remote_url": display, "remote_url_sha256": fingerprint}
@@ -1135,7 +1250,10 @@ def _require_expected_remote_url(
 ) -> None:
     if remote_url_sha256 != operation.expected_remote_url_sha256:
         raise CasError("configured remote URL does not match operator expectation")
-    parsed = urlsplit(remote_url)
+    try:
+        parsed = urlsplit(remote_url)
+    except ValueError:
+        raise CasError("remote URL could not be parsed safely") from None
     scheme = parsed.scheme.lower()
     if scheme == "ssh" or (not scheme and ":" in remote_url):
         raise CasError("SSH remote transport is not permitted")
@@ -1161,7 +1279,8 @@ def _execute(operation: Operation) -> dict:
     try:
         receipt["expected"] = _validated_coordinates(operation)
         receipt["expected_remote_url_sha256"] = _validated_remote_expectation(operation)
-        _require_no_external_git_config_environment()
+        receipt["window_owner"] = _validated_window_owner(operation)
+        _require_safe_process_environment()
         remote_url = _require_operation(operation)
         receipt.update(
             branch=operation.branch,
@@ -1209,7 +1328,16 @@ def _execute(operation: Operation) -> dict:
                 remote_url,
                 baseline,
             )
-            receipt.update(result="success", readback=observed)
+            receipt.update(
+                result="success",
+                readback=observed,
+                transition_outcome=_transition_outcome(
+                    operation,
+                    mutations,
+                    observed,
+                    unexpected_observation=False,
+                ),
+            )
             return receipt
 
         # Repeat the local proof immediately before the first owned mutation.
@@ -1230,7 +1358,7 @@ def _execute(operation: Operation) -> dict:
             operation.from_sha,
             operation.to_sha,
         )
-        mutations.append("remote-main-cas")
+        mutations.append(MUTATION_REMOTE_MAIN_CAS)
 
         if operation.verb == "restore":
             # The remote CAS happens first.  The local ref then gets its own CAS;
@@ -1245,21 +1373,52 @@ def _execute(operation: Operation) -> dict:
             remote_url,
             baseline,
         )
-        receipt.update(result="success", readback=observed)
-        return receipt
-    except CasError as exc:
-        if exc.error_code is not None:
-            receipt["error_code"] = exc.error_code
         receipt.update(
-            result="error",
-            error=str(exc),
-            readback=(
-                _best_effort_readback(operation, remote_url)
-                if operation_validated and remote_url is not None
-                else {"head": None, "local": None, "remote": None}
+            result="success",
+            readback=observed,
+            transition_outcome=_transition_outcome(
+                operation,
+                mutations,
+                observed,
+                unexpected_observation=False,
             ),
         )
-        raise CasFailure(receipt) from None
+        return receipt
+    except CasError as exc:
+        message = str(exc)
+        error_code = exc.error_code
+    except Exception:
+        message = "unexpected internal failure"
+        error_code = "unexpected-exception"
+
+    readback = (
+        _best_effort_readback(operation, remote_url)
+        if operation_validated and remote_url is not None
+        else {"head": None, "local": None, "remote": None}
+    )
+    transition_outcome = _transition_outcome(
+        operation,
+        mutations,
+        readback,
+        unexpected_observation=True,
+    )
+    if transition_outcome == "succeeded-with-unexpected-observation":
+        receipt.update(
+            result="warning",
+            warning=message,
+            readback=readback,
+            transition_outcome=transition_outcome,
+        )
+    else:
+        receipt.update(
+            result="error",
+            error=message,
+            readback=readback,
+            transition_outcome=transition_outcome,
+        )
+    if error_code is not None:
+        receipt["error_code"] = error_code
+    raise CasFailure(receipt) from None
 
 
 def forward(
@@ -1271,6 +1430,7 @@ def forward(
     *,
     dry_run: bool = False,
     expected_remote_url_sha256: str | None = None,
+    window_owner: str | None = None,
 ) -> dict:
     """Fast-forward canonical main by one exact commit and CAS-push it."""
     return _execute(
@@ -1283,6 +1443,7 @@ def forward(
             to_sha,
             dry_run,
             expected_remote_url_sha256,
+            window_owner,
         )
     )
 
@@ -1296,6 +1457,7 @@ def restore(
     *,
     dry_run: bool = False,
     expected_remote_url_sha256: str | None = None,
+    window_owner: str | None = None,
 ) -> dict:
     """CAS canonical main from one exact candidate back to its exact prior."""
     return _execute(
@@ -1308,6 +1470,7 @@ def restore(
             to_sha,
             dry_run,
             expected_remote_url_sha256,
+            window_owner,
         )
     )
 
@@ -1322,11 +1485,13 @@ class CanonicalRefCasAdapter:
         branch: str = "main",
         *,
         expected_remote_url_sha256: str,
+        window_owner: str,
     ):
         self.repo = pathlib.Path(repo)
         self.remote = remote
         self.branch = branch
         self.expected_remote_url_sha256 = expected_remote_url_sha256
+        self.window_owner = window_owner
 
     def restore_canonical_ref_exact(self, candidate_sha: str, prior_sha: str) -> str:
         result = restore(
@@ -1336,6 +1501,7 @@ class CanonicalRefCasAdapter:
             candidate_sha,
             prior_sha,
             expected_remote_url_sha256=self.expected_remote_url_sha256,
+            window_owner=self.window_owner,
         )
         return result["readback"]["local"]
 
@@ -1353,6 +1519,7 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--from", dest="from_sha", required=True)
         command.add_argument("--to", dest="to_sha", required=True)
         command.add_argument("--expect-remote-url-sha256")
+        command.add_argument("--window-owner")
         command.add_argument("--receipt-path", required=True)
         command.add_argument("--dry-run", action="store_true")
     return parser
@@ -1426,7 +1593,21 @@ def _best_effort_diagnostic(message: str) -> None:
     _best_effort_mirror(2, (message + "\n").encode("utf-8"))
 
 
+def _ensure_standard_streams() -> None:
+    for target_descriptor in (1, 2):
+        try:
+            os.fstat(target_descriptor)
+        except OSError:
+            null_descriptor = os.open(os.devnull, os.O_WRONLY)
+            if null_descriptor != target_descriptor:
+                try:
+                    os.dup2(null_descriptor, target_descriptor)
+                finally:
+                    os.close(null_descriptor)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _ensure_standard_streams()
     args = _parser().parse_args(argv)
     try:
         (
@@ -1448,9 +1629,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.to_sha,
                 dry_run=args.dry_run,
                 expected_remote_url_sha256=args.expect_remote_url_sha256,
+                window_owner=args.window_owner,
             )
         except CasFailure as exc:
             result = exc.receipt
+            result_code = 1
+            mirror_descriptor = 2
+        except Exception:
+            fallback_operation = Operation(
+                args.verb,
+                pathlib.Path(args.repo),
+                args.remote,
+                args.branch,
+                args.from_sha,
+                args.to_sha,
+                args.dry_run,
+                args.expect_remote_url_sha256,
+                args.window_owner,
+            )
+            result = _base_receipt(fallback_operation, [])
+            result.update(
+                result="error",
+                error="unexpected internal failure",
+                error_code="unexpected-exception",
+                readback={"head": None, "local": None, "remote": None},
+                transition_outcome="not-attempted",
+            )
             result_code = 1
             mirror_descriptor = 2
         else:

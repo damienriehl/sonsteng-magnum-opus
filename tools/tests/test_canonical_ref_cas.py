@@ -20,6 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "tools" / "canonical_ref_cas.py"
 AUTO_REMOTE_EXPECTATION = object()
+WINDOW_OWNER = "packet-d-window-test"
 sys.path.insert(0, str(CLI.parent))
 import canonical_ref_cas as cas
 
@@ -114,6 +115,7 @@ def invoke(
     expected_remote_url_sha256: str | None | object = AUTO_REMOTE_EXPECTATION,
     receipt_path: Path | None = None,
     close_stdout: bool = False,
+    window_owner: str | None = WINDOW_OWNER,
 ):
     configured_remote_url = git(
         repositories.daemon, "remote", "get-url", "origin"
@@ -144,6 +146,8 @@ def invoke(
         "--receipt-path",
         str(receipt_path),
     ]
+    if window_owner is not None:
+        command.extend(["--window-owner", window_owner])
     if expected_remote_url_sha256 is not None:
         command.extend(
             ["--expect-remote-url-sha256", str(expected_remote_url_sha256)]
@@ -193,12 +197,22 @@ def assert_receipt_identity(result: dict, repositories: Repositories) -> None:
     assert result["repo"] == str(repositories.daemon.resolve())
     assert result["remote"] == "origin"
     assert result["branch"] == "main"
+    assert result["window_owner"] == WINDOW_OWNER
+    assert result["host_identity"] == os.uname().nodename
 
 
 def receipt_without_identity(result: dict, repositories: Repositories) -> dict:
     assert_receipt_identity(result, repositories)
     stripped = dict(result)
-    for name in ("tool", "repo", "remote", "branch", "timestamp_utc"):
+    for name in (
+        "tool",
+        "repo",
+        "remote",
+        "branch",
+        "timestamp_utc",
+        "window_owner",
+        "host_identity",
+    ):
         stripped.pop(name)
     return stripped
 
@@ -241,6 +255,7 @@ def test_happy_forward(repositories: Repositories):
         ).hexdigest(),
         "expected_remote_url_sha256": remote_url_sha256(repositories),
         "result": "success",
+        "transition_outcome": "succeeded",
         "verb": "forward",
     }
     assert sha(repositories.daemon, "refs/heads/main") == repositories.candidate
@@ -274,6 +289,22 @@ def test_missing_remote_url_expectation_is_refused_before_mutation(
     assert remote_sha(repositories.daemon) == repositories.prior
 
 
+def test_missing_window_owner_is_refused_before_mutation(
+    repositories: Repositories,
+):
+    completed = invoke(repositories, "forward", window_owner=None)
+
+    assert completed.returncode == 1
+    failure = receipt(completed)
+    assert failure["error"] == "--window-owner is required"
+    assert failure["error_code"] == "invalid-window-owner"
+    assert failure["window_owner"] is None
+    assert failure["host_identity"] == os.uname().nodename
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
 @pytest.mark.parametrize(
     "invalid_digest",
     ["A" * 64, "a" * 63, "a" * 65, "g" * 64],
@@ -293,6 +324,47 @@ def test_malformed_remote_url_expectation_is_refused_before_mutation(
     assert failure["error_code"] == "invalid-remote-expectation"
     assert failure["mutations"] == []
     assert failure["readback"] == {"head": None, "local": None, "remote": None}
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+@pytest.mark.parametrize(
+    "environment_name",
+    [
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "LD_LIBRARY_PATH",
+        "LD_ARBITRARY_FAMILY_MEMBER",
+        "OPENSSL_CONF",
+        "OPENSSL_MODULES",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+    ],
+)
+def test_forward_refuses_process_injection_environment_before_mutation(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    environment_name: str,
+):
+    monkeypatch.setenv(environment_name, "")
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    failure = captured.value.receipt
+    assert failure["result"] == "error"
+    assert failure["error"] == "process injection environment is not permitted"
+    assert failure["error_code"] == "unsafe-process-environment"
+    assert failure["mutations"] == []
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
 
@@ -318,6 +390,7 @@ def test_invalid_operation_identity_is_not_echoed_in_failure_receipt(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     failure = captured.value.receipt
@@ -414,6 +487,40 @@ def test_daemon_local_remote_url_rewrite_is_refused_before_mutation(
     assert sha(decoy, "refs/heads/main") == repositories.prior
 
 
+def test_daemon_worktree_remote_url_rewrite_is_refused_before_mutation(
+    repositories: Repositories,
+):
+    decoy = repositories.remote.parent / "worktree-rewrite-decoy.git"
+    git(decoy.parent, "init", "-q", "--bare", str(decoy))
+    git(
+        repositories.seed,
+        "push",
+        "-q",
+        str(decoy),
+        f"{repositories.prior}:refs/heads/main",
+    )
+    git(repositories.daemon, "config", "extensions.worktreeConfig", "true")
+    git(
+        repositories.daemon,
+        "config",
+        "--worktree",
+        f"url.{decoy}.insteadOf",
+        str(repositories.remote),
+    )
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 1
+    failure = receipt(completed)
+    assert failure["error"] == (
+        "daemon repository must not configure remote URL rewrites"
+    )
+    assert failure["mutations"] == []
+    assert sha(repositories.daemon) == repositories.prior
+    assert sha(repositories.remote, "refs/heads/main") == repositories.prior
+    assert sha(decoy, "refs/heads/main") == repositories.prior
+
+
 def test_closed_stdout_preserves_receipt_at_required_path(
     repositories: Repositories,
 ):
@@ -446,6 +553,40 @@ def test_existing_receipt_path_is_refused_before_mutation(
     assert receipt_path.read_text(encoding="utf-8") == "existing evidence\n"
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_retry_after_consumed_receipt_path_records_target_already_present(
+    repositories: Repositories,
+):
+    first = invoke(repositories, "forward")
+    assert first.returncode == 0, first.stderr
+    consumed_path = repositories.remote.parent / "consumed-receipt.json"
+    consumed_path.touch(mode=0o600)
+    retry_path = repositories.remote.parent / "retry-receipt.json"
+
+    refused = invoke(
+        repositories,
+        "forward",
+        receipt_path=consumed_path,
+    )
+    retry = invoke(
+        repositories,
+        "forward",
+        receipt_path=retry_path,
+    )
+
+    assert refused.returncode == 1
+    assert consumed_path.read_bytes() == b""
+    assert retry.returncode == 1
+    result = json.loads(retry_path.read_text(encoding="utf-8"))
+    assert result["result"] == "error"
+    assert result["transition_outcome"] == "target-already-present"
+    assert result["mutations"] == []
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": repositories.candidate,
+    }
 
 
 def test_write_all_retries_partial_writes(monkeypatch: pytest.MonkeyPatch):
@@ -512,28 +653,95 @@ def test_unexpected_operation_error_closes_receipt_descriptor(
     monkeypatch.setattr(cas, "forward", raising_forward)
     monkeypatch.setattr(cas.os, "close", recording_close)
 
-    with pytest.raises(RuntimeError, match="unexpected test failure"):
-        cas.main(
-            [
-                "forward",
-                "--repo",
-                str(repositories.daemon),
-                "--remote",
-                "origin",
-                "--branch",
-                "main",
-                "--from",
-                repositories.prior,
-                "--to",
-                repositories.candidate,
-                "--expect-remote-url-sha256",
-                expected_remote_url_sha256,
-                "--receipt-path",
-                str(receipt_path),
-            ]
-        )
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            expected_remote_url_sha256,
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
 
+    assert result_code == 1
+    failure = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert failure["result"] == "error"
+    assert failure["error"] == "unexpected internal failure"
+    assert failure["error_code"] == "unexpected-exception"
+    assert failure["mutations"] == []
+    assert failure["readback"] == {"head": None, "local": None, "remote": None}
     assert len(closed_descriptors) == 2
+
+
+def test_unexpected_post_mutation_exception_writes_complete_warning_receipt(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    receipt_path = repositories.remote.parent / "post-mutation-exception.json"
+    expected_remote_url_sha256 = remote_url_sha256(repositories)
+    original_final_state = cas._require_final_state
+
+    def raise_after_final_readback(*args, **kwargs):
+        original_final_state(*args, **kwargs)
+        raise RuntimeError("unbounded internal detail must not escape")
+
+    monkeypatch.setattr(cas, "_require_final_state", raise_after_final_readback)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            expected_remote_url_sha256,
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    assert result_code == 1
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
+    assert result["warning"] == "unexpected internal failure"
+    assert "unbounded internal detail" not in json.dumps(result, sort_keys=True)
+    assert result["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+        "remote-tracking-main-cas",
+    ]
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": repositories.candidate,
+    }
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
 
 
 def test_receipt_directory_sync_failure_returns_error_after_completed_cas(
@@ -570,6 +778,8 @@ def test_receipt_directory_sync_failure_returns_error_after_completed_cas(
             repositories.candidate,
             "--expect-remote-url-sha256",
             expected_remote_url_sha256,
+            "--window-owner",
+            WINDOW_OWNER,
             "--receipt-path",
             str(receipt_path),
         ]
@@ -580,6 +790,46 @@ def test_receipt_directory_sync_failure_returns_error_after_completed_cas(
     assert captured.out == ""
     assert captured.err == "canonical-ref CAS receipt file could not be written\n"
     assert fsync_calls == 2
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_closed_standard_streams_cannot_alias_receipt_diagnostic(
+    repositories: Repositories,
+):
+    receipt_path = repositories.remote.parent / "closed-streams-write-failure.json"
+    command_arguments = [
+        "forward",
+        "--repo",
+        str(repositories.daemon),
+        "--remote",
+        "origin",
+        "--branch",
+        "main",
+        "--from",
+        repositories.prior,
+        "--to",
+        repositories.candidate,
+        "--expect-remote-url-sha256",
+        remote_url_sha256(repositories),
+        "--window-owner",
+        WINDOW_OWNER,
+        "--receipt-path",
+        str(receipt_path),
+    ]
+    child = (
+        "import os,sys;"
+        f"sys.path.insert(0,{str(CLI.parent)!r});"
+        "import canonical_ref_cas as cas;"
+        "cas._write_receipt=lambda *_args,**_kwargs:(_ for _ in ()).throw(OSError());"
+        "os.close(1);os.close(2);"
+        f"os._exit(cas.main({command_arguments!r}))"
+    )
+
+    completed = subprocess.run([sys.executable, "-c", child], cwd=ROOT)
+
+    assert completed.returncode == 1
+    assert receipt_path.read_bytes() == b""
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -827,6 +1077,7 @@ def test_restore_happy(repositories: Repositories):
         ).hexdigest(),
         "expected_remote_url_sha256": remote_url_sha256(repositories),
         "result": "success",
+        "transition_outcome": "succeeded",
         "verb": "restore",
     }
     assert git(repositories.daemon, "status", "--porcelain", "--untracked-files=all").stdout == ""
@@ -842,6 +1093,7 @@ def test_restore_adapter_satisfies_migration_contract(repositories: Repositories
     adapter = cas.CanonicalRefCasAdapter(
         repositories.daemon,
         expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
     )
 
     observed = adapter.restore_canonical_ref_exact(
@@ -877,12 +1129,14 @@ def test_dry_run_mutates_nothing(repositories: Repositories):
     forward = invoke(repositories, "forward", dry_run=True)
 
     assert forward.returncode == 0, forward.stderr
-    assert receipt(forward)["readback"] == {
+    forward_result = receipt(forward)
+    assert forward_result["transition_outcome"] == "not-attempted"
+    assert forward_result["readback"] == {
         "head": repositories.prior,
         "local": repositories.prior,
         "remote": repositories.prior,
     }
-    assert receipt(forward)["mutations"] == []
+    assert forward_result["mutations"] == []
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
 
@@ -890,12 +1144,14 @@ def test_dry_run_mutates_nothing(repositories: Repositories):
     restore = invoke(repositories, "restore", dry_run=True)
 
     assert restore.returncode == 0, restore.stderr
-    assert receipt(restore)["readback"] == {
+    restore_result = receipt(restore)
+    assert restore_result["transition_outcome"] == "not-attempted"
+    assert restore_result["readback"] == {
         "head": repositories.candidate,
         "local": repositories.candidate,
         "remote": repositories.candidate,
     }
-    assert receipt(restore)["mutations"] == []
+    assert restore_result["mutations"] == []
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -1086,23 +1342,34 @@ def test_runbook_pins_cas_release_identity_invocation_and_receipt_acceptance():
         "REVIEWED_OPS_COMMIT=",
         "REVIEWED_CAS_SHA256=",
         "EXPECTED_REMOTE_URL_SHA256=",
+        "WINDOW_OWNER=",
+        'HOST_IDENTITY=$(/usr/bin/env -i /usr/bin/uname -n)',
         "set -eu",
         "unset LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD",
         "unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP",
         'trusted_git -C "$OPS_REPO" rev-parse --verify HEAD',
         '"$REVIEWED_OPS_COMMIT:tools/canonical_ref_cas.py"',
         'trusted_git -C "$OPS_REPO" hash-object -- "$CAS"',
-        '/usr/bin/sha256sum -- "$CAS"',
+        '/usr/bin/env -i /usr/bin/readlink -f -- "$CAS"',
+        'ACTUAL_CAS_SHA256=$(/usr/bin/env -i /usr/bin/sha256sum -- "$CAS")',
+        "/usr/bin/env -i /usr/bin/test -x /usr/bin/python3",
+        '/usr/bin/env -i /usr/bin/mkdir "$RECEIPT_DIR"',
         'os.confstr("CS_PATH")',
         '/usr/bin/env -i /usr/bin/python3 -I "$CAS" forward',
         '/usr/bin/env -i /usr/bin/python3 -I "$CAS" restore',
         '--expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256"',
+        '--window-owner "$WINDOW_OWNER"',
         "--receipt-path",
         'tool.sha256` is `$REVIEWED_CAS_SHA256',
+        '`window_owner` equals `$WINDOW_OWNER`',
+        '`host_identity` equals `$HOST_IDENTITY`',
+        'transition_outcome: "succeeded-with-unexpected-observation"',
+        'transition_outcome: "target-already-present"',
         'Exit `0` alone never accepts any of the four CAS commands',
     ):
         assert required_text in documentation
     assert "the production window must not open" in normalized_prose
+    assert documentation.count('--window-owner "$WINDOW_OWNER"') == 4
     assert "python3 tools/canonical_ref_cas.py" not in documentation
 
 
@@ -1130,6 +1397,7 @@ def test_dry_run_refuses_remote_race_before_final_readback(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
             dry_run=True,
         )
 
@@ -1171,6 +1439,7 @@ def test_dry_run_refuses_local_race_before_final_readback(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
             dry_run=True,
         )
 
@@ -1215,6 +1484,7 @@ def test_validated_readback_is_last_git_interaction_before_success(
         repositories.prior if verb == "forward" else repositories.candidate,
         repositories.candidate if verb == "forward" else repositories.prior,
         expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
         dry_run=dry_run,
     )
 
@@ -1292,14 +1562,23 @@ def test_post_receive_hook_non_main_remote_ref_delta_is_reported(
     completed = invoke(repositories, "forward")
 
     assert completed.returncode != 0
-    failure = receipt(completed)
-    assert failure["error"] == "remote ref map changed outside canonical main"
-    assert failure["mutations"] == [
+    result = receipt(completed)
+    assert result["result"] == "warning"
+    assert result["warning"] == "remote ref map changed outside canonical main"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
+    assert result["mutations"] == [
         "local-main-cas",
         "worktree-alignment",
         "remote-main-cas",
         "remote-tracking-main-cas",
     ]
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": repositories.candidate,
+    }
     after = remote_refs(repositories.daemon)
     if delta == "removed":
         assert tag_ref not in after
@@ -1359,6 +1638,7 @@ def test_push_uses_pinned_url_and_fully_qualified_main_refspec(
         repositories.prior,
         repositories.candidate,
         expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
     )
 
     assert result["result"] == "success"
@@ -1405,10 +1685,16 @@ def test_remote_url_change_is_detected_without_retargeting_push(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert retargeted
-    assert captured.value.receipt["error"] == (
+    result = captured.value.receipt
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
+    assert result["warning"] == (
         "validated remote URL changed during operation"
     )
     assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
@@ -1451,10 +1737,24 @@ def test_restore_alignment_does_not_overwrite_raced_local_main(
             repositories.candidate,
             repositories.prior,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert raced
-    assert captured.value.receipt["error"] == "local main changed during worktree alignment"
+    failure = captured.value.receipt
+    assert failure["error"] == "local main changed during worktree alignment"
+    assert failure["result"] == "error"
+    assert failure["transition_outcome"] == "incomplete"
+    assert failure["mutations"] == [
+        "remote-main-cas",
+        "local-main-cas",
+        "worktree-alignment",
+    ]
+    assert failure["readback"] == {
+        "head": competitor,
+        "local": competitor,
+        "remote": repositories.prior,
+    }
     assert sha(repositories.daemon, "refs/heads/main") == competitor
     assert remote_sha(repositories.daemon) == repositories.prior
 
@@ -1485,6 +1785,7 @@ def test_forward_cas_does_not_overwrite_coherent_ancestor_race(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert raced
@@ -1601,6 +1902,7 @@ def test_forward_pushes_immutable_candidate_during_local_ref_race(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     failure = captured.value.receipt
@@ -1670,30 +1972,20 @@ def test_invalid_coordinate_is_redacted_from_receipt(
 def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
     repositories: Repositories, monkeypatch: pytest.MonkeyPatch
 ):
-    captured_argv = None
-    captured_environment = None
-
-    def fake_run(*args, **kwargs):
-        nonlocal captured_argv
-        nonlocal captured_environment
-        captured_argv = args[0]
-        captured_environment = kwargs["env"]
-        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
-
-    monkeypatch.setenv("CAS_UNRELATED_SENTINEL", "must-not-reach-git")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/tmp/hostile-global-config")
-    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/tmp/hostile-system-config")
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
-    monkeypatch.setenv("GIT_CONFIG_KEY_0", "uploadpack.hideRefs")
-    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "refs/heads/side")
-    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'uploadpack.hideRefs=refs/heads/side'")
-    monkeypatch.setenv("PATH", "/tmp/hostile-path")
-    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/hostile-agent")
-    monkeypatch.setenv("LANG", "hostile_LANG")
-    monkeypatch.setenv("LANGUAGE", "hostile_LANGUAGE")
-    monkeypatch.setenv("LC_CTYPE", "hostile_LC_CTYPE")
-    monkeypatch.setenv("TZ", "hostile_TZ")
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "cas.parentSentinel")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "visible-in-parent")
+    control = subprocess.run(
+        [cas.GIT_PATH, "config", "--get", "cas.parentSentinel"],
+        cwd=repositories.daemon,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=dict(os.environ),
+    )
+    assert control.returncode == 0
+    assert control.stdout.strip() == "visible-in-parent"
+
     operation = cas.Operation(
         "forward",
         repositories.daemon,
@@ -1704,29 +1996,16 @@ def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
         False,
     )
 
-    cas._run_git(operation, ["version"], stage="environment test")
+    isolated = cas._run_git(
+        operation,
+        ["config", "--get", "cas.parentSentinel"],
+        stage="environment test",
+        check=False,
+    )
 
-    assert captured_argv is not None
-    assert captured_argv[0] == cas.GIT_PATH
-    assert Path(captured_argv[0]).is_absolute()
-    assert captured_environment is not None
-    assert "CAS_UNRELATED_SENTINEL" not in captured_environment
-    assert "GIT_CONFIG_KEY_0" not in captured_environment
-    assert "GIT_CONFIG_VALUE_0" not in captured_environment
-    assert "GIT_CONFIG_PARAMETERS" not in captured_environment
-    assert "PATH" not in captured_environment
-    assert "SSH_AUTH_SOCK" not in captured_environment
-    assert "LANG" not in captured_environment
-    assert "LANGUAGE" not in captured_environment
-    assert "LC_CTYPE" not in captured_environment
-    assert "TZ" not in captured_environment
-    assert captured_environment["LC_ALL"] == "C"
-    assert captured_environment["GIT_CONFIG_GLOBAL"] == os.devnull
-    assert captured_environment["GIT_CONFIG_SYSTEM"] == os.devnull
-    assert captured_environment["GIT_CONFIG_NOSYSTEM"] == "1"
-    assert captured_environment["GIT_CONFIG_COUNT"] == "0"
-    assert captured_environment["GIT_SSH_COMMAND"]
-    assert captured_environment["GIT_SSH_COMMAND"] == os.devnull
+    assert isolated.returncode == 1
+    assert isolated.stdout == ""
+    assert isolated.stderr == ""
 
 
 def test_run_git_without_resolved_git_carries_stage_and_starts_no_subprocess(
@@ -1841,6 +2120,7 @@ def test_missing_resolved_git_fails_closed_before_subprocess(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=expected_remote_url_sha256,
+            window_owner=WINDOW_OWNER,
         )
 
     failure = captured.value.receipt
@@ -1857,6 +2137,7 @@ def test_missing_resolved_git_fails_closed_before_subprocess(
             "to": repositories.candidate,
         },
         "git_executable": None,
+        "host_identity": os.uname().nodename,
         "mutations": [],
         "remote": None,
         "readback": {"head": None, "local": None, "remote": None},
@@ -1865,7 +2146,9 @@ def test_missing_resolved_git_fails_closed_before_subprocess(
         "repo": None,
         "expected_remote_url_sha256": expected_remote_url_sha256,
         "result": "error",
+        "transition_outcome": "not-landed",
         "verb": "forward",
+        "window_owner": WINDOW_OWNER,
     }
 
 
@@ -2094,7 +2377,7 @@ def test_forward_refuses_global_url_instead_of_before_mutation(
         str(decoy),
         f"{repositories.prior}:refs/heads/main",
     )
-    configured_url = "https://prod.invalid/repo.git"
+    configured_url = str(repositories.remote)
     git(repositories.daemon, "remote", "set-url", "origin", configured_url)
     global_config = repositories.remote.parent / "hostile-url.config"
     global_config.write_text(
@@ -2109,8 +2392,12 @@ def test_forward_refuses_global_url_instead_of_before_mutation(
     assert completed.returncode != 0
     failure = receipt(completed)
     assert failure["result"] == "error"
+    assert failure["error"] == (
+        "external Git configuration environment is not permitted"
+    )
     assert failure["mutations"] == []
     assert sha(repositories.daemon) == repositories.prior
+    assert sha(repositories.remote, "refs/heads/main") == repositories.prior
     assert sha(decoy, "refs/heads/main") == repositories.prior
 
 
@@ -2173,6 +2460,7 @@ def test_forward_refuses_local_non_main_ref_delta_before_owned_mutation(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert captured.value.receipt["error"] == (
@@ -2198,9 +2486,12 @@ def test_forward_reports_local_non_main_ref_delta_before_success(
     completed = invoke(repositories, "forward")
 
     assert completed.returncode != 0
-    failure = receipt(completed)
-    assert failure["error"] == "local ref map changed outside allowed transitions"
-    assert failure["result"] == "error"
+    result = receipt(completed)
+    assert result["warning"] == "local ref map changed outside allowed transitions"
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
     assert sha(repositories.daemon, "refs/heads/side") == repositories.candidate
 
 
@@ -2272,9 +2563,13 @@ def test_changed_non_main_local_symref_fails_for_forward_and_restore(
     completed = invoke(repositories, verb)
 
     assert completed.returncode != 0
-    failure = receipt(completed)
-    assert failure["error"] == "local ref map changed outside allowed transitions"
-    assert failure["mutations"] == (
+    result = receipt(completed)
+    assert result["result"] == "warning"
+    assert result["warning"] == "local ref map changed outside allowed transitions"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
+    assert result["mutations"] == (
         [
             "local-main-cas",
             "worktree-alignment",
@@ -2289,7 +2584,7 @@ def test_changed_non_main_local_symref_fails_for_forward_and_restore(
             "remote-tracking-main-cas",
         ]
     )
-    assert failure["readback"] == {"head": target, "local": target, "remote": target}
+    assert result["readback"] == {"head": target, "local": target, "remote": target}
 
 
 def test_forward_reports_remote_head_symref_change(
@@ -2312,9 +2607,12 @@ def test_forward_reports_remote_head_symref_change(
     completed = invoke(repositories, "forward")
 
     assert completed.returncode != 0
-    failure = receipt(completed)
-    assert failure["result"] == "error"
-    assert failure["error"] == "remote HEAD changed during operation"
+    result = receipt(completed)
+    assert result["result"] == "warning"
+    assert result["warning"] == "remote HEAD changed during operation"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
     assert git(repositories.remote, "symbolic-ref", "HEAD").stdout.strip() == (
         "refs/heads/side"
     )
@@ -2438,6 +2736,7 @@ def test_push_source_is_verified_non_shallow_after_fetch(
         repositories.prior,
         repositories.candidate,
         expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
     )
 
     assert result["result"] == "success"
@@ -2451,9 +2750,11 @@ def test_all_temporary_workspaces_are_pinned_below_daemon_parent(
 ):
     original_temporary_directory = cas.tempfile.TemporaryDirectory
     chosen_roots: list[Path] = []
+    cleanup_policies: list[bool] = []
 
     def recording_temporary_directory(*args, **kwargs):
         chosen_roots.append(Path(kwargs["dir"]).resolve())
+        cleanup_policies.append(kwargs["ignore_cleanup_errors"])
         return original_temporary_directory(*args, **kwargs)
 
     monkeypatch.setattr(
@@ -2469,10 +2770,12 @@ def test_all_temporary_workspaces_are_pinned_below_daemon_parent(
         repositories.prior,
         repositories.candidate,
         expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
     )
 
     assert result["result"] == "success"
     assert chosen_roots
+    assert cleanup_policies and all(cleanup_policies)
     assert all(
         root == repositories.remote.parent
         or root.is_relative_to(repositories.remote.parent)
@@ -2554,9 +2857,12 @@ def test_forward_reports_malformed_local_ref_before_success(
     completed = invoke(repositories, "forward")
 
     assert completed.returncode != 0
-    failure = receipt(completed)
-    assert failure["error"] == "local refs could not be read exactly"
-    assert failure["result"] == "error"
+    result = receipt(completed)
+    assert result["warning"] == "local refs could not be read exactly"
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == (
+        "succeeded-with-unexpected-observation"
+    )
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -2618,6 +2924,7 @@ def test_forward_refuses_second_main_worktree_race_before_owned_mutation(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert snapshots == 2
@@ -2659,11 +2966,13 @@ def test_forward_reports_local_main_race_during_final_remote_snapshot(
             repositories.prior,
             repositories.candidate,
             expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
         )
 
     assert snapshots == 3
     failure = captured.value.receipt
     assert failure["result"] == "error"
+    assert failure["transition_outcome"] == "incomplete"
     assert failure["mutations"] == [
         "local-main-cas",
         "worktree-alignment",
@@ -2672,6 +2981,24 @@ def test_forward_reports_local_main_race_during_final_remote_snapshot(
     ]
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_receipt_preserves_local_remote_path_containing_at_sign(
+    repositories: Repositories,
+):
+    local_remote = repositories.remote.parent / "remote@local-repository"
+    local_remote.symlink_to(repositories.remote, target_is_directory=True)
+    git(repositories.daemon, "remote", "set-url", "origin", str(local_remote))
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 0, completed.stderr
+    result = receipt(completed)
+    assert result["result"] == "success"
+    assert result["remote_url"] == str(local_remote)
+    assert result["remote_url_sha256"] == hashlib.sha256(
+        str(local_remote).encode("utf-8")
+    ).hexdigest()
 
 
 @pytest.mark.parametrize("remote_moved", [False, True])
@@ -2695,3 +3022,59 @@ def test_receipt_redacts_remote_url_credentials(
         exact_url.encode("utf-8")
     ).hexdigest()
     assert result["result"] == ("error" if remote_moved else "success")
+
+
+@pytest.mark.parametrize(
+    ("configured_url", "redacted_url"),
+    [
+        (
+            "https://user-info:masked-value@example.invalid/repository.git",
+            "https://example.invalid/repository.git",
+        ),
+        (
+            "user-info:masked-value@example.invalid:repository.git",
+            "example.invalid:repository.git",
+        ),
+        (
+            "user-info:masked-value@example.invalid",
+            "[redacted]",
+        ),
+        (
+            "user-info@example.invalid/not-scp",
+            "[redacted]",
+        ),
+    ],
+)
+def test_failure_receipt_redacts_userinfo_from_every_remote_url_form(
+    repositories: Repositories,
+    configured_url: str,
+    redacted_url: str,
+):
+    userinfo = configured_url.rsplit("@", 1)[0]
+    git(repositories.daemon, "remote", "set-url", "origin", configured_url)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 1
+    result = receipt(completed)
+    serialized = json.dumps(result, sort_keys=True)
+    assert result["remote_url"] == redacted_url
+    assert userinfo not in serialized
+    assert result["mutations"] == []
+
+
+def test_malformed_remote_url_produces_bounded_receipt_without_traceback(
+    repositories: Repositories,
+):
+    configured_url = "http://[::1"
+    git(repositories.daemon, "remote", "set-url", "origin", configured_url)
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 1
+    assert "Traceback" not in completed.stderr
+    result = receipt(completed)
+    assert result["result"] == "error"
+    assert result["remote_url"] == "[redacted]"
+    assert result["error"] == "remote URL could not be parsed safely"
+    assert result["mutations"] == []

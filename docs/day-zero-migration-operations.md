@@ -210,6 +210,7 @@ EXPECTED_REMOTE_URL_SHA256=<independently-recorded-64-character-remote-url-sha25
 DAEMON_REPO=/absolute/path/to/the/dedicated-daemon-checkout
 WINDOW_OWNER=<opaque-Packet-D-window-id>
 RECEIPT_DIR=/absolute/path/to/a/new-mode-0700-window-evidence-directory
+HOST_IDENTITY=$(/usr/bin/env -i /usr/bin/uname -n)
 
 trusted_git() {
   /usr/bin/env -i \
@@ -226,23 +227,25 @@ trusted_git() {
 test "${OPS_REPO#/}" != "$OPS_REPO"
 test "${DAEMON_REPO#/}" != "$DAEMON_REPO"
 test "${RECEIPT_DIR#/}" != "$RECEIPT_DIR"
-test "$(/usr/bin/readlink -f -- "$OPS_REPO")" = "$OPS_REPO"
-test "$(/usr/bin/readlink -f -- "$CAS")" = "$CAS"
-test "$(/usr/bin/readlink -f -- "$DAEMON_REPO")" = "$DAEMON_REPO"
+test -n "$WINDOW_OWNER"
+test -n "$HOST_IDENTITY"
+test "$(/usr/bin/env -i /usr/bin/readlink -f -- "$OPS_REPO")" = "$OPS_REPO"
+test "$(/usr/bin/env -i /usr/bin/readlink -f -- "$CAS")" = "$CAS"
+test "$(/usr/bin/env -i /usr/bin/readlink -f -- "$DAEMON_REPO")" = "$DAEMON_REPO"
 test "$(trusted_git -C "$OPS_REPO" rev-parse --verify HEAD)" = "$REVIEWED_OPS_COMMIT"
 test -z "$(trusted_git -C "$OPS_REPO" status --porcelain --untracked-files=all)"
 REVIEWED_CAS_BLOB=$(trusted_git -C "$OPS_REPO" rev-parse \
   "$REVIEWED_OPS_COMMIT:tools/canonical_ref_cas.py")
 ACTUAL_CAS_BLOB=$(trusted_git -C "$OPS_REPO" hash-object -- "$CAS")
 test "$ACTUAL_CAS_BLOB" = "$REVIEWED_CAS_BLOB"
-ACTUAL_CAS_SHA256=$(/usr/bin/sha256sum -- "$CAS")
+ACTUAL_CAS_SHA256=$(/usr/bin/env -i /usr/bin/sha256sum -- "$CAS")
 ACTUAL_CAS_SHA256=${ACTUAL_CAS_SHA256%% *}
 test "$ACTUAL_CAS_SHA256" = "$REVIEWED_CAS_SHA256"
-test -x /usr/bin/python3
+/usr/bin/env -i /usr/bin/test -x /usr/bin/python3
 /usr/bin/env -i /usr/bin/python3 -I -c 'import os,pathlib,shutil,sys; p=os.confstr("CS_PATH"); es=p.split(os.pathsep) if p else []; g=shutil.which("git",path=p) if es and all(os.path.isabs(e) for e in es) else None; q=pathlib.Path(g).resolve(strict=True) if g else None; sys.exit(0 if q and q.is_file() and os.access(q,os.X_OK) else 1)'
-test ! -e "$RECEIPT_DIR"
+/usr/bin/env -i /usr/bin/test ! -e "$RECEIPT_DIR"
 umask 077
-/usr/bin/mkdir "$RECEIPT_DIR"
+/usr/bin/env -i /usr/bin/mkdir "$RECEIPT_DIR"
 ```
 
 The absolute `/usr/bin/python3 -I` interpreter, absolute `$CAS` path, clean
@@ -271,6 +274,7 @@ CAS_RESTORE_DRY_RECEIPT="$RECEIPT_DIR/canonical-ref-restore-dry-run.json"
   --from "$CANDIDATE_SHA" \
   --to "$PRIOR_SHA" \
   --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --window-owner "$WINDOW_OWNER" \
   --receipt-path "$CAS_RESTORE_DRY_RECEIPT" \
   --dry-run
 ```
@@ -286,6 +290,7 @@ CAS_RESTORE_RECEIPT="$RECEIPT_DIR/canonical-ref-restore.json"
   --from "$CANDIDATE_SHA" \
   --to "$PRIOR_SHA" \
   --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --window-owner "$WINDOW_OWNER" \
   --receipt-path "$CAS_RESTORE_RECEIPT"
 ```
 
@@ -306,12 +311,14 @@ includes the verifier's absolute path and self-hash; the absolute repository;
 remote name and branch; UTC timestamp; operation labels; validated SHA values;
 the operator-supplied remote expectation; a credential-redacted validated
 remote URL; and the SHA-256 fingerprint of the exact validated URL. It also
-includes best-effort readback after a failure so partial state is never silent.
+records the required window owner and host identity, plus best-effort readback
+after a failure so partial state is never silent.
 An inability to open, write, flush, or sync the receipt fails the command.
 
 An injected production adapter can implement the state machine method by
 delegating to
-`canonical_ref_cas.CanonicalRefCasAdapter(...).restore_canonical_ref_exact`.
+`canonical_ref_cas.CanonicalRefCasAdapter(...,
+window_owner=WINDOW_OWNER).restore_canonical_ref_exact`.
 That method returns the exact prior SHA only after all three readbacks match,
 which satisfies the check in `day_zero_migration._restore_canonical_ref_exact`.
 It deliberately supplies no adapter for the other `--execute` production
@@ -393,6 +400,7 @@ CAS_FORWARD_DRY_RECEIPT="$RECEIPT_DIR/canonical-ref-forward-dry-run.json"
   --from "$PRIOR_SHA" \
   --to "$CANDIDATE_SHA" \
   --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --window-owner "$WINDOW_OWNER" \
   --receipt-path "$CAS_FORWARD_DRY_RECEIPT" \
   --dry-run
 ```
@@ -408,6 +416,7 @@ CAS_FORWARD_RECEIPT="$RECEIPT_DIR/canonical-ref-forward.json"
   --from "$PRIOR_SHA" \
   --to "$CANDIDATE_SHA" \
   --expect-remote-url-sha256 "$EXPECTED_REMOTE_URL_SHA256" \
+  --window-owner "$WINDOW_OWNER" \
   --receipt-path "$CAS_FORWARD_RECEIPT"
 ```
 
@@ -420,7 +429,10 @@ configuration injected through the environment, invokes Git from an explicit
 environment with no inherited variables, `LC_ALL=C`, global and system Git
 configuration disabled, replacement objects disabled, prompts disabled, and
 SSH transport disabled. Only the tool-created temporary-index and optional-lock
-controls are added for the calls that need them. It records a credential-redacted version
+controls are added for the calls that need them. It independently refuses any
+`LD_*`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `PYTHONHOME`, `PYTHONPATH`, or
+`PYTHONSTARTUP` variable in its own environment. It records a
+credential-redacted version, including redaction of URL and scp-like userinfo,
 and SHA-256 fingerprint of the validated remote URL in its receipt. It checks
 the candidate in a fresh standalone exact
 clone, rejects hidden index flags, and proves tracked content and file types
@@ -449,10 +461,13 @@ receipt file only after rerunning the release-identity comparisons above, and
 require all of the following: `result` is `"success"`; `tool.path` is `$CAS`;
 `tool.sha256` is `$REVIEWED_CAS_SHA256`; `repo`, `remote`, and `branch` are the
 absolute `$DAEMON_REPO`, `"origin"`, and `"main"`; `timestamp_utc` falls inside
-the current named window; both remote URL digest fields equal
+the current named window; `window_owner` equals `$WINDOW_OWNER` and
+`host_identity` equals `$HOST_IDENTITY`; both remote URL digest fields equal
 `$EXPECTED_REMOTE_URL_SHA256`; `expected.from` and `expected.to` equal the
 command coordinates; and all three `readback` values equal `--from` for a dry
-run or `--to` for a live run. A dry-run mutation list must be empty. A live
+run or `--to` for a live run. A successful dry run has
+`transition_outcome: "not-attempted"`; a successful live run has
+`transition_outcome: "succeeded"`. A dry-run mutation list must be empty. A live
 forward list must be exactly `local-main-cas`, `worktree-alignment`,
 `remote-main-cas`, `remote-tracking-main-cas`; a live restore list must be
 exactly `remote-main-cas`, `local-main-cas`, `worktree-alignment`,
@@ -461,3 +476,23 @@ identity-mismatched receipt and keep the window fenced. A failed live command
 uses its receipt and direct state readback to decide compensation; never
 compensate merely because terminal output was lost when the durable receipt is
 present and valid.
+
+A nonzero exit with `result: "warning"` and
+`transition_outcome: "succeeded-with-unexpected-observation"` means the
+canonical transition succeeded but a later observation prevented clean
+certification. Accept that classification only when the live mutation list is
+the complete verb-specific list above and all three readbacks equal `--to`.
+Keep the window fenced and investigate the named `warning`, but **do not run
+candidate-to-prior compensation** against that state. The receipt's transition
+evidence, not `result` or the process exit alone, decides whether compensation
+may move production.
+
+Receipt paths are single-use. If a process consumed a path but left an empty,
+partial, or malformed file, preserve that file; never delete, overwrite, or
+reuse it. Choose a new unique path in the same mode-`0700` window evidence
+directory and rerun the exact original command. The CAS makes the retry
+non-mutating if the transition already landed. A retry receipt with
+`transition_outcome: "target-already-present"`, no mutations, and all three
+readbacks equal to `--to` proves the retry found the target already present;
+keep the window fenced and investigate the consumed receipt, and do not order
+compensation from the retry's `result` alone.
