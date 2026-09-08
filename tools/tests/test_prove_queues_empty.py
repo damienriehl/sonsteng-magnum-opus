@@ -1904,10 +1904,18 @@ def test_host_identity_failure_returns_one_bounded_receipt(tmp_path):
 def test_frontier_variants_reject_unknown_or_incoherent_fields(tmp_path):
     impossible = [
         {**EMPTY_FRONTIER, "unknown": False},
+        {**EMPTY_FRONTIER, "base_sha": ""},
         {
             **EMPTY_FRONTIER,
             "blocked_reason": "missing_batch_evidence",
             "blocked_batch_id": "batch-1",
+        },
+        {
+            "active_release": None,
+            "batches": [],
+            "blocked_reason": "missing_batch_evidence",
+            "blocked_batch_id": "",
+            "operation_frontier": EMPTY_OPERATION_FRONTIER,
         },
         {
             **EMPTY_FRONTIER,
@@ -1973,11 +1981,21 @@ def test_frontier_and_review_collection_bounds_fail_closed():
         "generator_id": "generator",
         "member_count": 1,
     }
+    boundary_frontier = {
+        **EMPTY_FRONTIER,
+        "batches": [batch] * 1000,
+    }
     oversized_frontier = {
         **EMPTY_FRONTIER,
-        "batches": [batch] * (queues.MAX_FRONTIER_ITEMS + 1),
+        "batches": [batch] * 1001,
     }
 
+    summary, empty = queues._frontier_summary(
+        {"ok": True, "context": boundary_frontier}
+    )
+
+    assert summary["queue_count"] == 1000
+    assert empty is False
     with pytest.raises(
         queues.ProofError, match="^frontier-response-malformed$"
     ):
@@ -2102,20 +2120,54 @@ def test_missing_fence_assertions_emit_unproven_without_gets(tmp_path):
         assert http_calls == []
 
 
-def test_invalid_window_owner_emits_unproven_without_gets(tmp_path):
+@pytest.mark.parametrize(
+    ("window_owner", "proof_error"),
+    [
+        pytest.param(
+            "owner@example", "fence-assertion-invalid", id="at-sign"
+        ),
+        pytest.param("owner/example", "fence-assertion-invalid", id="slash"),
+        pytest.param("invalid owner", "fence-assertion-invalid", id="space"),
+        pytest.param(
+            "-leading-hyphen", "arguments-invalid", id="leading-hyphen"
+        ),
+        pytest.param("a" * 129, "fence-assertion-invalid", id="too-long"),
+        pytest.param("owner-é", "fence-assertion-invalid", id="non-ascii"),
+    ],
+)
+def test_invalid_window_owner_emits_unproven_without_gets(
+    tmp_path, window_owner, proof_error
+):
+    assert queues.WINDOW_OWNER_RE.fullmatch(window_owner) is None
     opener, http_calls = injected_opener([])
 
     code, receipt, _systemctl_calls = run_main(
-        tmp_path, opener=opener, window_owner="invalid owner"
+        tmp_path, opener=opener, window_owner=window_owner
     )
 
     assert code == 1
     assert receipt["all_queues_empty"] is False
     assert receipt["fence"] == "unproven"
-    assert receipt["proof_error"] == "fence-assertion-invalid"
+    assert receipt["proof_error"] == proof_error
     assert receipt["first_get_utc"] is None
     assert receipt["last_get_utc"] is None
     assert http_calls == []
+
+
+def test_window_owner_accepts_every_allowed_punctuation_character(tmp_path):
+    window_owner = "a:._-9"
+    opener, _http_calls = injected_opener([])
+
+    code, receipt, _systemctl_calls = run_main(
+        tmp_path, opener=opener, window_owner=window_owner
+    )
+
+    assert code == 0
+    assert receipt["fence"]["window_owner"] == window_owner
+
+
+def test_window_phase_allowlist_is_exact():
+    assert queues.WINDOW_PHASES == ("opening", "closing")
 
 
 def test_invalid_window_nonce_emits_unproven_without_gets(tmp_path):
