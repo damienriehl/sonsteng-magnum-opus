@@ -14,6 +14,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -53,6 +54,32 @@ GIT_CONFIG_PINS = (
     "-c",
     "transfer.hideRefs=",
 )
+
+
+def _resolve_git_path() -> str | None:
+    """Resolve Git once from the OS-defined trusted utility path."""
+    try:
+        system_path = os.confstr("CS_PATH")
+    except (AttributeError, OSError, ValueError):
+        return None
+    if not system_path or any(
+        not entry or not os.path.isabs(entry)
+        for entry in system_path.split(os.pathsep)
+    ):
+        return None
+    candidate = shutil.which("git", path=system_path)
+    if candidate is None:
+        return None
+    try:
+        resolved = pathlib.Path(candidate).resolve(strict=True)
+    except OSError:
+        return None
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        return None
+    return str(resolved)
+
+
+GIT_PATH = _resolve_git_path()
 
 
 class CasError(RuntimeError):
@@ -120,6 +147,8 @@ def _run_git(
     cwd: pathlib.Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    if GIT_PATH is None:
+        raise CasError(f"Git operation failed during {stage}")
     environment = {
         name: os.environ[name]
         for name in GIT_ENV_ALLOWLIST
@@ -141,7 +170,7 @@ def _run_git(
     )
     try:
         completed = subprocess.run(
-            ["git", *GIT_CONFIG_PINS, *args],
+            [GIT_PATH, *GIT_CONFIG_PINS, *args],
             cwd=cwd or operation.repo,
             check=False,
             capture_output=True,
@@ -1040,6 +1069,7 @@ def _base_receipt(operation: Operation, mutations: list[str]) -> dict:
     return {
         "dry_run": operation.dry_run,
         "expected": {"from": None, "to": None},
+        "git_executable": GIT_PATH,
         "mutations": mutations,
         "remote_url": None,
         "remote_url_sha256": None,

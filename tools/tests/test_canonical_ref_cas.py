@@ -160,6 +160,7 @@ def test_happy_forward(repositories: Repositories):
     assert receipt(completed) == {
         "dry_run": False,
         "expected": {"from": repositories.prior, "to": repositories.candidate},
+        "git_executable": cas.GIT_PATH,
         "mutations": [
             "local-main-cas",
             "worktree-alignment",
@@ -408,6 +409,7 @@ def test_restore_happy(repositories: Repositories):
     assert receipt(completed) == {
         "dry_run": False,
         "expected": {"from": repositories.candidate, "to": repositories.prior},
+        "git_executable": cas.GIT_PATH,
         "mutations": [
             "remote-main-cas",
             "local-main-cas",
@@ -1224,10 +1226,13 @@ def test_invalid_coordinate_is_redacted_from_receipt(
 def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
     repositories: Repositories, monkeypatch: pytest.MonkeyPatch
 ):
+    captured_argv = None
     captured_environment = None
 
     def fake_run(*args, **kwargs):
+        nonlocal captured_argv
         nonlocal captured_environment
+        captured_argv = args[0]
         captured_environment = kwargs["env"]
         return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
 
@@ -1251,6 +1256,9 @@ def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
 
     cas._run_git(operation, ["version"], stage="environment test")
 
+    assert captured_argv is not None
+    assert captured_argv[0] == cas.GIT_PATH
+    assert Path(captured_argv[0]).is_absolute()
     assert captured_environment is not None
     assert "CAS_UNRELATED_SENTINEL" not in captured_environment
     assert "GIT_CONFIG_KEY_0" not in captured_environment
@@ -1260,6 +1268,87 @@ def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
     assert captured_environment["GIT_CONFIG_SYSTEM"] == os.devnull
     assert captured_environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert captured_environment["GIT_CONFIG_COUNT"] == "0"
+
+
+def test_git_resolution_requires_a_regular_executable_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    candidate = tmp_path / "git"
+    candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    monkeypatch.setattr(cas.os, "confstr", lambda _name: str(tmp_path))
+
+    assert cas._resolve_git_path() is None
+
+    candidate.chmod(0o700)
+
+    assert cas._resolve_git_path() == str(candidate.resolve())
+
+    candidate.unlink()
+    candidate.mkdir()
+
+    assert cas._resolve_git_path() is None
+
+
+def test_missing_resolved_git_fails_closed_before_subprocess(
+    repositories: Repositories, monkeypatch: pytest.MonkeyPatch
+):
+    def fail_if_called(*_args, **_kwargs):
+        pytest.fail("subprocess.run must not be called without resolved Git")
+
+    monkeypatch.setattr(cas, "GIT_PATH", None)
+    monkeypatch.setattr(subprocess, "run", fail_if_called)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+        )
+
+    assert captured.value.receipt == {
+        "dry_run": False,
+        "error": "Git operation failed during repository validation",
+        "expected": {
+            "from": repositories.prior,
+            "to": repositories.candidate,
+        },
+        "git_executable": None,
+        "mutations": [],
+        "readback": {"head": None, "local": None, "remote": None},
+        "remote_url": None,
+        "remote_url_sha256": None,
+        "result": "error",
+        "verb": "forward",
+    }
+
+
+def test_forward_ignores_inherited_path_git_shim_and_records_real_executable(
+    repositories: Repositories,
+):
+    shim_directory = repositories.remote.parent / "shim"
+    shim_directory.mkdir()
+    shim_marker = repositories.remote.parent / "path-git-shim-invoked"
+    path_shim = shim_directory / "git"
+    path_shim.write_text(
+        "#!/bin/sh\n"
+        f": > {shim_marker}\n"
+        "exit 97\n",
+        encoding="utf-8",
+    )
+    path_shim.chmod(0o700)
+    hostile_environment = dict(os.environ)
+    hostile_environment["PATH"] = str(shim_directory)
+
+    completed = invoke(repositories, "forward", env=hostile_environment)
+
+    assert completed.returncode == 0, completed.stderr
+    result = receipt(completed)
+    assert result["result"] == "success"
+    assert result["git_executable"] == cas.GIT_PATH
+    assert Path(result["git_executable"]).is_absolute()
+    assert not shim_marker.exists()
 
 
 def test_forward_refuses_global_pack_objects_hook_before_mutation(
