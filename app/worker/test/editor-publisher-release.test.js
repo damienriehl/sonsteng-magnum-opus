@@ -869,10 +869,14 @@ const scopes = ({ publisher = false, admin = false, releaseService = false,
   instructor:{granted:false}, admin:{granted:admin}, publisher:{granted:publisher},
   release_service:{granted:releaseService}, release_observer:{granted:releaseObserver} });
 
-async function observerFrontier(context) {
-  const env = { PROD_RELEASE_LEDGER:"true",EDITOR:{ getByName:() => ({
-    productionPreparationContext:async () => context,
+function frontierEnv(productionPreparationContext) {
+  return { PROD_RELEASE_LEDGER:"true",EDITOR:{ getByName:() => ({
+    productionPreparationContext,
   }) } };
+}
+
+async function observerFrontierFromProvider(productionPreparationContext) {
+  const env = frontierEnv(productionPreparationContext);
   const response = await productionPreparationContextEndpoint(new Request(
     "https://edit.example/edit/v1/prod/releases/frontier"),env,{
       editor:"service:observer",credential_channel:"bearer",
@@ -880,6 +884,33 @@ async function observerFrontier(context) {
     });
   assert.equal(response.status,200);
   return (await response.json()).context;
+}
+
+async function observerFrontier(context) {
+  return observerFrontierFromProvider(async () => context);
+}
+
+async function observerFrontierFromCore(core) {
+  return observerFrontierFromProvider(async (...args) => core.productionPreparationContext(...args));
+}
+
+function consumerReadsOperationQueuesAsEmpty(frontier) {
+  return frontier.pending_operation_count === 0 && frontier.blocked_state === "unblocked";
+}
+
+async function assertOperationProjectionCorruptionFailsClosed(core, reason) {
+  const env = frontierEnv(async (...args) => core.productionPreparationContext(...args));
+  const request = () => new Request("https://edit.example/edit/v1/prod/releases/frontier");
+  await assert.rejects(productionPreparationContextEndpoint(request(),env,{
+    editor:"service:release",credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }),
+  }),new RegExp(`operation_frontier_integrity:${reason}`));
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal("projection" in context,false,
+    "a caught integrity failure must not become a known-empty projection");
 }
 
 function assertObserverOperationFrontier(actual, expected) {
@@ -908,16 +939,26 @@ function seedReviewedHeldOperation(core) {
 
 test("observer operation frontier is present and empty stores are zero and unblocked", async () => {
   const core = makeCore(() => 9000);
-  const context = await observerFrontier(core.productionPreparationContext());
+  const context = await observerFrontierFromCore(core);
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:0,blocked_state:"unblocked",
+  });
+});
+
+test("empty-store release service preserves the exact legacy operation projection", () => {
+  const core = makeCore(() => 9001);
+  const context = core.productionPreparationContext();
+  assert.equal(JSON.stringify(context.projection),
+    '{"review_receipts":[],"sources":[],"eligible_operation_count":0}');
+  assert.deepEqual(context.projection,{
+    review_receipts:[],sources:[],eligible_operation_count:0,
   });
 });
 
 test("observer operation frontier reports eligible-only operation work", async () => {
   const core = makeCore(() => 9010);
   reviewedProjection(core);
-  const context = await observerFrontier(core.productionPreparationContext());
+  const context = await observerFrontierFromCore(core);
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
@@ -967,6 +1008,11 @@ test("observer operation frontier reports bounded blockage when projection is un
   reviewedProjection(core);
   core.sql.exec("UPDATE production_review_revisions SET operations_json=? WHERE id=?",
     "{malformed","revision-v2");
+  const tolerantContext = core.productionPreparationContext({
+    tolerateOperationProjectionFailure:true,
+  });
+  assert.equal("projection" in tolerantContext,false,
+    "a caught failure must leave the projection absent, not known-empty or undefined");
   const calls = [];
   const env = { PROD_RELEASE_LEDGER:"true",EDITOR:{ getByName:() => ({
     productionPreparationContext:async (...args) => {
@@ -989,20 +1035,228 @@ test("observer operation frontier reports bounded blockage when projection is un
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:0,blocked_state:"blocked",
   });
-  assert.equal(context.operation_frontier.pending_operation_count === 0 &&
-    context.operation_frontier.blocked_state === "unblocked",false,
+  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false,
     "a blocked zero count must fail closed rather than prove the frontier empty");
   assert.deepEqual(calls,[[],[{ tolerateOperationProjectionFailure:true }]],
     "release service must use the default path while observers request tolerant projection");
 });
 
+test("operation frontier rejects missing normalized operation evidence", async () => {
+  const core = makeCore(() => 9016);
+  reviewedProjection(core);
+  core.sql.exec("DELETE FROM production_review_operations WHERE operation_id=?","op-accepted");
+  await assertOperationProjectionCorruptionFailsClosed(core,"missing_normalized_row");
+});
+
+test("operation frontier rejects extra normalized operation rows", async () => {
+  const core = makeCore(() => 9017);
+  reviewedProjection(core);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state)
+    VALUES (?,?,?,?,?,?,?,?,?)`,"op-extra","op-extra","review-v2","revision-v2",
+    "data/copy/home.json#lead",null,"accepted","","unpublished");
+  await assertOperationProjectionCorruptionFailsClosed(core,"extra_normalized_row");
+});
+
+test("operation frontier rejects orphaned active operation rows", async () => {
+  const core = makeCore(() => 9018);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,lifecycle_state)
+    VALUES (?,?,?,?,?,?,?,?,?)`,"op-orphan","op-orphan","review-missing","revision-missing",
+    "data/copy/missing.json#lead",null,"accepted","","unpublished");
+  await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_normalized_row");
+});
+
+test("operation frontier rejects unknown operation lifecycle states", async () => {
+  const core = makeCore(() => 9019);
+  reviewedProjection(core);
+  core.sql.exec("UPDATE production_review_operations SET lifecycle_state=? WHERE operation_id=?",
+    "unexpected-state","op-accepted");
+  await assertOperationProjectionCorruptionFailsClosed(core,"unknown_lifecycle_state");
+});
+
+test("operation frontier rejects normalized decision corruption", async () => {
+  const core = makeCore(() => 9019);
+  reviewedProjection(core);
+  core.sql.exec("UPDATE production_review_operations SET decision=? WHERE operation_id=?",
+    "rejected","op-accepted");
+  await assertOperationProjectionCorruptionFailsClosed(core,"extra_normalized_row");
+});
+
+test("operation frontier rejects unknown normalized decision states", async () => {
+  const core = makeCore(() => 9019);
+  reviewedProjection(core);
+  core.sql.exec("UPDATE production_review_operations SET decision=? WHERE operation_id=?",
+    "unexpected-decision","op-accepted");
+  await assertOperationProjectionCorruptionFailsClosed(core,"unknown_decision_state");
+});
+
+test("operation frontier rejects duplicate submitted operation evidence", async () => {
+  const core = makeCore(() => 9019);
+  reviewedProjection(core);
+  const row = core._one("SELECT operations_json FROM production_review_revisions WHERE id=?",
+    "revision-v2");
+  const operations = JSON.parse(row.operations_json);
+  operations.push(operations[0]);
+  core.sql.exec("UPDATE production_review_revisions SET operations_json=? WHERE id=?",
+    JSON.stringify(operations),"revision-v2");
+  await assertOperationProjectionCorruptionFailsClosed(core,"missing_normalized_row");
+});
+
 test("observer operation frontier reports held-only operation work", async () => {
   const core = makeCore(() => 9020);
   seedReviewedHeldOperation(core);
-  const context = await observerFrontier(core.productionPreparationContext());
+  const context = await observerFrontierFromCore(core);
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
+});
+
+test("observer consumer does not read an unanswered-only submission as empty", async () => {
+  const core = makeCore(() => 9020);
+  const sourceRef = "data/copy/unanswered.json#lead";
+  assert.equal(core.recordReviewRevision({ id:"revision-unanswered",source_ref:sourceRef,
+    source_revision:"dev-unanswered",prod_base:"prod-base",commit_sha:"dev-unanswered",
+    original_hash:"old",proposed_hash:"new",original_text:"Original",proposed_text:"Proposal",
+    suggestion_ids:["suggestion-unanswered"],operations:[{
+      id:"operation-unanswered",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-unanswered",prod_base:"prod-base",old_text:"Original",
+      new_text:"Proposal",
+    }] }).ok,true);
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-unanswered",source_revision:"dev-unanswered",
+    prod_base:"prod-base",decisions:[] }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-unanswered",
+    idempotency_key:"review-unanswered",request_digest:"review-unanswered",actor:"slot:damien",
+    review_revision_id:"revision-unanswered",source_revision:"dev-unanswered",
+    prod_base:"prod-base",decisions:[] }).ok,true);
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+});
+
+test("observer consumer does not read legacy normalized review work as empty", async () => {
+  const core = makeCore(() => 9020);
+  const sourceRef = "data/copy/legacy.json#lead";
+  const operation = { id:"operation-legacy",kind:"replace",source_ref:sourceRef,
+    source_revision:"dev-legacy",prod_base:"prod-base",old_text:"Original",new_text:"Proposal" };
+  assert.equal(core.recordReviewRevision({ id:"revision-legacy",source_ref:sourceRef,
+    source_revision:"dev-legacy",prod_base:"prod-base",commit_sha:"dev-legacy",
+    original_hash:"old",proposed_hash:"new",original_text:"Original",proposed_text:"Proposal",
+    suggestion_ids:["suggestion-legacy"],operations:[operation] }).ok,true);
+  core.sql.exec(`INSERT INTO production_reviews
+    (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
+      receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  "review-legacy","review-legacy","review-legacy","slot:damien","revision-legacy",
+  "dev-legacy","prod-base","receipt-legacy","{}",9020);
+  core.sql.exec(`INSERT INTO production_review_decisions
+    (review_id,operation_id,decision,note,operation_digest,group_id)
+    VALUES (?,?,?,?,?,?)`,"review-legacy","operation-legacy","accepted","","digest",null);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+      lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,"operation-legacy","operation-legacy",
+  "review-legacy","revision-legacy",sourceRef,null,"accepted","","unpublished");
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+});
+
+test("observer consumer does not read a stale accepted operation as empty", async () => {
+  const core = makeCore(() => 9021);
+  reviewedProjection(core);
+  core.now = () => 9022;
+  const sourceRef = "data/copy/home.json#lead";
+  assert.equal(core.recordReviewRevision({ id:"revision-newer",source_ref:sourceRef,
+    source_revision:"dev-2",prod_base:"prod-base",commit_sha:"dev-2",
+    original_hash:"newer-old",proposed_hash:"newer-new",original_text:"Newer original",
+    proposed_text:"Newer proposal",suggestion_ids:["suggestion-newer"],operations:[{
+      id:"op-newer",decision_id:"op-newer",kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-2",prod_base:"prod-base",old_text:"original",new_text:"proposal",
+    }] }).ok,true);
+
+  const projection = core.productionPreparationContext().projection;
+  const summary = core._operationFrontierSummaryProjection();
+  const unpublishedNonRejected = projection.sources.flatMap((source) => source.operations)
+    .filter((operation) => operation.id === "op-accepted").length;
+  assert.equal(summary.eligible_operation_count + summary.held_operation_count,
+    unpublishedNonRejected,
+    "no projected, unpublished, non-rejected operation may be absent from both counts");
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+});
+
+test("observer consumer does not read non-structural group or move-pair holds as empty", async () => {
+  for (const linkageKey of ["group_id","move_pair_id"]) {
+    const core = makeCore(() => 9022);
+    const suffix = linkageKey === "group_id" ? "group" : "move";
+    const sources = [
+      { review_revision_id:`revision-${suffix}-a`,source_ref:`data/copy/${suffix}-a.json#lead`,
+        source_revision:`dev-${suffix}-a`,operation_id:`operation-${suffix}-a`,decision:"accepted" },
+      { review_revision_id:`revision-${suffix}-b`,source_ref:`data/copy/${suffix}-b.json#lead`,
+        source_revision:`dev-${suffix}-b`,operation_id:`operation-${suffix}-b`,decision:"rejected" },
+    ];
+    for (const source of sources) {
+      assert.equal(core.recordReviewRevision({ id:source.review_revision_id,
+        source_ref:source.source_ref,source_revision:source.source_revision,prod_base:"prod-base",
+        commit_sha:source.source_revision,original_hash:"old",proposed_hash:"new",
+        original_text:"Original",proposed_text:"Proposal",
+        suggestion_ids:[`suggestion-${source.operation_id}`],operations:[{
+          id:source.operation_id,decision_id:source.operation_id,kind:"replace",
+          [linkageKey]:`semantic-${suffix}`,source_ref:source.source_ref,
+          source_revision:source.source_revision,prod_base:"prod-base",
+          old_text:"Original",new_text:"Proposal",
+        }] }).ok,true);
+      const decisions = [{ operation_id:source.operation_id,decision:source.decision }];
+      assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+        review_revision_id:source.review_revision_id,source_revision:source.source_revision,
+        prod_base:"prod-base",decisions }).ok,true);
+    }
+    for (const source of sources) assert.equal(core.submitPublisherReview({
+      id:`review-${source.operation_id}`,idempotency_key:`review-${source.operation_id}`,
+      request_digest:`review-${source.operation_id}`,actor:"slot:damien",
+      review_revision_id:source.review_revision_id,source_revision:source.source_revision,
+      prod_base:"prod-base",decisions:[{
+        operation_id:source.operation_id,decision:source.decision,
+      }],
+    }).ok,true);
+
+    const context = await observerFrontierFromCore(core);
+    assertObserverOperationFrontier(context.operation_frontier,{
+      pending_operation_count:1,blocked_state:"unblocked",
+    });
+    assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+  }
+});
+
+test("observer consumer does not read a frozen accepted v2 member as empty", async () => {
+  const core = makeCore(() => 9023);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-frozen-v2",
+    idempotency_key:"release-frozen-v2",request_digest:"release-frozen-v2",schema_version:2,
+    target_batch_id:"operation-frontier",candidate_sha:"candidate-frozen-v2",
+    review_receipt_hash:receipt,review_receipts:[receipt],projection_identity:"frozen-v2",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[{
+      operation_id:"op-held",decision:"rejected",reason:"rejected",
+    }],
+  }));
+  assert.equal(prepared.ok,true);
+
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
 });
 
 test("observer operation frontier survives an active release with truthful counts", async () => {
@@ -1044,6 +1298,100 @@ test("observer operation frontier survives missing batch evidence with truthful 
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
+});
+
+function seedHighCardinalityReview(core,{ operationCount,prefix,normalized=true }) {
+  const sourceRef = `data/copy/${prefix}.json#lead`;
+  const operationsJson = `[${Array.from({ length:operationCount },(_value,index) =>
+    `{"id":"${prefix}-operation-${String(index).padStart(6,"0")}"}`).join(",")}]`;
+  core.sql.exec(`INSERT INTO production_review_revisions
+    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
+     original_text,proposed_text,source_original_text,source_proposed_text,
+     suggestion_ids_json,operations_json,evidence_digest,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`revision-${prefix}`,sourceRef,`dev-${prefix}`,
+    "prod-base",`dev-${prefix}`,"old","new","source text must not be projected","proposal",
+    "source text must not be projected","proposal","[]",operationsJson,`evidence-${prefix}`,9042);
+  core.sql.exec(`INSERT INTO production_review_submissions
+    (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
+    VALUES (?,?,?,?,?,?,?)`,`review-${prefix}`,`review-${prefix}`,
+    `review-${prefix}`,"slot:damien",`receipt-${prefix}`,"{}",9042);
+  core.sql.exec(`INSERT INTO production_review_submission_sources
+    (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
+    VALUES (?,?,?,?,?)`,`review-${prefix}`,`revision-${prefix}`,`dev-${prefix}`,
+    "prod-base",`evidence-${prefix}`);
+  if (normalized) core.sql.exec(`INSERT INTO production_review_operations
+      (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+       lifecycle_state)
+      SELECT json_extract(value,'$.id'),json_extract(value,'$.id'),?, ?, ?,NULL,'unanswered','',
+        'unpublished' FROM json_each(?)`,`review-${prefix}`,`revision-${prefix}`,
+  sourceRef,operationsJson);
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`release-${prefix}`,`release-${prefix}`,
+    `release-${prefix}`,"prepared","service:release","bearer","production",
+    "operation-frontier","prod-base",`candidate-${prefix}`,"generator","evidence","manifest",
+    "membership",9042,9042);
+}
+
+test("observer operation frontier bounds normalized and evidence high-cardinality projections", async () => {
+  const core = makeCore(() => 9042);
+  seedHighCardinalityReview(core,{ operationCount:100_001,prefix:"high-normalized" });
+
+  const projectionQueries = [];
+  const all = core._all.bind(core);
+  core._all = (sql,...args) => {
+    projectionQueries.push({ sql,args });
+    return all(sql,...args);
+  };
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal(context.active_release.id,"release-high-normalized");
+  assert.equal(projectionQueries.some(({sql}) =>
+    /r\.original_text|r\.operations_json/.test(sql)),false,
+    "observer count projection must not select source text or full operations_json");
+  assert.equal(projectionQueries.some(({sql,args}) =>
+    /LIMIT 1 OFFSET \?/i.test(sql) && args.includes(100_000)),true,
+    "observer count projection must stop at its 100001-row sentinel");
+
+  const evidenceCore = makeCore(() => 9043);
+  seedHighCardinalityReview(evidenceCore,{ operationCount:100_001,
+    prefix:"high-evidence",normalized:false });
+  const evidenceQueries = [];
+  const evidenceAll = evidenceCore._all.bind(evidenceCore);
+  evidenceCore._all = (sql,...args) => {
+    evidenceQueries.push({ sql,args });
+    return evidenceAll(sql,...args);
+  };
+  const evidenceContext = await observerFrontierFromCore(evidenceCore);
+  assertObserverOperationFrontier(evidenceContext.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal(evidenceQueries.some(({sql,args}) =>
+    /json_each\(revision\.operations_json\)[\s\S]*LIMIT 1 OFFSET \?/i.test(sql) &&
+      args.includes(100_000)),true,
+  "submitted evidence overflow must be bounded independently of normalized rows");
+});
+
+test("observer operation frontier pages the exact 100000-operation maximum", async () => {
+  const core = makeCore(() => 9044);
+  seedHighCardinalityReview(core,{ operationCount:100_000,prefix:"high-exact" });
+  let largestMaterializedPage = 0;
+  const all = core._all.bind(core);
+  core._all = (sql,...args) => {
+    const rows = all(sql,...args);
+    largestMaterializedPage = Math.max(largestMaterializedPage,rows.length);
+    return rows;
+  };
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:100_000,blocked_state:"unblocked",
+  });
+  assert.equal(largestMaterializedPage <= 5_000,true,
+    "the largest valid frontier must be counted in bounded pages");
 });
 
 test("observer operation frontier preserves every legacy observer key byte-for-byte", async () => {
