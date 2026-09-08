@@ -5,10 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -50,6 +54,15 @@ def local_refs(repo: Path) -> dict[str, str]:
         "--format=%(refname) %(objectname)",
     ).stdout.splitlines()
     return {ref: value for ref, value in (line.split() for line in lines)}
+
+
+def sockets_available() -> bool:
+    try:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+        return True
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -1243,6 +1256,8 @@ def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "uploadpack.hideRefs")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "refs/heads/side")
     monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'uploadpack.hideRefs=refs/heads/side'")
+    monkeypatch.setenv("PATH", "/tmp/hostile-path")
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/hostile-agent")
     monkeypatch.setattr(subprocess, "run", fake_run)
     operation = cas.Operation(
         "forward",
@@ -1264,10 +1279,88 @@ def test_run_git_uses_allowlisted_environment_and_pins_config_isolation(
     assert "GIT_CONFIG_KEY_0" not in captured_environment
     assert "GIT_CONFIG_VALUE_0" not in captured_environment
     assert "GIT_CONFIG_PARAMETERS" not in captured_environment
+    assert "PATH" not in captured_environment
+    assert "SSH_AUTH_SOCK" not in captured_environment
     assert captured_environment["GIT_CONFIG_GLOBAL"] == os.devnull
     assert captured_environment["GIT_CONFIG_SYSTEM"] == os.devnull
     assert captured_environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert captured_environment["GIT_CONFIG_COUNT"] == "0"
+    assert captured_environment["GIT_SSH_COMMAND"]
+    assert captured_environment["GIT_SSH_COMMAND"] == os.devnull
+
+
+def test_run_git_without_resolved_git_carries_stage_and_starts_no_subprocess(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    def fail_if_called(*_args, **_kwargs):
+        pytest.fail("subprocess.run must not be called without resolved Git")
+
+    operation = cas.Operation(
+        "forward",
+        tmp_path,
+        "origin",
+        "main",
+        "1" * 40,
+        "2" * 40,
+        False,
+    )
+    monkeypatch.setattr(cas, "GIT_PATH", None)
+    monkeypatch.setattr(subprocess, "run", fail_if_called)
+
+    with pytest.raises(cas.CasError) as captured:
+        cas._run_git(operation, ["version"], stage="supplied fail-closed stage")
+
+    assert str(captured.value)
+    assert str(captured.value) == "Git operation failed during supplied fail-closed stage"
+
+
+def test_git_resolution_fails_closed_when_confstr_raises(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def raising_confstr(_name: str):
+        raise OSError("CS_PATH unavailable")
+
+    monkeypatch.setattr(cas.os, "confstr", raising_confstr)
+
+    assert cas._resolve_git_path() is None
+
+
+@pytest.mark.parametrize("system_path", ["relative/bin", "/bin::/usr/bin"])
+def test_git_resolution_fails_closed_for_malformed_or_relative_cs_path(
+    system_path: str, monkeypatch: pytest.MonkeyPatch
+):
+    def fail_if_called(*_args, **_kwargs):
+        pytest.fail("shutil.which must not inspect an invalid CS_PATH")
+
+    monkeypatch.setattr(cas.os, "confstr", lambda _name: system_path)
+    monkeypatch.setattr(cas.shutil, "which", fail_if_called)
+
+    assert cas._resolve_git_path() is None
+
+
+def test_git_resolution_fails_closed_when_git_is_not_on_cs_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(cas.os, "confstr", lambda _name: str(tmp_path))
+    monkeypatch.setattr(cas.shutil, "which", lambda _name, *, path: None)
+
+    assert cas._resolve_git_path() is None
+
+
+def test_git_resolution_fails_closed_when_strict_resolve_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    candidate = tmp_path / "git"
+
+    def raising_resolve(_path: Path, *, strict: bool = False):
+        assert strict is True
+        raise OSError("resolved Git disappeared")
+
+    monkeypatch.setattr(cas.os, "confstr", lambda _name: str(tmp_path))
+    monkeypatch.setattr(cas.shutil, "which", lambda _name, *, path: str(candidate))
+    monkeypatch.setattr(cas.pathlib.Path, "resolve", raising_resolve)
+
+    assert cas._resolve_git_path() is None
 
 
 def test_git_resolution_requires_a_regular_executable_file(
@@ -1348,6 +1441,142 @@ def test_forward_ignores_inherited_path_git_shim_and_records_real_executable(
     assert result["result"] == "success"
     assert result["git_executable"] == cas.GIT_PATH
     assert Path(result["git_executable"]).is_absolute()
+    assert not shim_marker.exists()
+
+
+@pytest.mark.skipif(not sockets_available(), reason="localhost sockets are unavailable")
+def test_forward_uses_smart_http_remote_without_inherited_helper_path(
+    repositories: Repositories,
+):
+    git(repositories.remote, "config", "http.receivepack", "true")
+    requests: list[tuple[str, str]] = []
+
+    class Handler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(
+                *args,
+                directory=str(repositories.remote.parent),
+                **kwargs,
+            )
+
+        def _serve_git(self) -> None:
+            parsed = urlsplit(self.path)
+            content_length = int(self.headers.get("Content-Length", "0"))
+            request_body = self.rfile.read(content_length)
+            backend_environment = dict(os.environ)
+            backend_environment.update(
+                {
+                    "CONTENT_LENGTH": str(content_length),
+                    "CONTENT_TYPE": self.headers.get("Content-Type", ""),
+                    "GIT_HTTP_EXPORT_ALL": "1",
+                    "GIT_PROJECT_ROOT": str(repositories.remote.parent),
+                    "PATH_INFO": parsed.path,
+                    "QUERY_STRING": parsed.query,
+                    "REMOTE_ADDR": self.client_address[0],
+                    "REQUEST_METHOD": self.command,
+                }
+            )
+            completed = subprocess.run(
+                [cas.GIT_PATH, "http-backend"],
+                input=request_body,
+                capture_output=True,
+                env=backend_environment,
+                check=False,
+            )
+            header_block, separator, response_body = completed.stdout.partition(
+                b"\r\n\r\n"
+            )
+            if not separator:
+                header_block, separator, response_body = completed.stdout.partition(
+                    b"\n\n"
+                )
+            assert separator
+            status = 200
+            response_headers: list[tuple[str, str]] = []
+            for line in header_block.decode("latin-1").splitlines():
+                name, value = line.split(":", 1)
+                assert name
+                if name.lower() == "status":
+                    status = int(value.strip().split()[0])
+                else:
+                    response_headers.append((name, value.strip()))
+            self.send_response(status)
+            for name, value in response_headers:
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
+            requests.append((self.command, self.path))
+
+        def do_GET(self) -> None:  # noqa: N802
+            self._serve_git()
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._serve_git()
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        remote_url = f"http://127.0.0.1:{server.server_port}/{repositories.remote.name}"
+        assert remote_url
+        git(repositories.daemon, "remote", "set-url", "origin", remote_url)
+
+        shim_directory = repositories.remote.parent / "helper-shims"
+        shim_directory.mkdir()
+        shim_marker = repositories.remote.parent / "ambient-helper-invoked"
+        for name in ("git-remote-http", "ssh"):
+            shim = shim_directory / name
+            shim.write_text(
+                "#!/bin/sh\n"
+                f": > {shim_marker}\n"
+                "exit 97\n",
+                encoding="utf-8",
+            )
+            shim.chmod(0o700)
+        hostile_environment = dict(os.environ)
+        hostile_environment["PATH"] = str(shim_directory)
+        hostile_environment["SSH_AUTH_SOCK"] = str(
+            repositories.remote.parent / "hostile-agent"
+        )
+
+        completed = invoke(
+            repositories,
+            "forward",
+            env=hostile_environment,
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert completed.returncode == 0, completed.stderr
+    result = receipt(completed)
+    assert result["result"]
+    assert result["result"] == "success"
+    assert result["remote_url"]
+    assert result["remote_url"] == remote_url
+    assert result["mutations"]
+    assert result["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+        "remote-tracking-main-cas",
+    ]
+    assert requests
+    assert any(
+        method
+        and path
+        and method == "POST"
+        and path.endswith("/git-receive-pack")
+        for method, path in requests
+    )
+    observed_remote = sha(repositories.remote, "refs/heads/main")
+    assert observed_remote
+    assert observed_remote == repositories.candidate
     assert not shim_marker.exists()
 
 

@@ -31,8 +31,6 @@ GIT_ENV_ALLOWLIST = (
     "LANGUAGE",
     "LC_ALL",
     "LC_CTYPE",
-    "PATH",
-    "SSH_AUTH_SOCK",
     "TZ",
 )
 GIT_INTERNAL_ENV = frozenset({"GIT_INDEX_FILE", "GIT_OPTIONAL_LOCKS"})
@@ -165,6 +163,7 @@ def _run_git(
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_SYSTEM": os.devnull,
             "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_SSH_COMMAND": os.devnull,
             "GIT_TERMINAL_PROMPT": "0",
         }
     )
