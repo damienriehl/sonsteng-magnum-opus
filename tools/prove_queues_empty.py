@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import email.utils
+import hashlib
 import http.client
 import json
 import os
@@ -27,9 +29,13 @@ MAX_BOUND_VALUE_BYTES = 256
 TIMER_UNIT = "sonsteng-prod-release.timer"
 APPLY_TIMER_UNIT = "sonsteng-apply.timer"
 USER_AGENT = "sonsteng-queue-proof/1.0"
-APPROVED_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
+SYSTEM_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
+TLS_12_CIPHER_POLICY = "ECDHE+AESGCM:ECDHE+CHACHA20"
+MACHINE_ID_PATH = "/etc/machine-id"
+BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id"
 ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 WINDOW_OWNER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+WINDOW_NONCE_RE = re.compile(r"[0-9a-f]{64}")
 CONTENT_LENGTH_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 GIT_OBJECT_ID_RE = re.compile(r"[0-9a-f]{40}")
 ALLOWED_LEDGER_ORIGINS = frozenset(
@@ -98,20 +104,56 @@ class _ProofArgumentParser(argparse.ArgumentParser):
     def error(self, _message):
         raise _ArgumentsInvalid from None
 
+    def exit(self, _status=0, _message=None):
+        raise _ArgumentsInvalid from None
+
+    def print_help(self, file=None):
+        # Proof invocations have a one-receipt stdout contract, including help.
+        return None
+
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, file_pointer, code, message, headers, new_url):
         return None
 
 
-def _production_opener():
-    """Build an HTTPS stack with no authority inherited from the environment."""
+def _read_system_ca_bundle():
     try:
+        raw = pathlib.Path(SYSTEM_CA_BUNDLE).read_bytes()
+        cadata = raw.decode("ascii")
+    except (OSError, UnicodeError) as exc:
+        raise ProofError("https-client-unavailable") from exc
+    if not raw:
+        raise ProofError("https-client-unavailable")
+    return raw, cadata
+
+
+def _production_context(ca_bundle=None):
+    """Build an explicit TLS context without environment-selected trust inputs."""
+    try:
+        if ca_bundle is None:
+            _raw, cadata = _read_system_ca_bundle()
+        else:
+            _raw, cadata = ca_bundle
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.maximum_version = ssl.TLSVersion.TLSv1_2
+        context.set_ciphers(TLS_12_CIPHER_POLICY)
         context.verify_mode = ssl.CERT_REQUIRED
         context.check_hostname = True
         context.keylog_filename = None
-        context.load_verify_locations(cafile=APPROVED_CA_BUNDLE)
+        context.load_verify_locations(cadata=cadata)
+        return context
+    except Exception as exc:
+        raise ProofError("https-client-unavailable") from exc
+
+
+def _production_opener():
+    """Build an HTTPS stack with no authority inherited from the environment."""
+    context = _production_context()
+    try:
+        # Other standard handlers are unreachable because every requested URL
+        # is constructed from the HTTPS-only allowlist and redirects are denied.
         return urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
             _NoRedirect(),
@@ -119,6 +161,13 @@ def _production_opener():
         ).open
     except Exception as exc:
         raise ProofError("https-client-unavailable") from exc
+
+
+def _assert_clean_process_environment(environment=None):
+    """Refuse loader and OpenSSL configuration inherited by this process."""
+    names = os.environ if environment is None else environment
+    if any(name.startswith("LD_") for name in names) or "OPENSSL_CONF" in names:
+        raise ProofError("environment-hostile")
 
 
 def _protected_env(path, required_keys, *, missing_ok=False):
@@ -264,6 +313,25 @@ def _declared_content_length(headers):
     return declared_length
 
 
+def _server_date(headers):
+    values = [
+        value
+        for name, value in headers
+        if isinstance(name, str) and name.casefold() == "date"
+    ]
+    if len(values) != 1 or not isinstance(values[0], str):
+        raise ProofError("http-server-date-invalid")
+    try:
+        observed = email.utils.parsedate_to_datetime(values[0])
+        if observed is None or observed.tzinfo is None:
+            raise ValueError
+        return email.utils.format_datetime(
+            observed.astimezone(datetime.timezone.utc), usegmt=True
+        )
+    except (TypeError, ValueError, OverflowError):
+        raise ProofError("http-server-date-invalid") from None
+
+
 def _read_response(manager):
     response = _response_call(lambda: manager.__enter__())
     try:
@@ -276,6 +344,7 @@ def _read_response(manager):
             raise ProofError("http-status-invalid")
         headers = _response_call(lambda: list(response.getheaders()))
         declared_length = _declared_content_length(headers)
+        server_date = _server_date(headers)
         if isinstance(response, http.client.HTTPResponse):
             wire_body = response.fp
             if wire_body is None:
@@ -327,7 +396,7 @@ def _read_response(manager):
         raise
     else:
         _response_call(lambda: manager.__exit__(None, None, None))
-    return raw
+    return raw, server_date
 
 
 def _get_json(url, bearer, opener, *, review=False):
@@ -345,7 +414,7 @@ def _get_json(url, bearer, opener, *, review=False):
     manager = _response_call(
         lambda: opener(request, timeout=TIMEOUT_SECONDS)
     )
-    raw = _read_response(manager)
+    raw, server_date = _read_response(manager)
     try:
         payload = json.loads(
             raw.decode("utf-8"),
@@ -360,7 +429,13 @@ def _get_json(url, bearer, opener, *, review=False):
         raise ProofError("http-response-malformed") from exc
     if not isinstance(payload, dict):
         raise ProofError("http-response-malformed")
-    return payload
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+    return payload, server_date, hashlib.sha256(canonical).hexdigest()
 
 
 def _review_counts(payload):
@@ -518,9 +593,9 @@ def _frontier_summary(payload):
     return summary, reason == "unprepared" and operation_empty
 
 
-def _timer_state(unit, run):
+def _timer_state(unit, run, systemctl_path=SYSTEMCTL_PATH):
     """Read timer state without mutating the unit."""
-    if SYSTEMCTL_PATH is None:
+    if systemctl_path is None:
         return {"active": None, "available": False, "enabled": None}
     environment = {
         "LC_ALL": "C",
@@ -528,7 +603,7 @@ def _timer_state(unit, run):
     }
     try:
         enabled = run(
-            [SYSTEMCTL_PATH, "--user", "is-enabled", unit],
+            [systemctl_path, "--user", "is-enabled", unit],
             capture_output=True,
             encoding="utf-8",
             env=environment,
@@ -538,7 +613,7 @@ def _timer_state(unit, run):
             check=False,
         )
         active = run(
-            [SYSTEMCTL_PATH, "--user", "is-active", unit],
+            [systemctl_path, "--user", "is-active", unit],
             capture_output=True,
             encoding="utf-8",
             env=environment,
@@ -568,9 +643,9 @@ def _timer_state(unit, run):
     }
 
 
-def timer_state(run=subprocess.run):
+def timer_state(run=subprocess.run, systemctl_path=SYSTEMCTL_PATH):
     """Read the production release timer state without mutating the unit."""
-    return _timer_state(TIMER_UNIT, run)
+    return _timer_state(TIMER_UNIT, run, systemctl_path)
 
 
 def _utc_timestamp(utc_now):
@@ -589,15 +664,77 @@ def _utc_timestamp(utc_now):
         raise ProofError("timestamp-unavailable") from exc
 
 
+def _read_bounded_identity(path, *, pattern):
+    try:
+        with pathlib.Path(path).open("rb") as source:
+            raw = source.read(257)
+        value = raw.decode("ascii").strip()
+    except (OSError, UnicodeError) as exc:
+        raise ProofError("host-identity-unavailable") from exc
+    if len(raw) > 256 or not pattern.fullmatch(value):
+        raise ProofError("host-identity-unavailable")
+    return value.encode("ascii")
+
+
+def _host_identity():
+    machine_id = _read_bounded_identity(
+        MACHINE_ID_PATH, pattern=re.compile(r"[0-9a-fA-F]{32}")
+    )
+    boot_id = _read_bounded_identity(
+        BOOT_ID_PATH,
+        pattern=re.compile(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        ),
+    )
+    return {
+        "boot_id_sha256": hashlib.sha256(b"boot-id\0" + boot_id).hexdigest(),
+        "machine_id_sha256": hashlib.sha256(
+            b"machine-id\0" + machine_id
+        ).hexdigest(),
+    }
+
+
+def _git_blob_oid(raw):
+    header = f"blob {len(raw)}\0".encode("ascii")
+    return hashlib.sha1(header + raw, usedforsecurity=False).hexdigest()
+
+
+def _self_blob():
+    try:
+        raw = pathlib.Path(__file__).read_bytes()
+    except OSError as exc:
+        raise ProofError("verifier-identity-unreadable") from exc
+    return _git_blob_oid(raw)
+
+
 def _release_identity(release_commit, verifier_blob):
     if (
         not GIT_OBJECT_ID_RE.fullmatch(release_commit)
         or not GIT_OBJECT_ID_RE.fullmatch(verifier_blob)
     ):
         raise ProofError("release-identity-invalid")
+    measured_blob = _self_blob()
+    if measured_blob != verifier_blob:
+        raise ProofError("verifier-blob-mismatch")
     return {
         "release_commit": release_commit,
-        "verifier_blob": verifier_blob,
+        "verifier_blob": measured_blob,
+    }
+
+
+def _system_ca_bundle_identity(context, raw):
+    try:
+        stats = context.cert_store_stats()
+        ca_count = stats["x509_ca"]
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise ProofError("https-client-unavailable") from exc
+    if not raw or not isinstance(ca_count, int) or ca_count <= 0:
+        raise ProofError("https-client-unavailable")
+    return {
+        "path": SYSTEM_CA_BUNDLE,
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "x509_ca_count": ca_count,
     }
 
 
@@ -614,11 +751,15 @@ def _new_receipt(verifier_identity=None):
         },
         "fence": "unproven",
         "first_get_utc": None,
+        "host_identity": None,
         "last_get_utc": None,
         "ledger_host": None,
+        "ledger_state_hash": None,
+        "preflight": None,
         "publication": "unproved",
         "publication_fallback": None,
         "publication_frontier": None,
+        "server_dates": {"publication_frontier": None, "review": None},
         "timer": {"active": None, "available": False, "enabled": None},
         "verifier_identity": dict(verifier_identity),
     }
@@ -638,17 +779,29 @@ def prove(
     verifier_identity,
     apply_timer_stopped,
     window_owner,
+    window_nonce,
     opener,
     run_systemctl,
+    systemctl_path,
+    read_host_identity,
     utc_now,
 ):
     receipt = _new_receipt(verifier_identity)
     try:
-        if not apply_timer_stopped or window_owner is None:
+        if (
+            not apply_timer_stopped
+            or window_owner is None
+            or window_nonce is None
+        ):
             raise ProofError("fence-assertion-missing")
         if not WINDOW_OWNER_RE.fullmatch(window_owner):
             raise ProofError("fence-assertion-invalid")
-        apply_timer = _timer_state(APPLY_TIMER_UNIT, run_systemctl)
+        if not WINDOW_NONCE_RE.fullmatch(window_nonce):
+            raise ProofError("fence-assertion-invalid")
+        receipt["host_identity"] = dict(read_host_identity())
+        apply_timer = _timer_state(
+            APPLY_TIMER_UNIT, run_systemctl, systemctl_path
+        )
         apply_stopped = (
             apply_timer["available"] is True
             and apply_timer["active"] is False
@@ -657,12 +810,13 @@ def prove(
             "apply_timer": apply_timer,
             "apply_timer_stopped": apply_stopped,
             "proved": apply_stopped,
+            "window_nonce": window_nonce,
             "window_owner": window_owner,
         }
         if not apply_stopped:
             raise ProofError("fence-apply-timer-not-stopped")
 
-        timer = timer_state(run_systemctl)
+        timer = timer_state(run_systemctl, systemctl_path)
         receipt["timer"] = timer
         review_url, frontier_url, ledger_host = _api_coordinates(
             ledger_origin
@@ -671,10 +825,11 @@ def prove(
         apply_env = _protected_env(apply_env_file, {"EDIT_SERVICE_TOKEN"})
         receipt["first_get_utc"] = _utc_timestamp(utc_now)
         receipt["last_get_utc"] = receipt["first_get_utc"]
-        review_payload = _get_json(
+        review_payload, review_server_date, review_hash = _get_json(
             review_url, apply_env["EDIT_SERVICE_TOKEN"], opener, review=True
         )
         counts = _review_counts(review_payload)
+        receipt["server_dates"]["review"] = review_server_date
         receipt["editor_review"] = counts
         receipt["apply"] = {"accepted": counts["accepted"]}
 
@@ -685,12 +840,27 @@ def prove(
         )
         if observer_env is not None:
             receipt["last_get_utc"] = _utc_timestamp(utc_now)
-            frontier_payload = _get_json(
+            frontier_payload, frontier_server_date, frontier_hash = _get_json(
                 frontier_url,
                 observer_env["SONSTENG_PROD_OBSERVER_BEARER"],
                 opener,
             )
             frontier, publication_empty = _frontier_summary(frontier_payload)
+            combined_hash = hashlib.sha256(
+                b"review\0"
+                + bytes.fromhex(review_hash)
+                + b"frontier\0"
+                + bytes.fromhex(frontier_hash)
+            ).hexdigest()
+            receipt["server_dates"][
+                "publication_frontier"
+            ] = frontier_server_date
+            receipt["ledger_state_hash"] = {
+                "algorithm": "sha256",
+                "combined": combined_hash,
+                "publication_frontier": frontier_hash,
+                "review": review_hash,
+            }
             receipt["publication"] = "observer-frontier"
             receipt["publication_frontier"] = frontier
         else:
@@ -715,32 +885,64 @@ def prove(
     return receipt
 
 
-def _run_proof(args, opener, run_systemctl, utc_now):
+def _preflight_receipt(verifier_identity, systemctl_path):
+    receipt = _new_receipt(verifier_identity)
+    if systemctl_path is None:
+        raise ProofError("systemctl-unavailable")
     try:
+        resolved_systemctl = pathlib.Path(systemctl_path).resolve(strict=True)
+    except OSError as exc:
+        raise ProofError("systemctl-unavailable") from exc
+    if not resolved_systemctl.is_file() or not os.access(resolved_systemctl, os.X_OK):
+        raise ProofError("systemctl-unavailable")
+    ca_bundle = _read_system_ca_bundle()
+    context = _production_context(ca_bundle)
+    receipt["preflight"] = {
+        "ready": True,
+        "system_ca_bundle": _system_ca_bundle_identity(context, ca_bundle[0]),
+        "systemctl_path": str(resolved_systemctl),
+    }
+    return receipt
+
+
+def _run_proof(
+    args,
+    opener,
+    run_systemctl,
+    utc_now,
+    systemctl_path,
+    read_host_identity,
+):
+    verifier_identity = None
+    try:
+        _assert_clean_process_environment()
         verifier_identity = _release_identity(
             args.release_commit, args.verifier_blob
         )
-    except ProofError as exc:
-        return _failed_receipt(str(exc))
-
-    if opener is None:
-        try:
+        if args.preflight:
+            return _preflight_receipt(verifier_identity, systemctl_path)
+        if opener is None:
             opener = _production_opener()
-        except ProofError as exc:
-            return _failed_receipt(str(exc), verifier_identity)
-    if utc_now is None:
-        utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
-    return prove(
-        args.ledger_origin,
-        args.apply_env_file,
-        args.observer_env_file,
-        verifier_identity=verifier_identity,
-        apply_timer_stopped=args.apply_timer_stopped,
-        window_owner=args.window_owner,
-        opener=opener,
-        run_systemctl=run_systemctl,
-        utc_now=utc_now,
-    )
+        if utc_now is None:
+            utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
+        return prove(
+            args.ledger_origin,
+            args.apply_env_file,
+            args.observer_env_file,
+            verifier_identity=verifier_identity,
+            apply_timer_stopped=args.apply_timer_stopped,
+            window_owner=args.window_owner,
+            window_nonce=args.window_nonce,
+            opener=opener,
+            run_systemctl=run_systemctl,
+            systemctl_path=systemctl_path,
+            read_host_identity=read_host_identity,
+            utc_now=utc_now,
+        )
+    except ProofError as exc:
+        return _failed_receipt(str(exc), verifier_identity)
+    except Exception:
+        return _failed_receipt("verifier-defect", verifier_identity)
 
 
 def main(
@@ -750,28 +952,76 @@ def main(
     run_systemctl=subprocess.run,
     utc_now=None,
     stdout=None,
+    systemctl_path=None,
+    read_host_identity=None,
 ):
-    parser = _ProofArgumentParser(
-        description="Emit a text-free proof that all Day Zero queues are empty"
-    )
-    parser.add_argument("--ledger-origin", required=True)
-    parser.add_argument("--apply-env-file", required=True)
-    parser.add_argument("--observer-env-file", required=True)
-    parser.add_argument("--release-commit", required=True)
-    parser.add_argument("--verifier-blob", required=True)
-    parser.add_argument("--apply-timer-stopped", action="store_true")
-    parser.add_argument("--window-owner")
     try:
-        args = parser.parse_args(argv)
-    except _ArgumentsInvalid:
-        receipt = _failed_receipt("arguments-invalid")
-    else:
-        receipt = _run_proof(args, opener, run_systemctl, utc_now)
-    print(
-        json.dumps(receipt, sort_keys=True, separators=(",", ":")),
-        file=stdout or sys.stdout,
-    )
-    return 0 if receipt["all_queues_empty"] else 1
+        parser = _ProofArgumentParser(
+            description=(
+                "Emit a text-free proof that all Day Zero queues are empty"
+            )
+        )
+        parser.add_argument("--ledger-origin")
+        parser.add_argument("--apply-env-file")
+        parser.add_argument("--observer-env-file")
+        parser.add_argument("--release-commit", required=True)
+        parser.add_argument("--verifier-blob", required=True)
+        parser.add_argument("--preflight", action="store_true")
+        parser.add_argument("--apply-timer-stopped", action="store_true")
+        parser.add_argument("--window-owner")
+        parser.add_argument("--window-nonce")
+        if systemctl_path is None:
+            systemctl_path = SYSTEMCTL_PATH
+        if read_host_identity is None:
+            read_host_identity = _host_identity
+        try:
+            args = parser.parse_args(argv)
+            if not args.preflight and any(
+                value is None
+                for value in (
+                    args.ledger_origin,
+                    args.apply_env_file,
+                    args.observer_env_file,
+                )
+            ):
+                raise _ArgumentsInvalid
+        except _ArgumentsInvalid:
+            receipt = _failed_receipt("arguments-invalid")
+        else:
+            receipt = _run_proof(
+                args, opener, run_systemctl, utc_now,
+                systemctl_path, read_host_identity,
+            )
+        successful = receipt["all_queues_empty"] or (
+            isinstance(receipt.get("preflight"), dict)
+            and receipt["preflight"].get("ready") is True
+        )
+    except Exception:
+        receipt = _failed_receipt("verifier-defect")
+        successful = False
+    try:
+        serialized = json.dumps(
+            receipt, sort_keys=True, separators=(",", ":")
+        )
+    except Exception:
+        # This literal is deliberately independent of the JSON encoder so an
+        # encoder or receipt-shape defect still produces one bounded receipt.
+        serialized = (
+            '{"all_queues_empty":false,"apply":{"accepted":null},'
+            '"editor_review":{"accepted":null,"other_non_terminal":null,'
+            '"pending":null},"fence":"unproven","first_get_utc":null,'
+            '"host_identity":null,"last_get_utc":null,"ledger_host":null,'
+            '"ledger_state_hash":null,"preflight":null,'
+            '"proof_error":"verifier-defect","publication":"unproved",'
+            '"publication_fallback":null,"publication_frontier":null,'
+            '"server_dates":{"publication_frontier":null,"review":null},'
+            '"timer":{"active":null,"available":false,"enabled":null},'
+            '"verifier_identity":{"release_commit":null,'
+            '"verifier_blob":null}}'
+        )
+        successful = False
+    print(serialized, file=stdout or sys.stdout)
+    return 0 if successful else 1
 
 
 if __name__ == "__main__":

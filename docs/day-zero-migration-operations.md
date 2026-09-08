@@ -229,6 +229,38 @@ does not authorize or execute production work.
 Damien must perform the production window at the keyboard under the Cloudflare
 PROD principal described in `docs/prod-release-operations.md`:
 
+Before pencils-down or either timer is changed, run this offline preflight from
+the reviewed values recorded outside the checkout. It makes no HTTP request.
+It must exit `0` with `preflight.ready:true`, the reviewed measured
+`verifier_blob`, `/usr/bin/systemctl`, and the expected system-CA-bundle path,
+SHA-256, and nonzero root count. A missing/unreadable bundle fails as
+`https-client-unavailable`; a missing trusted-path systemctl fails as
+`systemctl-unavailable`. Compare the reported bundle SHA-256 and root count to
+the approved baseline for this production host before opening the window:
+
+```bash
+builtin test "$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout rev-parse --verify 'HEAD^{commit}')" = \
+  '<reviewed-release-commit-SHA>' || exit 72
+builtin test "$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout rev-parse '<reviewed-release-commit-SHA>:tools/prove_queues_empty.py')" = \
+  '<reviewed-verifier-Git-blob-OID>' || exit 73
+builtin test "$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout hash-object -- /home/damienriehl/.local/share/sonsteng-daemon/checkout/tools/prove_queues_empty.py)" = \
+  '<reviewed-verifier-Git-blob-OID>' || exit 74
+(
+  builtin exec -c /usr/bin/env -i LC_ALL=C \
+    /usr/bin/python3 -I \
+    /proc/self/fd/9 \
+    --preflight \
+    --release-commit '<reviewed-release-commit-SHA>' \
+    --verifier-blob '<reviewed-verifier-Git-blob-OID>'
+) 9</home/damienriehl/.local/share/sonsteng-daemon/checkout/tools/prove_queues_empty.py \
+  > '<absolute-preflight-receipt-path>.json'
+queue_proof_preflight_rc=$?
+```
+
+This preflight intentionally reports `all_queues_empty:false`: it checks that
+the proof machinery is ready, not the live queues. Treat any skipped comparison
+or nonzero result as a stop before the window.
+
 1. notify John, establish pencils-down, stop the apply timer, prove both
    services quiescent, take the daemon lock, and establish the six-actor
    exclusive change window;
@@ -237,26 +269,47 @@ PROD principal described in `docs/prod-release-operations.md`:
    the exact release commit plus the Git blob object ID at
    `tools/prove_queues_empty.py`. After review, the reviewer records those two
    values with these absolute commands; the operator copies the recorded
-   values into the two quoted placeholders below rather than deriving new
-   expected values during the production window:
+   values into the two quoted placeholders below rather than deriving a new
+   expected value from the working verifier during the production window. The
+   expected blob therefore comes from the review record, independently of the
+   bytes the verifier will measure:
 
    ```bash
-   builtin command /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
-     rev-parse --verify 'HEAD^{commit}'
-   builtin command /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
-     rev-parse '<reviewed-release-commit-SHA>:tools/prove_queues_empty.py'
+   (
+     builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
+       rev-parse --verify 'HEAD^{commit}'
+   ) 9<"$QUEUE_PROOF_VERIFIER"
+   (
+     builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
+       rev-parse '<reviewed-release-commit-SHA>:tools/prove_queues_empty.py'
+   )
    ```
 
-   Establish this read-only launcher once in the supervised shell. Its
-   checkout, Git, Python, and verifier paths are absolute; Python isolated mode
+   Before opening, the supervisor also records one unpredictable 64-character
+   lowercase-hex window nonce outside the checkout and substitutes it for
+   `<recorded-Packet-D-window-nonce>` in the readonly function. Rehearsals use a
+   different nonce. The checkout, Git, env, Python, and verifier paths are
+   absolute. Bash `exec -c` gives the dynamic loader of `/usr/bin/env` an empty
+   environment; `/usr/bin/env -i` then gives Python an empty environment with
+   the sole allowlisted entry `LC_ALL=C`. The verifier constructs the two
+   variables needed by its systemctl child itself. Python isolated mode also
    ignores user-site and Python environment path injection. The Bash builtin
    command boundary prevents PATH entries or slash-named shell functions from
    intercepting Git or Python, and a pre-existing readonly launcher makes setup
-   exit `69`. Every invocation independently requires the named checkout to be
+   exit `69`. The verifier independently refuses every inherited `LD_*` name
+   and `OPENSSL_CONF`, even if it is invoked outside this launcher. Every
+   invocation independently requires the named checkout to be
    at the reviewed commit, requires that commit to contain the reviewed blob,
    and hashes the working verifier bytes to reject a dirty or substituted copy.
-   A mismatch refuses before Python starts. Keep the function readonly for the
-   whole window:
+   The launcher opens the working verifier once on file descriptor 9, feeds
+   that descriptor to `git hash-object --stdin`, and invokes Python through
+   that same descriptor. Python
+   then reads its own `/proc/self/fd/9` source path, hashes those exact bytes as
+   a Git blob (`SHA-1("blob " + ASCII byte length + NUL + file bytes)`), and
+   compares that measurement with the independently recorded expected blob.
+   The shell rejects a mismatch before Python starts; Python rejects a mismatch
+   or unreadable self path with a bounded receipt. Keep the function readonly
+   for the whole window:
 
    <!-- queue-proof-launcher:start -->
    ```bash
@@ -267,35 +320,39 @@ PROD principal described in `docs/prod-release-operations.md`:
    builtin unset -f run_queue_proof 2>/dev/null || exit 69
 
    run_queue_proof() {
-     local observed_checkout observed_commit committed_blob working_blob
-     observed_checkout=$(builtin command /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --show-toplevel) || return 70
+     builtin local observed_checkout observed_commit committed_blob working_blob
+     observed_checkout=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --show-toplevel) || return 70
      case "$observed_checkout" in
        "$QUEUE_PROOF_CHECKOUT") ;;
        *) return 71 ;;
      esac
-     observed_commit=$(builtin command /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --verify 'HEAD^{commit}') || return 70
+     observed_commit=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --verify 'HEAD^{commit}') || return 70
      case "$observed_commit" in
        "$QUEUE_PROOF_RELEASE_COMMIT") ;;
        *) return 72 ;;
      esac
-     committed_blob=$(builtin command /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse "${QUEUE_PROOF_RELEASE_COMMIT}:tools/prove_queues_empty.py") || return 70
+     committed_blob=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse "${QUEUE_PROOF_RELEASE_COMMIT}:tools/prove_queues_empty.py") || return 70
      case "$committed_blob" in
        "$QUEUE_PROOF_VERIFIER_BLOB") ;;
        *) return 73 ;;
      esac
-     working_blob=$(builtin command /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" hash-object -- "$QUEUE_PROOF_VERIFIER") || return 70
-     case "$working_blob" in
-       "$QUEUE_PROOF_VERIFIER_BLOB") ;;
-       *) return 74 ;;
-     esac
-     builtin command /usr/bin/python3 -I "$QUEUE_PROOF_VERIFIER" \
-       --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
-       --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
-       --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
-       --apply-env-file /home/damienriehl/.config/sonsteng-apply/env \
-       --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
-       --apply-timer-stopped \
-       --window-owner '<opaque-Packet-D-window-id>'
+     (
+       working_blob=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" hash-object --stdin <&9) || return 70
+       case "$working_blob" in
+         "$QUEUE_PROOF_VERIFIER_BLOB") ;;
+         *) return 74 ;;
+       esac
+       builtin exec -c /usr/bin/env -i LC_ALL=C \
+         /usr/bin/python3 -I /proc/self/fd/9 \
+         --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
+         --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
+         --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
+         --apply-env-file /home/damienriehl/.config/sonsteng-apply/env \
+         --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
+         --apply-timer-stopped \
+         --window-owner '<opaque-Packet-D-window-id>' \
+         --window-nonce '<recorded-Packet-D-window-nonce>'
+     ) 9<"$QUEUE_PROOF_VERIFIER"
    }
    builtin readonly -f run_queue_proof
 
@@ -305,28 +362,51 @@ PROD principal described in `docs/prod-release-operations.md`:
    <!-- queue-proof-launcher:end -->
 
    Require `opening_queue_proof_rc` to be exactly `0`, the receipt to contain
-   `"all_queues_empty":true`, and its `verifier_identity` values to equal the
-   two reviewed constants. The verifier command executed by the function is:
+   `"all_queues_empty":true`, its measured `verifier_identity` values to equal
+   the two reviewed constants, and its fence nonce to equal the nonce recorded
+   before the window. The supervised shell transcript must show that the
+   readonly `run_queue_proof` function produced the redirected receipt. A bare
+   hand invocation is not accepted. The verifier command executed by the
+   function is:
 
    ```bash
-   builtin command /usr/bin/python3 -I "$QUEUE_PROOF_VERIFIER" \
-     --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
-     --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
-     --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
-     --apply-env-file /home/damienriehl/.config/sonsteng-apply/env \
-     --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
-     --apply-timer-stopped \
-     --window-owner '<opaque-Packet-D-window-id>'
+   (
+     builtin exec -c /usr/bin/env -i LC_ALL=C \
+       /usr/bin/python3 -I /proc/self/fd/9 \
+       --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
+       --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
+       --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
+       --apply-env-file /home/damienriehl/.config/sonsteng-apply/env \
+       --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
+       --apply-timer-stopped \
+       --window-owner '<opaque-Packet-D-window-id>' \
+       --window-nonce '<recorded-Packet-D-window-nonce>'
+   ) 9<"$QUEUE_PROOF_VERIFIER"
    ```
 
    The tool performs only the
    daemon's admin review GET and the observer's readiness-frontier GET, emits
    counts rather than authored rows or IDs, and names only the ledger host. It
    verifies `sonsteng-apply.timer` is inactive, records its recognized
-   enabled/disabled state, records the named window and the UTC times of the
-   first and last GET, and fails with `"fence":"unproven"` when either fence
-   assertion is absent. The receipt is valid only inside the exact window named
-   by `window_owner`; use the same opaque ID for the opening and closing proof.
+   enabled/disabled state, records the named window and nonce, the local UTC
+   times and server-authenticated HTTP `Date` values of both GETs, SHA-256s of
+   the canonical JSON form of both validated response bodies plus a
+   domain-separated combined ledger-state hash, and SHA-256s of this host's
+   machine ID and boot ID. It
+   fails with `"fence":"unproven"` when any fence assertion is absent. The
+   receipt is valid only inside the exact window named by `window_owner`; use
+   the same opaque ID and pre-recorded nonce for the opening and closing proof.
+
+   The verifier deliberately uses the host's full distribution-managed CA
+   store rather than a private issuer pin. The allowlisted origin is a
+   Cloudflare edge whose served issuer chain may rotate independently of this
+   migration window; narrowing today to one observed root could turn routine
+   edge certificate rotation into an in-window outage. The compensating check
+   is explicit: preflight records the bundle path, SHA-256, and loaded root
+   count, and the operator compares them with the approved production-host
+   baseline and confirms no unreviewed local CA/update changed that baseline.
+   The name `SYSTEM_CA_BUNDLE` is intentional; this is not represented as a
+   one-origin trust set.
 
    Publication emptiness additionally requires the observer context to expose
    exactly `operation_frontier:{pending_operation_count,blocked_state}`, with a
@@ -356,13 +436,24 @@ PROD principal described in `docs/prod-release-operations.md`:
     ```
 
     Require `closing_queue_proof_rc` to be exactly `0`,
-    `"all_queues_empty":true`, and the same two `verifier_identity` values.
+    `"all_queues_empty":true`, the same two `verifier_identity` values, and the
+    same pre-recorded fence nonce. Confirm that the server dates and ledger-state
+    hashes belong to this closing run rather than the opening receipt.
     Preserve this fresh identity-bearing receipt as the durable queue evidence.
     Only then release the window and restore the apply timer's prior policy.
 
 The opening receipt is a go/no-go check for entering Packet D work. It does not
 remain authoritative after later actions in the window. The closing rerun,
 still inside the fence, is the durable evidence for that named window.
+
+These fields make an accidental stale, rehearsal, other-host, or other-ledger
+receipt detectable when compared with the pre-recorded nonce and supervised
+window log. They are not a signature. Someone able to forge arbitrary receipt
+bytes can still forge these fields; a valid receipt can also be replayed inside
+the same window if an auditor ignores its server dates and ordering, and later
+work after the closing proof still invalidates it. Preventing those cases needs
+the supervised fence/log discipline (or a future signing scheme), not another
+self-declared receipt field.
 
 If any step is ambiguous, run complete compensation and keep the window fenced
 until the prior state is proved. Do not infer a provider ID, fall forward to
