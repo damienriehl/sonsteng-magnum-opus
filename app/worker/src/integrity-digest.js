@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+const MAX_DIGEST_DEPTH = 256;
+
 export function sha256HexSync(value) {
   return createHash("sha256").update(value,"utf8").digest("hex");
 }
@@ -14,7 +16,9 @@ function assertDataProperties(value,names) {
   }
 }
 
-export function serializeDigestValue(value,seen=new Set()) {
+function serializeDigestValueAtDepth(value,seen,depth) {
+  if (depth > MAX_DIGEST_DEPTH)
+    throw new TypeError("integrity_digest:max_depth_exceeded");
   if (value === null) return "n;";
   if (value === undefined) return "u;";
   if (typeof value === "boolean") return value ? "b1;" : "b0;";
@@ -44,7 +48,7 @@ export function serializeDigestValue(value,seen=new Set()) {
       throw new TypeError("digest arrays must be dense and property-free");
     assertDataProperties(value,names);
     encoded = `a${value.length}:` + value.map((item) =>
-      serializeDigestValue(item,seen)).join("");
+      serializeDigestValueAtDepth(item,seen,depth+1)).join("");
   } else {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null)
@@ -54,10 +58,15 @@ export function serializeDigestValue(value,seen=new Set()) {
       throw new TypeError("digest records require enumerable properties");
     assertDataProperties(value,names);
     encoded = `o${keys.length}:` + keys.map((key) =>
-      serializeDigestValue(key,seen) + serializeDigestValue(value[key],seen)).join("");
+      serializeDigestValueAtDepth(key,seen,depth+1) +
+      serializeDigestValueAtDepth(value[key],seen,depth+1)).join("");
   }
   seen.delete(value);
   return encoded;
+}
+
+export function serializeDigestValue(value,seen=new Set()) {
+  return serializeDigestValueAtDepth(value,seen,0);
 }
 
 export function integrityDigest(value) {

@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,11 +33,9 @@ function release(over = {}) {
 
 test("integrity digests use SHA-256 over injective typed serialization", () => {
   const core = makeCore(() => 1200);
-  for (const value of ["abc","a".repeat(55),"b".repeat(56),"c".repeat(63),
-    "d".repeat(64),"e".repeat(65),"f".repeat(1000),"🙂漢字\u0000"]) {
-    assert.equal(sha256HexSync(value),createHash("sha256").update(value).digest("hex"),
-      `SHA-256 must match the reference implementation for ${value.length} code units`);
-  }
+  assert.equal(sha256HexSync("abc"),
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    "SHA-256 must match the published abc known-answer vector");
   const digests = [
     core._fingerprint("ab","c",null),
     core._fingerprint("a","bc",null),
@@ -72,6 +69,76 @@ test("integrity digests use SHA-256 over injective typed serialization", () => {
   })),/enumerable data properties/);
   assert.throws(() => serializeDigestValue(Object.setPrototypeOf([],null)),
     /nonstandard digest arrays/);
+});
+
+test("integrity digest bigint tag separates a bigint from the same-digit number", () => {
+  assert.notEqual(integrityDigest(1n),integrityDigest(1),
+    "the bigint/number type tag must distinguish identical digit payloads");
+});
+
+test("integrity digest negative-zero frame separates -0 from 0", () => {
+  assert.notEqual(integrityDigest(-0),integrityDigest(0),
+    "the explicit -0 encoding must distinguish signed zero values");
+});
+
+test("integrity digest array length prefix separates equal flattened elements", () => {
+  assert.notEqual(integrityDigest([[],[]]),integrityDigest([[[]]]),
+    "the array element-count prefix must distinguish equal flattened frames");
+});
+
+test("integrity digest object key-count prefix separates equal flattened entries", () => {
+  assert.notEqual(integrityDigest({ a:{ b:[] } }),integrityDigest({ a:{},b:[] }),
+    "the object key-count prefix must distinguish equal flattened frames");
+});
+
+test("integrity digest bounds deep evidence with a named error on write and read", async () => {
+  let deeplyNested = "leaf";
+  for (let depth=0;depth<3000;depth++) deeplyNested = [deeplyNested];
+  const isNamedDepthError = (error) => {
+    assert.equal(error instanceof RangeError,false,"deep evidence must not overflow the stack");
+    assert.equal(error.name,"TypeError");
+    assert.equal(error.message,"integrity_digest:max_depth_exceeded");
+    return true;
+  };
+  let maximumDepth = "leaf";
+  for (let depth=0;depth<256;depth++) maximumDepth = [maximumDepth];
+  assert.doesNotThrow(() => serializeDigestValue(maximumDepth));
+  assert.throws(() => serializeDigestValue([maximumDepth]),isNamedDepthError);
+  assert.throws(() => serializeDigestValue(deeplyNested),isNamedDepthError);
+
+  const writeCore = makeCore(() => 1200);
+  const sourceRef = "data/copy/deep-write.json#lead";
+  assert.throws(() => writeCore.recordReviewRevision({ id:"revision-deep-write",
+    source_ref:sourceRef,source_revision:"dev-deep-write",prod_base:"prod-base",
+    commit_sha:"dev-deep-write",original_hash:"old",proposed_hash:"new",
+    original_text:"old",proposed_text:"new",suggestion_ids:[],operations:[{
+      id:"operation-deep-write",decision_id:"operation-deep-write",kind:"replace",
+      source_ref:sourceRef,source_revision:"dev-deep-write",prod_base:"prod-base",
+      op_arg:deeplyNested,
+    }] }),isNamedDepthError);
+
+  const readCore = makeCore(() => 1200);
+  reviewedProjection(readCore);
+  let deeplyNestedStoredValue = "leaf";
+  for (let depth=0;depth<300;depth++) deeplyNestedStoredValue = [deeplyNestedStoredValue];
+  const revision = readCore._one(`SELECT id,operations_json FROM production_review_revisions
+    WHERE id=?`,"revision-v2");
+  const operations = JSON.parse(revision.operations_json);
+  operations[0].op_arg = deeplyNestedStoredValue;
+  readCore.sql.exec("UPDATE production_review_revisions SET operations_json=? WHERE id=?",
+    JSON.stringify(operations),revision.id);
+  const env = frontierEnv(async (...args) => readCore.productionPreparationContext(...args));
+  await assert.rejects(productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),env,{
+    editor:"service:release",credential_channel:"bearer",
+    scopes:scopes({ releaseService:true }),
+  }),isNamedDepthError);
+  const context = await observerFrontierFromCore(readCore);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  assert.equal("projection" in context,false,
+    "the observer must fail closed when stored evidence exceeds the digest depth bound");
 });
 
 test("FNV-era suggestion fingerprints fail closed without mutating the row", () => {
@@ -1370,6 +1437,27 @@ test("operation frontier validates canonical receipt JSON and receipt hash", asy
   });
 });
 
+test("operation frontier rejects an extra receipt key after coordinated restatement", async () => {
+  const core = makeCore(() => 9014);
+  reviewedProjection(core);
+  const row = core._one("SELECT receipt_json FROM production_review_submissions WHERE id=?",
+    "review-v2");
+  const receipt = { ...JSON.parse(row.receipt_json),injected_field:"attacker-controlled" };
+  core.sql.exec(`UPDATE production_review_submissions SET receipt_json=?,receipt_hash=?
+    WHERE id=?`,core._canonical(receipt),core._digest(receipt),"review-v2");
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_metadata_mismatch");
+});
+
+test("operation frontier binds receipt created_at to its immutable row", async () => {
+  const core = makeCore(() => 9014);
+  reviewedProjection(core);
+  core.sql.exec(`UPDATE production_review_submissions SET created_at=created_at+7
+    WHERE id=?`,"review-v2");
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_metadata_mismatch");
+});
+
 test("compatible legacy receipts reject immutable and child divergence", async (t) => {
   await t.test("hash divergence",async () => {
     const core = makeCore(() => 9014);
@@ -1867,6 +1955,37 @@ test("operation frontier binds every completed-release event to frozen evidence"
     await assertOperationProjectionCorruptionFailsClosed(core,
       "publication_release_evidence_mismatch");
   });
+});
+
+test("operation frontier binds release updated_at to the complete event", async () => {
+  const { core,releaseId } = completedOperationFrontierRelease("updated-at-binding");
+  core.sql.exec("UPDATE production_releases SET updated_at=updated_at+5000 WHERE id=?",releaseId);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
+});
+
+test("operation frontier rejects completed lifecycle events out of order", async () => {
+  const { core,releaseId } = completedOperationFrontierRelease("event-ordering");
+  const verified = core._one(`SELECT id FROM production_release_events
+    WHERE release_id=? AND type='verified'`,releaseId);
+  const worker = core._one(`SELECT id FROM production_release_events
+    WHERE release_id=? AND type='worker_deployed'`,releaseId);
+  core.sql.exec("UPDATE production_release_events SET id=-1 WHERE id=?",verified.id);
+  core.sql.exec("UPDATE production_release_events SET id=? WHERE id=?",verified.id,worker.id);
+  core.sql.exec("UPDATE production_release_events SET id=? WHERE id=-1",worker.id);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
+});
+
+test("operation frontier rejects a gap in frozen member ordinals", async () => {
+  const { core,releaseId } = completedOperationFrontierRelease("member-ordinal-gap");
+  core.sql.exec(`UPDATE production_release_operation_members SET ordinal=ordinal+5
+    WHERE release_id=?`,releaseId);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
 });
 
 test("completed release membership binds the attacker-controlled held reason", async () => {
@@ -2417,12 +2536,10 @@ test("operation frontier sentinel excludes already-published normalized rows", (
     (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
      lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,"published-sentinel-operation",
   "published-sentinel-operation","published-sentinel-review","published-sentinel-revision",
-  "data/copy/published-sentinel.json#lead",null,"accepted","","unpublished");
-  core.sql.exec(`INSERT INTO production_published_operations
-    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
-     published_at) VALUES (?,?,?,?,?,?,?)`,"published-sentinel-operation",
-  "published-sentinel-release","published-sentinel-revision",
-  "data/copy/published-sentinel.json#lead","published-sentinel-source","candidate",9044);
+  "data/copy/published-sentinel.json#lead",null,"accepted","","published");
+  assert.equal(core._one(`SELECT COUNT(*) AS count FROM production_published_operations
+    WHERE operation_id=?`,"published-sentinel-operation").count,0,
+  "the fixture must leave lifecycle state as the only published-row exclusion");
 
   assert.equal(core._operationFrontierIntegrityExceedsLimit(1),false,
     "published history must not trigger the pending-operation work bound");
