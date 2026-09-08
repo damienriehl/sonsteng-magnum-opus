@@ -179,6 +179,101 @@ function reviewedProjection(core) {
   return core.productionPreparationContext().projection;
 }
 
+function seedSingleOperationProjectionCase(core,{ suffix,decision="accepted",groupId=null,
+  lifecycleState="unpublished",legacy=false } = {}) {
+  const reviewId = `review-compat-${suffix}`;
+  const revisionId = `revision-compat-${suffix}`;
+  const operationId = `operation-compat-${suffix}`;
+  const sourceRef = `data/copy/compat-${suffix}.json#lead`;
+  const sourceRevision = `dev-compat-${suffix}`;
+  const operation = { id:operationId,decision_id:operationId,kind:"replace",
+    source_ref:sourceRef,source_revision:sourceRevision,prod_base:"prod-base",
+    base_range:[0,3],old_text:"old",new_text:"new",...(groupId ? { group_id:groupId } : {}) };
+  assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+    source_revision:sourceRevision,prod_base:"prod-base",commit_sha:sourceRevision,
+    original_hash:`old-${suffix}`,proposed_hash:`new-${suffix}`,original_text:"old",
+    proposed_text:"new",suggestion_ids:[`suggestion-${suffix}`],operations:[operation] }).ok,true);
+  const decisions = decision === "unanswered" ? [] : [{ operation_id:operationId,decision,
+    ...(decision === "questioned" ? { note:"What changed?" } : {}) }];
+  if (legacy) {
+    core.sql.exec(`INSERT INTO production_reviews
+      (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
+       receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,reviewId,reviewId,
+    reviewId,"slot:damien",revisionId,sourceRevision,"prod-base",`receipt-${suffix}`,"{}",9002);
+    if (decisions.length) core.sql.exec(`INSERT INTO production_review_decisions
+      (review_id,operation_id,decision,note,operation_digest,group_id)
+      VALUES (?,?,?,?,?,?)`,reviewId,operationId,decision,"","digest",groupId);
+    core.sql.exec(`INSERT INTO production_review_operations
+      (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+       lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,operationId,operationId,reviewId,revisionId,
+    sourceRef,groupId,decision,"",lifecycleState);
+  } else {
+    const draft = core.savePublisherReviewDraft({ actor:"slot:damien",review_revision_id:revisionId,
+      source_revision:sourceRevision,prod_base:"prod-base",decisions });
+    assert.equal(draft.ok,true,`${suffix}: ${draft.reason}`);
+    assert.equal(core.submitPublisherReview({ id:reviewId,idempotency_key:reviewId,
+      request_digest:reviewId,actor:"slot:damien",sources:[{ review_revision_id:revisionId,
+        source_revision:sourceRevision,prod_base:"prod-base",decisions }] }).ok,true);
+    if (lifecycleState !== "unpublished") core.sql.exec(
+      "UPDATE production_review_operations SET lifecycle_state=? WHERE operation_id=?",
+      lifecycleState,operationId);
+  }
+  const parentTable = legacy ? "production_reviews" : "production_review_submissions";
+  const receiptHash = core._one(`SELECT receipt_hash FROM ${parentTable} WHERE id=?`,reviewId)
+    .receipt_hash;
+  return { reviewId,revisionId,operationId,sourceRef,sourceRevision,operation,decision,groupId,
+    receiptHash };
+}
+
+function expectedSingleOperationProjection(seed) {
+  const canonicalOperation = { base_range:[0,3],decision_id:seed.operationId,
+    ...(seed.groupId ? { group_id:seed.groupId } : {}),id:seed.operationId,kind:"replace",
+    new_text:"new",old_text:"old",prod_base:"prod-base",source_ref:seed.sourceRef,
+    source_revision:seed.sourceRevision,production_scope:"prose",production_hold_reason:null };
+  return { review_receipts:[{ id:seed.reviewId,actor:"slot:damien",created_at:9002,
+    receipt_hash:seed.receiptHash }],sources:[{
+    review_id:seed.reviewId,review_revision_id:seed.revisionId,source_ref:seed.sourceRef,
+    source_revision:seed.sourceRevision,prod_base:"prod-base",
+    original_hash:`old-${seed.reviewId.replace("review-compat-","")}`,
+    proposed_hash:`new-${seed.reviewId.replace("review-compat-","")}`,
+    original_text:"old",source_original_text:"old",
+    operations:[canonicalOperation],
+    stale:false,decisions:[{ operation_id:seed.operationId,decision:seed.decision,note:"",
+      group_id:seed.groupId }],
+  }],eligible_operation_count:1,held_operation_count:0 };
+}
+
+function seedPublicationIntegrityCase(core,{ suffix,lifecycleState="published",
+  publication=true,releaseState="complete",schemaVersion=2,member=true,
+  memberOverrides={},publicationOverrides={} } = {}) {
+  const seed = seedSingleOperationProjectionCase(core,{ suffix });
+  core.sql.exec("UPDATE production_review_operations SET lifecycle_state=? WHERE operation_id=?",
+    lifecycleState,seed.operationId);
+  const releaseId = `release-compat-${suffix}`;
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at,schema_version)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,
+  releaseId,releaseId,releaseState,"service:release","bearer","production",
+  "operation-frontier","prod-base",`candidate-${suffix}`,"generator","evidence","manifest",
+  "membership",9003,9003,schemaVersion);
+  if (member) core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
+     ordinal) VALUES (?,?,?,?,?,?,?)`,releaseId,seed.operationId,
+  memberOverrides.review_revision_id || seed.revisionId,
+  memberOverrides.source_ref || seed.sourceRef,"[]",seed.groupId,0);
+  if (publication) core.sql.exec(`INSERT INTO production_published_operations
+    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
+     published_at) VALUES (?,?,?,?,?,?,?)`,publicationOverrides.operation_id || seed.operationId,
+  publicationOverrides.release_id || releaseId,
+  publicationOverrides.review_revision_id || seed.revisionId,
+  publicationOverrides.source_ref || seed.sourceRef,
+  publicationOverrides.source_revision || seed.sourceRevision,
+  publicationOverrides.candidate_sha || `candidate-${suffix}`,9003);
+  return { ...seed,releaseId };
+}
+
 test("v2 preparation freezes exact reviewed operation membership and held exclusions", () => {
   const core = makeCore(() => 2000);
   const projection = reviewedProjection(core);
@@ -407,10 +502,24 @@ test("trusted builder omits fully published reviews without blocking later sourc
 
   const published = recordAccepted({ suffix:"published",
     sourceRef:"data/copy/home.json#lead",prodBase:"prod-base" });
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at,schema_version)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  "release-published","release-published","release-published","complete","service:release",
+  "bearer","production","operation-frontier","prod-base","candidate-published","generator",
+  "evidence","manifest","membership",1240,1240,2);
+  core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
+     ordinal) VALUES (?,?,?,?,?,?,?)`,"release-published",published.operationId,
+  published.revisionId,published.sourceRef,"[]",null,0);
   core.sql.exec(`INSERT INTO production_published_operations
     (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at)
     VALUES (?,?,?,?,?,?,?)`,published.operationId,"release-published",published.revisionId,
     published.sourceRef,"dev-published","candidate-published",1240);
+  core.sql.exec("UPDATE production_review_operations SET lifecycle_state='published' WHERE operation_id=?",
+    published.operationId);
   const pending = recordAccepted({ suffix:"pending",
     sourceRef:"data/copy/home.json#cta",prodBase:"candidate-published" });
 
@@ -955,6 +1064,35 @@ test("empty-store release service preserves the exact legacy operation projectio
   });
 });
 
+test("non-empty release-service stores preserve the exact origin/main operation projection", () => {
+  const cases = [
+    { suffix:"accepted",expected:"single" },
+    { suffix:"unanswered",decision:"unanswered",expected:"empty" },
+    { suffix:"questioned",decision:"questioned",expected:"empty" },
+    { suffix:"superseded",lifecycleState:"superseded",expected:"empty" },
+    { suffix:"grouped",groupId:"compat-group",expected:"single" },
+    { suffix:"legacy",legacy:true,expected:"empty" },
+  ];
+  for (const compatibilityCase of cases) {
+    const core = makeCore(() => 9002);
+    const seed = seedSingleOperationProjectionCase(core,compatibilityCase);
+    assert.equal(Number(core._one(
+      "SELECT COUNT(*) AS count FROM production_review_operations").count) > 0,true,
+    `${compatibilityCase.suffix} must compare a non-empty store`);
+    const actual = core.productionPreparationContext().projection;
+    const expected = compatibilityCase.expected === "single" ?
+      expectedSingleOperationProjection(seed) :
+      { review_receipts:[],sources:[],eligible_operation_count:0 };
+    const actualBytes = JSON.stringify(actual);
+    const expectedBytes = JSON.stringify(expected);
+    assert.equal(actualBytes.length > 0,true,
+      `${compatibilityCase.suffix} actual comparison value must be non-empty`);
+    assert.equal(expectedBytes.length > 0,true,
+      `${compatibilityCase.suffix} expected comparison value must be non-empty`);
+    assert.equal(actualBytes,expectedBytes,compatibilityCase.suffix);
+  }
+});
+
 test("observer operation frontier reports eligible-only operation work", async () => {
   const core = makeCore(() => 9010);
   reviewedProjection(core);
@@ -1065,6 +1203,161 @@ test("operation frontier rejects orphaned active operation rows", async () => {
     VALUES (?,?,?,?,?,?,?,?,?)`,"op-orphan","op-orphan","review-missing","revision-missing",
     "data/copy/missing.json#lead",null,"accepted","","unpublished");
   await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_normalized_row");
+});
+
+test("operation frontier rejects submission sources without submission parents", async () => {
+  const core = makeCore(() => 9018);
+  reviewedProjection(core);
+  core.sql.exec("DELETE FROM production_review_submissions WHERE id=?","review-v2");
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "submission_source_missing_submission");
+});
+
+test("operation frontier rejects submission sources without revision parents", async () => {
+  const core = makeCore(() => 9018);
+  reviewedProjection(core);
+  core.sql.exec("DELETE FROM production_review_revisions WHERE id=?","revision-v2");
+  await assertOperationProjectionCorruptionFailsClosed(core,"submission_source_missing_revision");
+});
+
+test("operation frontier rejects submissions without source children", async () => {
+  const core = makeCore(() => 9018);
+  reviewedProjection(core);
+  core.sql.exec("DELETE FROM production_review_submission_sources WHERE review_id=?","review-v2");
+  await assertOperationProjectionCorruptionFailsClosed(core,"submission_missing_source");
+});
+
+test("operation frontier rejects legacy reviews without revision parents", async () => {
+  const core = makeCore(() => 9018);
+  core.sql.exec(`INSERT INTO production_reviews
+    (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
+     receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,"legacy-orphan",
+  "legacy-orphan","legacy-orphan","slot:damien","missing-revision","dev-missing",
+  "prod-base","receipt-legacy-orphan","{}",9018);
+  await assertOperationProjectionCorruptionFailsClosed(core,"legacy_review_missing_revision");
+});
+
+test("operation frontier rejects submission decisions without review parents", async () => {
+  const core = makeCore(() => 9018);
+  core.sql.exec(`INSERT INTO production_review_submission_decisions
+    (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
+    VALUES (?,?,?,?,?,?,?)`,"missing-review","missing-revision","missing-operation",
+  "accepted","","digest",null);
+  await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_submission_decision");
+});
+
+test("operation frontier rejects submission decisions without operation evidence", async () => {
+  const core = makeCore(() => 9018);
+  reviewedProjection(core);
+  core.sql.exec(`INSERT INTO production_review_submission_decisions
+    (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
+    VALUES (?,?,?,?,?,?,?)`,"review-v2","revision-v2","missing-operation","accepted","",
+  "digest",null);
+  await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_submission_decision");
+});
+
+test("operation frontier rejects legacy decisions without review parents", async () => {
+  const core = makeCore(() => 9018);
+  core.sql.exec(`INSERT INTO production_review_decisions
+    (review_id,operation_id,decision,note,operation_digest,group_id)
+    VALUES (?,?,?,?,?,?)`,"missing-review","missing-operation","accepted","","digest",null);
+  await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_legacy_decision");
+});
+
+test("operation frontier rejects legacy decisions without operation evidence", async () => {
+  const core = makeCore(() => 9018);
+  seedSingleOperationProjectionCase(core,{ suffix:"legacy-decision",legacy:true });
+  core.sql.exec(`INSERT INTO production_review_decisions
+    (review_id,operation_id,decision,note,operation_digest,group_id)
+    VALUES (?,?,?,?,?,?)`,"review-compat-legacy-decision","missing-operation","accepted","",
+  "digest",null);
+  await assertOperationProjectionCorruptionFailsClosed(core,"orphaned_legacy_decision");
+});
+
+test("operation frontier rejects published lifecycle without a publication row", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"lifecycle-only",publication:false });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_marker_mismatch");
+});
+
+test("operation frontier rejects publication rows without published lifecycle", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"row-only",lifecycleState:"unpublished" });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_marker_mismatch");
+});
+
+test("operation frontier rejects publication rows without normalized operations", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"missing-operation",
+    publicationOverrides:{ operation_id:"missing-operation" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_marker_mismatch");
+});
+
+test("operation frontier rejects publication revision mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"revision-mismatch",
+    publicationOverrides:{ review_revision_id:"different-revision" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_operation_mismatch");
+});
+
+test("operation frontier rejects publication source mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"source-mismatch",
+    publicationOverrides:{ source_ref:"data/copy/different.json#lead" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_operation_mismatch");
+});
+
+test("operation frontier rejects publication source-revision mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"source-revision-mismatch",
+    publicationOverrides:{ source_revision:"different-source-revision" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_operation_mismatch");
+});
+
+test("operation frontier rejects publication rows without release parents", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"missing-release",
+    publicationOverrides:{ release_id:"missing-release" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication rows for incomplete releases", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"incomplete-release",releaseState:"restored" });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication rows for legacy releases", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"legacy-release",schemaVersion:1 });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication rows without release membership", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"missing-member",member:false });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication member revision mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"member-revision-mismatch",
+    memberOverrides:{ review_revision_id:"different-revision" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication member source mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"member-source-mismatch",
+    memberOverrides:{ source_ref:"data/copy/different.json#lead" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
+});
+
+test("operation frontier rejects publication candidate mismatches", async () => {
+  const core = makeCore(() => 9018);
+  seedPublicationIntegrityCase(core,{ suffix:"candidate-mismatch",
+    publicationOverrides:{ candidate_sha:"different-candidate" } });
+  await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
 });
 
 test("operation frontier rejects unknown operation lifecycle states", async () => {
@@ -1332,7 +1625,94 @@ function seedHighCardinalityReview(core,{ operationCount,prefix,normalized=true 
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`release-${prefix}`,`release-${prefix}`,
     `release-${prefix}`,"prepared","service:release","bearer","production",
     "operation-frontier","prod-base",`candidate-${prefix}`,"generator","evidence","manifest",
-    "membership",9042,9042);
+  "membership",9042,9042);
+}
+
+function seedRejectedAndPublishedHistory(core,{ rejectedCount,publishedCount,prefix }) {
+  const operationCount = rejectedCount + publishedCount;
+  const sourceRef = `data/copy/${prefix}.json#lead`;
+  const revisionId = `revision-${prefix}`;
+  const reviewId = `review-${prefix}`;
+  const releaseId = `release-${prefix}`;
+  const operationsJson = `[${Array.from({ length:operationCount },(_value,index) =>
+    `{"id":"${prefix}-operation-${String(index).padStart(6,"0")}"}`).join(",")}]`;
+  core.sql.exec(`INSERT INTO production_review_revisions
+    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
+     original_text,proposed_text,source_original_text,source_proposed_text,
+     suggestion_ids_json,operations_json,evidence_digest,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,revisionId,sourceRef,`dev-${prefix}`,
+  "prod-base",`dev-${prefix}`,"old","new","historical source text","proposal",
+  "historical source text","proposal","[]",operationsJson,`evidence-${prefix}`,9043);
+  core.sql.exec(`INSERT INTO production_review_submissions
+    (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
+    VALUES (?,?,?,?,?,?,?)`,reviewId,reviewId,reviewId,"slot:damien",`receipt-${prefix}`,
+  "{}",9043);
+  core.sql.exec(`INSERT INTO production_review_submission_sources
+    (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
+    VALUES (?,?,?,?,?)`,reviewId,revisionId,`dev-${prefix}`,"prod-base",`evidence-${prefix}`);
+  core.sql.exec(`INSERT INTO production_review_submission_decisions
+    (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
+    SELECT ?,?,json_extract(value,'$.id'),
+      CASE WHEN CAST(key AS INTEGER)<? THEN 'rejected' ELSE 'accepted' END,'','digest',NULL
+    FROM json_each(?)`,reviewId,revisionId,rejectedCount,operationsJson);
+  core.sql.exec(`INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+     lifecycle_state)
+    SELECT json_extract(value,'$.id'),json_extract(value,'$.id'),?,?,?,NULL,
+      CASE WHEN CAST(key AS INTEGER)<? THEN 'rejected' ELSE 'accepted' END,'',
+      CASE WHEN CAST(key AS INTEGER)<? THEN 'unpublished' ELSE 'published' END
+    FROM json_each(?)`,reviewId,revisionId,sourceRef,rejectedCount,rejectedCount,operationsJson);
+  core.sql.exec(`INSERT INTO production_releases
+    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+     membership_hash,created_at,updated_at,schema_version)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,
+  releaseId,releaseId,"complete","service:release","bearer","production","operation-frontier",
+  "prod-base",`candidate-${prefix}`,"generator","evidence","manifest","membership",9043,9043,2);
+  core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
+     ordinal)
+    SELECT ?,operation_id,review_revision_id,source_ref,'[]',NULL,
+      ROW_NUMBER() OVER (ORDER BY operation_id)-1
+    FROM production_review_operations WHERE lifecycle_state='published'`,releaseId);
+  core.sql.exec(`INSERT INTO production_published_operations
+    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
+     published_at)
+    SELECT operation_id,?,review_revision_id,source_ref,?, ?,?
+    FROM production_review_operations WHERE lifecycle_state='published'`,releaseId,
+  `dev-${prefix}`,`candidate-${prefix}`,9043);
+}
+
+function seedManySmallPendingRevisions(core,{ revisionCount,prefix }) {
+  const sequence = `WITH RECURSIVE sequence(value) AS (
+    SELECT 0 UNION ALL SELECT value+1 FROM sequence WHERE value+1<?)`;
+  const id = (label) => `'${prefix}-${label}-' || printf('%06d',value)`;
+  const sourceRef = `'data/copy/${prefix}-' || printf('%06d',value) || '.json#lead'`;
+  core.sql.exec(`${sequence} INSERT INTO production_review_revisions
+    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
+     original_text,proposed_text,source_original_text,source_proposed_text,
+     suggestion_ids_json,operations_json,evidence_digest,created_at)
+    SELECT ${id("revision")},${sourceRef},${id("source")},'prod-base',${id("source")},
+      'old','new','source text','proposal','source text','proposal','[]',
+      json_array(json_object('id',${id("operation")},'decision_id',${id("operation")},
+        'kind','replace','source_ref',${sourceRef})),'evidence',9044 FROM sequence`,revisionCount);
+  core.sql.exec(`${sequence} INSERT INTO production_review_submissions
+    (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
+    SELECT ${id("review")},${id("review")},${id("review")},'slot:damien',
+      ${id("receipt")},'{}',9044 FROM sequence`,revisionCount);
+  core.sql.exec(`${sequence} INSERT INTO production_review_submission_sources
+    (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
+    SELECT ${id("review")},${id("revision")},${id("source")},'prod-base','evidence'
+    FROM sequence`,revisionCount);
+  core.sql.exec(`${sequence} INSERT INTO production_review_submission_decisions
+    (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
+    SELECT ${id("review")},${id("revision")},${id("operation")},'accepted','','digest',NULL
+    FROM sequence`,revisionCount);
+  core.sql.exec(`${sequence} INSERT INTO production_review_operations
+    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+     lifecycle_state)
+    SELECT ${id("operation")},${id("operation")},${id("review")},${id("revision")},
+      ${sourceRef},NULL,'accepted','','unpublished' FROM sequence`,revisionCount);
 }
 
 test("observer operation frontier bounds normalized and evidence high-cardinality projections", async () => {
@@ -1370,10 +1750,47 @@ test("observer operation frontier bounds normalized and evidence high-cardinalit
   assertObserverOperationFrontier(evidenceContext.operation_frontier,{
     pending_operation_count:0,blocked_state:"blocked",
   });
+  assert.throws(() => evidenceCore._operationFrontierSummaryProjection(),
+    /operation_frontier_integrity:missing_normalized_row/,
+    "missing normalized evidence must fail through integrity validation");
   assert.equal(evidenceQueries.some(({sql,args}) =>
     /json_each\(revision\.operations_json\)[\s\S]*LIMIT 1 OFFSET \?/i.test(sql) &&
-      args.includes(100_000)),true,
-  "submitted evidence overflow must be bounded independently of normalized rows");
+      args.includes(100_000)),false,
+  "historical evidence must not be mistaken for pending-operation overflow");
+});
+
+test("observer operation frontier ignores high-cardinality rejected and published history", async () => {
+  const core = makeCore(() => 9043);
+  seedRejectedAndPublishedHistory(core,{ rejectedCount:50_001,publishedCount:50_000,
+    prefix:"historical" });
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:0,blocked_state:"unblocked",
+  });
+  assert.deepEqual(core._operationFrontierSummaryProjection(),{
+    eligible_operation_count:0,held_operation_count:0,
+  });
+});
+
+test("observer operation frontier pages many small candidate revisions", async () => {
+  const core = makeCore(() => 9044);
+  seedManySmallPendingRevisions(core,{ revisionCount:6_001,prefix:"many-small" });
+  let largestMaterializedQuery = 0;
+  const candidatePageSizes = [];
+  const all = core._all.bind(core);
+  core._all = (sql,...args) => {
+    const rows = all(sql,...args);
+    largestMaterializedQuery = Math.max(largestMaterializedQuery,rows.length);
+    if (/candidate_revisions[\s\S]*operation_count/i.test(sql)) candidatePageSizes.push(rows.length);
+    return rows;
+  };
+  const context = await observerFrontierFromCore(core);
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:6_001,blocked_state:"unblocked",
+  });
+  assert.deepEqual(candidatePageSizes,[5_000,1_001]);
+  assert.equal(largestMaterializedQuery <= 5_000,true,
+    "every observer query result must stay within the intended page bound");
 });
 
 test("observer operation frontier pages the exact 100000-operation maximum", async () => {

@@ -218,6 +218,10 @@ export const SCHEMA_SQL = `
     ON production_review_operations(lifecycle_state, decision);
   CREATE INDEX IF NOT EXISTS idx_review_operation_group
     ON production_review_operations(group_id, lifecycle_state);
+  CREATE INDEX IF NOT EXISTS idx_review_operation_submission_decision
+    ON production_review_operations(review_id, review_revision_id, decision_id);
+  CREATE INDEX IF NOT EXISTS idx_review_operation_legacy_decision
+    ON production_review_operations(review_id, decision_id);
   CREATE INDEX IF NOT EXISTS idx_review_operation_source
     ON production_review_operations(source_ref, lifecycle_state);
   CREATE INDEX IF NOT EXISTS idx_review_operation_revision
@@ -2098,16 +2102,22 @@ export class EditorStoreCore {
       WHERE decision NOT IN ('accepted','rejected','questioned','unanswered') LIMIT 1`))
       throw this._operationFrontierIntegrityError("unknown_decision_state");
 
-    if (this._one(`SELECT 1 AS orphaned FROM production_review_operations operation
-      LEFT JOIN production_review_revisions revision ON revision.id=operation.review_revision_id
-      LEFT JOIN production_review_submission_sources source
-        ON source.review_id=operation.review_id
-          AND source.review_revision_id=operation.review_revision_id
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_sources source
       LEFT JOIN production_review_submissions submission ON submission.id=source.review_id
-      LEFT JOIN production_reviews review ON review.id=operation.review_id
-        AND review.review_revision_id=operation.review_revision_id
-      WHERE revision.id IS NULL OR (submission.id IS NULL AND review.id IS NULL) LIMIT 1`))
-      throw this._operationFrontierIntegrityError("orphaned_normalized_row");
+      WHERE submission.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_source_missing_submission");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_sources source
+      LEFT JOIN production_review_revisions revision ON revision.id=source.review_revision_id
+      WHERE revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_source_missing_revision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submissions submission
+      LEFT JOIN production_review_submission_sources source ON source.review_id=submission.id
+      WHERE source.review_id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_missing_source");
+    if (this._one(`SELECT 1 AS orphaned FROM production_reviews review
+      LEFT JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      WHERE revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("legacy_review_missing_revision");
 
     if (this._one(`SELECT 1 AS invalid FROM production_review_revisions revision
       WHERE CASE WHEN json_valid(revision.operations_json)=0 THEN 1
@@ -2119,6 +2129,97 @@ export class EditorStoreCore {
           WHERE review.review_revision_id=revision.id)
       ) LIMIT 1`))
       throw this._operationFrontierIntegrityError("malformed_operations_json",SyntaxError);
+
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      LEFT JOIN production_review_submissions submission ON submission.id=decision.review_id
+      LEFT JOIN production_review_submission_sources source
+        ON source.review_id=decision.review_id
+          AND source.review_revision_id=decision.review_revision_id
+      LEFT JOIN production_review_revisions revision ON revision.id=decision.review_revision_id
+      WHERE submission.id IS NULL OR source.review_id IS NULL OR revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_submission_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_decisions decision
+      LEFT JOIN production_reviews review ON review.id=decision.review_id
+      LEFT JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      WHERE review.id IS NULL OR revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_legacy_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id
+          AND operation.review_revision_id=decision.review_revision_id
+          AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL LIMIT 1`) && this._one(
+      `SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      JOIN production_review_submission_sources source
+        ON source.review_id=decision.review_id
+          AND source.review_revision_id=decision.review_revision_id
+      JOIN production_review_revisions revision ON revision.id=decision.review_revision_id
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id
+          AND operation.review_revision_id=decision.review_revision_id
+          AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL AND NOT EXISTS (
+        SELECT 1 FROM json_each(revision.operations_json) evidence
+        WHERE COALESCE(json_extract(evidence.value,'$.decision_id'),
+          json_extract(evidence.value,'$.id'))=decision.operation_id) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_submission_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_decisions decision
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL LIMIT 1`) && this._one(
+      `SELECT 1 AS orphaned FROM production_review_decisions decision
+      JOIN production_reviews review ON review.id=decision.review_id
+      JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL AND NOT EXISTS (
+        SELECT 1 FROM json_each(revision.operations_json) evidence
+        WHERE COALESCE(json_extract(evidence.value,'$.decision_id'),
+          json_extract(evidence.value,'$.id'))=decision.operation_id) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_legacy_decision");
+
+    if (this._one(`SELECT 1 AS mismatched FROM (
+      SELECT operation.operation_id FROM production_review_operations operation
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=operation.operation_id
+      WHERE (operation.lifecycle_state='published')<>(published.operation_id IS NOT NULL)
+      UNION ALL
+      SELECT published.operation_id FROM production_published_operations published
+      LEFT JOIN production_review_operations operation
+        ON operation.operation_id=published.operation_id
+      WHERE operation.operation_id IS NULL
+    ) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_marker_mismatch");
+    if (this._one(`SELECT 1 AS mismatched FROM production_published_operations published
+      JOIN production_review_operations operation
+        ON operation.operation_id=published.operation_id
+      LEFT JOIN production_review_revisions revision ON revision.id=operation.review_revision_id
+      WHERE revision.id IS NULL OR published.review_revision_id<>operation.review_revision_id
+        OR published.source_ref<>operation.source_ref
+        OR published.source_revision<>revision.source_revision LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_operation_mismatch");
+    if (this._one(`SELECT 1 AS mismatched FROM production_published_operations published
+      LEFT JOIN production_releases release ON release.id=published.release_id
+      LEFT JOIN production_release_operation_members member
+        ON member.release_id=published.release_id AND member.operation_id=published.operation_id
+      WHERE release.id IS NULL OR release.state<>'complete'
+        OR COALESCE(release.schema_version,1)<2
+        OR release.candidate_sha<>published.candidate_sha
+        OR member.operation_id IS NULL
+        OR member.review_revision_id<>published.review_revision_id
+        OR member.source_ref<>published.source_ref LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_release_mismatch");
+
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_operations operation
+      LEFT JOIN production_review_revisions revision ON revision.id=operation.review_revision_id
+      LEFT JOIN production_review_submission_sources source
+        ON source.review_id=operation.review_id
+          AND source.review_revision_id=operation.review_revision_id
+      LEFT JOIN production_review_submissions submission ON submission.id=source.review_id
+      LEFT JOIN production_reviews review ON review.id=operation.review_id
+        AND review.review_revision_id=operation.review_revision_id
+      WHERE revision.id IS NULL OR (submission.id IS NULL AND review.id IS NULL) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_normalized_row");
 
     const mismatch = this._one(`SELECT * FROM (WITH submitted_evidence_raw AS (
         SELECT source.review_id,revision.id AS review_revision_id,
@@ -2176,47 +2277,37 @@ export class EditorStoreCore {
 
   _operationFrontierIntegrityExceedsLimit(operationLimit) {
     const offset = operationLimit - 1;
-    const normalizedOverflow = this._all(`SELECT operation_id
-      FROM production_review_operations LIMIT 1 OFFSET ?`,offset).length > 0;
-    if (normalizedOverflow) return true;
-    return this._all(`SELECT * FROM (SELECT json_extract(evidence.value,'$.id') AS operation_id
-      FROM production_review_submission_sources source
-      JOIN production_review_submissions submission ON submission.id=source.review_id
-      JOIN production_review_revisions revision ON revision.id=source.review_revision_id
-      JOIN json_each(revision.operations_json) evidence
-      UNION ALL
-      SELECT json_extract(evidence.value,'$.id')
-      FROM production_reviews review
-      JOIN production_review_revisions revision ON revision.id=review.review_revision_id
-      JOIN json_each(revision.operations_json) evidence
-      LIMIT 1 OFFSET ?)`,offset).length > 0;
+    return this._all(`SELECT operation.operation_id
+      FROM production_review_operations operation
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=operation.operation_id
+      WHERE operation.lifecycle_state<>'published' AND operation.decision<>'rejected'
+        AND published.operation_id IS NULL
+      LIMIT 1 OFFSET ?`,offset).length > 0;
   }
 
-  _operationFrontierCandidateRevisions() {
+  _operationFrontierCandidateRevisions(afterRevisionId=null,limit=5_000) {
     return this._all(`SELECT * FROM (WITH active_groups AS (
         SELECT DISTINCT group_id FROM production_review_operations
         WHERE lifecycle_state='unpublished' AND decision='accepted' AND group_id IS NOT NULL
           AND operation_id NOT IN (SELECT operation_id FROM production_published_operations)
       ), candidate_revisions AS (
         SELECT DISTINCT review_revision_id FROM production_review_operations
-        WHERE (lifecycle_state<>'published' AND decision<>'rejected'
-          AND operation_id NOT IN (SELECT operation_id FROM production_published_operations))
-           OR group_id IN (SELECT group_id FROM active_groups)
-      ) SELECT source.review_id,revision.id AS review_revision_id,
+        WHERE (? IS NULL OR review_revision_id>?) AND (
+          (lifecycle_state<>'published' AND decision<>'rejected'
+            AND operation_id NOT IN (SELECT operation_id FROM production_published_operations))
+          OR group_id IN (SELECT group_id FROM active_groups))
+      ) SELECT revision.id AS review_revision_id,
           revision.source_ref AS revision_source_ref,revision.source_revision,
           revision.prod_base,json_array_length(revision.operations_json) AS operation_count
         FROM candidate_revisions candidate
         JOIN production_review_revisions revision ON revision.id=candidate.review_revision_id
-        JOIN production_review_submission_sources source
-          ON source.review_revision_id=revision.id
-        JOIN production_review_submissions submission ON submission.id=source.review_id
-        UNION ALL
-        SELECT review.id,revision.id,revision.source_ref,revision.source_revision,
-          revision.prod_base,json_array_length(revision.operations_json)
-        FROM candidate_revisions candidate
-        JOIN production_review_revisions revision ON revision.id=candidate.review_revision_id
-        JOIN production_reviews review ON review.review_revision_id=revision.id
-      ORDER BY review_revision_id)`);
+        WHERE EXISTS (SELECT 1 FROM production_review_submission_sources source
+            JOIN production_review_submissions submission ON submission.id=source.review_id
+            WHERE source.review_revision_id=revision.id)
+          OR EXISTS (SELECT 1 FROM production_reviews review
+            WHERE review.review_revision_id=revision.id)
+      ORDER BY revision.id LIMIT ?)`,afterRevisionId,afterRevisionId,limit);
   }
 
   _operationFrontierSummaryRows(revisions, startKey=null, endKey=null) {
@@ -2303,17 +2394,23 @@ export class EditorStoreCore {
       batch = [];
       batchSize = 0;
     };
-    for (const revision of this._operationFrontierCandidateRevisions()) {
-      if (revision.operation_count > pageSize) {
-        flushBatch();
-        for (let startKey=0;startKey<revision.operation_count;startKey+=pageSize)
-          revisionPages.push({ revisions:[revision],startKey,
-            endKey:Math.min(startKey+pageSize,revision.operation_count) });
-      } else {
-        if (batchSize + revision.operation_count > pageSize) flushBatch();
-        batch.push(revision);
-        batchSize += revision.operation_count;
+    let afterRevisionId = null;
+    while (true) {
+      const candidates = this._operationFrontierCandidateRevisions(afterRevisionId,pageSize);
+      for (const revision of candidates) {
+        if (revision.operation_count > pageSize) {
+          flushBatch();
+          for (let startKey=0;startKey<revision.operation_count;startKey+=pageSize)
+            revisionPages.push({ revisions:[revision],startKey,
+              endKey:Math.min(startKey+pageSize,revision.operation_count) });
+        } else {
+          if (batchSize + revision.operation_count > pageSize) flushBatch();
+          batch.push(revision);
+          batchSize += revision.operation_count;
+        }
       }
+      if (candidates.length < pageSize) break;
+      afterRevisionId = candidates.at(-1).review_revision_id;
     }
     flushBatch();
     let total = 0;
@@ -2380,26 +2477,18 @@ export class EditorStoreCore {
           AND operation_id NOT IN (SELECT operation_id FROM production_published_operations)
       ), candidate_revisions AS (
         SELECT DISTINCT review_revision_id FROM production_review_operations
-        WHERE (lifecycle_state<>'published' AND decision<>'rejected'
+        WHERE (lifecycle_state='unpublished' AND decision='accepted'
           AND operation_id NOT IN (SELECT operation_id FROM production_published_operations))
            OR group_id IN (SELECT group_id FROM active_groups)
       )
-      SELECT parent.* FROM (SELECT s.id,s.actor,s.created_at,s.receipt_hash,
-        r.id AS review_revision_id,
+      SELECT s.id,s.actor,s.created_at,s.receipt_hash,r.id AS review_revision_id,
         r.source_ref,r.source_revision,r.prod_base,r.original_hash,r.proposed_hash,
         r.original_text,r.source_original_text,r.operations_json
       FROM candidate_revisions candidate
       JOIN production_review_revisions r ON r.id=candidate.review_revision_id
       JOIN production_review_submission_sources x ON x.review_revision_id=r.id
       JOIN production_review_submissions s ON s.id=x.review_id
-      UNION ALL
-      SELECT review.id,review.actor,review.created_at,review.receipt_hash,
-        r.id,r.source_ref,r.source_revision,r.prod_base,r.original_hash,r.proposed_hash,
-        r.original_text,r.source_original_text,r.operations_json
-      FROM candidate_revisions candidate
-      JOIN production_review_revisions r ON r.id=candidate.review_revision_id
-      JOIN production_reviews review ON review.review_revision_id=r.id) parent
-      ORDER BY parent.source_ref,parent.created_at,parent.id,parent.review_revision_id)`);
+      ORDER BY r.source_ref,s.created_at,s.id,r.id)`);
     if (!submittedRows.length) return { review_receipts:[],sources:[],
       eligible_operation_count:0 };
 
@@ -2470,10 +2559,11 @@ export class EditorStoreCore {
 
     const classifiedSources = classifyProductionScope(projectionSources);
     const heldGroups = this._heldReviewGroups(classifiedSources);
-    let eligibleOperationCount = 0;
+    let eligibleOperationCount = 0,heldOperationCount = 0;
     for (const source of classifiedSources) {
       const decisions = new Map(source.decisions.map((decision) => [decision.operation_id,decision]));
       for (const operation of source.operations) {
+        if (operation.production_scope === "held") heldOperationCount += 1;
         const classification = this._classifyReleaseOperation({ source,operation,
           decision:decisions.get(operation.decision_id || operation.id),heldGroups,
           lifecycleState:lifecycleByOperation.get(operation.id),frozen:frozen.has(operation.id) });
@@ -2482,7 +2572,7 @@ export class EditorStoreCore {
     }
     return { review_receipts:[...receiptById.values()].sort((a,b) =>
       a.created_at-b.created_at || a.id.localeCompare(b.id)),sources:classifiedSources,
-      eligible_operation_count:eligibleOperationCount };
+      eligible_operation_count:eligibleOperationCount,held_operation_count:heldOperationCount };
   }
 
   publisherSummary() {
