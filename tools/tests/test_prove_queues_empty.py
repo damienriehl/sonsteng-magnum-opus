@@ -8,6 +8,7 @@ import os
 import pathlib
 import ssl
 import subprocess
+import sys
 import textwrap
 from types import SimpleNamespace
 
@@ -20,11 +21,12 @@ spec = importlib.util.spec_from_file_location(
 )
 queues = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(queues)
+queues.__cached__ = None
 
 LEDGER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev"
 WINDOW_OWNER = "packet-d-test-window"
-WINDOW_NONCE = "0123456789abcdef" * 4
 RELEASE_COMMIT = "a" * 40
+GENERATE_WINDOW_NONCE = object()
 
 
 def git_blob_oid(raw):
@@ -36,6 +38,57 @@ def git_blob_oid(raw):
 
 def sha256_hex(raw):
     return hashlib.sha256(raw).hexdigest()
+
+
+def window_nonce_for(path):
+    return sha256_hex(
+        b"queue-proof-test-window\0" + os.fsencode(path)
+    )
+
+
+def window_nonce_digest_for(path):
+    return sha256_hex(
+        b"queue-proof-window-nonce\0"
+        + window_nonce_for(path).encode("ascii")
+    )
+
+
+def write_window_nonce(path):
+    nonce = window_nonce_for(path)
+    path.write_text(
+        f"QUEUE_PROOF_WINDOW_NONCE={nonce}\n", encoding="ascii"
+    )
+    path.chmod(0o600)
+    return window_nonce_digest_for(path)
+
+
+def successful_handshake(_ledger_host, _context):
+    return {
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "protocol": "TLSv1.3",
+        "secret_bits": 256,
+    }
+
+
+def window_fence_args(tmp_path, *, phase="opening"):
+    nonce_file = tmp_path / "direct-window-nonce.env"
+    write_window_nonce(nonce_file)
+    return [
+        "--apply-timer-stopped",
+        "--window-owner",
+        WINDOW_OWNER,
+        "--window-nonce-file",
+        str(nonce_file),
+        "--window-phase",
+        phase,
+    ]
+
+
+def call_main(argv, **kwargs):
+    kwargs.setdefault("process_environment", {"LC_ALL": "C"})
+    kwargs.setdefault("isolated", True)
+    kwargs.setdefault("tls_handshake", successful_handshake)
+    return queues.main(argv, **kwargs)
 
 
 def ledger_hashes(review_payload, frontier_payload):
@@ -88,6 +141,15 @@ def release_identity_args(
         release_commit,
         "--verifier-blob",
         verifier_blob,
+    ]
+
+
+def preflight_args():
+    return [
+        *release_identity_args(),
+        "--ledger-origin",
+        LEDGER_ORIGIN,
+        "--preflight",
     ]
 
 
@@ -275,18 +337,31 @@ def run_main(
     fence=True,
     apply_timer_asserted=True,
     window_owner=WINDOW_OWNER,
-    window_nonce=WINDOW_NONCE,
+    window_nonce=GENERATE_WINDOW_NONCE,
+    window_phase="opening",
     ledger_origin=LEDGER_ORIGIN,
     event_log=None,
     raw_output=False,
     run_systemctl=None,
     read_host_identity=None,
+    process_environment=None,
 ):
     apply_env = tmp_path / "apply.env"
     observer_env = tmp_path / "observer.env"
     write_apply_env(apply_env)
     if observer:
         write_observer_env(observer_env)
+    nonce_file = tmp_path / "window-nonce.env"
+    expected_nonce_digest = None
+    if window_nonce is not None:
+        if window_nonce is GENERATE_WINDOW_NONCE:
+            expected_nonce_digest = write_window_nonce(nonce_file)
+        else:
+            nonce_file.write_text(
+                f"QUEUE_PROOF_WINDOW_NONCE={window_nonce}\n",
+                encoding="ascii",
+            )
+            nonce_file.chmod(0o600)
     if run_systemctl is None:
         systemctl, systemctl_calls = injected_systemctl(
             production_enabled=timer_enabled,
@@ -317,7 +392,9 @@ def run_main(
     if fence and window_owner is not None:
         argv.extend(["--window-owner", window_owner])
     if fence and window_nonce is not None:
-        argv.extend(["--window-nonce", window_nonce])
+        argv.extend(["--window-nonce-file", str(nonce_file)])
+    if fence and window_phase is not None:
+        argv.extend(["--window-phase", window_phase])
 
     def utc_now():
         timestamp = next(timestamps)
@@ -327,7 +404,7 @@ def run_main(
 
     if read_host_identity is None:
         read_host_identity = lambda: dict(HOST_IDENTITY)
-    code = queues.main(
+    code = call_main(
         argv,
         opener=opener,
         run_systemctl=systemctl,
@@ -335,9 +412,18 @@ def run_main(
         stdout=output,
         systemctl_path="/usr/bin/systemctl",
         read_host_identity=read_host_identity,
+        process_environment=(
+            {"LC_ALL": "C"}
+            if process_environment is None
+            else process_environment
+        ),
     )
     serialized = output.getvalue()
     receipt = serialized if raw_output else json.loads(serialized)
+    if isinstance(receipt, dict) and expected_nonce_digest is not None:
+        assert receipt.get("fence") == "unproven" or receipt["fence"].get(
+            "window_nonce_sha256"
+        ) == expected_nonce_digest
     return code, receipt, systemctl_calls
 
 
@@ -385,6 +471,10 @@ def test_all_empty_returns_true_and_zero(tmp_path):
             "publication_frontier": "Mon, 07 Sep 2026 15:00:01 GMT",
             "review": "Mon, 07 Sep 2026 15:00:00 GMT",
         },
+        "server_date_skew_seconds": {
+            "publication_frontier": 0,
+            "review": 0,
+        },
         "ledger_state_hash": ledger_hashes(
             {"ok": True, "items": []},
             {"ok": True, "context": EMPTY_FRONTIER},
@@ -398,8 +488,11 @@ def test_all_empty_returns_true_and_zero(tmp_path):
             },
             "apply_timer_stopped": True,
             "proved": True,
-            "window_nonce": WINDOW_NONCE,
+            "window_nonce_sha256": window_nonce_digest_for(
+                tmp_path / "window-nonce.env"
+            ),
             "window_owner": WINDOW_OWNER,
+            "window_phase": "opening",
         },
         "publication": "observer-frontier",
         "preflight": None,
@@ -438,6 +531,26 @@ def test_all_empty_returns_true_and_zero(tmp_path):
     serialized = json.dumps(receipt)
     assert "admin-secret" not in serialized
     assert "observer-secret" not in serialized
+
+
+def test_window_phase_distinguishes_opening_and_closing_without_nonce_leak(
+    tmp_path,
+):
+    opener, _calls = injected_opener([])
+    _code, opening, _systemctl_calls = run_main(
+        tmp_path, opener=opener, window_phase="opening"
+    )
+    opener, _calls = injected_opener([])
+    _code, closing, _systemctl_calls = run_main(
+        tmp_path, opener=opener, window_phase="closing"
+    )
+
+    assert opening["ledger_state_hash"] == closing["ledger_state_hash"]
+    assert opening["fence"]["window_phase"] == "opening"
+    assert closing["fence"]["window_phase"] == "closing"
+    assert opening != closing
+    serialized = json.dumps([opening, closing])
+    assert window_nonce_for(tmp_path / "window-nonce.env") not in serialized
 
 
 def test_one_pending_row_returns_false_and_one(tmp_path):
@@ -1009,7 +1122,7 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
             raise http.client.IncompleteRead(b"private partial body", 100)
 
     output = io.StringIO()
-    code = queues.main(
+    code = call_main(
         [
             *release_identity_args(),
             "--ledger-origin",
@@ -1018,11 +1131,7 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
             str(apply_env),
             "--observer-env-file",
             str(observer_env),
-            "--apply-timer-stopped",
-            "--window-owner",
-            WINDOW_OWNER,
-            "--window-nonce",
-            WINDOW_NONCE,
+            *window_fence_args(tmp_path),
         ],
         opener=lambda _request, timeout: IncompleteResponse({}),
         run_systemctl=injected_systemctl()[0],
@@ -1057,6 +1166,7 @@ def test_deeply_nested_json_returns_one_bounded_receipt(tmp_path, monkeypatch):
             loads=reject_excessive_nesting,
         ),
     )
+    write_window_nonce(tmp_path / "direct-window-nonce.env")
     receipt = queues.prove(
         LEDGER_ORIGIN,
         apply_env,
@@ -1067,7 +1177,8 @@ def test_deeply_nested_json_returns_one_bounded_receipt(tmp_path, monkeypatch):
         },
         apply_timer_stopped=True,
         window_owner=WINDOW_OWNER,
-        window_nonce=WINDOW_NONCE,
+        window_nonce_file=(tmp_path / "direct-window-nonce.env"),
+        window_phase="opening",
         opener=lambda _request, timeout: RawResponse(raw),
         run_systemctl=injected_systemctl()[0],
         systemctl_path="/usr/bin/systemctl",
@@ -1091,7 +1202,7 @@ def test_clock_provider_exception_returns_one_bounded_receipt(tmp_path):
     def unavailable_clock():
         raise RuntimeError("private clock-provider detail")
 
-    code = queues.main(
+    code = call_main(
         [
             *release_identity_args(),
             "--ledger-origin",
@@ -1100,11 +1211,7 @@ def test_clock_provider_exception_returns_one_bounded_receipt(tmp_path):
             str(apply_env),
             "--observer-env-file",
             str(observer_env),
-            "--apply-timer-stopped",
-            "--window-owner",
-            WINDOW_OWNER,
-            "--window-nonce",
-            WINDOW_NONCE,
+            *window_fence_args(tmp_path),
         ],
         opener=lambda _request, timeout: Response({"ok": True, "items": []}),
         run_systemctl=injected_systemctl()[0],
@@ -1365,6 +1472,54 @@ def test_malformed_or_duplicate_server_date_fails_closed(
     assert receipt["proof_error"] == "http-server-date-invalid"
 
 
+def test_server_date_outside_clock_skew_bound_fails_closed(tmp_path):
+    opener = lambda _request, timeout: Response(
+        {"ok": True, "items": []},
+        server_date="Tue, 07 Jan 2020 03:00:00 GMT",
+    )
+
+    code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-server-date-skew"
+    assert abs(receipt["server_date_skew_seconds"]["review"]) > 300
+
+
+@pytest.mark.parametrize("skew", [-300, 300])
+def test_server_date_accepts_exact_clock_skew_boundary(skew):
+    queues._assert_server_clock_skew(skew)
+
+
+@pytest.mark.parametrize("skew", [-301, 301])
+def test_server_date_refuses_one_second_outside_clock_skew_boundary(skew):
+    with pytest.raises(queues.ProofError, match="^http-server-date-skew$"):
+        queues._assert_server_clock_skew(skew)
+
+
+def test_server_date_pair_must_be_monotonic(tmp_path):
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return Response(
+                {"ok": True, "items": []},
+                server_date="Mon, 07 Sep 2026 15:00:01 GMT",
+            )
+        return Response(
+            {"ok": True, "context": EMPTY_FRONTIER},
+            server_date="Mon, 07 Sep 2026 15:00:00 GMT",
+        )
+
+    code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "http-server-date-nonmonotonic"
+    assert receipt["server_date_skew_seconds"] == {
+        "publication_frontier": -1,
+        "review": 1,
+    }
+
+
 def test_host_identity_failure_returns_one_bounded_receipt(tmp_path):
     def unavailable_host_identity():
         raise queues.ProofError("host-identity-unavailable")
@@ -1501,6 +1656,7 @@ def test_missing_fence_assertions_emit_unproven_without_gets(tmp_path):
         {"apply_timer_asserted": False},
         {"window_owner": None},
         {"window_nonce": None},
+        {"window_phase": None},
     ]
     for kwargs in cases:
         opener, http_calls = injected_opener([])
@@ -1547,6 +1703,21 @@ def test_invalid_window_nonce_emits_unproven_without_gets(tmp_path):
     assert http_calls == []
 
 
+def test_window_nonce_file_refuses_extra_assignments(tmp_path):
+    nonce_file = tmp_path / "nonce-with-extra.env"
+    nonce_file.write_text(
+        f"QUEUE_PROOF_WINDOW_NONCE={window_nonce_for(nonce_file)}\n"
+        "EXTRA_VALUE=not-allowed\n",
+        encoding="ascii",
+    )
+    nonce_file.chmod(0o600)
+
+    with pytest.raises(
+        queues.ProofError, match="^window-nonce-unavailable$"
+    ):
+        queues._window_nonce_digest(nonce_file)
+
+
 def test_apply_timer_must_be_inactive_with_known_enabled_state(tmp_path):
     opener, http_calls = injected_opener([])
 
@@ -1561,8 +1732,11 @@ def test_apply_timer_must_be_inactive_with_known_enabled_state(tmp_path):
         "apply_timer": {"active": True, "available": True, "enabled": True},
         "apply_timer_stopped": False,
         "proved": False,
-        "window_nonce": WINDOW_NONCE,
+        "window_nonce_sha256": window_nonce_digest_for(
+            tmp_path / "window-nonce.env"
+        ),
         "window_owner": WINDOW_OWNER,
+        "window_phase": "opening",
     }
     assert http_calls == []
 
@@ -1578,7 +1752,7 @@ def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
     def unavailable_systemctl(_argv, **_kwargs):
         raise OSError("systemctl unavailable")
 
-    code = queues.main(
+    code = call_main(
         [
             *release_identity_args(),
             "--ledger-origin",
@@ -1587,11 +1761,7 @@ def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
             str(apply_env),
             "--observer-env-file",
             str(observer_env),
-            "--apply-timer-stopped",
-            "--window-owner",
-            WINDOW_OWNER,
-            "--window-nonce",
-            WINDOW_NONCE,
+            *window_fence_args(tmp_path),
         ],
         opener=opener,
         run_systemctl=unavailable_systemctl,
@@ -1609,8 +1779,11 @@ def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
         "apply_timer": {"active": None, "available": False, "enabled": None},
         "apply_timer_stopped": False,
         "proved": False,
-        "window_nonce": WINDOW_NONCE,
+        "window_nonce_sha256": window_nonce_digest_for(
+            tmp_path / "direct-window-nonce.env"
+        ),
         "window_owner": WINDOW_OWNER,
+        "window_phase": "opening",
     }
     assert receipt["first_get_utc"] is None
     assert receipt["last_get_utc"] is None
@@ -1698,7 +1871,7 @@ def test_production_opener_ignores_proxy_and_tls_environment(
     assert production_context.keylog_filename is None
     assert default_context.keylog_filename == str(keylog_file)
     assert production_context.minimum_version == ssl.TLSVersion.TLSv1_2
-    assert production_context.maximum_version == ssl.TLSVersion.TLSv1_2
+    assert production_context.maximum_version == ssl.TLSVersion.MAXIMUM_SUPPORTED
     assert len(production_context.get_ciphers()) == 9
     assert {
         cipher["name"]
@@ -1735,7 +1908,7 @@ def test_tls_context_setup_failure_returns_one_bounded_false_receipt(
 
     monkeypatch.setattr(queues.ssl, "SSLContext", context_failure)
 
-    code = queues.main(
+    code = call_main(
         [
             *release_identity_args(),
             "--ledger-origin",
@@ -1744,11 +1917,7 @@ def test_tls_context_setup_failure_returns_one_bounded_false_receipt(
             str(apply_env),
             "--observer-env-file",
             str(observer_env),
-            "--apply-timer-stopped",
-            "--window-owner",
-            WINDOW_OWNER,
-            "--window-nonce",
-            WINDOW_NONCE,
+            *window_fence_args(tmp_path),
         ],
         run_systemctl=lambda *_args, **_kwargs: pytest.fail(
             "systemctl must not run after TLS setup failure"
@@ -1769,7 +1938,7 @@ def test_tls_context_setup_failure_returns_one_bounded_false_receipt(
 def test_invalid_release_identity_fails_before_systemctl_or_network(tmp_path):
     output = io.StringIO()
 
-    code = queues.main(
+    code = call_main(
         [
             *release_identity_args(release_commit="not-a-reviewed-commit"),
             "--ledger-origin",
@@ -1778,11 +1947,7 @@ def test_invalid_release_identity_fails_before_systemctl_or_network(tmp_path):
             str(tmp_path / "missing-apply.env"),
             "--observer-env-file",
             str(tmp_path / "missing-observer.env"),
-            "--apply-timer-stopped",
-            "--window-owner",
-            WINDOW_OWNER,
-            "--window-nonce",
-            WINDOW_NONCE,
+            *window_fence_args(tmp_path),
         ],
         opener=lambda *_args, **_kwargs: pytest.fail("network must not run"),
         run_systemctl=lambda *_args, **_kwargs: pytest.fail(
@@ -1863,9 +2028,9 @@ def test_self_identity_failures_emit_one_bounded_receipt(
     ["LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_ARBITRARY", "OPENSSL_CONF"],
 )
 def test_hostile_loader_and_crypto_environment_is_refused(
-    tmp_path, monkeypatch, variable
+    tmp_path, variable
 ):
-    monkeypatch.setenv(variable, "private-hostile-value")
+    hostile_environment = {"LC_ALL": "C", variable: "private-hostile-value"}
     code, serialized, _systemctl_calls = run_main(
         tmp_path,
         opener=lambda *_args, **_kwargs: pytest.fail("network must not run"),
@@ -1873,6 +2038,7 @@ def test_hostile_loader_and_crypto_environment_is_refused(
             "systemctl must not run"
         ),
         raw_output=True,
+        process_environment=hostile_environment,
     )
     receipt = json.loads(serialized)
 
@@ -1889,8 +2055,8 @@ def test_preflight_measures_identity_trust_store_and_systemctl():
     expected_context.load_verify_locations(cafile=queues.SYSTEM_CA_BUNDLE)
     output = io.StringIO()
 
-    code = queues.main(
-        [*release_identity_args(), "--preflight"],
+    code = call_main(
+        preflight_args(),
         stdout=output,
         systemctl_path=queues.SYSTEMCTL_PATH,
     )
@@ -1899,6 +2065,9 @@ def test_preflight_measures_identity_trust_store_and_systemctl():
     assert code == 0
     assert receipt["all_queues_empty"] is False
     assert receipt["preflight"]["ready"] is True
+    assert receipt["preflight"]["https_handshake"] == successful_handshake(
+        None, None
+    )
     assert receipt["preflight"]["systemctl_path"] == queues.SYSTEMCTL_PATH
     assert receipt["preflight"]["system_ca_bundle"]["path"] == (
         queues.SYSTEM_CA_BUNDLE
@@ -1916,8 +2085,8 @@ def test_preflight_refuses_missing_trusted_systemctl(monkeypatch):
     monkeypatch.setattr(queues, "SYSTEMCTL_PATH", None)
     output = io.StringIO()
 
-    code = queues.main(
-        [*release_identity_args(), "--preflight"], stdout=output
+    code = call_main(
+        preflight_args(), stdout=output
     )
     receipt = json.loads(output.getvalue())
 
@@ -1932,14 +2101,180 @@ def test_preflight_refuses_missing_system_ca_bundle(tmp_path, monkeypatch):
     )
     output = io.StringIO()
 
-    code = queues.main(
-        [*release_identity_args(), "--preflight"], stdout=output
+    code = call_main(
+        preflight_args(), stdout=output
     )
     receipt = json.loads(output.getvalue())
 
     assert code == 1
     assert receipt["preflight"] is None
     assert receipt["proof_error"] == "https-client-unavailable"
+
+
+def test_preflight_performs_handshake_to_allowlisted_host():
+    observed = []
+
+    def handshake(ledger_host, context):
+        observed.append((ledger_host, context))
+        return successful_handshake(ledger_host, context)
+
+    output = io.StringIO()
+    code = call_main(
+        preflight_args(),
+        stdout=output,
+        systemctl_path=queues.SYSTEMCTL_PATH,
+        tls_handshake=handshake,
+    )
+    receipt = json.loads(output.getvalue())
+
+    assert code == 0
+    assert len(observed) == 1
+    assert observed[0][0] == "sonsteng-chat.damienriehl.workers.dev"
+    assert observed[0][1].minimum_version == ssl.TLSVersion.TLSv1_2
+    assert observed[0][1].maximum_version == ssl.TLSVersion.MAXIMUM_SUPPORTED
+    assert receipt["preflight"]["https_handshake"]["protocol"] == "TLSv1.3"
+
+
+def test_preflight_handshake_failure_fails_closed():
+    def unavailable_handshake(_ledger_host, _context):
+        raise queues.ProofError("https-handshake-unavailable")
+
+    output = io.StringIO()
+    code = call_main(
+        preflight_args(),
+        stdout=output,
+        systemctl_path=queues.SYSTEMCTL_PATH,
+        tls_handshake=unavailable_handshake,
+    )
+    receipt = json.loads(output.getvalue())
+
+    assert code == 1
+    assert receipt["preflight"] is None
+    assert receipt["proof_error"] == "https-handshake-unavailable"
+
+
+@pytest.mark.parametrize("protocol", ["TLSv1.2", "TLSv1.3"])
+def test_tls_handshake_uses_allowlisted_destination_and_sni(
+    monkeypatch, protocol
+):
+    observed = []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def version(self):
+            return protocol
+
+        def cipher(self):
+            return ("TLS_AES_256_GCM_SHA384", protocol, 256)
+
+    class Transport:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Context:
+        def wrap_socket(self, transport, *, server_hostname):
+            observed.append(("wrap", transport, server_hostname))
+            return Connection()
+
+    transport = Transport()
+
+    def connect(destination, *, timeout):
+        observed.append(("connect", destination, timeout))
+        return transport
+
+    monkeypatch.setattr(queues.socket, "create_connection", connect)
+
+    result = queues._tls_handshake(
+        "sonsteng-chat.damienriehl.workers.dev", Context()
+    )
+
+    assert observed == [
+        (
+            "connect",
+            ("sonsteng-chat.damienriehl.workers.dev", 443),
+            queues.TIMEOUT_SECONDS,
+        ),
+        ("wrap", transport, "sonsteng-chat.damienriehl.workers.dev"),
+    ]
+    assert result == {
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "protocol": protocol,
+        "secret_bits": 256,
+    }
+
+
+def test_tls_handshake_maps_transport_failure_to_bounded_error(monkeypatch):
+    def unavailable(_destination, *, timeout):
+        raise OSError(f"private transport failure after {timeout}")
+
+    monkeypatch.setattr(queues.socket, "create_connection", unavailable)
+
+    with pytest.raises(
+        queues.ProofError, match="^https-handshake-unavailable$"
+    ):
+        queues._tls_handshake(
+            "sonsteng-chat.damienriehl.workers.dev", object()
+        )
+
+
+@pytest.mark.parametrize(
+    ("protocol", "cipher"),
+    [
+        ("TLSv1.1", ("TLS_AES_256_GCM_SHA384", "TLSv1.1", 256)),
+        ("TLSv1.3", None),
+        ("TLSv1.3", ("", "TLSv1.3", 256)),
+        ("TLSv1.3", ("TLS_AES_256_GCM_SHA384", "TLSv1.3", True)),
+        ("TLSv1.3", ("TLS_AES_256_GCM_SHA384", "TLSv1.3", 0)),
+    ],
+)
+def test_tls_handshake_refuses_malformed_negotiated_values(
+    monkeypatch, protocol, cipher
+):
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def version(self):
+            return protocol
+
+        def cipher(self):
+            return cipher
+
+    class Transport:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Context:
+        def wrap_socket(self, _transport, *, server_hostname):
+            assert server_hostname == "sonsteng-chat.damienriehl.workers.dev"
+            return Connection()
+
+    monkeypatch.setattr(
+        queues.socket,
+        "create_connection",
+        lambda _destination, *, timeout: Transport(),
+    )
+
+    with pytest.raises(
+        queues.ProofError, match="^https-handshake-invalid$"
+    ):
+        queues._tls_handshake(
+            "sonsteng-chat.damienriehl.workers.dev", Context()
+        )
 
 
 def test_host_identity_hashes_measured_machine_and_boot_ids(
@@ -1975,6 +2310,22 @@ def test_host_identity_refuses_malformed_or_oversized_input(
         "12345678-1234-5678-9abc-def012345678\n", encoding="ascii"
     )
     monkeypatch.setattr(queues, "MACHINE_ID_PATH", str(machine_path))
+    monkeypatch.setattr(queues, "BOOT_ID_PATH", str(boot_path))
+
+    with pytest.raises(
+        queues.ProofError, match="^host-identity-unavailable$"
+    ):
+        queues._host_identity()
+
+
+def test_host_identity_refuses_symlink_input(tmp_path, monkeypatch):
+    real_machine_id = tmp_path / "real-machine-id"
+    real_machine_id.write_text("0123456789abcdef0123456789abcdef\n")
+    linked_machine_id = tmp_path / "machine-id"
+    linked_machine_id.symlink_to(real_machine_id)
+    boot_path = tmp_path / "boot-id"
+    boot_path.write_text("12345678-1234-5678-9abc-def012345678\n")
+    monkeypatch.setattr(queues, "MACHINE_ID_PATH", str(linked_machine_id))
     monkeypatch.setattr(queues, "BOOT_ID_PATH", str(boot_path))
 
     with pytest.raises(
@@ -2023,18 +2374,16 @@ def test_documented_invocation_ignores_shell_path_and_cwd_or_refuses(tmp_path):
     preload_source.write_text(
         """
 #include <fcntl.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 __attribute__((constructor)) static void mark_loader_execution(void) {
-    const char *path = getenv("LOADER_MARKER");
-    if (path == NULL) return;
+    const char *path = <loader-marker>;
     int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (fd < 0) return;
     (void)write(fd, "x", 1);
     (void)close(fd);
 }
-""",
+""".replace("<loader-marker>", json.dumps(str(loader_marker))),
         encoding="ascii",
     )
     subprocess.run(
@@ -2080,6 +2429,8 @@ __attribute__((constructor)) static void mark_loader_execution(void) {
     assert fenced.startswith("```bash\n") and fenced.endswith("\n```")
     launcher = fenced.removeprefix("```bash\n").removesuffix("\n```")
     receipt_path = tmp_path / "opening-receipt.json"
+    nonce_path = tmp_path / "window-nonce.env"
+    nonce_digest = write_window_nonce(nonce_path)
     launcher = (
         launcher.replace(
             "/home/damienriehl/.local/share/sonsteng-daemon/checkout",
@@ -2088,7 +2439,7 @@ __attribute__((constructor)) static void mark_loader_execution(void) {
         .replace("<reviewed-release-commit-SHA>", release_commit)
         .replace("<reviewed-verifier-Git-blob-OID>", verifier_blob)
         .replace("<opaque-Packet-D-window-id>", WINDOW_OWNER)
-        .replace("<recorded-Packet-D-window-nonce>", WINDOW_NONCE)
+        .replace("<absolute-mode-0600-window-nonce-file>", str(nonce_path))
         .replace("<absolute-opening-receipt-path>.json", str(receipt_path))
         .replace(
             "/home/damienriehl/.config/sonsteng-apply/env",
@@ -2110,7 +2461,6 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
 '''.replace("<preload-object>", str(preload_object))
     environment = {
         "PATH": str(shim_dir),
-        "LOADER_MARKER": str(loader_marker),
         "POISON_MARKER": str(poison_marker),
     }
 
@@ -2133,39 +2483,82 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
     )
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
 
-    assert "builtin exec -c /usr/bin/env -i LC_ALL=C" in launcher
     assert invoked.returncode == 1
-    assert invoked.stdout == ""
+    assert invoked.stdout == receipt_path.read_text(encoding="utf-8")
     assert receipt["all_queues_empty"] is False
-    assert receipt["proof_error"] != "environment-hostile"
+    assert receipt["proof_error"] == "fence-apply-timer-not-stopped"
     assert receipt["verifier_identity"] == {
         "release_commit": release_commit,
         "verifier_blob": verifier_blob,
     }
+    assert receipt["fence"]["window_nonce_sha256"] == nonce_digest
+    assert receipt["fence"]["window_phase"] == "opening"
     assert not poison_marker.exists()
     assert not loader_marker.exists()
 
     receipt_path.unlink()
+    no_isolated_mode_launcher = launcher.replace(
+        "/usr/bin/python3 -I -B", "/usr/bin/python3 -B"
+    )
+    no_isolated_mode = invoke_launcher(no_isolated_mode_launcher)
+    no_isolated_mode_receipt = json.loads(
+        receipt_path.read_text(encoding="utf-8")
+    )
+
+    assert no_isolated_mode.returncode == 1
+    assert no_isolated_mode_receipt["proof_error"] == (
+        "runtime-isolation-required"
+    )
+    assert not poison_marker.exists()
+    assert not loader_marker.exists()
+
+    receipt_path.unlink()
+    no_inner_env_clear_launcher = launcher.replace(
+        "/usr/bin/env -i LC_ALL=C", "/usr/bin/env LC_ALL=C"
+    )
+    no_inner_env_clear = invoke_launcher(no_inner_env_clear_launcher)
+    no_inner_env_clear_receipt = json.loads(
+        receipt_path.read_text(encoding="utf-8")
+    )
+
+    assert no_inner_env_clear.returncode == 1
+    assert no_inner_env_clear_receipt["proof_error"] == "environment-hostile"
+    assert not poison_marker.exists()
+    assert not loader_marker.exists()
+
+    receipt_path.unlink()
+    no_loader_clear_launcher = launcher.replace(
+        "builtin exec -c /usr/bin/env QUEUE_PROOF_ENV_SCRUB_REQUIRED=1",
+        "builtin exec /usr/bin/env QUEUE_PROOF_ENV_SCRUB_REQUIRED=1",
+    )
+    no_loader_clear = invoke_launcher(no_loader_clear_launcher)
+
+    assert no_loader_clear.returncode == 1
+    assert loader_marker.exists()
+    assert not poison_marker.exists()
+    receipt_path.unlink()
+    loader_marker.unlink()
+
     wrong_blob_launcher = launcher.replace(verifier_blob, "0" * 40)
     wrong_blob = invoke_launcher(wrong_blob_launcher)
 
     assert wrong_blob.returncode == 73
     assert wrong_blob.stdout == ""
-    assert receipt_path.read_bytes() == b""
+    assert not receipt_path.exists()
     assert not poison_marker.exists()
     assert not loader_marker.exists()
 
     verifier.write_bytes(verifier.read_bytes() + b"\n")
-    receipt_path.unlink()
+    receipt_path.unlink(missing_ok=True)
     dirty_verifier = invoke_launcher()
 
     assert dirty_verifier.returncode == 74
     assert dirty_verifier.stdout == ""
-    assert receipt_path.read_bytes() == b""
+    assert not receipt_path.exists()
     assert not poison_marker.exists()
     assert not loader_marker.exists()
 
-    receipt_path.unlink()
+    receipt_path.unlink(missing_ok=True)
     (checkout / "later-commit.txt").write_text("later\n", encoding="utf-8")
     subprocess.run([*git, "add", "later-commit.txt"], check=True)
     subprocess.run(
@@ -2185,11 +2578,11 @@ builtin export LD_ARBITRARY=private OPENSSL_CONF=/private/openssl.cnf
 
     assert wrong_head.returncode == 72
     assert wrong_head.stdout == ""
-    assert receipt_path.read_bytes() == b""
+    assert not receipt_path.exists()
     assert not poison_marker.exists()
     assert not loader_marker.exists()
 
-    receipt_path.unlink()
+    receipt_path.unlink(missing_ok=True)
     counterfeit_function = r'''
 run_queue_proof() {
   : > "$POISON_MARKER"
@@ -2206,6 +2599,64 @@ builtin readonly -f run_queue_proof
     assert not receipt_path.exists()
     assert not poison_marker.exists()
     assert not loader_marker.exists()
+
+
+def test_runbook_states_only_the_loader_protection_the_tool_can_deliver():
+    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(runbook.split())
+
+    assert "`builtin exec -c` is the loader-isolation boundary" in normalized
+    assert "secondary, post-start guards" in normalized
+    assert (
+        "They cannot fire if a dynamic loader pre-empts the interpreter"
+        in normalized
+    )
+    assert "outside this documented readonly launcher is unsupported" in normalized
+    assert "Receipt contents alone are insufficient" in normalized
+    assert "even if it is invoked outside this launcher" not in normalized
+
+
+def test_runbook_records_self_hash_limits_and_load_bearing_script_route():
+    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(runbook.split())
+
+    assert (
+        "the file reachable at `__file__` had the reviewed blob at run time"
+        in normalized
+    )
+    assert "the measurement is a later re-read" in normalized
+    assert "It proves nothing when the invoked program is not this program" in normalized
+    assert "does not cover interpreter caches" in normalized
+    assert "echoes `release_commit` without verifying it" in normalized
+    assert (
+        "The real binding is the runbook's Git gates plus the supervised transcript"
+        in normalized
+    )
+    assert "-I -B --check-hash-based-pycs always /proc/self/fd/9" in normalized
+    assert (
+        "A `-m` invocation, import, wrapper, or ordinary path substitution is unsupported"
+        in normalized
+    )
+
+
+def test_runbook_keeps_nonce_off_argv_and_defines_verifier_before_use():
+    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--window-nonce " not in runbook
+    assert "--window-nonce-file" in runbook
+    verifier_definition = (
+        'builtin readonly QUEUE_PROOF_VERIFIER="$QUEUE_PROOF_CHECKOUT/'
+        'tools/prove_queues_empty.py"'
+    )
+    assert runbook.index(verifier_definition) < runbook.index(
+        '9<"$QUEUE_PROOF_VERIFIER"'
+    )
 
 
 def test_apply_timer_decode_failure_returns_one_bounded_false_receipt(tmp_path):
@@ -2271,7 +2722,7 @@ def test_production_timer_decode_failure_returns_one_bounded_false_receipt(
 def _assert_invalid_arguments_receipt(argv):
     output = io.StringIO()
 
-    code = queues.main(argv, stdout=output)
+    code = call_main(argv, stdout=output)
     serialized = output.getvalue()
     receipt = json.loads(serialized)
 
@@ -2318,7 +2769,7 @@ def test_argument_parser_defect_returns_one_bounded_receipt(monkeypatch):
     monkeypatch.setattr(queues._ProofArgumentParser, "parse_args", fail_parse)
     output = io.StringIO()
 
-    code = queues.main([], stdout=output)
+    code = call_main([], stdout=output)
     serialized = output.getvalue()
     receipt = json.loads(serialized)
 
@@ -2336,8 +2787,8 @@ def test_json_encoder_defect_returns_literal_bounded_receipt(monkeypatch):
     monkeypatch.setattr(queues.json, "dumps", fail_json_encode)
     output = io.StringIO()
 
-    code = queues.main(
-        [*release_identity_args(), "--preflight"], stdout=output
+    code = call_main(
+        preflight_args(), stdout=output
     )
     serialized = output.getvalue()
     receipt = json.loads(serialized)
@@ -2347,3 +2798,232 @@ def test_json_encoder_defect_returns_literal_bounded_receipt(monkeypatch):
     assert len(serialized) < 2048
     assert receipt["proof_error"] == "verifier-defect"
     assert "private encoder defect" not in serialized
+
+
+def test_write_all_retries_partial_writes(monkeypatch):
+    writes = []
+
+    def partial_write(_descriptor, payload):
+        amount = min(3, len(payload))
+        writes.append(payload[:amount])
+        return amount
+
+    monkeypatch.setattr(queues.os, "write", partial_write)
+
+    queues._write_all(123, b"complete receipt")
+
+    assert b"".join(writes) == b"complete receipt"
+
+
+@pytest.mark.parametrize("written", [0, -1])
+def test_write_all_refuses_nonprogressing_write(monkeypatch, written):
+    monkeypatch.setattr(
+        queues.os, "write", lambda _descriptor, _payload: written
+    )
+
+    with pytest.raises(OSError):
+        queues._write_all(123, b"receipt")
+
+
+def test_durable_receipt_write_syncs_file_and_directory(tmp_path, monkeypatch):
+    receipt_path = tmp_path / "durable-receipt.json"
+    file_descriptor, directory_descriptor, filename = queues._open_receipt(
+        str(receipt_path)
+    )
+    fsync_calls = []
+    original_fsync = queues.os.fsync
+
+    def record_fsync(descriptor):
+        fsync_calls.append(descriptor)
+        original_fsync(descriptor)
+
+    monkeypatch.setattr(queues.os, "fsync", record_fsync)
+    try:
+        queues._write_receipt(
+            file_descriptor,
+            directory_descriptor,
+            filename,
+            b'{"receipt":true}\n',
+        )
+    finally:
+        os.close(file_descriptor)
+        os.close(directory_descriptor)
+
+    assert receipt_path.read_bytes() == b'{"receipt":true}\n'
+    assert fsync_calls == [file_descriptor, directory_descriptor]
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_durable_receipt_write_failure_returns_nonzero_diagnostic(
+    tmp_path, monkeypatch, capfd
+):
+    receipt_path = tmp_path / "failed-receipt.json"
+
+    def fail_write(*_args):
+        raise OSError("private storage failure")
+
+    monkeypatch.setattr(queues, "_write_receipt", fail_write)
+
+    code = call_main(
+        [*preflight_args(), "--receipt-path", str(receipt_path)],
+        systemctl_path=queues.SYSTEMCTL_PATH,
+    )
+    captured = capfd.readouterr()
+
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err == "queue proof receipt file could not be written\n"
+    assert receipt_path.read_bytes() == b""
+    assert "private storage failure" not in captured.err
+
+
+def test_runtime_requires_only_allowlisted_environment_and_isolated_mode():
+    queues._assert_clean_process_environment(
+        {"LC_ALL": "C"}, isolated=True
+    )
+
+    with pytest.raises(queues.ProofError, match="^environment-hostile$"):
+        queues._assert_clean_process_environment(
+            {"LC_ALL": "C", "UNEXPECTED": "value"}, isolated=True
+        )
+    with pytest.raises(
+        queues.ProofError, match="^runtime-isolation-required$"
+    ):
+        queues._assert_clean_process_environment(
+            {"LC_ALL": "C"}, isolated=False
+        )
+
+
+def test_self_blob_refuses_a_bytecode_cache_route(monkeypatch):
+    monkeypatch.setattr(queues, "__cached__", "/tmp/hostile.pyc")
+
+    with pytest.raises(
+        queues.ProofError, match="^verifier-bytecode-cached$"
+    ):
+        queues._self_blob()
+
+
+def test_tls_context_allows_tls_13():
+    context = queues._production_context()
+
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
+    assert context.maximum_version == ssl.TLSVersion.MAXIMUM_SUPPORTED
+
+
+def receipt_writer_child(receipt_path, *, close_stdout=False):
+    source_path = TOOLS / "prove_queues_empty.py"
+    child = f"""
+import hashlib
+import importlib.util
+import os
+import pathlib
+
+source_path = pathlib.Path({str(source_path)!r})
+spec = importlib.util.spec_from_file_location("queue_receipt_child", source_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.__cached__ = None
+raw = source_path.read_bytes()
+blob = hashlib.sha1(
+    f"blob {{len(raw)}}\\0".encode("ascii") + raw,
+    usedforsecurity=False,
+).hexdigest()
+if {close_stdout!r}:
+    os.close(1)
+raise SystemExit(module.main(
+    [
+        "--release-commit", "a" * 40,
+        "--verifier-blob", blob,
+        "--ledger-origin", {LEDGER_ORIGIN!r},
+        "--preflight",
+        "--receipt-path", {str(receipt_path)!r},
+    ],
+    systemctl_path="/usr/bin/systemctl",
+    process_environment={{"LC_ALL": "C"}},
+    isolated=True,
+    tls_handshake=lambda _host, _context: {{
+        "cipher": "TLS_AES_256_GCM_SHA384",
+        "protocol": "TLSv1.3",
+        "secret_bits": 256,
+    }},
+))
+"""
+    return [sys.executable, "-c", child]
+
+
+def assert_durable_preflight_receipt(receipt_path):
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["preflight"]["ready"] is True
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_full_stdout_returns_nonzero_but_preserves_durable_receipt(tmp_path):
+    receipt_path = tmp_path / "full-stdout-receipt.json"
+    with open("/dev/full", "wb") as full_sink:
+        completed = subprocess.run(
+            receipt_writer_child(receipt_path),
+            stdout=full_sink,
+            stderr=subprocess.PIPE,
+            text=False,
+            check=False,
+        )
+
+    assert completed.returncode == 1
+    assert completed.stderr == (
+        b"queue proof stdout mirror failed; receipt is at the required path\n"
+    )
+    assert_durable_preflight_receipt(receipt_path)
+
+
+def test_broken_stdout_pipe_returns_nonzero_but_preserves_durable_receipt(
+    tmp_path,
+):
+    receipt_path = tmp_path / "broken-pipe-receipt.json"
+    read_descriptor, write_descriptor = os.pipe()
+    os.close(read_descriptor)
+    try:
+        child = subprocess.Popen(
+            receipt_writer_child(receipt_path),
+            stdout=write_descriptor,
+            stderr=subprocess.PIPE,
+        )
+    finally:
+        os.close(write_descriptor)
+    _stdout, stderr = child.communicate(timeout=5)
+
+    assert child.returncode == 1
+    assert stderr == (
+        b"queue proof stdout mirror failed; receipt is at the required path\n"
+    )
+    assert_durable_preflight_receipt(receipt_path)
+
+
+def test_closed_stdout_returns_nonzero_but_preserves_durable_receipt(tmp_path):
+    receipt_path = tmp_path / "closed-stdout-receipt.json"
+    completed = subprocess.run(
+        receipt_writer_child(receipt_path, close_stdout=True),
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr == (
+        b"queue proof stdout mirror was unavailable; receipt is at the required path\n"
+    )
+    assert_durable_preflight_receipt(receipt_path)
+
+
+def test_existing_receipt_path_is_refused_without_overwrite(tmp_path):
+    receipt_path = tmp_path / "existing-receipt.json"
+    receipt_path.write_text("existing evidence\n", encoding="utf-8")
+
+    completed = subprocess.run(
+        receipt_writer_child(receipt_path),
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stdout == b""
+    assert completed.stderr == b"queue proof receipt file could not be opened\n"
+    assert receipt_path.read_text(encoding="utf-8") == "existing evidence\n"

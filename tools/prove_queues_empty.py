@@ -12,6 +12,7 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import ssl
 import stat
 import subprocess
@@ -26,6 +27,7 @@ MAX_ENV_BYTES = 64 * 1024
 MAX_FRONTIER_ITEMS = 1000
 MAX_OPERATION_COUNT = 100_000
 MAX_BOUND_VALUE_BYTES = 256
+MAX_CLOCK_SKEW_SECONDS = 300
 TIMER_UNIT = "sonsteng-prod-release.timer"
 APPLY_TIMER_UNIT = "sonsteng-apply.timer"
 USER_AGENT = "sonsteng-queue-proof/1.0"
@@ -36,6 +38,7 @@ BOOT_ID_PATH = "/proc/sys/kernel/random/boot_id"
 ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 WINDOW_OWNER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 WINDOW_NONCE_RE = re.compile(r"[0-9a-f]{64}")
+WINDOW_PHASES = ("opening", "closing")
 CONTENT_LENGTH_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 GIT_OBJECT_ID_RE = re.compile(r"[0-9a-f]{40}")
 ALLOWED_LEDGER_ORIGINS = frozenset(
@@ -137,7 +140,6 @@ def _production_context(ca_bundle=None):
             _raw, cadata = ca_bundle
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
-        context.maximum_version = ssl.TLSVersion.TLSv1_2
         context.set_ciphers(TLS_12_CIPHER_POLICY)
         context.verify_mode = ssl.CERT_REQUIRED
         context.check_hostname = True
@@ -163,14 +165,20 @@ def _production_opener():
         raise ProofError("https-client-unavailable") from exc
 
 
-def _assert_clean_process_environment(environment=None):
-    """Refuse loader and OpenSSL configuration inherited by this process."""
+def _assert_clean_process_environment(environment=None, *, isolated=None):
+    """Require the exact environment and isolated mode of the sanctioned launcher."""
     names = os.environ if environment is None else environment
-    if any(name.startswith("LD_") for name in names) or "OPENSSL_CONF" in names:
+    if set(names) != {"LC_ALL"} or names.get("LC_ALL") != "C":
         raise ProofError("environment-hostile")
+    if isolated is None:
+        isolated = sys.flags.isolated == 1
+    if isolated is not True:
+        raise ProofError("runtime-isolation-required")
 
 
-def _protected_env(path, required_keys, *, missing_ok=False):
+def _protected_env(
+    path, required_keys, *, missing_ok=False, reject_unknown=False
+):
     """Read required values from an owned, regular, mode-0600 environment file."""
     target = pathlib.Path(path)
     flags = (
@@ -217,6 +225,8 @@ def _protected_env(path, required_keys, *, missing_ok=False):
         key = key.strip()
         if not ENV_NAME_RE.fullmatch(key):
             raise ProofError("environment-malformed")
+        if key not in required_keys and reject_unknown:
+            raise ProofError("environment-malformed")
         if key in required_keys:
             if key in found:
                 raise ProofError("environment-malformed")
@@ -227,6 +237,25 @@ def _protected_env(path, required_keys, *, missing_ok=False):
     if set(found) != set(required_keys) or any(not found[key] for key in required_keys):
         raise ProofError("environment-unavailable")
     return found
+
+
+def _window_nonce_digest(path):
+    try:
+        values = _protected_env(
+            path,
+            {"QUEUE_PROOF_WINDOW_NONCE"},
+            reject_unknown=True,
+        )
+    except ProofError as exc:
+        if str(exc) in {"environment-unavailable", "environment-malformed"}:
+            raise ProofError("window-nonce-unavailable") from exc
+        raise
+    nonce = values["QUEUE_PROOF_WINDOW_NONCE"]
+    if not WINDOW_NONCE_RE.fullmatch(nonce):
+        raise ProofError("fence-assertion-invalid")
+    return hashlib.sha256(
+        b"queue-proof-window-nonce\0" + nonce.encode("ascii")
+    ).hexdigest()
 
 
 def _api_coordinates(ledger_origin):
@@ -325,9 +354,10 @@ def _server_date(headers):
         observed = email.utils.parsedate_to_datetime(values[0])
         if observed is None or observed.tzinfo is None:
             raise ValueError
-        return email.utils.format_datetime(
-            observed.astimezone(datetime.timezone.utc), usegmt=True
+        utc_observed = observed.astimezone(datetime.timezone.utc).replace(
+            microsecond=0
         )
+        return utc_observed
     except (TypeError, ValueError, OverflowError):
         raise ProofError("http-server-date-invalid") from None
 
@@ -436,6 +466,37 @@ def _get_json(url, bearer, opener, *, review=False):
         separators=(",", ":"),
     ).encode("ascii")
     return payload, server_date, hashlib.sha256(canonical).hexdigest()
+
+
+def _tls_handshake(ledger_host, context):
+    """Perform one authenticated TLS handshake without an HTTP request."""
+    try:
+        with socket.create_connection(
+            (ledger_host, 443), timeout=TIMEOUT_SECONDS
+        ) as transport:
+            with context.wrap_socket(
+                transport, server_hostname=ledger_host
+            ) as connection:
+                protocol = connection.version()
+                cipher = connection.cipher()
+    except Exception as exc:
+        raise ProofError("https-handshake-unavailable") from exc
+    if (
+        protocol not in {"TLSv1.2", "TLSv1.3"}
+        or not isinstance(cipher, tuple)
+        or len(cipher) != 3
+        or not isinstance(cipher[0], str)
+        or not cipher[0]
+        or not isinstance(cipher[2], int)
+        or isinstance(cipher[2], bool)
+        or cipher[2] <= 0
+    ):
+        raise ProofError("https-handshake-invalid")
+    return {
+        "cipher": cipher[0],
+        "protocol": protocol,
+        "secret_bits": cipher[2],
+    }
 
 
 def _review_counts(payload):
@@ -648,27 +709,59 @@ def timer_state(run=subprocess.run, systemctl_path=SYSTEMCTL_PATH):
     return _timer_state(TIMER_UNIT, run, systemctl_path)
 
 
-def _utc_timestamp(utc_now):
+def _utc_observation(utc_now):
     try:
         observed = utc_now()
         if not isinstance(observed, datetime.datetime) or observed.tzinfo is None:
             raise ProofError("timestamp-unavailable")
-        return (
-            observed.astimezone(datetime.timezone.utc)
-            .isoformat(timespec="seconds")
-            .replace("+00:00", "Z")
+        utc_observed = observed.astimezone(datetime.timezone.utc).replace(
+            microsecond=0
         )
+        return utc_observed
     except ProofError:
         raise
     except Exception as exc:
         raise ProofError("timestamp-unavailable") from exc
 
 
-def _read_bounded_identity(path, *, pattern):
+def _utc_timestamp(observed):
+    return observed.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _http_date(observed):
+    return email.utils.format_datetime(observed, usegmt=True)
+
+
+def _server_clock_skew_seconds(server_date, local_time):
     try:
-        with pathlib.Path(path).open("rb") as source:
+        skew = int((server_date - local_time).total_seconds())
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ProofError("http-server-date-invalid") from exc
+    return skew
+
+
+def _assert_server_clock_skew(skew):
+    if abs(skew) > MAX_CLOCK_SKEW_SECONDS:
+        raise ProofError("http-server-date-skew")
+
+
+def _read_bounded_identity(path, *, pattern):
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(path, flags)
+        with os.fdopen(descriptor, "rb") as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ProofError("host-identity-unavailable")
             raw = source.read(257)
         value = raw.decode("ascii").strip()
+    except ProofError:
+        raise
     except (OSError, UnicodeError) as exc:
         raise ProofError("host-identity-unavailable") from exc
     if len(raw) > 256 or not pattern.fullmatch(value):
@@ -701,6 +794,8 @@ def _git_blob_oid(raw):
 
 
 def _self_blob():
+    if globals().get("__cached__") is not None:
+        raise ProofError("verifier-bytecode-cached")
     try:
         raw = pathlib.Path(__file__).read_bytes()
     except OSError as exc:
@@ -759,6 +854,10 @@ def _new_receipt(verifier_identity=None):
         "publication": "unproved",
         "publication_fallback": None,
         "publication_frontier": None,
+        "server_date_skew_seconds": {
+            "publication_frontier": None,
+            "review": None,
+        },
         "server_dates": {"publication_frontier": None, "review": None},
         "timer": {"active": None, "available": False, "enabled": None},
         "verifier_identity": dict(verifier_identity),
@@ -779,7 +878,8 @@ def prove(
     verifier_identity,
     apply_timer_stopped,
     window_owner,
-    window_nonce,
+    window_nonce_file,
+    window_phase,
     opener,
     run_systemctl,
     systemctl_path,
@@ -791,13 +891,15 @@ def prove(
         if (
             not apply_timer_stopped
             or window_owner is None
-            or window_nonce is None
+            or window_nonce_file is None
+            or window_phase is None
         ):
             raise ProofError("fence-assertion-missing")
         if not WINDOW_OWNER_RE.fullmatch(window_owner):
             raise ProofError("fence-assertion-invalid")
-        if not WINDOW_NONCE_RE.fullmatch(window_nonce):
+        if window_phase not in WINDOW_PHASES:
             raise ProofError("fence-assertion-invalid")
+        window_nonce_sha256 = _window_nonce_digest(window_nonce_file)
         receipt["host_identity"] = dict(read_host_identity())
         apply_timer = _timer_state(
             APPLY_TIMER_UNIT, run_systemctl, systemctl_path
@@ -810,8 +912,9 @@ def prove(
             "apply_timer": apply_timer,
             "apply_timer_stopped": apply_stopped,
             "proved": apply_stopped,
-            "window_nonce": window_nonce,
+            "window_nonce_sha256": window_nonce_sha256,
             "window_owner": window_owner,
+            "window_phase": window_phase,
         }
         if not apply_stopped:
             raise ProofError("fence-apply-timer-not-stopped")
@@ -823,13 +926,20 @@ def prove(
         )
         receipt["ledger_host"] = ledger_host
         apply_env = _protected_env(apply_env_file, {"EDIT_SERVICE_TOKEN"})
-        receipt["first_get_utc"] = _utc_timestamp(utc_now)
+        first_get_time = _utc_observation(utc_now)
+        receipt["first_get_utc"] = _utc_timestamp(first_get_time)
         receipt["last_get_utc"] = receipt["first_get_utc"]
-        review_payload, review_server_date, review_hash = _get_json(
+        review_payload, review_server_time, review_hash = _get_json(
             review_url, apply_env["EDIT_SERVICE_TOKEN"], opener, review=True
         )
         counts = _review_counts(review_payload)
-        receipt["server_dates"]["review"] = review_server_date
+        receipt["server_dates"]["review"] = _http_date(review_server_time)
+        receipt["server_date_skew_seconds"]["review"] = (
+            _server_clock_skew_seconds(review_server_time, first_get_time)
+        )
+        _assert_server_clock_skew(
+            receipt["server_date_skew_seconds"]["review"]
+        )
         receipt["editor_review"] = counts
         receipt["apply"] = {"accepted": counts["accepted"]}
 
@@ -839,8 +949,13 @@ def prove(
             missing_ok=True,
         )
         if observer_env is not None:
-            receipt["last_get_utc"] = _utc_timestamp(utc_now)
-            frontier_payload, frontier_server_date, frontier_hash = _get_json(
+            last_get_time = _utc_observation(utc_now)
+            receipt["last_get_utc"] = _utc_timestamp(last_get_time)
+            (
+                frontier_payload,
+                frontier_server_time,
+                frontier_hash,
+            ) = _get_json(
                 frontier_url,
                 observer_env["SONSTENG_PROD_OBSERVER_BEARER"],
                 opener,
@@ -854,7 +969,17 @@ def prove(
             ).hexdigest()
             receipt["server_dates"][
                 "publication_frontier"
-            ] = frontier_server_date
+            ] = _http_date(frontier_server_time)
+            receipt["server_date_skew_seconds"][
+                "publication_frontier"
+            ] = _server_clock_skew_seconds(
+                frontier_server_time, last_get_time
+            )
+            _assert_server_clock_skew(
+                receipt["server_date_skew_seconds"]["publication_frontier"]
+            )
+            if frontier_server_time < review_server_time:
+                raise ProofError("http-server-date-nonmonotonic")
             receipt["ledger_state_hash"] = {
                 "algorithm": "sha256",
                 "combined": combined_hash,
@@ -885,7 +1010,9 @@ def prove(
     return receipt
 
 
-def _preflight_receipt(verifier_identity, systemctl_path):
+def _preflight_receipt(
+    verifier_identity, systemctl_path, ledger_origin, tls_handshake
+):
     receipt = _new_receipt(verifier_identity)
     if systemctl_path is None:
         raise ProofError("systemctl-unavailable")
@@ -897,7 +1024,9 @@ def _preflight_receipt(verifier_identity, systemctl_path):
         raise ProofError("systemctl-unavailable")
     ca_bundle = _read_system_ca_bundle()
     context = _production_context(ca_bundle)
+    _review_url, _frontier_url, ledger_host = _api_coordinates(ledger_origin)
     receipt["preflight"] = {
+        "https_handshake": tls_handshake(ledger_host, context),
         "ready": True,
         "system_ca_bundle": _system_ca_bundle_identity(context, ca_bundle[0]),
         "systemctl_path": str(resolved_systemctl),
@@ -912,15 +1041,25 @@ def _run_proof(
     utc_now,
     systemctl_path,
     read_host_identity,
+    process_environment,
+    isolated,
+    tls_handshake,
 ):
     verifier_identity = None
     try:
-        _assert_clean_process_environment()
+        _assert_clean_process_environment(
+            process_environment, isolated=isolated
+        )
         verifier_identity = _release_identity(
             args.release_commit, args.verifier_blob
         )
         if args.preflight:
-            return _preflight_receipt(verifier_identity, systemctl_path)
+            return _preflight_receipt(
+                verifier_identity,
+                systemctl_path,
+                args.ledger_origin,
+                tls_handshake,
+            )
         if opener is None:
             opener = _production_opener()
         if utc_now is None:
@@ -932,7 +1071,8 @@ def _run_proof(
             verifier_identity=verifier_identity,
             apply_timer_stopped=args.apply_timer_stopped,
             window_owner=args.window_owner,
-            window_nonce=args.window_nonce,
+            window_nonce_file=args.window_nonce_file,
+            window_phase=args.window_phase,
             opener=opener,
             run_systemctl=run_systemctl,
             systemctl_path=systemctl_path,
@@ -945,6 +1085,111 @@ def _run_proof(
         return _failed_receipt("verifier-defect", verifier_identity)
 
 
+def _write_all(file_descriptor, payload):
+    offset = 0
+    view = memoryview(payload)
+    while offset < len(view):
+        written = os.write(file_descriptor, view[offset:])
+        if written <= 0:
+            raise OSError
+        offset += written
+
+
+def _open_receipt(path):
+    target = pathlib.Path(path)
+    if not target.is_absolute():
+        raise OSError
+    directory_descriptor = os.open(
+        target.parent,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+    )
+    receipt_descriptor = -1
+    try:
+        receipt_descriptor = os.open(
+            target.name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=directory_descriptor,
+        )
+        os.fchmod(receipt_descriptor, 0o600)
+    except OSError:
+        if receipt_descriptor >= 0:
+            os.close(receipt_descriptor)
+        os.close(directory_descriptor)
+        raise
+    return receipt_descriptor, directory_descriptor, target.name
+
+
+def _write_receipt(
+    file_descriptor, directory_descriptor, filename, payload
+):
+    _write_all(file_descriptor, payload)
+    os.fsync(file_descriptor)
+    opened = os.fstat(file_descriptor)
+    named = os.stat(
+        filename,
+        dir_fd=directory_descriptor,
+        follow_symlinks=False,
+    )
+    if (
+        not stat.S_ISREG(opened.st_mode)
+        or not stat.S_ISREG(named.st_mode)
+        or stat.S_IMODE(opened.st_mode) != 0o600
+        or stat.S_IMODE(named.st_mode) != 0o600
+        or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+    ):
+        raise OSError
+    os.fsync(directory_descriptor)
+
+
+def _best_effort_diagnostic(message):
+    try:
+        _write_all(2, (message + "\n").encode("utf-8"))
+    except OSError:
+        pass
+
+
+def _reserve_standard_streams():
+    stdout_was_available = True
+    for target_descriptor in (1, 2):
+        try:
+            os.fstat(target_descriptor)
+        except OSError:
+            if target_descriptor == 1:
+                stdout_was_available = False
+            null_descriptor = os.open(os.devnull, os.O_WRONLY)
+            if null_descriptor != target_descriptor:
+                try:
+                    os.dup2(null_descriptor, target_descriptor)
+                finally:
+                    os.close(null_descriptor)
+    return stdout_was_available
+
+
+def _serialize_receipt(receipt):
+    try:
+        return (
+            json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8"), False
+    except Exception:
+        # This literal is deliberately independent of the JSON encoder so an
+        # encoder or receipt-shape defect still produces one bounded receipt.
+        return (
+            b'{"all_queues_empty":false,"apply":{"accepted":null},'
+            b'"editor_review":{"accepted":null,"other_non_terminal":null,'
+            b'"pending":null},"fence":"unproven","first_get_utc":null,'
+            b'"host_identity":null,"last_get_utc":null,"ledger_host":null,'
+            b'"ledger_state_hash":null,"preflight":null,'
+            b'"proof_error":"verifier-defect","publication":"unproved",'
+            b'"publication_fallback":null,"publication_frontier":null,'
+            b'"server_date_skew_seconds":{"publication_frontier":null,'
+            b'"review":null},"server_dates":{"publication_frontier":null,'
+            b'"review":null},"timer":{"active":null,"available":false,'
+            b'"enabled":null},"verifier_identity":{"release_commit":null,'
+            b'"verifier_blob":null}}\n'
+        ), True
+
+
 def main(
     argv=None,
     *,
@@ -954,7 +1199,32 @@ def main(
     stdout=None,
     systemctl_path=None,
     read_host_identity=None,
+    process_environment=None,
+    isolated=None,
+    tls_handshake=None,
 ):
+    command_line = list(sys.argv[1:] if argv is None else argv)
+    receipt_descriptor = -1
+    receipt_directory_descriptor = -1
+    receipt_filename = None
+    stdout_was_available = True
+    durable_receipt = stdout is None
+    if durable_receipt:
+        stdout_was_available = _reserve_standard_streams()
+        bootstrap = _ProofArgumentParser(add_help=False)
+        bootstrap.add_argument("--receipt-path", required=True)
+        try:
+            bootstrap_args, _unknown = bootstrap.parse_known_args(command_line)
+            (
+                receipt_descriptor,
+                receipt_directory_descriptor,
+                receipt_filename,
+            ) = _open_receipt(bootstrap_args.receipt_path)
+        except (_ArgumentsInvalid, OSError):
+            _best_effort_diagnostic(
+                "queue proof receipt file could not be opened"
+            )
+            return 1
     try:
         parser = _ProofArgumentParser(
             description=(
@@ -964,24 +1234,30 @@ def main(
         parser.add_argument("--ledger-origin")
         parser.add_argument("--apply-env-file")
         parser.add_argument("--observer-env-file")
+        parser.add_argument("--receipt-path", required=durable_receipt)
         parser.add_argument("--release-commit", required=True)
         parser.add_argument("--verifier-blob", required=True)
         parser.add_argument("--preflight", action="store_true")
         parser.add_argument("--apply-timer-stopped", action="store_true")
         parser.add_argument("--window-owner")
-        parser.add_argument("--window-nonce")
+        parser.add_argument("--window-nonce-file")
+        parser.add_argument("--window-phase", choices=WINDOW_PHASES)
         if systemctl_path is None:
             systemctl_path = SYSTEMCTL_PATH
         if read_host_identity is None:
             read_host_identity = _host_identity
+        if tls_handshake is None:
+            tls_handshake = _tls_handshake
         try:
-            args = parser.parse_args(argv)
-            if not args.preflight and any(
+            args = parser.parse_args(command_line)
+            if args.ledger_origin is None or (
+                not args.preflight
+                and any(
                 value is None
                 for value in (
-                    args.ledger_origin,
                     args.apply_env_file,
                     args.observer_env_file,
+                )
                 )
             ):
                 raise _ArgumentsInvalid
@@ -991,6 +1267,7 @@ def main(
             receipt = _run_proof(
                 args, opener, run_systemctl, utc_now,
                 systemctl_path, read_host_identity,
+                process_environment, isolated, tls_handshake,
             )
         successful = receipt["all_queues_empty"] or (
             isinstance(receipt.get("preflight"), dict)
@@ -999,28 +1276,57 @@ def main(
     except Exception:
         receipt = _failed_receipt("verifier-defect")
         successful = False
-    try:
-        serialized = json.dumps(
-            receipt, sort_keys=True, separators=(",", ":")
-        )
-    except Exception:
-        # This literal is deliberately independent of the JSON encoder so an
-        # encoder or receipt-shape defect still produces one bounded receipt.
-        serialized = (
-            '{"all_queues_empty":false,"apply":{"accepted":null},'
-            '"editor_review":{"accepted":null,"other_non_terminal":null,'
-            '"pending":null},"fence":"unproven","first_get_utc":null,'
-            '"host_identity":null,"last_get_utc":null,"ledger_host":null,'
-            '"ledger_state_hash":null,"preflight":null,'
-            '"proof_error":"verifier-defect","publication":"unproved",'
-            '"publication_fallback":null,"publication_frontier":null,'
-            '"server_dates":{"publication_frontier":null,"review":null},'
-            '"timer":{"active":null,"available":false,"enabled":null},'
-            '"verifier_identity":{"release_commit":null,'
-            '"verifier_blob":null}}'
-        )
+    payload, serialization_failed = _serialize_receipt(receipt)
+    if serialization_failed:
         successful = False
-    print(serialized, file=stdout or sys.stdout)
+    if durable_receipt:
+        try:
+            _write_receipt(
+                receipt_descriptor,
+                receipt_directory_descriptor,
+                receipt_filename,
+                payload,
+            )
+            os.close(receipt_descriptor)
+            receipt_descriptor = -1
+            os.close(receipt_directory_descriptor)
+            receipt_directory_descriptor = -1
+        except OSError:
+            _best_effort_diagnostic(
+                "queue proof receipt file could not be written"
+            )
+            successful = False
+        finally:
+            for descriptor in (
+                receipt_descriptor,
+                receipt_directory_descriptor,
+            ):
+                if descriptor >= 0:
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        pass
+        if receipt_descriptor >= 0 or receipt_directory_descriptor >= 0:
+            return 1
+        if not stdout_was_available:
+            _best_effort_diagnostic(
+                "queue proof stdout mirror was unavailable; receipt is at the required path"
+            )
+            return 1
+        try:
+            _write_all(1, payload)
+        except OSError:
+            _best_effort_diagnostic(
+                "queue proof stdout mirror failed; receipt is at the required path"
+            )
+            return 1
+    else:
+        try:
+            stdout.write(payload.decode("utf-8"))
+            stdout.flush()
+        except Exception:
+            _best_effort_diagnostic("queue proof receipt sink failed")
+            return 1
     return 0 if successful else 1
 
 

@@ -229,13 +229,16 @@ does not authorize or execute production work.
 Damien must perform the production window at the keyboard under the Cloudflare
 PROD principal described in `docs/prod-release-operations.md`:
 
-Before pencils-down or either timer is changed, run this offline preflight from
-the reviewed values recorded outside the checkout. It makes no HTTP request.
+Before pencils-down or either timer is changed, run this network preflight from
+the reviewed values recorded outside the checkout. It performs an authenticated
+TLS handshake to the allowlisted ledger origin but makes no HTTP/API request.
 It must exit `0` with `preflight.ready:true`, the reviewed measured
 `verifier_blob`, `/usr/bin/systemctl`, and the expected system-CA-bundle path,
-SHA-256, and nonzero root count. A missing/unreadable bundle fails as
+SHA-256, nonzero root count, and negotiated TLS protocol/cipher. A
+missing/unreadable bundle fails as
 `https-client-unavailable`; a missing trusted-path systemctl fails as
-`systemctl-unavailable`. Compare the reported bundle SHA-256 and root count to
+`systemctl-unavailable`; a failed handshake fails as
+`https-handshake-unavailable`. Compare the reported bundle SHA-256 and root count to
 the approved baseline for this production host before opening the window:
 
 ```bash
@@ -247,13 +250,14 @@ builtin test "$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/d
   '<reviewed-verifier-Git-blob-OID>' || exit 74
 (
   builtin exec -c /usr/bin/env -i LC_ALL=C \
-    /usr/bin/python3 -I \
+    /usr/bin/python3 -I -B --check-hash-based-pycs always \
     /proc/self/fd/9 \
     --preflight \
     --release-commit '<reviewed-release-commit-SHA>' \
-    --verifier-blob '<reviewed-verifier-Git-blob-OID>'
-) 9</home/damienriehl/.local/share/sonsteng-daemon/checkout/tools/prove_queues_empty.py \
-  > '<absolute-preflight-receipt-path>.json'
+    --verifier-blob '<reviewed-verifier-Git-blob-OID>' \
+    --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
+    --receipt-path '<absolute-preflight-receipt-path>.json'
+) 9</home/damienriehl/.local/share/sonsteng-daemon/checkout/tools/prove_queues_empty.py
 queue_proof_preflight_rc=$?
 ```
 
@@ -275,10 +279,8 @@ or nonzero result as a stop before the window.
    bytes the verifier will measure:
 
    ```bash
-   (
-     builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
-       rev-parse --verify 'HEAD^{commit}'
-   ) 9<"$QUEUE_PROOF_VERIFIER"
+   builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
+     rev-parse --verify 'HEAD^{commit}'
    (
      builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C /home/damienriehl/.local/share/sonsteng-daemon/checkout \
        rev-parse '<reviewed-release-commit-SHA>:tools/prove_queues_empty.py'
@@ -286,30 +288,53 @@ or nonzero result as a stop before the window.
    ```
 
    Before opening, the supervisor also records one unpredictable 64-character
-   lowercase-hex window nonce outside the checkout and substitutes it for
-   `<recorded-Packet-D-window-nonce>` in the readonly function. Rehearsals use a
-   different nonce. The checkout, Git, env, Python, and verifier paths are
-   absolute. Bash `exec -c` gives the dynamic loader of `/usr/bin/env` an empty
-   environment; `/usr/bin/env -i` then gives Python an empty environment with
-   the sole allowlisted entry `LC_ALL=C`. The verifier constructs the two
-   variables needed by its systemctl child itself. Python isolated mode also
+   lowercase-hex window nonce outside the checkout in an operator-owned,
+   regular, mode-`0600` file whose sole assignment is named
+   `QUEUE_PROOF_WINDOW_NONCE`. Rehearsals use a newly provisioned file containing
+   a different nonce. The nonce itself never appears in a command argument,
+   receipt, checked-in fixture, documentation example, or transcript; receipts carry only its domain-separated
+   SHA-256, which the supervisor compares with the separately recorded digest.
+   The checkout, Git, env, Python, verifier, nonce-file, and receipt paths are
+   absolute.
+
+   The launcher's Bash `builtin exec -c` is the loader-isolation boundary: it
+   gives the dynamic loader of the first `/usr/bin/env` an empty environment.
+   The nested `/usr/bin/env -i` then removes the launcher's non-secret scrub
+   canary and gives Python the exact sole allowlisted entry `LC_ALL=C`; removing
+   either isolation mechanism is a tested failure. The verifier's exact
+   environment allowlist and isolated-mode check are secondary, post-start
+   guards. They cannot fire if a dynamic loader pre-empts the interpreter.
+   Invoking the verifier outside this documented readonly launcher is unsupported,
+   and no receipt from such an invocation is acceptable. Python isolated mode
    ignores user-site and Python environment path injection. The Bash builtin
    command boundary prevents PATH entries or slash-named shell functions from
    intercepting Git or Python, and a pre-existing readonly launcher makes setup
-   exit `69`. The verifier independently refuses every inherited `LD_*` name
-   and `OPENSSL_CONF`, even if it is invoked outside this launcher. Every
+   exit `69`. Every
    invocation independently requires the named checkout to be
    at the reviewed commit, requires that commit to contain the reviewed blob,
    and hashes the working verifier bytes to reject a dirty or substituted copy.
    The launcher opens the working verifier once on file descriptor 9, feeds
    that descriptor to `git hash-object --stdin`, and invokes Python through
-   that same descriptor. Python
-   then reads its own `/proc/self/fd/9` source path, hashes those exact bytes as
+   that same descriptor. Python then reads its own `/proc/self/fd/9` source path, hashes those bytes as
    a Git blob (`SHA-1("blob " + ASCII byte length + NUL + file bytes)`), and
    compares that measurement with the independently recorded expected blob.
    The shell rejects a mismatch before Python starts; Python rejects a mismatch
-   or unreadable self path with a bounded receipt. Keep the function readonly
-   for the whole window:
+   or unreadable self path with a bounded receipt.
+
+   Precisely stated, the self-hash proves that the file reachable at `__file__`
+   had the reviewed blob at run time. Through `/proc/self/fd/9` that measurement
+   is inode-bound, so a dirty or substituted copy is refused even if the shell
+   gates were skipped. It does **not** prove that the executing bytes equal the
+   hashed bytes: the measurement is a later re-read. It proves nothing when the
+   invoked program is not this program, does not cover interpreter caches, and
+   echoes `release_commit` without verifying it. The real binding is the
+   runbook's Git gates plus the supervised transcript. The
+   `/usr/bin/python3 -I -B --check-hash-based-pycs always /proc/self/fd/9` script
+   route is therefore load-bearing: it executes the opened source as `__main__`
+   without consulting `__pycache__`. A `-m` invocation, import, wrapper, or
+   ordinary path substitution is unsupported. The in-tool `__cached__ is None`
+   check is another post-start guard, not proof about code that could already
+   have executed from a cache. Keep the function readonly for the whole window:
 
    <!-- queue-proof-launcher:start -->
    ```bash
@@ -317,10 +342,25 @@ or nonzero result as a stop before the window.
    builtin readonly QUEUE_PROOF_VERIFIER="$QUEUE_PROOF_CHECKOUT/tools/prove_queues_empty.py" || exit 68
    builtin readonly QUEUE_PROOF_RELEASE_COMMIT='<reviewed-release-commit-SHA>' || exit 68
    builtin readonly QUEUE_PROOF_VERIFIER_BLOB='<reviewed-verifier-Git-blob-OID>' || exit 68
+   builtin readonly QUEUE_PROOF_NONCE_FILE='<absolute-mode-0600-window-nonce-file>' || exit 68
    builtin unset -f run_queue_proof 2>/dev/null || exit 69
 
    run_queue_proof() {
-     builtin local observed_checkout observed_commit committed_blob working_blob
+     builtin local observed_checkout observed_commit committed_blob working_blob window_phase receipt_path
+     case "$#" in
+       2) ;;
+       *) return 68 ;;
+     esac
+     window_phase=$1
+     receipt_path=$2
+     case "$window_phase" in
+       opening|closing) ;;
+       *) return 68 ;;
+     esac
+     case "$receipt_path" in
+       /*) ;;
+       *) return 68 ;;
+     esac
      observed_checkout=$(builtin exec -c /usr/bin/env -i LC_ALL=C /usr/bin/git -C "$QUEUE_PROOF_CHECKOUT" rev-parse --show-toplevel) || return 70
      case "$observed_checkout" in
        "$QUEUE_PROOF_CHECKOUT") ;;
@@ -342,8 +382,9 @@ or nonzero result as a stop before the window.
          "$QUEUE_PROOF_VERIFIER_BLOB") ;;
          *) return 74 ;;
        esac
-       builtin exec -c /usr/bin/env -i LC_ALL=C \
-         /usr/bin/python3 -I /proc/self/fd/9 \
+       builtin exec -c /usr/bin/env QUEUE_PROOF_ENV_SCRUB_REQUIRED=1 \
+         /usr/bin/env -i LC_ALL=C \
+         /usr/bin/python3 -I -B --check-hash-based-pycs always /proc/self/fd/9 \
          --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
          --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
          --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
@@ -351,28 +392,34 @@ or nonzero result as a stop before the window.
          --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
          --apply-timer-stopped \
          --window-owner '<opaque-Packet-D-window-id>' \
-         --window-nonce '<recorded-Packet-D-window-nonce>'
+         --window-nonce-file "$QUEUE_PROOF_NONCE_FILE" \
+         --window-phase "$window_phase" \
+         --receipt-path "$receipt_path"
      ) 9<"$QUEUE_PROOF_VERIFIER"
    }
    builtin readonly -f run_queue_proof
 
-   run_queue_proof > '<absolute-opening-receipt-path>.json'
+   run_queue_proof opening '<absolute-opening-receipt-path>.json'
    opening_queue_proof_rc=$?
    ```
    <!-- queue-proof-launcher:end -->
 
    Require `opening_queue_proof_rc` to be exactly `0`, the receipt to contain
    `"all_queues_empty":true`, its measured `verifier_identity` values to equal
-   the two reviewed constants, and its fence nonce to equal the nonce recorded
-   before the window. The supervised shell transcript must show that the
-   readonly `run_queue_proof` function produced the redirected receipt. A bare
-   hand invocation is not accepted. The verifier command executed by the
+   the two reviewed constants, `fence.window_phase:"opening"`, and its
+   `fence.window_nonce_sha256` to equal the digest recorded before the window.
+   Receipt contents alone are insufficient. Acceptance also requires the
+   supervised shell transcript to show this exact readonly `run_queue_proof`
+   function was invoked with the opening phase and required receipt path and to
+   record its return code. A bare hand invocation is unsupported and is never
+   accepted, regardless of its receipt contents. The verifier command executed by the
    function is:
 
    ```bash
    (
-     builtin exec -c /usr/bin/env -i LC_ALL=C \
-       /usr/bin/python3 -I /proc/self/fd/9 \
+     builtin exec -c /usr/bin/env QUEUE_PROOF_ENV_SCRUB_REQUIRED=1 \
+       /usr/bin/env -i LC_ALL=C \
+       /usr/bin/python3 -I -B --check-hash-based-pycs always /proc/self/fd/9 \
        --release-commit "$QUEUE_PROOF_RELEASE_COMMIT" \
        --verifier-blob "$QUEUE_PROOF_VERIFIER_BLOB" \
        --ledger-origin https://sonsteng-chat.damienriehl.workers.dev \
@@ -380,7 +427,9 @@ or nonzero result as a stop before the window.
        --observer-env-file /home/damienriehl/.config/sonsteng-release-observer/env \
        --apply-timer-stopped \
        --window-owner '<opaque-Packet-D-window-id>' \
-       --window-nonce '<recorded-Packet-D-window-nonce>'
+       --window-nonce-file "$QUEUE_PROOF_NONCE_FILE" \
+       --window-phase "$window_phase" \
+       --receipt-path "$receipt_path"
    ) 9<"$QUEUE_PROOF_VERIFIER"
    ```
 
@@ -388,14 +437,27 @@ or nonzero result as a stop before the window.
    daemon's admin review GET and the observer's readiness-frontier GET, emits
    counts rather than authored rows or IDs, and names only the ledger host. It
    verifies `sonsteng-apply.timer` is inactive, records its recognized
-   enabled/disabled state, records the named window and nonce, the local UTC
-   times and server-authenticated HTTP `Date` values of both GETs, SHA-256s of
+   enabled/disabled state, records the named window, phase, and nonce digest,
+   the local UTC times and server-authenticated HTTP `Date` values of both GETs,
+   and the signed skew in seconds (`server Date - local clock`). Each skew must
+   be within 300 seconds, and the frontier server date must not precede the
+   review server date. It also records SHA-256s of
    the canonical JSON form of both validated response bodies plus a
    domain-separated combined ledger-state hash, and SHA-256s of this host's
    machine ID and boot ID. It
    fails with `"fence":"unproven"` when any fence assertion is absent. The
    receipt is valid only inside the exact window named by `window_owner`; use
-   the same opaque ID and pre-recorded nonce for the opening and closing proof.
+   the same opaque ID and protected nonce file for the opening and closing proof.
+
+   The receipt path is required, absolute, create-new, and mode `0600`. The
+   verifier retries partial writes, syncs the receipt file, verifies the opened
+   inode still names that regular file, and syncs the parent directory before
+   mirroring the same bytes to stdout. Failure to open, write, flush, or sync the
+   durable receipt returns nonzero with a bounded diagnostic. `/dev/full`, a
+   closed stdout, or a broken stdout pipe also returns nonzero; when the durable
+   write completed, the receipt remains at the required path and the diagnostic
+   says the stdout mirror failed. Preserve any existing or partial receipt and
+   use a new path for a supervised retry.
 
    The verifier deliberately uses the host's full distribution-managed CA
    store rather than a private issuer pin. The allowlisted origin is a
@@ -406,7 +468,9 @@ or nonzero result as a stop before the window.
    count, and the operator compares them with the approved production-host
    baseline and confirms no unreviewed local CA/update changed that baseline.
    The name `SYSTEM_CA_BUNDLE` is intentional; this is not represented as a
-   one-origin trust set.
+   one-origin trust set. Production permits TLS 1.2 or TLS 1.3 (minimum TLS 1.2,
+   no TLS-1.2 maximum pin); the preflight handshake records which protocol and
+   cipher the edge actually negotiated before the window.
 
    Publication emptiness additionally requires the observer context to expose
    exactly `operation_frontier:{pending_operation_count,blocked_state}`, with a
@@ -431,14 +495,18 @@ or nonzero result as a stop before the window.
     blob, and working verifier blob before this second proof:
 
     ```bash
-    run_queue_proof > '<absolute-closing-receipt-path>.json'
+    run_queue_proof closing '<absolute-closing-receipt-path>.json'
     closing_queue_proof_rc=$?
     ```
 
     Require `closing_queue_proof_rc` to be exactly `0`,
     `"all_queues_empty":true`, the same two `verifier_identity` values, and the
-    same pre-recorded fence nonce. Confirm that the server dates and ledger-state
-    hashes belong to this closing run rather than the opening receipt.
+    same pre-recorded fence nonce digest. Require
+    `fence.window_phase:"closing"` and require both closing server dates to
+    strictly postdate their opening-receipt counterparts. The phase is the
+    categorical discriminator and the server-date pairs are the temporal
+    discriminator. Do not use `ledger_state_hash` to distinguish the receipts:
+    for two successful empty-ledger proofs it is necessarily identical.
     Preserve this fresh identity-bearing receipt as the durable queue evidence.
     Only then release the window and restore the apply timer's prior policy.
 
@@ -447,7 +515,7 @@ remain authoritative after later actions in the window. The closing rerun,
 still inside the fence, is the durable evidence for that named window.
 
 These fields make an accidental stale, rehearsal, other-host, or other-ledger
-receipt detectable when compared with the pre-recorded nonce and supervised
+receipt detectable when compared with the pre-recorded nonce digest and supervised
 window log. They are not a signature. Someone able to forge arbitrary receipt
 bytes can still forge these fields; a valid receipt can also be replayed inside
 the same window if an auditor ignores its server dates and ordering, and later
