@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import subprocess
+import textwrap
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,8 @@ spec.loader.exec_module(queues)
 
 LEDGER_ORIGIN = "https://sonsteng-chat.damienriehl.workers.dev"
 WINDOW_OWNER = "packet-d-test-window"
+RELEASE_COMMIT = "a" * 40
+VERIFIER_BLOB = "b" * 40
 EMPTY_OPERATION_FRONTIER = {
     "blocked_state": "unblocked",
     "pending_operation_count": 0,
@@ -30,6 +33,17 @@ EMPTY_FRONTIER = {
     "batches": [],
     "operation_frontier": EMPTY_OPERATION_FRONTIER,
 }
+
+
+def release_identity_args(
+    release_commit=RELEASE_COMMIT, verifier_blob=VERIFIER_BLOB
+):
+    return [
+        "--release-commit",
+        release_commit,
+        "--verifier-blob",
+        verifier_blob,
+    ]
 
 
 class Response:
@@ -72,22 +86,22 @@ class RawResponse(Response):
         self.read_calls = 0
 
 
-class BytesSocket:
+class CountingWireBody(io.BytesIO):
     def __init__(self, wire_bytes):
-        self._stream = io.BytesIO(wire_bytes)
-
-    def makefile(self, *_args, **_kwargs):
-        return self._stream
-
-
-class CountingHTTPResponse(http.client.HTTPResponse):
-    def __init__(self, sock):
-        super().__init__(sock)
+        super().__init__(wire_bytes)
         self.read_calls = 0
 
-    def read(self, amount=None):
+    def read(self, amount=-1):
         self.read_calls += 1
         return super().read(amount)
+
+
+class BytesSocket:
+    def __init__(self, wire_bytes):
+        self.stream = CountingWireBody(wire_bytes)
+
+    def makefile(self, *_args, **_kwargs):
+        return self.stream
 
 
 class TimeoutInsteadOfEof(io.RawIOBase):
@@ -117,9 +131,11 @@ def real_http_response(body, *, declared_length, extra_headers=()):
         + b"\r\n"
         + body
     )
-    response = CountingHTTPResponse(BytesSocket(wire))
+    socket = BytesSocket(wire)
+    response = http.client.HTTPResponse(socket)
     response.begin()
-    return response
+    socket.stream.read_calls = 0
+    return response, socket.stream
 
 
 def write_apply_env(path):
@@ -224,6 +240,7 @@ def run_main(
     )
     output = io.StringIO()
     argv = [
+        *release_identity_args(),
         "--ledger-origin",
         ledger_origin,
         "--apply-env-file",
@@ -313,6 +330,10 @@ def test_all_empty_returns_true_and_zero(tmp_path):
             "operation_frontier": EMPTY_OPERATION_FRONTIER,
         },
         "timer": {"active": False, "available": True, "enabled": False},
+        "verifier_identity": {
+            "release_commit": RELEASE_COMMIT,
+            "verifier_blob": VERIFIER_BLOB,
+        },
     }
     assert [call[0].get_method() for call in http_calls] == ["GET", "GET"]
     assert all(call[0].get_header("Connection") == "close" for call in http_calls)
@@ -519,7 +540,9 @@ def test_review_early_eof_with_real_http_response_returns_one_bounded_receipt(
     tmp_path,
 ):
     body = json.dumps({"ok": True, "items": []}).encode("utf-8")
-    response = real_http_response(body, declared_length=len(body) + 64)
+    response, _wire_body = real_http_response(
+        body, declared_length=len(body) + 64
+    )
 
     def opener(request, timeout):
         if request.full_url.endswith("/review"):
@@ -544,7 +567,9 @@ def test_frontier_early_eof_with_real_http_response_returns_one_bounded_receipt(
 ):
     body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
     review_response = Response({"ok": True, "items": []})
-    frontier_response = real_http_response(body, declared_length=len(body) + 64)
+    frontier_response, _wire_body = real_http_response(
+        body, declared_length=len(body) + 64
+    )
 
     def opener(request, timeout):
         if request.full_url.endswith("/review"):
@@ -566,7 +591,7 @@ def test_frontier_early_eof_with_real_http_response_returns_one_bounded_receipt(
 
 def test_review_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_path):
     body = json.dumps({"ok": True, "items": []}).encode("utf-8")
-    response = real_http_response(
+    response, _wire_body = real_http_response(
         body + b'{"status":"pending","private":"row"}',
         declared_length=len(body),
     )
@@ -593,7 +618,7 @@ def test_review_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_path)
 def test_frontier_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_path):
     body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
     review_response = Response({"ok": True, "items": []})
-    frontier_response = real_http_response(
+    frontier_response, _wire_body = real_http_response(
         body + b'{"status":"pending","private":"row"}',
         declared_length=len(body),
     )
@@ -619,7 +644,9 @@ def test_frontier_surplus_wire_bytes_with_real_http_response_fail_closed(tmp_pat
 
 def test_review_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
     body = json.dumps({"ok": True, "items": []}).encode("utf-8")
-    response = real_http_response(body, declared_length=len(body))
+    response, _wire_body = real_http_response(
+        body, declared_length=len(body)
+    )
     response.fp = TimeoutInsteadOfEof(body)
 
     def opener(request, timeout):
@@ -644,7 +671,9 @@ def test_review_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
 def test_frontier_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
     review_response = Response({"ok": True, "items": []})
     body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
-    frontier_response = real_http_response(body, declared_length=len(body))
+    frontier_response, _wire_body = real_http_response(
+        body, declared_length=len(body)
+    )
     frontier_response.fp = TimeoutInsteadOfEof(body)
 
     def opener(request, timeout):
@@ -668,7 +697,7 @@ def test_frontier_real_response_timeout_instead_of_eof_fails_closed(tmp_path):
 
 def test_review_content_range_fails_before_real_response_body_read(tmp_path):
     body = json.dumps({"ok": True, "items": []}).encode("utf-8")
-    response = real_http_response(
+    response, wire_body = real_http_response(
         body,
         declared_length=len(body),
         extra_headers=[("Content-Range", f"bytes 0-{len(body) - 1}/{len(body) + 64}")],
@@ -687,13 +716,13 @@ def test_review_content_range_fails_before_real_response_body_read(tmp_path):
     assert code == 1
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "http-response-framing-invalid"
-    assert response.read_calls == 0
+    assert wire_body.read_calls == 0
 
 
 def test_frontier_content_range_fails_before_real_response_body_read(tmp_path):
     review_response = Response({"ok": True, "items": []})
     body = json.dumps({"ok": True, "context": EMPTY_FRONTIER}).encode("utf-8")
-    frontier_response = real_http_response(
+    frontier_response, wire_body = real_http_response(
         body,
         declared_length=len(body),
         extra_headers=[("Content-Range", f"bytes 0-{len(body) - 1}/{len(body) + 64}")],
@@ -710,7 +739,25 @@ def test_frontier_content_range_fails_before_real_response_body_read(tmp_path):
     assert receipt["all_queues_empty"] is False
     assert receipt["proof_error"] == "http-response-framing-invalid"
     assert review_response.read_calls == 1
-    assert frontier_response.read_calls == 0
+    assert wire_body.read_calls == 0
+
+
+def test_real_response_body_counter_observes_production_read_path(tmp_path):
+    review_body = json.dumps({"ok": True, "items": []}).encode("utf-8")
+    review_response, wire_body = real_http_response(
+        review_body, declared_length=len(review_body)
+    )
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/review"):
+            return review_response
+        return Response({"ok": True, "context": EMPTY_FRONTIER})
+
+    code, receipt, _systemctl_calls = run_main(tmp_path, opener=opener)
+
+    assert code == 0
+    assert receipt["all_queues_empty"] is True
+    assert wire_body.read_calls == 2
 
 
 @pytest.mark.parametrize(
@@ -867,6 +914,7 @@ def test_incomplete_http_read_returns_one_bounded_receipt(tmp_path):
     output = io.StringIO()
     code = queues.main(
         [
+            *release_identity_args(),
             "--ledger-origin",
             LEDGER_ORIGIN,
             "--apply-env-file",
@@ -914,6 +962,10 @@ def test_deeply_nested_json_returns_one_bounded_receipt(tmp_path, monkeypatch):
         LEDGER_ORIGIN,
         apply_env,
         observer_env,
+        verifier_identity={
+            "release_commit": RELEASE_COMMIT,
+            "verifier_blob": VERIFIER_BLOB,
+        },
         apply_timer_stopped=True,
         window_owner=WINDOW_OWNER,
         opener=lambda _request, timeout: RawResponse(raw),
@@ -939,6 +991,7 @@ def test_clock_provider_exception_returns_one_bounded_receipt(tmp_path):
 
     code = queues.main(
         [
+            *release_identity_args(),
             "--ledger-origin",
             LEDGER_ORIGIN,
             "--apply-env-file",
@@ -1337,6 +1390,7 @@ def test_unavailable_apply_timer_fails_closed_without_gets(tmp_path):
 
     code = queues.main(
         [
+            *release_identity_args(),
             "--ledger-origin",
             LEDGER_ORIGIN,
             "--apply-env-file",
@@ -1404,6 +1458,330 @@ def test_timer_state_ignores_inherited_path_systemctl_shim(tmp_path, monkeypatch
 
     assert state == {"active": False, "available": True, "enabled": True}
     assert not shim_marker.exists()
+
+
+def test_production_opener_ignores_proxy_and_tls_environment(monkeypatch):
+    poisoned_environment = {
+        "HTTP_PROXY": "http://upper-http.invalid:9443",
+        "HTTPS_PROXY": "http://upper-https.invalid:9443",
+        "ALL_PROXY": "http://upper-all.invalid:9443",
+        "NO_PROXY": "sonsteng-chat.damienriehl.workers.dev",
+        "http_proxy": "http://lower-http.invalid:9443",
+        "https_proxy": "http://lower-https.invalid:9443",
+        "all_proxy": "http://lower-all.invalid:9443",
+        "no_proxy": "sonsteng-chat.damienriehl.workers.dev",
+        "SSL_CERT_FILE": "/tmp/private-attacker-ca.pem",
+        "SSL_CERT_DIR": "/tmp/private-attacker-ca-directory",
+        "SSLKEYLOGFILE": "/tmp/private-tls-keys.log",
+    }
+    for name, value in poisoned_environment.items():
+        monkeypatch.setenv(name, value)
+
+    contexts = []
+
+    class FakeContext:
+        def __init__(self, protocol):
+            self.protocol = protocol
+            self.verify_mode = None
+            self.check_hostname = False
+            self.keylog_filename = "ambient-keylog"
+            self.loaded_locations = []
+            contexts.append(self)
+
+        def load_verify_locations(self, *, cafile):
+            self.loaded_locations.append(cafile)
+
+    handlers = []
+    trusted_open = object()
+    https_contexts = []
+
+    class RecordingHTTPSHandler:
+        def __init__(self, *, context):
+            self.context = context
+            https_contexts.append(context)
+
+    def capture_build_opener(*configured_handlers):
+        handlers.extend(configured_handlers)
+        return SimpleNamespace(open=trusted_open)
+
+    monkeypatch.setattr(queues.ssl, "SSLContext", FakeContext)
+    monkeypatch.setattr(
+        queues.urllib.request, "HTTPSHandler", RecordingHTTPSHandler
+    )
+    monkeypatch.setattr(
+        queues.urllib.request, "build_opener", capture_build_opener
+    )
+
+    opener = queues._production_opener()
+
+    assert opener is trusted_open
+    assert len(contexts) == 1
+    assert contexts[0].protocol == queues.ssl.PROTOCOL_TLS_CLIENT
+    assert contexts[0].verify_mode == queues.ssl.CERT_REQUIRED
+    assert contexts[0].check_hostname is True
+    assert contexts[0].loaded_locations == [queues.APPROVED_CA_BUNDLE]
+    assert contexts[0].keylog_filename is None
+    proxy_handlers = [
+        handler
+        for handler in handlers
+        if isinstance(handler, queues.urllib.request.ProxyHandler)
+    ]
+    assert len(proxy_handlers) == 1
+    assert proxy_handlers[0].proxies == {}
+    assert any(isinstance(handler, queues._NoRedirect) for handler in handlers)
+    https_handlers = [
+        handler for handler in handlers if isinstance(handler, RecordingHTTPSHandler)
+    ]
+    assert len(https_handlers) == 1
+    assert https_contexts == contexts
+
+
+def test_tls_context_setup_failure_returns_one_bounded_false_receipt(
+    tmp_path, monkeypatch
+):
+    apply_env = tmp_path / "apply.env"
+    observer_env = tmp_path / "observer.env"
+    write_apply_env(apply_env)
+    write_observer_env(observer_env)
+    output = io.StringIO()
+
+    def context_failure(_protocol):
+        raise OSError("private trust-store setup detail")
+
+    monkeypatch.setattr(queues.ssl, "SSLContext", context_failure)
+
+    code = queues.main(
+        [
+            *release_identity_args(),
+            "--ledger-origin",
+            LEDGER_ORIGIN,
+            "--apply-env-file",
+            str(apply_env),
+            "--observer-env-file",
+            str(observer_env),
+            "--apply-timer-stopped",
+            "--window-owner",
+            WINDOW_OWNER,
+        ],
+        run_systemctl=lambda *_args, **_kwargs: pytest.fail(
+            "systemctl must not run after TLS setup failure"
+        ),
+        stdout=output,
+    )
+    serialized = output.getvalue()
+    receipt = json.loads(serialized)
+
+    assert code == 1
+    assert serialized.count("\n") == 1
+    assert len(serialized) < 2048
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "https-client-unavailable"
+    assert "private trust-store setup detail" not in serialized
+
+
+def test_invalid_release_identity_fails_before_systemctl_or_network(tmp_path):
+    output = io.StringIO()
+
+    code = queues.main(
+        [
+            *release_identity_args(release_commit="not-a-reviewed-commit"),
+            "--ledger-origin",
+            LEDGER_ORIGIN,
+            "--apply-env-file",
+            str(tmp_path / "missing-apply.env"),
+            "--observer-env-file",
+            str(tmp_path / "missing-observer.env"),
+            "--apply-timer-stopped",
+            "--window-owner",
+            WINDOW_OWNER,
+        ],
+        opener=lambda *_args, **_kwargs: pytest.fail("network must not run"),
+        run_systemctl=lambda *_args, **_kwargs: pytest.fail(
+            "systemctl must not run"
+        ),
+        stdout=output,
+    )
+    receipt = json.loads(output.getvalue())
+
+    assert code == 1
+    assert receipt["all_queues_empty"] is False
+    assert receipt["proof_error"] == "release-identity-invalid"
+    assert receipt["verifier_identity"] == {
+        "release_commit": None,
+        "verifier_blob": None,
+    }
+
+
+def test_documented_invocation_ignores_shell_path_and_cwd_or_refuses(tmp_path):
+    checkout = tmp_path / "trusted-checkout"
+    checkout.mkdir()
+    verifier = checkout / "tools/prove_queues_empty.py"
+    verifier.parent.mkdir()
+    verifier.write_bytes((TOOLS / "prove_queues_empty.py").read_bytes())
+    git = ["/usr/bin/git", "-C", str(checkout)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "tools/prove_queues_empty.py"], check=True)
+    subprocess.run(
+        [
+            *git,
+            "-c",
+            "user.name=Queue Proof Test",
+            "-c",
+            "user.email=queue-proof-test.invalid",
+            "commit",
+            "-qm",
+            "test fixture",
+        ],
+        check=True,
+    )
+    wrong_cwd = tmp_path / "wrong-cwd"
+    wrong_cwd.mkdir()
+    shim_dir = tmp_path / "poisoned-path"
+    shim_dir.mkdir()
+    poison_marker = tmp_path / "counterfeit-command-ran"
+    for command_name in ("python3", "git"):
+        shim = shim_dir / command_name
+        shim.write_text(
+            "#!/bin/sh\n"
+            ': > "$POISON_MARKER"\n'
+            "printf '%s\\n' '{\"all_queues_empty\":true}'\n",
+            encoding="utf-8",
+        )
+        shim.chmod(0o700)
+
+    release_commit = subprocess.run(
+        [*git, "rev-parse", "--verify", "HEAD^{commit}"],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    verifier_blob = subprocess.run(
+        [*git, "rev-parse", f"{release_commit}:tools/prove_queues_empty.py"],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    runbook = (TOOLS.parent / "docs/day-zero-migration-operations.md").read_text(
+        encoding="utf-8"
+    )
+    marked = runbook.split("<!-- queue-proof-launcher:start -->", 1)[1].split(
+        "<!-- queue-proof-launcher:end -->", 1
+    )[0]
+    fenced = textwrap.dedent(marked).strip()
+    assert fenced.startswith("```bash\n") and fenced.endswith("\n```")
+    launcher = fenced.removeprefix("```bash\n").removesuffix("\n```")
+    receipt_path = tmp_path / "opening-receipt.json"
+    launcher = (
+        launcher.replace(
+            "/home/damienriehl/.local/share/sonsteng-daemon/checkout",
+            str(checkout),
+        )
+        .replace("<reviewed-release-commit-SHA>", release_commit)
+        .replace("<reviewed-verifier-Git-blob-OID>", verifier_blob)
+        .replace("<opaque-Packet-D-window-id>", WINDOW_OWNER)
+        .replace("<absolute-opening-receipt-path>.json", str(receipt_path))
+        .replace(
+            "/home/damienriehl/.config/sonsteng-apply/env",
+            str(tmp_path / "missing-apply.env"),
+        )
+        .replace(
+            "/home/damienriehl/.config/sonsteng-release-observer/env",
+            str(tmp_path / "missing-observer.env"),
+        )
+    )
+    poison = r'''
+python3() { : > "$POISON_MARKER"; }
+git() { : > "$POISON_MARKER"; }
+command() { : > "$POISON_MARKER"; return 99; }
+function /usr/bin/python3 { : > "$POISON_MARKER"; }
+function /usr/bin/git { : > "$POISON_MARKER"; }
+'''
+    environment = {
+        "PATH": str(shim_dir),
+        "POISON_MARKER": str(poison_marker),
+    }
+
+    def invoke_launcher(rendered_launcher=launcher, prelude=poison):
+        shell = prelude + rendered_launcher + '\nexit "$opening_queue_proof_rc"\n'
+        return subprocess.run(
+            ["/bin/bash", "--noprofile", "--norc", "-c", shell],
+            cwd=wrong_cwd,
+            env=environment,
+            capture_output=True,
+            encoding="utf-8",
+            timeout=5,
+            check=False,
+        )
+
+    invoked = invoke_launcher()
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+    assert invoked.returncode == 1
+    assert invoked.stdout == ""
+    assert receipt["all_queues_empty"] is False
+    assert receipt["verifier_identity"] == {
+        "release_commit": release_commit,
+        "verifier_blob": verifier_blob,
+    }
+    assert not poison_marker.exists()
+
+    receipt_path.unlink()
+    wrong_blob_launcher = launcher.replace(verifier_blob, "0" * 40)
+    wrong_blob = invoke_launcher(wrong_blob_launcher)
+
+    assert wrong_blob.returncode == 73
+    assert wrong_blob.stdout == ""
+    assert receipt_path.read_bytes() == b""
+    assert not poison_marker.exists()
+
+    verifier.write_bytes(verifier.read_bytes() + b"\n")
+    receipt_path.unlink()
+    dirty_verifier = invoke_launcher()
+
+    assert dirty_verifier.returncode == 74
+    assert dirty_verifier.stdout == ""
+    assert receipt_path.read_bytes() == b""
+    assert not poison_marker.exists()
+
+    receipt_path.unlink()
+    (checkout / "later-commit.txt").write_text("later\n", encoding="utf-8")
+    subprocess.run([*git, "add", "later-commit.txt"], check=True)
+    subprocess.run(
+        [
+            *git,
+            "-c",
+            "user.name=Queue Proof Test",
+            "-c",
+            "user.email=queue-proof-test.invalid",
+            "commit",
+            "-qm",
+            "later fixture commit",
+        ],
+        check=True,
+    )
+    wrong_head = invoke_launcher()
+
+    assert wrong_head.returncode == 72
+    assert wrong_head.stdout == ""
+    assert receipt_path.read_bytes() == b""
+    assert not poison_marker.exists()
+
+    receipt_path.unlink()
+    counterfeit_function = r'''
+run_queue_proof() {
+  : > "$POISON_MARKER"
+  printf '%s\n' '{"all_queues_empty":true}'
+}
+builtin readonly -f run_queue_proof
+'''
+    preexisting_function = invoke_launcher(
+        prelude=poison + counterfeit_function
+    )
+
+    assert preexisting_function.returncode == 69
+    assert preexisting_function.stdout == ""
+    assert not receipt_path.exists()
+    assert not poison_marker.exists()
 
 
 def test_apply_timer_decode_failure_returns_one_bounded_false_receipt(tmp_path):

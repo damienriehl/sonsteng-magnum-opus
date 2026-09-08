@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -26,9 +27,11 @@ MAX_BOUND_VALUE_BYTES = 256
 TIMER_UNIT = "sonsteng-prod-release.timer"
 APPLY_TIMER_UNIT = "sonsteng-apply.timer"
 USER_AGENT = "sonsteng-queue-proof/1.0"
+APPROVED_CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 ENV_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 WINDOW_OWNER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 CONTENT_LENGTH_RE = re.compile(r"(?:0|[1-9][0-9]*)")
+GIT_OBJECT_ID_RE = re.compile(r"[0-9a-f]{40}")
 ALLOWED_LEDGER_ORIGINS = frozenset(
     {"https://sonsteng-chat.damienriehl.workers.dev"}
 )
@@ -99,6 +102,23 @@ class _ProofArgumentParser(argparse.ArgumentParser):
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, file_pointer, code, message, headers, new_url):
         return None
+
+
+def _production_opener():
+    """Build an HTTPS stack with no authority inherited from the environment."""
+    try:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.check_hostname = True
+        context.keylog_filename = None
+        context.load_verify_locations(cafile=APPROVED_CA_BUNDLE)
+        return urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _NoRedirect(),
+            urllib.request.HTTPSHandler(context=context),
+        ).open
+    except Exception as exc:
+        raise ProofError("https-client-unavailable") from exc
 
 
 def _protected_env(path, required_keys, *, missing_ok=False):
@@ -569,7 +589,21 @@ def _utc_timestamp(utc_now):
         raise ProofError("timestamp-unavailable") from exc
 
 
-def _new_receipt():
+def _release_identity(release_commit, verifier_blob):
+    if (
+        not GIT_OBJECT_ID_RE.fullmatch(release_commit)
+        or not GIT_OBJECT_ID_RE.fullmatch(verifier_blob)
+    ):
+        raise ProofError("release-identity-invalid")
+    return {
+        "release_commit": release_commit,
+        "verifier_blob": verifier_blob,
+    }
+
+
+def _new_receipt(verifier_identity=None):
+    if verifier_identity is None:
+        verifier_identity = {"release_commit": None, "verifier_blob": None}
     return {
         "all_queues_empty": False,
         "apply": {"accepted": None},
@@ -586,7 +620,14 @@ def _new_receipt():
         "publication_fallback": None,
         "publication_frontier": None,
         "timer": {"active": None, "available": False, "enabled": None},
+        "verifier_identity": dict(verifier_identity),
     }
+
+
+def _failed_receipt(proof_error, verifier_identity=None):
+    receipt = _new_receipt(verifier_identity)
+    receipt["proof_error"] = proof_error
+    return receipt
 
 
 def prove(
@@ -594,13 +635,14 @@ def prove(
     apply_env_file,
     observer_env_file,
     *,
+    verifier_identity,
     apply_timer_stopped,
     window_owner,
     opener,
     run_systemctl,
     utc_now,
 ):
-    receipt = _new_receipt()
+    receipt = _new_receipt(verifier_identity)
     try:
         if not apply_timer_stopped or window_owner is None:
             raise ProofError("fence-assertion-missing")
@@ -673,6 +715,34 @@ def prove(
     return receipt
 
 
+def _run_proof(args, opener, run_systemctl, utc_now):
+    try:
+        verifier_identity = _release_identity(
+            args.release_commit, args.verifier_blob
+        )
+    except ProofError as exc:
+        return _failed_receipt(str(exc))
+
+    if opener is None:
+        try:
+            opener = _production_opener()
+        except ProofError as exc:
+            return _failed_receipt(str(exc), verifier_identity)
+    if utc_now is None:
+        utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
+    return prove(
+        args.ledger_origin,
+        args.apply_env_file,
+        args.observer_env_file,
+        verifier_identity=verifier_identity,
+        apply_timer_stopped=args.apply_timer_stopped,
+        window_owner=args.window_owner,
+        opener=opener,
+        run_systemctl=run_systemctl,
+        utc_now=utc_now,
+    )
+
+
 def main(
     argv=None,
     *,
@@ -681,34 +751,22 @@ def main(
     utc_now=None,
     stdout=None,
 ):
-    receipt = _new_receipt()
     parser = _ProofArgumentParser(
         description="Emit a text-free proof that all Day Zero queues are empty"
     )
     parser.add_argument("--ledger-origin", required=True)
     parser.add_argument("--apply-env-file", required=True)
     parser.add_argument("--observer-env-file", required=True)
+    parser.add_argument("--release-commit", required=True)
+    parser.add_argument("--verifier-blob", required=True)
     parser.add_argument("--apply-timer-stopped", action="store_true")
     parser.add_argument("--window-owner")
     try:
         args = parser.parse_args(argv)
     except _ArgumentsInvalid:
-        receipt["proof_error"] = "arguments-invalid"
+        receipt = _failed_receipt("arguments-invalid")
     else:
-        if opener is None:
-            opener = urllib.request.build_opener(_NoRedirect).open
-        if utc_now is None:
-            utc_now = lambda: datetime.datetime.now(datetime.timezone.utc)
-        receipt = prove(
-            args.ledger_origin,
-            args.apply_env_file,
-            args.observer_env_file,
-            apply_timer_stopped=args.apply_timer_stopped,
-            window_owner=args.window_owner,
-            opener=opener,
-            run_systemctl=run_systemctl,
-            utc_now=utc_now,
-        )
+        receipt = _run_proof(args, opener, run_systemctl, utc_now)
     print(
         json.dumps(receipt, sort_keys=True, separators=(",", ":")),
         file=stdout or sys.stdout,
