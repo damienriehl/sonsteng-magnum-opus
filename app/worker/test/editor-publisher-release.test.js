@@ -1698,6 +1698,18 @@ function completedOperationFrontierRelease(suffix,{ reclaimBeforeDeployment = fa
     firstFence:firstClaim.fencing_token,currentFence:claimed.fencing_token };
 }
 
+test("operation frontier rejects publication rows dated after real completion", async (t) => {
+  for (const table of ["production_published_operations",
+    "production_published_operation_sources"]) await t.test(table,async () => {
+    const { core,releaseId,completionTime } =
+      completedOperationFrontierRelease(`late-row-${table}`);
+    core.sql.exec(`UPDATE ${table} SET published_at=? WHERE release_id=?`,
+      completionTime+1,releaseId);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+});
+
 test("operation frontier binds deployment evidence to a preceding real execution claim", async (t) => {
   await t.test("deployment before claim",async () => {
     const { core,releaseId } = completedOperationFrontierRelease("ordering");
@@ -1740,6 +1752,20 @@ test("operation frontier binds deployment evidence to a preceding real execution
       await assertOperationProjectionCorruptionFailsClosed(core,
         "publication_release_evidence_mismatch");
     });
+
+  await t.test("completion and release row with the same unissued fence",async () => {
+    const { core,releaseId } = completedOperationFrontierRelease("completion-release-fence");
+    const event = core._one(`SELECT id,detail_json FROM production_release_events
+      WHERE release_id=? AND type='complete'`,releaseId);
+    const detail = JSON.parse(event.detail_json);
+    detail.fencing_token = "unissued-fence";
+    core.sql.exec("UPDATE production_release_events SET detail_json=? WHERE id=?",
+      JSON.stringify(detail),event.id);
+    core.sql.exec("UPDATE production_releases SET fencing_token=? WHERE id=?",
+      "unissued-fence",releaseId);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
 });
 
 test("operation frontier rejects source publications without completed v2 operation parents", async (t) => {
@@ -1781,6 +1807,9 @@ test("operation frontier rejects source publications without completed v2 operat
       (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)`,
     `operation-source-orphan-${suffix}`,`data/copy/source-orphan-${suffix}.json#lead`,
     releaseId,"candidate",9033);
+    assert.throws(() => core.publisherSummary(),{
+      message:"operation_frontier_integrity:publication_source_missing_completed_release",
+    });
     assert.throws(() => core._operationFrontierSummaryProjection(),
       /operation_frontier_integrity:publication_source_missing_completed_release/);
   });
