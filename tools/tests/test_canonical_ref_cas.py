@@ -339,7 +339,9 @@ def test_malformed_remote_url_expectation_is_refused_before_mutation(
         "OPENSSL_MODULES",
         "PYTHONPATH",
         "PYTHONHOME",
+        "PYTHONINSPECT",
         "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
     ],
 )
 def test_forward_refuses_process_injection_environment_before_mutation(
@@ -685,6 +687,135 @@ def test_unexpected_operation_error_closes_receipt_descriptor(
     assert len(closed_descriptors) == 2
 
 
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_execute_converts_interruption_to_landed_receipt(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    interruption: type[BaseException],
+):
+    def interrupt_remote_tracking(*_args, **_kwargs):
+        raise interruption
+
+    monkeypatch.setattr(cas, "_cas_remote_tracking_main", interrupt_remote_tracking)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    result = captured.value.receipt
+    assert result["result"] == "warning"
+    assert result["error_code"] == "interrupted"
+    assert result["warning"] == "operation interrupted"
+    assert result["transition_outcome"] == "landed-verification-incomplete"
+    assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_main_writes_receipt_for_interruption_without_traceback(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    interruption: type[BaseException],
+):
+    receipt_path = repositories.remote.parent / "interrupt-receipt.json"
+
+    def raising_forward(*_args, **_kwargs):
+        raise interruption
+
+    monkeypatch.setattr(cas, "forward", raising_forward)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            remote_url_sha256(repositories),
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    captured = capfd.readouterr()
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result_code == 130
+    assert captured.out == ""
+    assert "Traceback" not in captured.err
+    assert json.loads(captured.err) == result
+    assert result["result"] == "error"
+    assert result["error"] == "operation interrupted"
+    assert result["error_code"] == "interrupted"
+    assert result["transition_outcome"] == "not-landed"
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_main_bounds_interruption_during_receipt_publication(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    interruption: type[BaseException],
+):
+    receipt_path = repositories.remote.parent / "publication-interrupt.json"
+
+    def interrupt_publication(*_args, **_kwargs):
+        raise interruption
+
+    monkeypatch.setattr(cas, "_write_receipt", interrupt_publication)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            remote_url_sha256(repositories),
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    captured = capfd.readouterr()
+    mirrored_payload, diagnostic = captured.err.splitlines()
+    result = json.loads(mirrored_payload)
+    assert result_code == 130
+    assert captured.out == ""
+    assert "Traceback" not in captured.err
+    assert diagnostic == "canonical-ref CAS receipt publication interrupted"
+    assert result["result"] == "success"
+    assert result["transition_outcome"] == "succeeded"
+    assert not receipt_path.exists()
+    assert not list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp"))
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
 def test_unexpected_post_mutation_exception_writes_complete_warning_receipt(
     repositories: Repositories,
     monkeypatch: pytest.MonkeyPatch,
@@ -724,9 +855,7 @@ def test_unexpected_post_mutation_exception_writes_complete_warning_receipt(
     assert result_code == 1
     result = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert result["result"] == "warning"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert result["warning"] == "unexpected internal failure"
     assert "unbounded internal detail" not in json.dumps(result, sort_keys=True)
     assert result["mutations"] == [
@@ -742,6 +871,84 @@ def test_unexpected_post_mutation_exception_writes_complete_warning_receipt(
     }
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_landed_forward_with_remote_tracking_failure_is_not_demoted(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fail_remote_tracking(*_args, **_kwargs):
+        raise cas.CasError("remote-tracking main compare-and-swap failed")
+
+    monkeypatch.setattr(cas, "_cas_remote_tracking_main", fail_remote_tracking)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    result = captured.value.receipt
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == "landed-verification-incomplete"
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": repositories.candidate,
+    }
+    assert result["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+    ]
+
+
+def test_complete_landing_with_unavailable_remote_readback_is_not_demoted(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fail_final_state(*_args, **_kwargs):
+        raise cas.CasError("final verification unavailable")
+
+    def fail_remote_readback(*_args, **_kwargs):
+        raise cas.CasError("remote readback unavailable")
+
+    monkeypatch.setattr(cas, "_require_final_state", fail_final_state)
+    monkeypatch.setattr(cas, "_remote_sha", fail_remote_readback)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    result = captured.value.receipt
+    assert result["result"] == "warning"
+    assert result["transition_outcome"] == "landed-verification-incomplete"
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": None,
+    }
+    assert result["readback_errors"] == {
+        "remote": "remote readback unavailable",
+    }
+    assert result["mutations"] == [
+        "local-main-cas",
+        "worktree-alignment",
+        "remote-main-cas",
+        "remote-tracking-main-cas",
+    ]
 
 
 def test_receipt_directory_sync_failure_returns_error_after_completed_cas(
@@ -786,10 +993,121 @@ def test_receipt_directory_sync_failure_returns_error_after_completed_cas(
     )
 
     captured = capfd.readouterr()
+    mirrored_payload, diagnostic = captured.err.splitlines()
     assert result_code == 1
     assert captured.out == ""
-    assert captured.err == "canonical-ref CAS receipt file could not be written\n"
+    assert diagnostic == "canonical-ref CAS receipt file could not be written"
+    assert json.loads(mirrored_payload) == json.loads(
+        receipt_path.read_text(encoding="utf-8")
+    )
     assert fsync_calls == 2
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_partial_receipt_write_leaves_no_target_and_mirrors_complete_payload(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+):
+    receipt_path = repositories.remote.parent / "partial-write-receipt.json"
+    original_write = cas.os.write
+    receipt_write_calls = 0
+
+    def partial_then_full_disk(file_descriptor: int, payload: bytes) -> int:
+        nonlocal receipt_write_calls
+        if file_descriptor not in {1, 2}:
+            receipt_write_calls += 1
+            if receipt_write_calls == 1:
+                return min(40, len(payload))
+            raise OSError(28, "injected full disk")
+        return original_write(file_descriptor, payload)
+
+    monkeypatch.setattr(cas.os, "write", partial_then_full_disk)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            remote_url_sha256(repositories),
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    captured = capfd.readouterr()
+    mirrored_payload, diagnostic = captured.err.splitlines()
+    result = json.loads(mirrored_payload)
+    assert result_code == 1
+    assert captured.out == ""
+    assert diagnostic == "canonical-ref CAS receipt file could not be written"
+    assert result["result"] == "success"
+    assert result["transition_outcome"] == "succeeded"
+    assert receipt_write_calls == 2
+    assert not receipt_path.exists()
+    assert not list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp"))
+    assert sha(repositories.daemon) == repositories.candidate
+    assert remote_sha(repositories.daemon) == repositories.candidate
+
+
+def test_receipt_publication_collision_preserves_competing_target(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+):
+    receipt_path = repositories.remote.parent / "publication-collision.json"
+    original_link = cas.os.link
+
+    def competing_link(*args, **kwargs):
+        receipt_path.write_text("competing receipt\n", encoding="utf-8")
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(cas.os, "link", competing_link)
+
+    result_code = cas.main(
+        [
+            "forward",
+            "--repo",
+            str(repositories.daemon),
+            "--remote",
+            "origin",
+            "--branch",
+            "main",
+            "--from",
+            repositories.prior,
+            "--to",
+            repositories.candidate,
+            "--expect-remote-url-sha256",
+            remote_url_sha256(repositories),
+            "--window-owner",
+            WINDOW_OWNER,
+            "--receipt-path",
+            str(receipt_path),
+        ]
+    )
+
+    captured = capfd.readouterr()
+    mirrored_payload, diagnostic = captured.err.splitlines()
+    result = json.loads(mirrored_payload)
+    assert result_code == 1
+    assert captured.out == ""
+    assert diagnostic == "canonical-ref CAS receipt file could not be written"
+    assert result["result"] == "success"
+    assert result["transition_outcome"] == "succeeded"
+    assert receipt_path.read_text(encoding="utf-8") == "competing receipt\n"
+    assert not list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp"))
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -829,7 +1147,7 @@ def test_closed_standard_streams_cannot_alias_receipt_diagnostic(
     completed = subprocess.run([sys.executable, "-c", child], cwd=ROOT)
 
     assert completed.returncode == 1
-    assert receipt_path.read_bytes() == b""
+    assert not receipt_path.exists()
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -1090,10 +1408,12 @@ def test_restore_happy(repositories: Repositories):
 
 def test_restore_adapter_satisfies_migration_contract(repositories: Repositories):
     assert invoke(repositories, "forward").returncode == 0
+    receipt_path = repositories.remote.parent / "adapter-restore-success.json"
     adapter = cas.CanonicalRefCasAdapter(
         repositories.daemon,
         expected_remote_url_sha256=remote_url_sha256(repositories),
         window_owner=WINDOW_OWNER,
+        receipt_path=receipt_path,
     )
 
     observed = adapter.restore_canonical_ref_exact(
@@ -1103,6 +1423,175 @@ def test_restore_adapter_satisfies_migration_contract(repositories: Repositories
     assert observed == repositories.prior
     assert sha(repositories.daemon) == repositories.prior
     assert remote_sha(repositories.daemon) == repositories.prior
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result["result"] == "success"
+    assert result["transition_outcome"] == "succeeded"
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_restore_adapter_writes_failure_receipt_before_reraising(
+    repositories: Repositories,
+):
+    receipt_path = repositories.remote.parent / "adapter-restore-failure.json"
+    adapter = cas.CanonicalRefCasAdapter(
+        repositories.daemon,
+        expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
+        receipt_path=receipt_path,
+    )
+
+    with pytest.raises(cas.CasFailure) as captured:
+        adapter.restore_canonical_ref_exact(
+            repositories.candidate, repositories.prior
+        )
+
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result == captured.value.receipt
+    assert result["result"] == "error"
+    assert result["mutations"] == []
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("interruption", [KeyboardInterrupt, SystemExit])
+def test_restore_adapter_writes_post_mutation_interruption_receipt(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    interruption: type[BaseException],
+):
+    assert invoke(repositories, "forward").returncode == 0
+    receipt_path = repositories.remote.parent / "adapter-interruption.json"
+
+    def interrupt_remote_tracking(*_args, **_kwargs):
+        raise interruption
+
+    monkeypatch.setattr(cas, "_cas_remote_tracking_main", interrupt_remote_tracking)
+    adapter = cas.CanonicalRefCasAdapter(
+        repositories.daemon,
+        expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
+        receipt_path=receipt_path,
+    )
+
+    with pytest.raises(cas.CasFailure) as captured:
+        adapter.restore_canonical_ref_exact(
+            repositories.candidate, repositories.prior
+        )
+
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result == captured.value.receipt
+    assert result["result"] == "warning"
+    assert result["error_code"] == "interrupted"
+    assert result["transition_outcome"] == "landed-verification-incomplete"
+    assert result["mutations"] == [
+        "remote-main-cas",
+        "local-main-cas",
+        "worktree-alignment",
+    ]
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+@pytest.mark.parametrize(
+    ("publication_exception", "expected_message", "expected_error_code"),
+    [
+        (OSError, "canonical-ref CAS receipt file could not be written", None),
+        (
+            KeyboardInterrupt,
+            "canonical-ref CAS receipt publication interrupted",
+            "interrupted",
+        ),
+        (
+            SystemExit,
+            "canonical-ref CAS receipt publication interrupted",
+            "interrupted",
+        ),
+    ],
+)
+def test_restore_adapter_mirrors_receipt_publication_failure(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+    publication_exception: type[BaseException],
+    expected_message: str,
+    expected_error_code: str | None,
+):
+    assert invoke(repositories, "forward").returncode == 0
+    receipt_path = repositories.remote.parent / "adapter-publication-failure.json"
+
+    def fail_publication(*_args, **_kwargs):
+        raise publication_exception
+
+    monkeypatch.setattr(cas, "_write_receipt", fail_publication)
+    adapter = cas.CanonicalRefCasAdapter(
+        repositories.daemon,
+        expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
+        receipt_path=receipt_path,
+    )
+
+    with pytest.raises(cas.CasError) as captured:
+        adapter.restore_canonical_ref_exact(
+            repositories.candidate, repositories.prior
+        )
+
+    streams = capfd.readouterr()
+    mirrored_payload, diagnostic = streams.err.splitlines()
+    result = json.loads(mirrored_payload)
+    assert str(captured.value) == expected_message
+    assert captured.value.error_code == expected_error_code
+    assert streams.out == ""
+    assert diagnostic == expected_message
+    assert result["result"] == "success"
+    assert result["transition_outcome"] == "succeeded"
+    assert not receipt_path.exists()
+    assert not list(receipt_path.parent.glob(f".{receipt_path.name}.*.tmp"))
+    assert sha(repositories.daemon) == repositories.prior
+    assert remote_sha(repositories.daemon) == repositories.prior
+
+
+def test_restore_adapter_preserves_ledger_when_reconciliation_is_interrupted(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    assert invoke(repositories, "forward").returncode == 0
+    receipt_path = repositories.remote.parent / "adapter-reconciliation-interrupt.json"
+    original_push_main = cas._push_main
+
+    def committed_then_client_failure(*args, **kwargs):
+        original_push_main(*args, **kwargs)
+        raise cas.CasError("Git operation failed during remote main compare-and-swap")
+
+    def interrupt_remote_readback(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cas, "_push_main", committed_then_client_failure)
+    monkeypatch.setattr(cas, "_remote_sha", interrupt_remote_readback)
+    adapter = cas.CanonicalRefCasAdapter(
+        repositories.daemon,
+        expected_remote_url_sha256=remote_url_sha256(repositories),
+        window_owner=WINDOW_OWNER,
+        receipt_path=receipt_path,
+    )
+
+    with pytest.raises(cas.CasFailure) as captured:
+        adapter.restore_canonical_ref_exact(
+            repositories.candidate, repositories.prior
+        )
+
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result == captured.value.receipt
+    assert result["transition_outcome_source"] == "post-failure-readback"
+    assert result["transition_outcome"] == "incomplete"
+    assert result["mutations"] == []
+    assert result["readback"] == {
+        "head": repositories.candidate,
+        "local": repositories.candidate,
+        "remote": None,
+    }
+    assert result["readback_errors"] == {
+        "remote": "remote readback unavailable"
+    }
+    assert sha(repositories.remote, "refs/heads/main") == repositories.prior
 
 
 def test_restore_refused_when_remote_is_not_candidate(repositories: Repositories):
@@ -1345,8 +1834,10 @@ def test_runbook_pins_cas_release_identity_invocation_and_receipt_acceptance():
         "WINDOW_OWNER=",
         'HOST_IDENTITY=$(/usr/bin/env -i /usr/bin/uname -n)',
         "set -eu",
-        "unset LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD",
+        'for INJECTION_NAME in ${!LD_@}; do unset "$INJECTION_NAME"; done',
+        "unset OPENSSL_CONF OPENSSL_MODULES",
         "unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP",
+        "PYTHONUSERBASE",
         'trusted_git -C "$OPS_REPO" rev-parse --verify HEAD',
         '"$REVIEWED_OPS_COMMIT:tools/canonical_ref_cas.py"',
         'trusted_git -C "$OPS_REPO" hash-object -- "$CAS"',
@@ -1363,14 +1854,22 @@ def test_runbook_pins_cas_release_identity_invocation_and_receipt_acceptance():
         'tool.sha256` is `$REVIEWED_CAS_SHA256',
         '`window_owner` equals `$WINDOW_OWNER`',
         '`host_identity` equals `$HOST_IDENTITY`',
-        'transition_outcome: "succeeded-with-unexpected-observation"',
-        'transition_outcome: "target-already-present"',
+        "`verb` equals the command verb",
+        "`dry_run` is `true` exactly for a rehearsal",
+        '`transition_outcome_source` is `"post-failure-readback"`',
+        '`mutation_reconciliation.remote-main-cas`',
+        '`"confirmed-by-post-failure-readback"`',
+        "`readback_errors`",
+        "`landed-verification-incomplete`",
+        "`target-already-present`",
         'Exit `0` alone never accepts any of the four CAS commands',
     ):
-        assert required_text in documentation
+        assert required_text in documentation or required_text in normalized_prose
     assert "the production window must not open" in normalized_prose
     assert documentation.count('--window-owner "$WINDOW_OWNER"') == 4
     assert "python3 tools/canonical_ref_cas.py" not in documentation
+    for outcome in cas.TRANSITION_OUTCOMES:
+        assert f"`{outcome}`" in documentation
 
 
 def test_dry_run_refuses_remote_race_before_final_readback(
@@ -1565,9 +2064,7 @@ def test_post_receive_hook_non_main_remote_ref_delta_is_reported(
     result = receipt(completed)
     assert result["result"] == "warning"
     assert result["warning"] == "remote ref map changed outside canonical main"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert result["mutations"] == [
         "local-main-cas",
         "worktree-alignment",
@@ -1691,14 +2188,103 @@ def test_remote_url_change_is_detected_without_retargeting_push(
     assert retargeted
     result = captured.value.receipt
     assert result["result"] == "warning"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert result["warning"] == (
         "validated remote URL changed during operation"
     )
     assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
     assert sha(decoy, "refs/heads/main") == repositories.prior
+
+
+@pytest.mark.parametrize("verb", ["forward", "restore"])
+def test_remote_compare_and_swap_refuses_mid_operation_competing_commit(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    verb: str,
+):
+    if verb == "restore":
+        assert invoke(repositories, "forward").returncode == 0
+    original_push_main = cas._push_main
+    raced = False
+    competitor: str | None = None
+
+    def racing_push_main(*args, **kwargs):
+        nonlocal raced, competitor
+        if not raced:
+            raced = True
+            competitor = advance_remote(repositories)
+        return original_push_main(*args, **kwargs)
+
+    monkeypatch.setattr(cas, "_push_main", racing_push_main)
+    operation = cas.forward if verb == "forward" else cas.restore
+    current = repositories.prior if verb == "forward" else repositories.candidate
+    target = repositories.candidate if verb == "forward" else repositories.prior
+
+    with pytest.raises(cas.CasFailure) as captured:
+        operation(
+            repositories.daemon,
+            "origin",
+            "main",
+            current,
+            target,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    assert raced
+    assert competitor is not None
+    assert captured.value.receipt["error"] == (
+        "Git operation failed during remote main compare-and-swap"
+    )
+    assert sha(repositories.remote, "refs/heads/main") == competitor
+    assert competitor != target
+
+
+@pytest.mark.parametrize("verb", ["forward", "restore"])
+def test_post_failure_remote_reread_reconciles_committed_push(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+    verb: str,
+):
+    if verb == "restore":
+        assert invoke(repositories, "forward").returncode == 0
+    original_push_main = cas._push_main
+
+    def committed_then_client_failure(*args, **kwargs):
+        original_push_main(*args, **kwargs)
+        raise cas.CasError("Git operation failed during remote main compare-and-swap")
+
+    monkeypatch.setattr(cas, "_push_main", committed_then_client_failure)
+    operation = cas.forward if verb == "forward" else cas.restore
+    current = repositories.prior if verb == "forward" else repositories.candidate
+    target = repositories.candidate if verb == "forward" else repositories.prior
+
+    with pytest.raises(cas.CasFailure) as captured:
+        operation(
+            repositories.daemon,
+            "origin",
+            "main",
+            current,
+            target,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    result = captured.value.receipt
+    assert result["transition_outcome_source"] == "post-failure-readback"
+    assert result["mutation_reconciliation"] == {
+        "remote-main-cas": "confirmed-by-post-failure-readback",
+    }
+    assert result["readback"]["remote"] == target
+    assert result["mutations"] == (
+        ["local-main-cas", "worktree-alignment", "remote-main-cas"]
+        if verb == "forward"
+        else ["remote-main-cas"]
+    )
+    assert result["transition_outcome"] == (
+        "landed-verification-incomplete" if verb == "forward" else "incomplete"
+    )
+    assert sha(repositories.remote, "refs/heads/main") == target
 
 
 def test_restore_alignment_does_not_overwrite_raced_local_main(
@@ -2033,6 +2619,31 @@ def test_run_git_without_resolved_git_carries_stage_and_starts_no_subprocess(
     assert str(captured.value) == "Git operation failed during supplied fail-closed stage"
 
 
+def test_run_git_enforces_subprocess_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    operation = cas.Operation(
+        "forward",
+        tmp_path,
+        "origin",
+        "main",
+        "1" * 40,
+        "2" * 40,
+        False,
+    )
+
+    def timing_out_run(*_args, timeout, **_kwargs):
+        assert timeout == cas.TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired([cas.GIT_PATH, "version"], timeout)
+
+    monkeypatch.setattr(cas.subprocess, "run", timing_out_run)
+
+    with pytest.raises(cas.CasError) as captured:
+        cas._run_git(operation, ["version"], stage="bounded timeout test")
+
+    assert str(captured.value) == "Git operation failed during bounded timeout test"
+
+
 def test_git_resolution_fails_closed_when_confstr_raises(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -2147,6 +2758,7 @@ def test_missing_resolved_git_fails_closed_before_subprocess(
         "expected_remote_url_sha256": expected_remote_url_sha256,
         "result": "error",
         "transition_outcome": "not-landed",
+        "transition_outcome_source": "pre-operation-evidence",
         "verb": "forward",
         "window_owner": WINDOW_OWNER,
     }
@@ -2365,6 +2977,86 @@ def test_forward_refuses_global_pack_objects_hook_before_mutation(
     assert remote_sha(repositories.daemon) == repositories.prior
 
 
+def test_run_git_pins_upload_pack_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    operation = cas.Operation(
+        "forward",
+        tmp_path,
+        "origin",
+        "main",
+        "1" * 40,
+        "2" * 40,
+        False,
+    )
+    command: list[str] = []
+
+    def recording_run(args, **_kwargs):
+        command.extend(args)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(cas.subprocess, "run", recording_run)
+
+    cas._run_git(operation, ["version"], stage="configuration pin test")
+
+    assert command == [
+        cas.GIT_PATH,
+        "-c",
+        "uploadpack.packObjectsHook=",
+        "-c",
+        "uploadpack.hideRefs=",
+        "-c",
+        "transfer.hideRefs=",
+        "version",
+    ]
+
+
+def test_remote_queries_ignore_daemon_repository_transport_config(
+    repositories: Repositories,
+):
+    git(repositories.daemon, "config", "protocol.file.allow", "never")
+
+    completed = invoke(repositories, "forward")
+
+    assert completed.returncode == 0, completed.stderr
+    assert receipt(completed)["result"] == "success"
+
+
+def test_post_failure_remote_reread_ignores_daemon_transport_config(
+    repositories: Repositories,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    git(repositories.daemon, "config", "protocol.file.allow", "never")
+    original_push_main = cas._push_main
+
+    def committed_then_client_failure(*args, **kwargs):
+        original_push_main(*args, **kwargs)
+        raise cas.CasError("Git operation failed during remote main compare-and-swap")
+
+    monkeypatch.setattr(cas, "_push_main", committed_then_client_failure)
+
+    with pytest.raises(cas.CasFailure) as captured:
+        cas.forward(
+            repositories.daemon,
+            "origin",
+            "main",
+            repositories.prior,
+            repositories.candidate,
+            expected_remote_url_sha256=remote_url_sha256(repositories),
+            window_owner=WINDOW_OWNER,
+        )
+
+    result = captured.value.receipt
+    assert result["transition_outcome_source"] == "post-failure-readback"
+    assert result["mutation_reconciliation"] == {
+        "remote-main-cas": "confirmed-by-post-failure-readback"
+    }
+    assert result["readback"]["remote"] == repositories.candidate
+    assert result["transition_outcome"] == "landed-verification-incomplete"
+    assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
+    assert sha(repositories.remote, "refs/heads/main") == repositories.candidate
+
+
 def test_forward_refuses_global_url_instead_of_before_mutation(
     repositories: Repositories,
 ):
@@ -2489,9 +3181,7 @@ def test_forward_reports_local_non_main_ref_delta_before_success(
     result = receipt(completed)
     assert result["warning"] == "local ref map changed outside allowed transitions"
     assert result["result"] == "warning"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert sha(repositories.daemon, "refs/heads/side") == repositories.candidate
 
 
@@ -2566,9 +3256,7 @@ def test_changed_non_main_local_symref_fails_for_forward_and_restore(
     result = receipt(completed)
     assert result["result"] == "warning"
     assert result["warning"] == "local ref map changed outside allowed transitions"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert result["mutations"] == (
         [
             "local-main-cas",
@@ -2610,9 +3298,7 @@ def test_forward_reports_remote_head_symref_change(
     result = receipt(completed)
     assert result["result"] == "warning"
     assert result["warning"] == "remote HEAD changed during operation"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert git(repositories.remote, "symbolic-ref", "HEAD").stdout.strip() == (
         "refs/heads/side"
     )
@@ -2860,9 +3546,7 @@ def test_forward_reports_malformed_local_ref_before_success(
     result = receipt(completed)
     assert result["warning"] == "local refs could not be read exactly"
     assert result["result"] == "warning"
-    assert result["transition_outcome"] == (
-        "succeeded-with-unexpected-observation"
-    )
+    assert result["transition_outcome"] == "landed-verification-incomplete"
     assert sha(repositories.daemon) == repositories.candidate
     assert remote_sha(repositories.daemon) == repositories.candidate
 
@@ -3001,19 +3685,19 @@ def test_receipt_preserves_local_remote_path_containing_at_sign(
     ).hexdigest()
 
 
-@pytest.mark.parametrize("remote_moved", [False, True])
-def test_receipt_redacts_remote_url_credentials(
-    repositories: Repositories, remote_moved: bool
+@pytest.mark.parametrize("baseline_remote_moved", [False, True])
+def test_receipt_redacts_remote_url_credentials_on_success_and_baseline_refusal(
+    repositories: Repositories, baseline_remote_moved: bool
 ):
     exact_url = f"file://operator:super-secret@localhost{repositories.remote}"
     redacted_url = f"file://localhost{repositories.remote}"
     git(repositories.daemon, "remote", "set-url", "origin", exact_url)
-    if remote_moved:
+    if baseline_remote_moved:
         advance_remote(repositories)
 
     completed = invoke(repositories, "forward")
 
-    assert (completed.returncode != 0) is remote_moved
+    assert (completed.returncode != 0) is baseline_remote_moved
     assert "super-secret" not in completed.stdout
     assert "super-secret" not in completed.stderr
     result = receipt(completed)
@@ -3021,7 +3705,9 @@ def test_receipt_redacts_remote_url_credentials(
     assert result["remote_url_sha256"] == hashlib.sha256(
         exact_url.encode("utf-8")
     ).hexdigest()
-    assert result["result"] == ("error" if remote_moved else "success")
+    assert result["result"] == (
+        "error" if baseline_remote_moved else "success"
+    )
 
 
 @pytest.mark.parametrize(

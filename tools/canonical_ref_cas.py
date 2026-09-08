@@ -10,17 +10,19 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import enum
 import hashlib
 import json
 import os
 import pathlib
 import re
+import secrets
 import shutil
 import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -44,8 +46,10 @@ PROCESS_INJECTION_ENV_NAMES = frozenset(
         "OPENSSL_CONF",
         "OPENSSL_MODULES",
         "PYTHONHOME",
+        "PYTHONINSPECT",
         "PYTHONPATH",
         "PYTHONSTARTUP",
+        "PYTHONUSERBASE",
     }
 )
 GIT_CONFIG_PINS = (
@@ -76,6 +80,18 @@ RESTORE_MUTATIONS = (
     MUTATION_WORKTREE_ALIGNMENT,
     MUTATION_REMOTE_TRACKING_MAIN_CAS,
 )
+
+
+class TransitionOutcome(enum.StrEnum):
+    INCOMPLETE = "incomplete"
+    LANDED_VERIFICATION_INCOMPLETE = "landed-verification-incomplete"
+    NOT_ATTEMPTED = "not-attempted"
+    NOT_LANDED = "not-landed"
+    SUCCEEDED = "succeeded"
+    TARGET_ALREADY_PRESENT = "target-already-present"
+
+
+TRANSITION_OUTCOMES = frozenset(outcome.value for outcome in TransitionOutcome)
 
 
 def _resolve_git_path() -> str | None:
@@ -511,8 +527,9 @@ def _readback(
 
 def _best_effort_readback(
     operation: Operation, remote_url: str
-) -> dict[str, str | None]:
+) -> tuple[dict[str, str | None], dict[str, str]]:
     observed: dict[str, str | None] = {}
+    errors: dict[str, str] = {}
     for name, reader in (
         ("head", _head_sha),
         ("local", _local_sha),
@@ -520,9 +537,10 @@ def _best_effort_readback(
     ):
         try:
             observed[name] = reader(operation)
-        except Exception:
+        except BaseException:
             observed[name] = None
-    return observed
+            errors[name] = f"{name} readback unavailable"
+    return observed, errors
 
 
 def _intended_mutations(operation: Operation) -> tuple[str, ...]:
@@ -535,25 +553,29 @@ def _transition_outcome(
     readback: Mapping[str, str | None],
     *,
     unexpected_observation: bool,
+    remote_main_attempted: bool = False,
 ) -> str:
     if operation.dry_run:
-        return "not-attempted"
+        return TransitionOutcome.NOT_ATTEMPTED.value
     target_observed = readback == dict.fromkeys(
         ("head", "local", "remote"), operation.to_sha
     )
-    landed = tuple(mutations) == _intended_mutations(operation) and target_observed
-    if landed:
-        return (
-            "succeeded-with-unexpected-observation"
-            if unexpected_observation
-            else "succeeded"
-        )
+    complete_ledger = tuple(mutations) == _intended_mutations(operation)
+    no_contradicting_readback = all(
+        value is None or value == operation.to_sha for value in readback.values()
+    )
+    if complete_ledger and target_observed and not unexpected_observation:
+        return TransitionOutcome.SUCCEEDED.value
     target_already_present = not mutations and target_observed
     if target_already_present:
-        return "target-already-present"
+        return TransitionOutcome.TARGET_ALREADY_PRESENT.value
+    if target_observed or (complete_ledger and no_contradicting_readback):
+        return TransitionOutcome.LANDED_VERIFICATION_INCOMPLETE.value
+    if not mutations and remote_main_attempted and readback.get("remote") is None:
+        return TransitionOutcome.INCOMPLETE.value
     if not mutations:
-        return "not-landed"
-    return "incomplete"
+        return TransitionOutcome.NOT_LANDED.value
+    return TransitionOutcome.INCOMPLETE.value
 
 
 def _validated_coordinates(operation: Operation) -> dict[str, str]:
@@ -1275,6 +1297,7 @@ def _execute(operation: Operation) -> dict:
     mutations: list[str] = []
     receipt = _base_receipt(operation, mutations)
     operation_validated = False
+    remote_main_attempted = False
     remote_url: str | None = None
     try:
         receipt["expected"] = _validated_coordinates(operation)
@@ -1352,6 +1375,7 @@ def _execute(operation: Operation) -> dict:
         if operation.verb == "forward":
             _cas_local_main_and_align(operation, mutations)
 
+        remote_main_attempted = True
         _push_main(
             operation,
             remote_url,
@@ -1387,22 +1411,38 @@ def _execute(operation: Operation) -> dict:
     except CasError as exc:
         message = str(exc)
         error_code = exc.error_code
-    except Exception:
-        message = "unexpected internal failure"
-        error_code = "unexpected-exception"
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            message = "operation interrupted"
+            error_code = "interrupted"
+        else:
+            message = "unexpected internal failure"
+            error_code = "unexpected-exception"
 
-    readback = (
-        _best_effort_readback(operation, remote_url)
-        if operation_validated and remote_url is not None
-        else {"head": None, "local": None, "remote": None}
-    )
+    if operation_validated and remote_url is not None:
+        readback, readback_errors = _best_effort_readback(operation, remote_url)
+        outcome_source = "post-failure-readback"
+    else:
+        readback = {"head": None, "local": None, "remote": None}
+        readback_errors = {}
+        outcome_source = "pre-operation-evidence"
+    if (
+        remote_main_attempted
+        and MUTATION_REMOTE_MAIN_CAS not in mutations
+        and readback["remote"] == operation.to_sha
+    ):
+        mutations.append(MUTATION_REMOTE_MAIN_CAS)
+        receipt["mutation_reconciliation"] = {
+            MUTATION_REMOTE_MAIN_CAS: "confirmed-by-post-failure-readback"
+        }
     transition_outcome = _transition_outcome(
         operation,
         mutations,
         readback,
         unexpected_observation=True,
+        remote_main_attempted=remote_main_attempted,
     )
-    if transition_outcome == "succeeded-with-unexpected-observation":
+    if transition_outcome == TransitionOutcome.LANDED_VERIFICATION_INCOMPLETE:
         receipt.update(
             result="warning",
             warning=message,
@@ -1416,6 +1456,9 @@ def _execute(operation: Operation) -> dict:
             readback=readback,
             transition_outcome=transition_outcome,
         )
+    receipt["transition_outcome_source"] = outcome_source
+    if readback_errors:
+        receipt["readback_errors"] = readback_errors
     if error_code is not None:
         receipt["error_code"] = error_code
     raise CasFailure(receipt) from None
@@ -1486,22 +1529,27 @@ class CanonicalRefCasAdapter:
         *,
         expected_remote_url_sha256: str,
         window_owner: str,
+        receipt_path: pathlib.Path | str,
     ):
         self.repo = pathlib.Path(repo)
         self.remote = remote
         self.branch = branch
         self.expected_remote_url_sha256 = expected_remote_url_sha256
         self.window_owner = window_owner
+        self.receipt_path = pathlib.Path(receipt_path)
 
     def restore_canonical_ref_exact(self, candidate_sha: str, prior_sha: str) -> str:
-        result = restore(
-            self.repo,
-            self.remote,
-            self.branch,
-            candidate_sha,
-            prior_sha,
-            expected_remote_url_sha256=self.expected_remote_url_sha256,
-            window_owner=self.window_owner,
+        result = _execute_with_receipt_path(
+            self.receipt_path,
+            lambda: restore(
+                self.repo,
+                self.remote,
+                self.branch,
+                candidate_sha,
+                prior_sha,
+                expected_remote_url_sha256=self.expected_remote_url_sha256,
+                window_owner=self.window_owner,
+            ),
         )
         return result["readback"]["local"]
 
@@ -1525,7 +1573,7 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _open_receipt(path: str) -> tuple[int, int, str]:
+def _open_receipt(path: str) -> tuple[int, int, str, str]:
     target = pathlib.Path(path)
     if not target.is_absolute():
         raise OSError
@@ -1534,32 +1582,61 @@ def _open_receipt(path: str) -> tuple[int, int, str]:
         os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
     )
     try:
-        receipt_descriptor = os.open(
-            target.name,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o600,
-            dir_fd=directory_descriptor,
-        )
-    except OSError:
+        try:
+            os.stat(
+                target.name,
+                dir_fd=directory_descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise FileExistsError
+        for _attempt in range(128):
+            temporary_filename = (
+                f".{target.name}.{secrets.token_hex(16)}.tmp"
+            )
+            try:
+                receipt_descriptor = os.open(
+                    temporary_filename,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o600,
+                    dir_fd=directory_descriptor,
+                )
+            except FileExistsError:
+                continue
+            break
+        else:
+            raise OSError
+    except BaseException:
         os.close(directory_descriptor)
         raise
-    return receipt_descriptor, directory_descriptor, target.name
+    return (
+        receipt_descriptor,
+        directory_descriptor,
+        temporary_filename,
+        target.name,
+    )
+
+
+def _receipt_payload(receipt: dict) -> bytes:
+    return (
+        json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
 
 
 def _write_receipt(
     file_descriptor: int,
     directory_descriptor: int,
+    temporary_filename: str,
     filename: str,
-    receipt: dict,
-) -> bytes:
-    payload = (
-        json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
-    ).encode("utf-8")
+    payload: bytes,
+) -> None:
     _write_all(file_descriptor, payload)
     os.fsync(file_descriptor)
     opened = os.fstat(file_descriptor)
     named = os.stat(
-        filename,
+        temporary_filename,
         dir_fd=directory_descriptor,
         follow_symlinks=False,
     )
@@ -1569,8 +1646,16 @@ def _write_receipt(
         or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
     ):
         raise OSError
+    os.link(
+        temporary_filename,
+        filename,
+        src_dir_fd=directory_descriptor,
+        dst_dir_fd=directory_descriptor,
+        follow_symlinks=False,
+    )
     os.fsync(directory_descriptor)
-    return payload
+    os.unlink(temporary_filename, dir_fd=directory_descriptor)
+    os.fsync(directory_descriptor)
 
 
 def _write_all(file_descriptor: int, payload: bytes) -> None:
@@ -1593,6 +1678,13 @@ def _best_effort_diagnostic(message: str) -> None:
     _best_effort_mirror(2, (message + "\n").encode("utf-8"))
 
 
+def _best_effort_unlink(directory_descriptor: int, filename: str) -> None:
+    try:
+        os.unlink(filename, dir_fd=directory_descriptor)
+    except OSError:
+        pass
+
+
 def _ensure_standard_streams() -> None:
     for target_descriptor in (1, 2):
         try:
@@ -1606,6 +1698,78 @@ def _ensure_standard_streams() -> None:
                     os.close(null_descriptor)
 
 
+def _execute_with_receipt_path(
+    path: pathlib.Path | str, operation: Callable[[], dict]
+) -> dict:
+    try:
+        (
+            receipt_descriptor,
+            directory_descriptor,
+            temporary_filename,
+            filename,
+        ) = _open_receipt(str(path))
+    except OSError:
+        raise CasError("canonical-ref CAS receipt file could not be opened") from None
+    failure: CasFailure | None = None
+    receipt_written = False
+    try:
+        try:
+            result = operation()
+        except CasFailure as exc:
+            result = exc.receipt
+            failure = exc
+        payload: bytes | None = None
+        try:
+            payload = _receipt_payload(result)
+            _write_receipt(
+                receipt_descriptor,
+                directory_descriptor,
+                temporary_filename,
+                filename,
+                payload,
+            )
+            receipt_written = True
+        except OSError:
+            if payload is not None:
+                _best_effort_mirror(2, payload)
+            _best_effort_diagnostic(
+                "canonical-ref CAS receipt file could not be written"
+            )
+            raise CasError("canonical-ref CAS receipt file could not be written") from None
+        except BaseException as exc:
+            if payload is not None:
+                _best_effort_mirror(2, payload)
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                _best_effort_diagnostic(
+                    "canonical-ref CAS receipt publication interrupted"
+                )
+                raise CasError(
+                    "canonical-ref CAS receipt publication interrupted",
+                    error_code="interrupted",
+                ) from None
+            _best_effort_diagnostic(
+                "unexpected internal failure during canonical-ref CAS receipt publication"
+            )
+            raise CasError(
+                "unexpected internal failure during canonical-ref CAS receipt publication",
+                error_code="unexpected-exception",
+            ) from None
+    finally:
+        if not receipt_written:
+            _best_effort_unlink(directory_descriptor, temporary_filename)
+        try:
+            os.close(receipt_descriptor)
+        except OSError:
+            pass
+        try:
+            os.close(directory_descriptor)
+        except OSError:
+            pass
+    if failure is not None:
+        raise failure
+    return result
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     _ensure_standard_streams()
     args = _parser().parse_args(argv)
@@ -1613,11 +1777,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         (
             receipt_descriptor,
             receipt_directory_descriptor,
+            receipt_temporary_filename,
             receipt_filename,
         ) = _open_receipt(args.receipt_path)
     except OSError:
         _best_effort_diagnostic("canonical-ref CAS receipt file could not be opened")
         return 1
+    receipt_written = False
     try:
         operation = forward if args.verb == "forward" else restore
         try:
@@ -1633,9 +1799,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         except CasFailure as exc:
             result = exc.receipt
-            result_code = 1
+            result_code = 130 if result.get("error_code") == "interrupted" else 1
             mirror_descriptor = 2
-        except Exception:
+        except BaseException as exc:
             fallback_operation = Operation(
                 args.verb,
                 pathlib.Path(args.repo),
@@ -1648,35 +1814,68 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.window_owner,
             )
             result = _base_receipt(fallback_operation, [])
+            interrupted = isinstance(exc, (KeyboardInterrupt, SystemExit))
+            readback = {"head": None, "local": None, "remote": None}
             result.update(
                 result="error",
-                error="unexpected internal failure",
-                error_code="unexpected-exception",
-                readback={"head": None, "local": None, "remote": None},
-                transition_outcome="not-attempted",
+                error=(
+                    "operation interrupted"
+                    if interrupted
+                    else "unexpected internal failure"
+                ),
+                error_code=(
+                    "interrupted" if interrupted else "unexpected-exception"
+                ),
+                readback=readback,
+                transition_outcome=_transition_outcome(
+                    fallback_operation,
+                    [],
+                    readback,
+                    unexpected_observation=True,
+                ),
+                transition_outcome_source="pre-operation-evidence",
             )
-            result_code = 1
+            result_code = 130 if interrupted else 1
             mirror_descriptor = 2
         else:
             result_code = 0
             mirror_descriptor = 1
+        payload: bytes | None = None
         try:
-            payload = _write_receipt(
+            payload = _receipt_payload(result)
+            _write_receipt(
                 receipt_descriptor,
                 receipt_directory_descriptor,
+                receipt_temporary_filename,
                 receipt_filename,
-                result,
+                payload,
             )
-            os.close(receipt_descriptor)
-            receipt_descriptor = -1
-            os.close(receipt_directory_descriptor)
-            receipt_directory_descriptor = -1
+            receipt_written = True
         except OSError:
+            if payload is not None:
+                _best_effort_mirror(2, payload)
             _best_effort_diagnostic(
                 "canonical-ref CAS receipt file could not be written"
             )
             return 1
+        except BaseException as exc:
+            if payload is not None:
+                _best_effort_mirror(2, payload)
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                _best_effort_diagnostic(
+                    "canonical-ref CAS receipt publication interrupted"
+                )
+                return 130
+            _best_effort_diagnostic(
+                "unexpected internal failure during canonical-ref CAS receipt publication"
+            )
+            return 1
     finally:
+        if receipt_directory_descriptor >= 0 and not receipt_written:
+            _best_effort_unlink(
+                receipt_directory_descriptor,
+                receipt_temporary_filename,
+            )
         if receipt_descriptor >= 0:
             try:
                 os.close(receipt_descriptor)

@@ -199,8 +199,9 @@ canonical remote URL, not a digest read from the daemon checkout being verified.
 
 ```bash
 set -eu
-unset LD_AUDIT LD_LIBRARY_PATH LD_PRELOAD
-unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP
+for INJECTION_NAME in ${!LD_@}; do unset "$INJECTION_NAME"; done
+unset OPENSSL_CONF OPENSSL_MODULES
+unset PYTHONHOME PYTHONINSPECT PYTHONPATH PYTHONSTARTUP PYTHONUSERBASE
 
 OPS_REPO=/absolute/path/to/the/reviewed/operations-checkout
 CAS="$OPS_REPO/tools/canonical_ref_cas.py"
@@ -254,11 +255,17 @@ apply that same rule to the queue verifier when its reviewed release is pinned.
 Rerun all checkout, blob, and SHA-256 comparisons immediately after each
 verifier invocation and before accepting its receipt.
 Run this complete block in a pre-window rehearsal on the daemon host. The
-`set -eu` makes every failed identity comparison abort this block. Clearing the
-native-loader and Python injection variables before its first external command,
-then launching Python with `/usr/bin/env -i`, prevents ambient code injection
-from substituting the pinned interpreter. The `CS_PATH` probe is the go/no-go
-check for the verifier's trusted Git resolver;
+`set -eu` makes every failed identity comparison abort this block. Run it from a
+freshly authenticated login shell whose environment was not supplied by an
+untrusted parent. Clearing every ambient `LD_*` name plus the named OpenSSL and
+Python variables, then using `/usr/bin/env -i` and Python `-I`, bounds inherited
+environment injection; `-I` also disables the user site and `usercustomize`.
+It does not prove interpreter integrity. A native loader can pre-empt the shell
+or interpreter before either can clear or inspect its environment, so the
+in-tool refusal is necessarily a secondary guard. Corroborate receipt identity
+with the out-of-band Git blob and SHA-256 comparisons above after every
+invocation. The `CS_PATH` probe is the go/no-go check for the verifier's trusted
+Git resolver;
 if it is nonzero, the CAS tool is inoperable on that host and the production
 window must not open.
 
@@ -312,15 +319,25 @@ remote name and branch; UTC timestamp; operation labels; validated SHA values;
 the operator-supplied remote expectation; a credential-redacted validated
 remote URL; and the SHA-256 fingerprint of the exact validated URL. It also
 records the required window owner and host identity, plus best-effort readback
-after a failure so partial state is never silent.
-An inability to open, write, flush, or sync the receipt fails the command.
+after a failure so partial state is never silent. It writes and syncs a private
+temporary file in the evidence directory, then publishes the complete receipt
+without overwrite; the named receipt is therefore complete or absent, never a
+partial JSON file. An inability to open, write, flush, publish, or sync the
+receipt fails the command and mirrors the complete in-memory payload to standard
+error when possible.
 
 An injected production adapter can implement the state machine method by
 delegating to
 `canonical_ref_cas.CanonicalRefCasAdapter(...,
-window_owner=WINDOW_OWNER).restore_canonical_ref_exact`.
+receipt_path=<new-absolute-path>).restore_canonical_ref_exact`.
 That method returns the exact prior SHA only after all three readbacks match,
 which satisfies the check in `day_zero_migration._restore_canonical_ref_exact`.
+It publishes the same durable receipt on success and before re-raising a
+`CasFailure`; every adapter call requires a new, absolute, single-use path.
+If adapter receipt publication fails or is interrupted, the named receipt is
+complete or absent, the complete in-memory payload is mirrored to standard
+error when possible, and the adapter raises a bounded `CasError` instead of a
+raw `BaseException`.
 It deliberately supplies no adapter for the other `--execute` production
 methods.
 
@@ -430,8 +447,10 @@ environment with no inherited variables, `LC_ALL=C`, global and system Git
 configuration disabled, replacement objects disabled, prompts disabled, and
 SSH transport disabled. Only the tool-created temporary-index and optional-lock
 controls are added for the calls that need them. It independently refuses any
-`LD_*`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `PYTHONHOME`, `PYTHONPATH`, or
-`PYTHONSTARTUP` variable in its own environment. It records a
+`LD_*`, `OPENSSL_CONF`, `OPENSSL_MODULES`, `PYTHONHOME`, `PYTHONINSPECT`,
+`PYTHONPATH`, `PYTHONSTARTUP`, or `PYTHONUSERBASE` variable in its own
+environment. This is the same family and named-variable set cleared in the
+launcher block above. It records a
 credential-redacted version, including redaction of URL and scp-like userinfo,
 and SHA-256 fingerprint of the validated remote URL in its receipt. It checks
 the candidate in a fresh standalone exact
@@ -458,7 +477,10 @@ which must not be used for Day Zero.
 
 Exit `0` alone never accepts any of the four CAS commands. Open the named
 receipt file only after rerunning the release-identity comparisons above, and
-require all of the following: `result` is `"success"`; `tool.path` is `$CAS`;
+require all of the following: `result` is `"success"`;
+`verb` equals the command verb; `dry_run` is `true` exactly for a rehearsal and
+`false` for a live command;
+`tool.path` is `$CAS`;
 `tool.sha256` is `$REVIEWED_CAS_SHA256`; `repo`, `remote`, and `branch` are the
 absolute `$DAEMON_REPO`, `"origin"`, and `"main"`; `timestamp_utc` falls inside
 the current named window; `window_owner` equals `$WINDOW_OWNER` and
@@ -477,22 +499,68 @@ uses its receipt and direct state readback to decide compensation; never
 compensate merely because terminal output was lost when the durable receipt is
 present and valid.
 
-A nonzero exit with `result: "warning"` and
-`transition_outcome: "succeeded-with-unexpected-observation"` means the
-canonical transition succeeded but a later observation prevented clean
-certification. Accept that classification only when the live mutation list is
-the complete verb-specific list above and all three readbacks equal `--to`.
-Keep the window fenced and investigate the named `warning`, but **do not run
-candidate-to-prior compensation** against that state. The receipt's transition
-evidence, not `result` or the process exit alone, decides whether compensation
-may move production.
+Every possible `transition_outcome` has an operator rule:
 
-Receipt paths are single-use. If a process consumed a path but left an empty,
-partial, or malformed file, preserve that file; never delete, overwrite, or
-reuse it. Choose a new unique path in the same mode-`0700` window evidence
-directory and rerun the exact original command. The CAS makes the retry
-non-mutating if the transition already landed. A retry receipt with
-`transition_outcome: "target-already-present"`, no mutations, and all three
-readbacks equal to `--to` proves the retry found the target already present;
-keep the window fenced and investigate the consumed receipt, and do not order
-compensation from the retry's `result` alone.
+- `succeeded`: the live transition has the complete verb-specific ledger and
+  all three final readbacks equal `--to`. Continue only after every other
+  acceptance field also matches.
+- `landed-verification-incomplete`: the canonical transition landed, but some
+  later bookkeeping or verification was incomplete. This requires either all
+  three available readbacks at `--to`, or a complete ledger with no available
+  readback contradicting `--to`. Keep the window fenced, re-observe missing
+  values out of band, and **do not run candidate-to-prior compensation** against
+  this state.
+- `target-already-present`: no mutation was performed and all three readbacks
+  equal `--to`. Treat it as retry evidence, keep the window fenced, investigate
+  the earlier consumed receipt, and do not compensate from the retry result.
+- `not-attempted`: the command was a dry run and performed no owned mutation.
+  A successful rehearsal additionally requires an empty mutation list and all
+  three readbacks equal to `--from`; a failed rehearsal means the production
+  window must not open. Either result authorizes no live state change.
+- `incomplete`: at least one mutation was confirmed, or a remote CAS was
+  attempted and its post-failure remote observation is unavailable, but the
+  complete target state was not certified. Keep the window fenced and read all
+  three surfaces directly. If the remote readback equals `--to`, the production
+  ref CAS landed: do not repeat or reverse it merely from this label; repair
+  remaining local bookkeeping only under a new exact plan. If the remote
+  readback is absent, re-read it out of band before deciding any production
+  move.
+- `not-landed`: no mutation was confirmed and the target was not fully
+  observed. This is not proof that an unreadable remote stayed at `--from`,
+  especially when validation failed before readback. Keep the window fenced,
+  directly re-read the remote, and do not treat the label alone as authority to
+  move production.
+
+On any failure after operation validation, `transition_outcome_source` is
+`"post-failure-readback"`. A push reported failed by the client is reconciled
+against that fresh remote observation; when it equals `--to`, the receipt adds
+`remote-main-cas` to the confirmed mutation ledger and records
+`mutation_reconciliation.remote-main-cas` as
+`"confirmed-by-post-failure-readback"`. Observation failures appear separately
+in `readback_errors`; an unavailable observation is not a contradictory SHA.
+The receipt's transition evidence, not `result` or process exit alone, decides
+whether any compensation may move production.
+
+Receipt paths are single-use. The current writer publishes only complete JSON
+and removes its private temporary file. After a write failure, preserve the
+mirrored payload and any complete named receipt that was published, choose a
+new unique path in the same mode-`0700` evidence directory, and rerun the exact
+original command. Never delete, overwrite, or reuse a named receipt. The CAS
+makes the retry non-mutating if the transition already landed.
+
+`host_identity` is the UTS-namespace nodename, not proof of a physical host.
+Corroborate it with the independently controlled login/session and reviewed
+checkout identity; do not rely on `uname -n` from the same namespace alone.
+`timestamp_utc` is a single wall-clock observation with no monotonic or trusted
+clock corroboration. A timestamp outside the named window rejects the receipt
+but is not evidence that the transition failed; keep the window fenced and
+reconcile the live refs before any state change.
+
+`unsafe-process-environment` is a pre-mutation refusal. Keep the refusal for
+both CLI and adapter paths, including benign `LD_LIBRARY_PATH`: security takes
+precedence during compensation. Do not unset it inside an already-started
+adapter process, because loader effects may already have occurred. Keep
+production fenced, restart the adapter-hosting process from the clean launcher
+environment above, use a new receipt path, and retry only after direct ref
+readback. The accompanying `not-landed` value is not proof about an unreadable
+live remote.
