@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { dirname,resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { makeCore } from "./editor-sql-helper.mjs";
 import { publisherAuthorizeEndpoint, publisherReleaseEndpoint, productionPrepareEndpoint,
   productionPreparationContextEndpoint, productionClaimEndpoint,
@@ -196,13 +199,21 @@ function seedSingleOperationProjectionCase(core,{ suffix,decision="accepted",gro
   const decisions = decision === "unanswered" ? [] : [{ operation_id:operationId,decision,
     ...(decision === "questioned" ? { note:"What changed?" } : {}) }];
   if (legacy) {
+    const normalized = core._normalizeReviewDecisions(core._reviewRevision(revisionId),decisions);
+    assert.equal(normalized.reason,undefined);
+    const receipt = { review_id:reviewId,actor:"slot:damien",created_at:9002,
+      review_revision_id:revisionId,source_revision:sourceRevision,prod_base:"prod-base",
+      evidence_digest:core._reviewRevision(revisionId).evidence_digest,
+      decisions:normalized.decisions };
     core.sql.exec(`INSERT INTO production_reviews
       (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
        receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,reviewId,reviewId,
-    reviewId,"slot:damien",revisionId,sourceRevision,"prod-base",`receipt-${suffix}`,"{}",9002);
-    if (decisions.length) core.sql.exec(`INSERT INTO production_review_decisions
+    reviewId,"slot:damien",revisionId,sourceRevision,"prod-base",core._digest(receipt),
+    core._canonical(receipt),9002);
+    if (normalized.decisions.length) core.sql.exec(`INSERT INTO production_review_decisions
       (review_id,operation_id,decision,note,operation_digest,group_id)
-      VALUES (?,?,?,?,?,?)`,reviewId,operationId,decision,"","digest",groupId);
+      VALUES (?,?,?,?,?,?)`,reviewId,operationId,decision,
+    normalized.decisions[0].note,normalized.decisions[0].operation_digest,groupId);
     core.sql.exec(`INSERT INTO production_review_operations
       (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
        lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,operationId,operationId,reviewId,revisionId,
@@ -502,24 +513,25 @@ test("trusted builder omits fully published reviews without blocking later sourc
 
   const published = recordAccepted({ suffix:"published",
     sourceRef:"data/copy/home.json#lead",prodBase:"prod-base" });
-  core.sql.exec(`INSERT INTO production_releases
-    (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
-     target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
-     membership_hash,created_at,updated_at,schema_version)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  "release-published","release-published","release-published","complete","service:release",
-  "bearer","production","operation-frontier","prod-base","candidate-published","generator",
-  "evidence","manifest","membership",1240,1240,2);
-  core.sql.exec(`INSERT INTO production_release_operation_members
-    (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
-     ordinal) VALUES (?,?,?,?,?,?,?)`,"release-published",published.operationId,
-  published.revisionId,published.sourceRef,"[]",null,0);
-  core.sql.exec(`INSERT INTO production_published_operations
-    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,published_at)
-    VALUES (?,?,?,?,?,?,?)`,published.operationId,"release-published",published.revisionId,
-    published.sourceRef,"dev-published","candidate-published",1240);
-  core.sql.exec("UPDATE production_review_operations SET lifecycle_state='published' WHERE operation_id=?",
-    published.operationId);
+  const publishedProjection = core.productionPreparationContext().projection;
+  const publishedReceipt = publishedProjection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-published",
+    idempotency_key:"release-published",request_digest:"release-published",schema_version:2,
+    target_batch_id:"operation-frontier",base_sha:"prod-base",
+    candidate_sha:"candidate-published",review_receipt_hash:publishedReceipt,
+    review_receipts:[publishedReceipt],projection_identity:"projection-published",
+    accepted_operation_ids:[published.operationId],held_exclusions:[],
+  })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    id:prepared.id,idempotency_key:"authorize-published",request_digest:"authorize-published",
+    review_receipt_hash:publishedReceipt,projection_identity:"projection-published",
+  })).release;
+  const claimed = core.claimAuthorizedProductionRelease({ id:authorized.id,
+    actor:"service:release",credential_channel:"bearer" }).release;
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,actor:"service:release",
+      credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
   const pending = recordAccepted({ suffix:"pending",
     sourceRef:"data/copy/home.json#cta",prodBase:"candidate-published" });
 
@@ -620,6 +632,16 @@ test("normalized frontier backfills existing submitted reviews and drives the fi
   core.initSchema();
   assert.equal(core.publisherSummary().eligible,1);
   assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_operations").count,2);
+});
+
+test("publisher summary cannot bypass receipt integrity after all normalized rows vanish", () => {
+  const core = makeCore(() => 1286);
+  reviewedProjection(core);
+  core.sql.exec("DELETE FROM production_review_operations");
+  assert.equal(core._one("SELECT COUNT(*) AS count FROM production_review_submissions").count,1,
+    "the immutable receipt parent must remain as the operation-frontier mode signal");
+  assert.throws(() => core.publisherSummary(),
+    /operation_frontier_integrity:missing_normalized_row/);
 });
 
 test("History revert batches are first-class production frontier members", () => {
@@ -1003,7 +1025,9 @@ async function observerFrontierFromCore(core) {
   return observerFrontierFromProvider(async (...args) => core.productionPreparationContext(...args));
 }
 
-function consumerReadsOperationQueuesAsEmpty(frontier) {
+// Producer-local approximation only. This is not the authoritative Python
+// queue consumer and must never be described as a cross-boundary consumer test.
+function localFrontierLooksEmpty(frontier) {
   return frontier.pending_operation_count === 0 && frontier.blocked_state === "unblocked";
 }
 
@@ -1026,6 +1050,48 @@ function assertObserverOperationFrontier(actual, expected) {
   assert.deepEqual(Object.keys(actual).sort(),["blocked_state","pending_operation_count"]);
   assert.deepEqual(actual,expected);
 }
+
+function insertCanonicalMalformedEvidence(core,{ suffix,operation }) {
+  const reviewId = `review-malformed-${suffix}`;
+  const revisionId = `revision-malformed-${suffix}`;
+  const sourceRef = `data/copy/malformed-${suffix}.json#lead`;
+  const sourceRevision = `dev-malformed-${suffix}`;
+  const operations = [{ source_ref:sourceRef,source_revision:sourceRevision,
+    prod_base:"prod-base",...operation }];
+  const revisionEvidence = { source_ref:sourceRef,source_revision:sourceRevision,
+    prod_base:"prod-base",commit_sha:sourceRevision,original_hash:"old",proposed_hash:"new",
+    suggestion_ids:[`suggestion-${suffix}`],source_original_text:"old",
+    source_proposed_text:"new",operations };
+  const evidenceDigest = core._digest(revisionEvidence);
+  core.sql.exec(`INSERT INTO production_review_revisions
+    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
+     original_text,proposed_text,source_original_text,source_proposed_text,
+     suggestion_ids_json,operations_json,evidence_digest,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,revisionId,sourceRef,sourceRevision,"prod-base",
+  sourceRevision,"old","new","old","new","old","new",JSON.stringify([`suggestion-${suffix}`]),
+  core._canonical(operations),evidenceDigest,9010);
+  const receipt = { review_id:reviewId,actor:"slot:damien",created_at:9010,sources:[{
+    review_revision_id:revisionId,source_revision:sourceRevision,prod_base:"prod-base",
+    evidence_digest:evidenceDigest,decisions:[],
+  }] };
+  core.sql.exec(`INSERT INTO production_review_submissions
+    (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
+    VALUES (?,?,?,?,?,?,?)`,reviewId,reviewId,reviewId,"slot:damien",core._digest(receipt),
+  core._canonical(receipt),9010);
+  core.sql.exec(`INSERT INTO production_review_submission_sources
+    (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
+    VALUES (?,?,?,?,?)`,reviewId,revisionId,sourceRevision,"prod-base",evidenceDigest);
+  return { reviewId,revisionId,sourceRef };
+}
+
+test("authoritative queue consumer cannot appear without an executing boundary test", () => {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
+  const consumerName = ["prove","queues","empty.py"].join("_");
+  const consumerPath = resolve(repoRoot,"tools",consumerName);
+  assert.equal(existsSync(consumerPath),false,
+    `tools/${consumerName} is now present: replace this tripwire in the same change with a test ` +
+    "that executes the authoritative consumer");
+});
 
 function seedReviewedHeldOperation(core) {
   const sourceRef = "data/copy/home.json#structural";
@@ -1061,6 +1127,139 @@ test("empty-store release service preserves the exact legacy operation projectio
     '{"review_receipts":[],"sources":[],"eligible_operation_count":0}');
   assert.deepEqual(context.projection,{
     review_receipts:[],sources:[],eligible_operation_count:0,
+  });
+});
+
+test("operation frontier schema rejects null and empty normalized identities", () => {
+  const core = makeCore(() => 9001);
+  const schema = core._one(`SELECT sql FROM sqlite_master
+    WHERE type='table' AND name='production_review_operations'`).sql;
+  assert.match(schema,/operation_id TEXT PRIMARY KEY NOT NULL/i);
+  assert.match(schema,/CHECK\s*\(\s*typeof\(operation_id\)='text'\s+AND\s+length\(operation_id\)>0\s*\)/i);
+  assert.match(schema,/decision_id TEXT NOT NULL[^,]*CHECK\s*\(\s*typeof\(decision_id\)='text'\s+AND\s+length\(decision_id\)>0\s*\)/i);
+});
+
+test("operation frontier rejects malformed evidence identities before set comparison", async (t) => {
+  const cases = [
+    ["null-operation-id",{ id:null }],
+    ["empty-operation-id",{ id:"" }],
+    ["numeric-operation-id",{ id:7 }],
+    ["object-operation-id",{ id:{ nested:"id" } }],
+    ["missing-operation-id",{}],
+    ["empty-effective-decision-id",{ id:"operation-empty-decision",decision_id:"" }],
+    ["numeric-effective-decision-id",{ id:"operation-numeric-decision",decision_id:7 }],
+    ["object-effective-decision-id",{ id:"operation-object-decision",decision_id:{ nested:"id" } }],
+  ];
+  for (const [suffix,operation] of cases) await t.test(suffix,async () => {
+    const core = makeCore(() => 9010);
+    insertCanonicalMalformedEvidence(core,{ suffix,operation });
+    await assertOperationProjectionCorruptionFailsClosed(core,"invalid_evidence_identity");
+  });
+});
+
+test("operation frontier rejects identities accepted by a compatible legacy SQLite schema", async (t) => {
+  for (const [suffix,operationId,decisionId] of [
+    ["null-operation",null,"valid-decision"],
+    ["empty-operation","","valid-decision"],
+    ["empty-decision","valid-operation",""],
+  ]) await t.test(suffix,async () => {
+    const core = makeCore(() => 9011);
+    const seeded = insertCanonicalMalformedEvidence(core,{ suffix,
+      operation:{ id:"valid-operation",decision_id:"valid-decision" } });
+    core.sql.exec("DROP TABLE production_review_operations");
+    core.sql.exec(`CREATE TABLE production_review_operations (
+      operation_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL,
+      review_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
+      source_ref TEXT NOT NULL, group_id TEXT, decision TEXT NOT NULL,
+      note TEXT NOT NULL, lifecycle_state TEXT NOT NULL)`);
+    core.sql.exec(`INSERT INTO production_review_operations
+      (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
+       lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,operationId,decisionId,seeded.reviewId,
+    seeded.revisionId,seeded.sourceRef,null,"unanswered","","unpublished");
+    await assertOperationProjectionCorruptionFailsClosed(core,"invalid_normalized_identity");
+  });
+});
+
+test("operation frontier rejects partial source deletion against the immutable receipt", async () => {
+  const core = makeCore(() => 9012);
+  const specs = [
+    { suffix:"accepted",decision:"accepted" },
+    { suffix:"rejected",decision:"rejected" },
+  ];
+  const sources = [];
+  for (const spec of specs) {
+    const sourceRef = `data/copy/receipt-${spec.suffix}.json#lead`;
+    const revisionId = `revision-receipt-${spec.suffix}`;
+    const sourceRevision = `dev-receipt-${spec.suffix}`;
+    const operationId = `operation-receipt-${spec.suffix}`;
+    assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+      source_revision:sourceRevision,prod_base:"prod-base",commit_sha:sourceRevision,
+      original_hash:"old",proposed_hash:"new",original_text:"old",proposed_text:"new",
+      suggestion_ids:[`suggestion-${spec.suffix}`],operations:[{ id:operationId,
+        decision_id:operationId,kind:"replace",source_ref:sourceRef,
+        source_revision:sourceRevision,prod_base:"prod-base" }] }).ok,true);
+    const decisions = [{ operation_id:operationId,decision:spec.decision }];
+    assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+      review_revision_id:revisionId,source_revision:sourceRevision,prod_base:"prod-base",
+      decisions }).ok,true);
+    sources.push({ review_revision_id:revisionId,source_revision:sourceRevision,
+      prod_base:"prod-base",decisions });
+  }
+  assert.equal(core.submitPublisherReview({ id:"review-receipt-multi",
+    idempotency_key:"review-receipt-multi",request_digest:"review-receipt-multi",
+    actor:"slot:damien",sources }).ok,true);
+  core.sql.exec(`DELETE FROM production_review_submission_decisions
+    WHERE review_id=? AND review_revision_id=?`,"review-receipt-multi",
+  "revision-receipt-accepted");
+  core.sql.exec("DELETE FROM production_review_operations WHERE operation_id=?",
+    "operation-receipt-accepted");
+  core.sql.exec(`DELETE FROM production_review_submission_sources
+    WHERE review_id=? AND review_revision_id=?`,"review-receipt-multi",
+  "revision-receipt-accepted");
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_source_set_mismatch");
+});
+
+test("operation frontier rejects coordinated decision mutation against the immutable receipt", async () => {
+  const core = makeCore(() => 9013);
+  reviewedProjection(core);
+  core.sql.exec(`UPDATE production_review_submission_decisions SET decision='rejected'
+    WHERE review_id='review-v2' AND operation_id='op-accepted'`);
+  core.sql.exec(`UPDATE production_review_operations SET decision='rejected'
+    WHERE review_id='review-v2' AND operation_id='op-accepted'`);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_decision_set_mismatch");
+});
+
+test("operation frontier validates canonical receipt JSON and receipt hash", async (t) => {
+  await t.test("hash divergence",async () => {
+    const core = makeCore(() => 9014);
+    reviewedProjection(core);
+    core.sql.exec("UPDATE production_review_submissions SET receipt_hash='changed'");
+    await assertOperationProjectionCorruptionFailsClosed(core,"receipt_hash_mismatch");
+  });
+  await t.test("non-canonical JSON",async () => {
+    const core = makeCore(() => 9014);
+    reviewedProjection(core);
+    const row = core._one("SELECT receipt_json FROM production_review_submissions");
+    core.sql.exec("UPDATE production_review_submissions SET receipt_json=?",
+      JSON.stringify(JSON.parse(row.receipt_json),null,2));
+    await assertOperationProjectionCorruptionFailsClosed(core,"receipt_hash_mismatch");
+  });
+});
+
+test("compatible legacy receipts reject immutable and child divergence", async (t) => {
+  await t.test("hash divergence",async () => {
+    const core = makeCore(() => 9014);
+    seedSingleOperationProjectionCase(core,{ suffix:"legacy-hash",legacy:true });
+    core.sql.exec("UPDATE production_reviews SET receipt_hash='changed'");
+    await assertOperationProjectionCorruptionFailsClosed(core,"receipt_hash_mismatch");
+  });
+  await t.test("decision child deletion",async () => {
+    const core = makeCore(() => 9014);
+    seedSingleOperationProjectionCase(core,{ suffix:"legacy-child",legacy:true });
+    core.sql.exec("DELETE FROM production_review_decisions");
+    await assertOperationProjectionCorruptionFailsClosed(core,"receipt_decision_set_mismatch");
   });
 });
 
@@ -1126,7 +1325,7 @@ test("observer operation frontier blocks invalid or missing held operation count
   }
 });
 
-test("observer operation frontier blocks rather than truncates sums over the consumer count bound", async () => {
+test("observer operation frontier blocks rather than truncates sums over the contract count bound", async () => {
   const bounded = await observerFrontier({ projection:{
     eligible_operation_count:60_000,held_operation_count:40_000,
   } });
@@ -1173,7 +1372,7 @@ test("observer operation frontier reports bounded blockage when projection is un
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:0,blocked_state:"blocked",
   });
-  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false,
+  assert.equal(localFrontierLooksEmpty(context.operation_frontier),false,
     "a blocked zero count must fail closed rather than prove the frontier empty");
   assert.deepEqual(calls,[[],[{ tolerateOperationProjectionFailure:true }]],
     "release service must use the default path while observers request tolerant projection");
@@ -1360,6 +1559,175 @@ test("operation frontier rejects publication candidate mismatches", async () => 
   await assertOperationProjectionCorruptionFailsClosed(core,"publication_release_mismatch");
 });
 
+test("operation frontier rejects a late member appended after real release completion", async () => {
+  let now = 9020;
+  const core = makeCore(() => now);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-frozen-proof",
+    idempotency_key:"release-frozen-proof",request_digest:"release-frozen-proof",
+    schema_version:2,target_batch_id:"operation-frontier",candidate_sha:"candidate-frozen-proof",
+    review_receipt_hash:receipt,review_receipts:[receipt],projection_identity:"frozen-proof",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[{
+      operation_id:"op-held",decision:"rejected",reason:"rejected",
+    }],
+  })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    id:prepared.id,idempotency_key:"authorize-frozen-proof",
+    request_digest:"authorize-frozen-proof",review_receipt_hash:receipt,
+    projection_identity:"frozen-proof",
+  })).release;
+  const claimed = core.claimAuthorizedProductionRelease({ id:authorized.id,
+    actor:"service:release",credential_channel:"bearer" }).release;
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,
+      actor:"service:release",credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
+  const completionTime = core._one(`SELECT created_at FROM production_release_events
+    WHERE release_id=? AND type='complete'`,prepared.id).created_at;
+
+  now = 9030;
+  const sourceRef = "data/copy/late-after-completion.json#lead";
+  const operationId = "op-late-after-completion";
+  assert.equal(core.recordReviewRevision({ id:"revision-late-after-completion",
+    source_ref:sourceRef,source_revision:"dev-late",prod_base:prepared.candidate_sha,
+    commit_sha:"dev-late",original_hash:"old",proposed_hash:"new",original_text:"old",
+    proposed_text:"new",suggestion_ids:["suggestion-late"],operations:[{ id:operationId,
+      decision_id:operationId,kind:"replace",source_ref:sourceRef,source_revision:"dev-late",
+      prod_base:prepared.candidate_sha }] }).ok,true);
+  const decisions = [{ operation_id:operationId,decision:"accepted" }];
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-late-after-completion",source_revision:"dev-late",
+    prod_base:prepared.candidate_sha,decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-late-after-completion",
+    idempotency_key:"review-late-after-completion",request_digest:"review-late-after-completion",
+    actor:"slot:damien",review_revision_id:"revision-late-after-completion",
+    source_revision:"dev-late",prod_base:prepared.candidate_sha,decisions }).ok,true);
+
+  core.sql.exec(`INSERT INTO production_release_operation_members
+    (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
+     ordinal) VALUES (?,?,?,?,?,?,?)`,prepared.id,operationId,"revision-late-after-completion",
+  sourceRef,JSON.stringify([sourceRef]),null,1);
+  core.sql.exec(`INSERT INTO production_published_operations
+    (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
+     published_at) VALUES (?,?,?,?,?,?,?)`,operationId,prepared.id,
+  "revision-late-after-completion",sourceRef,"dev-late",prepared.candidate_sha,completionTime);
+  core.sql.exec(`INSERT INTO production_published_operation_sources
+    (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)`,
+  operationId,sourceRef,prepared.id,prepared.candidate_sha,completionTime);
+  core.sql.exec(`UPDATE production_review_operations SET lifecycle_state='published'
+    WHERE operation_id=?`,operationId);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
+});
+
+test("operation frontier requires exact source-publication children from real completion", async () => {
+  const core = makeCore(() => 9031);
+  const projection = reviewedProjection(core);
+  const receipt = projection.review_receipts[0].receipt_hash;
+  const prepared = core.prepareProductionRelease(release({ id:"release-source-proof",
+    idempotency_key:"release-source-proof",request_digest:"release-source-proof",
+    schema_version:2,target_batch_id:"operation-frontier",candidate_sha:"candidate-source-proof",
+    review_receipt_hash:receipt,review_receipts:[receipt],projection_identity:"source-proof",
+    accepted_operation_ids:["op-accepted"],held_exclusions:[{
+      operation_id:"op-held",decision:"rejected",reason:"rejected",
+    }],
+  })).release;
+  const authorized = core.authorizeProductionRelease(authorize(prepared,{
+    id:prepared.id,idempotency_key:"authorize-source-proof",
+    request_digest:"authorize-source-proof",review_receipt_hash:receipt,
+    projection_identity:"source-proof",
+  })).release;
+  const claimed = core.claimAuthorizedProductionRelease({ id:authorized.id,
+    actor:"service:release",credential_channel:"bearer" }).release;
+  for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+    assert.equal(core.transitionProductionRelease({ id:claimed.id,state,
+      actor:"service:release",credential_channel:"bearer",fencing_token:claimed.fencing_token,
+      detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
+  core.sql.exec("DELETE FROM production_published_operation_sources WHERE release_id=?",
+    prepared.id);
+
+  await assertOperationProjectionCorruptionFailsClosed(core,
+    "publication_release_evidence_mismatch");
+});
+
+test("operation frontier binds deployment evidence to a preceding real execution claim", async (t) => {
+  const completed = (suffix) => {
+    const core = makeCore(() => 9032);
+    const projection = reviewedProjection(core);
+    const receipt = projection.review_receipts[0].receipt_hash;
+    const prepared = core.prepareProductionRelease(release({ id:`release-claim-${suffix}`,
+      idempotency_key:`release-claim-${suffix}`,request_digest:`release-claim-${suffix}`,
+      schema_version:2,target_batch_id:"operation-frontier",
+      candidate_sha:`candidate-claim-${suffix}`,review_receipt_hash:receipt,
+      review_receipts:[receipt],projection_identity:`claim-${suffix}`,
+      accepted_operation_ids:["op-accepted"],held_exclusions:[{
+        operation_id:"op-held",decision:"rejected",reason:"rejected",
+      }],
+    })).release;
+    const authorized = core.authorizeProductionRelease(authorize(prepared,{
+      id:prepared.id,idempotency_key:`authorize-claim-${suffix}`,
+      request_digest:`authorize-claim-${suffix}`,review_receipt_hash:receipt,
+      projection_identity:`claim-${suffix}`,
+    })).release;
+    const claimed = core.claimAuthorizedProductionRelease({ id:authorized.id,
+      actor:"service:release",credential_channel:"bearer" }).release;
+    for (const state of ["pages_deployed","worker_deployed","verified","complete"])
+      assert.equal(core.transitionProductionRelease({ id:claimed.id,state,
+        actor:"service:release",credential_channel:"bearer",fencing_token:claimed.fencing_token,
+        detail:{ candidate_sha:prepared.candidate_sha } }).ok,true);
+    return { core,releaseId:prepared.id };
+  };
+
+  await t.test("deployment before claim",async () => {
+    const { core,releaseId } = completed("ordering");
+    core.sql.exec(`UPDATE production_release_events SET type='event-swap'
+      WHERE release_id=? AND type='executing'`,releaseId);
+    core.sql.exec(`UPDATE production_release_events SET type='executing'
+      WHERE release_id=? AND type='pages_deployed'`,releaseId);
+    core.sql.exec(`UPDATE production_release_events SET type='pages_deployed'
+      WHERE release_id=? AND type='event-swap'`,releaseId);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+
+  await t.test("deployment with unissued fence",async () => {
+    const { core,releaseId } = completed("fence");
+    const event = core._one(`SELECT id,detail_json FROM production_release_events
+      WHERE release_id=? AND type='pages_deployed'`,releaseId);
+    const detail = JSON.parse(event.detail_json);
+    detail.fencing_token = "unissued-fence";
+    core.sql.exec("UPDATE production_release_events SET detail_json=? WHERE id=?",
+      JSON.stringify(detail),event.id);
+    await assertOperationProjectionCorruptionFailsClosed(core,
+      "publication_release_evidence_mismatch");
+  });
+
+});
+
+test("operation frontier rejects source publications without completed v2 operation parents", async (t) => {
+  for (const [suffix,state,schemaVersion] of [
+    ["missing",null,null],["incomplete","prepared",2],["legacy","complete",1],
+  ]) await t.test(suffix,async () => {
+    const core = makeCore(() => 9033);
+    const releaseId = `release-source-orphan-${suffix}`;
+    if (state) core.sql.exec(`INSERT INTO production_releases
+      (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
+       target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
+       membership_hash,created_at,updated_at,schema_version)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,releaseId,releaseId,state,
+    "service:release","bearer","production","operation-frontier","base","candidate",
+    "generator","evidence","manifest","membership",9033,9033,schemaVersion);
+    core.sql.exec(`INSERT INTO production_published_operation_sources
+      (operation_id,source_ref,release_id,candidate_sha,published_at) VALUES (?,?,?,?,?)`,
+    `operation-source-orphan-${suffix}`,`data/copy/source-orphan-${suffix}.json#lead`,
+    releaseId,"candidate",9033);
+    assert.throws(() => core._operationFrontierSummaryProjection(),
+      /operation_frontier_integrity:publication_source_missing_operation/);
+  });
+});
+
 test("operation frontier rejects unknown operation lifecycle states", async () => {
   const core = makeCore(() => 9019);
   reviewedProjection(core);
@@ -1393,7 +1761,7 @@ test("operation frontier rejects duplicate submitted operation evidence", async 
   operations.push(operations[0]);
   core.sql.exec("UPDATE production_review_revisions SET operations_json=? WHERE id=?",
     JSON.stringify(operations),"revision-v2");
-  await assertOperationProjectionCorruptionFailsClosed(core,"missing_normalized_row");
+  await assertOperationProjectionCorruptionFailsClosed(core,"receipt_revision_mismatch");
 });
 
 test("observer operation frontier reports held-only operation work", async () => {
@@ -1405,7 +1773,7 @@ test("observer operation frontier reports held-only operation work", async () =>
   });
 });
 
-test("observer consumer does not read an unanswered-only submission as empty", async () => {
+test("producer-local frontier approximation rejects unanswered-only work as empty", async () => {
   const core = makeCore(() => 9020);
   const sourceRef = "data/copy/unanswered.json#lead";
   assert.equal(core.recordReviewRevision({ id:"revision-unanswered",source_ref:sourceRef,
@@ -1428,39 +1796,21 @@ test("observer consumer does not read an unanswered-only submission as empty", a
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
-  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+  assert.equal(localFrontierLooksEmpty(context.operation_frontier),false);
 });
 
-test("observer consumer does not read legacy normalized review work as empty", async () => {
+test("producer-local frontier approximation rejects legacy normalized work as empty", async () => {
   const core = makeCore(() => 9020);
-  const sourceRef = "data/copy/legacy.json#lead";
-  const operation = { id:"operation-legacy",kind:"replace",source_ref:sourceRef,
-    source_revision:"dev-legacy",prod_base:"prod-base",old_text:"Original",new_text:"Proposal" };
-  assert.equal(core.recordReviewRevision({ id:"revision-legacy",source_ref:sourceRef,
-    source_revision:"dev-legacy",prod_base:"prod-base",commit_sha:"dev-legacy",
-    original_hash:"old",proposed_hash:"new",original_text:"Original",proposed_text:"Proposal",
-    suggestion_ids:["suggestion-legacy"],operations:[operation] }).ok,true);
-  core.sql.exec(`INSERT INTO production_reviews
-    (id,idempotency_key,request_digest,actor,review_revision_id,source_revision,prod_base,
-      receipt_hash,receipt_json,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  "review-legacy","review-legacy","review-legacy","slot:damien","revision-legacy",
-  "dev-legacy","prod-base","receipt-legacy","{}",9020);
-  core.sql.exec(`INSERT INTO production_review_decisions
-    (review_id,operation_id,decision,note,operation_digest,group_id)
-    VALUES (?,?,?,?,?,?)`,"review-legacy","operation-legacy","accepted","","digest",null);
-  core.sql.exec(`INSERT INTO production_review_operations
-    (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
-      lifecycle_state) VALUES (?,?,?,?,?,?,?,?,?)`,"operation-legacy","operation-legacy",
-  "review-legacy","revision-legacy",sourceRef,null,"accepted","","unpublished");
+  seedSingleOperationProjectionCase(core,{ suffix:"observer-legacy",legacy:true });
 
   const context = await observerFrontierFromCore(core);
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
-  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+  assert.equal(localFrontierLooksEmpty(context.operation_frontier),false);
 });
 
-test("observer consumer does not read a stale accepted operation as empty", async () => {
+test("producer-local frontier approximation rejects stale accepted work as empty", async () => {
   const core = makeCore(() => 9021);
   reviewedProjection(core);
   core.now = () => 9022;
@@ -1485,10 +1835,10 @@ test("observer consumer does not read a stale accepted operation as empty", asyn
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
-  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+  assert.equal(localFrontierLooksEmpty(context.operation_frontier),false);
 });
 
-test("observer consumer does not read non-structural group or move-pair holds as empty", async () => {
+test("producer-local frontier approximation rejects semantic group holds as empty", async () => {
   for (const linkageKey of ["group_id","move_pair_id"]) {
     const core = makeCore(() => 9022);
     const suffix = linkageKey === "group_id" ? "group" : "move";
@@ -1527,11 +1877,11 @@ test("observer consumer does not read non-structural group or move-pair holds as
     assertObserverOperationFrontier(context.operation_frontier,{
       pending_operation_count:1,blocked_state:"unblocked",
     });
-    assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+    assert.equal(localFrontierLooksEmpty(context.operation_frontier),false);
   }
 });
 
-test("observer consumer does not read a frozen accepted v2 member as empty", async () => {
+test("producer-local frontier approximation rejects frozen accepted work as empty", async () => {
   const core = makeCore(() => 9023);
   const projection = reviewedProjection(core);
   const receipt = projection.review_receipts[0].receipt_hash;
@@ -1549,7 +1899,7 @@ test("observer consumer does not read a frozen accepted v2 member as empty", asy
   assertObserverOperationFrontier(context.operation_frontier,{
     pending_operation_count:1,blocked_state:"unblocked",
   });
-  assert.equal(consumerReadsOperationQueuesAsEmpty(context.operation_frontier),false);
+  assert.equal(localFrontierLooksEmpty(context.operation_frontier),false);
 });
 
 test("observer operation frontier survives an active release with truthful counts", async () => {
@@ -1595,29 +1945,32 @@ test("observer operation frontier survives missing batch evidence with truthful 
 
 function seedHighCardinalityReview(core,{ operationCount,prefix,normalized=true }) {
   const sourceRef = `data/copy/${prefix}.json#lead`;
-  const operationsJson = `[${Array.from({ length:operationCount },(_value,index) =>
-    `{"id":"${prefix}-operation-${String(index).padStart(6,"0")}"}`).join(",")}]`;
-  core.sql.exec(`INSERT INTO production_review_revisions
-    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
-     original_text,proposed_text,source_original_text,source_proposed_text,
-     suggestion_ids_json,operations_json,evidence_digest,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,`revision-${prefix}`,sourceRef,`dev-${prefix}`,
-    "prod-base",`dev-${prefix}`,"old","new","source text must not be projected","proposal",
-    "source text must not be projected","proposal","[]",operationsJson,`evidence-${prefix}`,9042);
+  const operations = Array.from({ length:operationCount },(_value,index) => ({
+    id:`${prefix}-operation-${String(index).padStart(6,"0")}`,source_ref:sourceRef,
+    source_revision:`dev-${prefix}`,prod_base:"prod-base",
+  }));
+  assert.equal(core.recordReviewRevision({ id:`revision-${prefix}`,source_ref:sourceRef,
+    source_revision:`dev-${prefix}`,prod_base:"prod-base",commit_sha:`dev-${prefix}`,
+    original_hash:"old",proposed_hash:"new",original_text:"source text must not be projected",
+    proposed_text:"proposal",suggestion_ids:[],operations }).ok,true);
+  const revision = core._reviewRevision(`revision-${prefix}`);
+  const receipt = { review_id:`review-${prefix}`,actor:"slot:damien",created_at:9042,
+    sources:[{ review_revision_id:revision.id,source_revision:revision.source_revision,
+      prod_base:revision.prod_base,evidence_digest:revision.evidence_digest,decisions:[] }] };
   core.sql.exec(`INSERT INTO production_review_submissions
     (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
     VALUES (?,?,?,?,?,?,?)`,`review-${prefix}`,`review-${prefix}`,
-    `review-${prefix}`,"slot:damien",`receipt-${prefix}`,"{}",9042);
+    `review-${prefix}`,"slot:damien",core._digest(receipt),core._canonical(receipt),9042);
   core.sql.exec(`INSERT INTO production_review_submission_sources
     (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
     VALUES (?,?,?,?,?)`,`review-${prefix}`,`revision-${prefix}`,`dev-${prefix}`,
-    "prod-base",`evidence-${prefix}`);
+    "prod-base",revision.evidence_digest);
   if (normalized) core.sql.exec(`INSERT INTO production_review_operations
       (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
        lifecycle_state)
       SELECT json_extract(value,'$.id'),json_extract(value,'$.id'),?, ?, ?,NULL,'unanswered','',
-        'unpublished' FROM json_each(?)`,`review-${prefix}`,`revision-${prefix}`,
-  sourceRef,operationsJson);
+        'unpublished' FROM json_each(?)`,`review-${prefix}`,`revision-${prefix}`,sourceRef,
+  revision.operations_json);
   core.sql.exec(`INSERT INTO production_releases
     (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
      target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
@@ -1634,85 +1987,160 @@ function seedRejectedAndPublishedHistory(core,{ rejectedCount,publishedCount,pre
   const revisionId = `revision-${prefix}`;
   const reviewId = `review-${prefix}`;
   const releaseId = `release-${prefix}`;
-  const operationsJson = `[${Array.from({ length:operationCount },(_value,index) =>
-    `{"id":"${prefix}-operation-${String(index).padStart(6,"0")}"}`).join(",")}]`;
-  core.sql.exec(`INSERT INTO production_review_revisions
-    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
-     original_text,proposed_text,source_original_text,source_proposed_text,
-     suggestion_ids_json,operations_json,evidence_digest,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,revisionId,sourceRef,`dev-${prefix}`,
-  "prod-base",`dev-${prefix}`,"old","new","historical source text","proposal",
-  "historical source text","proposal","[]",operationsJson,`evidence-${prefix}`,9043);
+  const operations = Array.from({ length:operationCount },(_value,index) => ({
+    id:`${prefix}-operation-${String(index).padStart(6,"0")}`,source_ref:sourceRef,
+    source_revision:`dev-${prefix}`,prod_base:"prod-base",
+  }));
+  assert.equal(core.recordReviewRevision({ id:revisionId,source_ref:sourceRef,
+    source_revision:`dev-${prefix}`,prod_base:"prod-base",commit_sha:`dev-${prefix}`,
+    original_hash:"old",proposed_hash:"new",original_text:"historical source text",
+    proposed_text:"proposal",suggestion_ids:[],operations }).ok,true);
+  const revision = core._reviewRevision(revisionId);
+  const decisions = operations.map((operation,index) => ({ operation_id:operation.id,
+    operation_digest:core._digest(operation),group_id:null,
+    decision:index < rejectedCount ? "rejected" : "accepted",note:"" }));
+  const receipt = { review_id:reviewId,actor:"slot:damien",created_at:9043,sources:[{
+    review_revision_id:revisionId,source_revision:`dev-${prefix}`,prod_base:"prod-base",
+    evidence_digest:revision.evidence_digest,decisions }] };
+  const receiptHash = core._digest(receipt);
   core.sql.exec(`INSERT INTO production_review_submissions
     (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
-    VALUES (?,?,?,?,?,?,?)`,reviewId,reviewId,reviewId,"slot:damien",`receipt-${prefix}`,
-  "{}",9043);
+    VALUES (?,?,?,?,?,?,?)`,reviewId,reviewId,reviewId,"slot:damien",receiptHash,
+  core._canonical(receipt),9043);
   core.sql.exec(`INSERT INTO production_review_submission_sources
     (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
-    VALUES (?,?,?,?,?)`,reviewId,revisionId,`dev-${prefix}`,"prod-base",`evidence-${prefix}`);
+    VALUES (?,?,?,?,?)`,reviewId,revisionId,`dev-${prefix}`,"prod-base",revision.evidence_digest);
   core.sql.exec(`INSERT INTO production_review_submission_decisions
     (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
-    SELECT ?,?,json_extract(value,'$.id'),
-      CASE WHEN CAST(key AS INTEGER)<? THEN 'rejected' ELSE 'accepted' END,'','digest',NULL
-    FROM json_each(?)`,reviewId,revisionId,rejectedCount,operationsJson);
+    SELECT ?,?,json_extract(value,'$.operation_id'),json_extract(value,'$.decision'),
+      json_extract(value,'$.note'),
+      json_extract(value,'$.operation_digest'),NULL FROM json_each(?)`,reviewId,revisionId,
+  JSON.stringify(decisions));
   core.sql.exec(`INSERT INTO production_review_operations
     (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
      lifecycle_state)
     SELECT json_extract(value,'$.id'),json_extract(value,'$.id'),?,?,?,NULL,
       CASE WHEN CAST(key AS INTEGER)<? THEN 'rejected' ELSE 'accepted' END,'',
       CASE WHEN CAST(key AS INTEGER)<? THEN 'unpublished' ELSE 'published' END
-    FROM json_each(?)`,reviewId,revisionId,sourceRef,rejectedCount,rejectedCount,operationsJson);
+    FROM json_each(?)`,reviewId,revisionId,sourceRef,rejectedCount,rejectedCount,
+  revision.operations_json);
+  const members = operations.slice(rejectedCount).map((operation,ordinal) => ({
+    operation_id:operation.id,review_revision_id:revisionId,source_ref:sourceRef,
+    source_revision:`dev-${prefix}`,affected_source_refs:[sourceRef],group_id:null,ordinal,
+  }));
+  const held = operations.slice(0,rejectedCount).map((operation) => ({
+    operation_id:operation.id,decision:"rejected",reason:"rejected",
+  }));
+  const membershipMembers = members.map(({ ordinal,...member }) => member);
+  const membershipHash = core._fingerprint(JSON.stringify(membershipMembers),JSON.stringify(held),
+    ["prod-base",`candidate-${prefix}`,"generator","evidence","manifest",receiptHash,
+      `projection-${prefix}`].join("\0"));
   core.sql.exec(`INSERT INTO production_releases
     (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,
      target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,
-     membership_hash,created_at,updated_at,schema_version)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,
-  releaseId,releaseId,"complete","service:release","bearer","production","operation-frontier",
-  "prod-base",`candidate-${prefix}`,"generator","evidence","manifest","membership",9043,9043,2);
+     membership_hash,created_at,updated_at,schema_version,review_receipt_hash,
+     projection_identity,authorization_key,authorization_digest,fencing_token)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,releaseId,releaseId,releaseId,
+  "complete","slot:damien","access","production","operation-frontier","prod-base",
+  `candidate-${prefix}`,"generator","evidence","manifest",membershipHash,9043,9043,2,
+  receiptHash,`projection-${prefix}`,`authorization-${prefix}`,`authorization-digest-${prefix}`,
+  `fence-${prefix}`);
   core.sql.exec(`INSERT INTO production_release_operation_members
     (release_id,operation_id,review_revision_id,source_ref,affected_source_refs_json,group_id,
      ordinal)
-    SELECT ?,operation_id,review_revision_id,source_ref,'[]',NULL,
+    SELECT ?,operation_id,review_revision_id,source_ref,?,NULL,
       ROW_NUMBER() OVER (ORDER BY operation_id)-1
-    FROM production_review_operations WHERE lifecycle_state='published'`,releaseId);
+    FROM production_review_operations WHERE lifecycle_state='published'`,releaseId,
+  JSON.stringify([sourceRef]));
+  core.sql.exec(`INSERT INTO production_release_held_exclusions
+    (release_id,operation_id,decision,reason)
+    SELECT ?,operation_id,'rejected','rejected' FROM production_review_operations
+    WHERE decision='rejected'`,releaseId);
   core.sql.exec(`INSERT INTO production_published_operations
     (operation_id,release_id,review_revision_id,source_ref,source_revision,candidate_sha,
      published_at)
     SELECT operation_id,?,review_revision_id,source_ref,?, ?,?
     FROM production_review_operations WHERE lifecycle_state='published'`,releaseId,
   `dev-${prefix}`,`candidate-${prefix}`,9043);
+  core.sql.exec(`INSERT INTO production_published_operation_sources
+    (operation_id,source_ref,release_id,candidate_sha,published_at)
+    SELECT operation_id,source_ref,?,candidate_sha,published_at
+    FROM production_published_operations WHERE release_id=?`,releaseId,releaseId);
+  const releaseRow = core._one("SELECT * FROM production_releases WHERE id=?",releaseId);
+  const eventDetails = [
+    ["prepared",core._releaseEvidenceBinding(releaseRow)],
+    ["authorized",core._releaseEvidenceBinding(releaseRow,{ authorization:true })],
+    ...["executing","pages_deployed","worker_deployed","verified","complete"].map((type) =>
+      [type,core._releaseEvidenceBinding(releaseRow,{ authorization:true,fencing:true })]),
+  ];
+  for (const [type,detail] of eventDetails) core.sql.exec(`INSERT INTO production_release_events
+    (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)`,releaseId,type,
+  "service:release",JSON.stringify(detail),9043);
 }
 
 function seedManySmallPendingRevisions(core,{ revisionCount,prefix }) {
-  const sequence = `WITH RECURSIVE sequence(value) AS (
-    SELECT 0 UNION ALL SELECT value+1 FROM sequence WHERE value+1<?)`;
-  const id = (label) => `'${prefix}-${label}-' || printf('%06d',value)`;
-  const sourceRef = `'data/copy/${prefix}-' || printf('%06d',value) || '.json#lead'`;
-  core.sql.exec(`${sequence} INSERT INTO production_review_revisions
-    (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
-     original_text,proposed_text,source_original_text,source_proposed_text,
-     suggestion_ids_json,operations_json,evidence_digest,created_at)
-    SELECT ${id("revision")},${sourceRef},${id("source")},'prod-base',${id("source")},
-      'old','new','source text','proposal','source text','proposal','[]',
-      json_array(json_object('id',${id("operation")},'decision_id',${id("operation")},
-        'kind','replace','source_ref',${sourceRef})),'evidence',9044 FROM sequence`,revisionCount);
-  core.sql.exec(`${sequence} INSERT INTO production_review_submissions
+  const reviewId = `${prefix}-review`;
+  const revisionRows = [],receiptSources = [],decisionRows = [];
+  for (let index=0;index<revisionCount;index++) {
+    const suffix = String(index).padStart(6,"0");
+    const revisionId = `${prefix}-revision-${suffix}`;
+    const operationId = `${prefix}-operation-${suffix}`;
+    const sourceRevision = `${prefix}-source-${suffix}`;
+    const sourceRef = `data/copy/${prefix}-${suffix}.json#lead`;
+    const operation = { id:operationId,decision_id:operationId,kind:"replace",
+      source_ref:sourceRef,source_revision:sourceRevision,prod_base:"prod-base" };
+    const evidence = { source_ref:sourceRef,source_revision:sourceRevision,
+      prod_base:"prod-base",commit_sha:sourceRevision,original_hash:"old",proposed_hash:"new",
+      suggestion_ids:[],source_original_text:"source text",source_proposed_text:"proposal",
+      operations:[operation] };
+    const evidenceDigest = core._digest(evidence);
+    revisionRows.push({ id:revisionId,source_ref:sourceRef,source_revision:sourceRevision,
+      prod_base:"prod-base",commit_sha:sourceRevision,original_hash:"old",proposed_hash:"new",
+      original_text:"source text",proposed_text:"proposal",source_original_text:"source text",
+      source_proposed_text:"proposal",suggestion_ids_json:"[]",
+      operations_json:core._canonical([operation]),evidence_digest:evidenceDigest,created_at:9044 });
+    const decision = { operation_id:operationId,operation_digest:core._digest(operation),
+      group_id:null,decision:"accepted",note:"" };
+    receiptSources.push({ review_revision_id:revisionId,source_revision:sourceRevision,
+      prod_base:"prod-base",evidence_digest:evidenceDigest,decisions:[decision] });
+    decisionRows.push({ review_revision_id:revisionId,...decision });
+  }
+  for (let start=0;start<revisionRows.length;start+=500) core.sql.exec(`
+    INSERT INTO production_review_revisions
+      (id,source_ref,source_revision,prod_base,commit_sha,original_hash,proposed_hash,
+       original_text,proposed_text,source_original_text,source_proposed_text,suggestion_ids_json,
+       operations_json,evidence_digest,created_at)
+    SELECT json_extract(value,'$.id'),json_extract(value,'$.source_ref'),
+      json_extract(value,'$.source_revision'),json_extract(value,'$.prod_base'),
+      json_extract(value,'$.commit_sha'),json_extract(value,'$.original_hash'),
+      json_extract(value,'$.proposed_hash'),json_extract(value,'$.original_text'),
+      json_extract(value,'$.proposed_text'),json_extract(value,'$.source_original_text'),
+      json_extract(value,'$.source_proposed_text'),json_extract(value,'$.suggestion_ids_json'),
+      json_extract(value,'$.operations_json'),json_extract(value,'$.evidence_digest'),
+      json_extract(value,'$.created_at') FROM json_each(?)`,JSON.stringify(
+    revisionRows.slice(start,start+500)));
+  const receipt = { review_id:reviewId,actor:"slot:damien",created_at:9044,
+    sources:receiptSources };
+  core.sql.exec(`INSERT INTO production_review_submissions
     (id,idempotency_key,request_digest,actor,receipt_hash,receipt_json,created_at)
-    SELECT ${id("review")},${id("review")},${id("review")},'slot:damien',
-      ${id("receipt")},'{}',9044 FROM sequence`,revisionCount);
-  core.sql.exec(`${sequence} INSERT INTO production_review_submission_sources
+    VALUES (?,?,?,?,?,?,?)`,reviewId,reviewId,reviewId,"slot:damien",core._digest(receipt),
+  core._canonical(receipt),9044);
+  core.sql.exec(`INSERT INTO production_review_submission_sources
     (review_id,review_revision_id,source_revision,prod_base,evidence_digest)
-    SELECT ${id("review")},${id("revision")},${id("source")},'prod-base','evidence'
-    FROM sequence`,revisionCount);
-  core.sql.exec(`${sequence} INSERT INTO production_review_submission_decisions
+    SELECT ?,id,source_revision,prod_base,evidence_digest FROM production_review_revisions`,reviewId);
+  core.sql.exec(`INSERT INTO production_review_submission_decisions
     (review_id,review_revision_id,operation_id,decision,note,operation_digest,group_id)
-    SELECT ${id("review")},${id("revision")},${id("operation")},'accepted','','digest',NULL
-    FROM sequence`,revisionCount);
-  core.sql.exec(`${sequence} INSERT INTO production_review_operations
+    SELECT ?,json_extract(value,'$.review_revision_id'),json_extract(value,'$.operation_id'),
+      json_extract(value,'$.decision'),json_extract(value,'$.note'),
+      json_extract(value,'$.operation_digest'),NULL FROM json_each(?)`,reviewId,
+  JSON.stringify(decisionRows));
+  core.sql.exec(`INSERT INTO production_review_operations
     (operation_id,decision_id,review_id,review_revision_id,source_ref,group_id,decision,note,
      lifecycle_state)
-    SELECT ${id("operation")},${id("operation")},${id("review")},${id("revision")},
-      ${sourceRef},NULL,'accepted','','unpublished' FROM sequence`,revisionCount);
+    SELECT json_extract(operation.value,'$.id'),json_extract(operation.value,'$.decision_id'),?,
+      revision.id,revision.source_ref,NULL,'accepted','','unpublished'
+    FROM production_review_revisions revision JOIN json_each(revision.operations_json) operation`,
+  reviewId);
 }
 
 test("observer operation frontier bounds normalized and evidence high-cardinality projections", async () => {
@@ -1769,6 +2197,52 @@ test("observer operation frontier ignores high-cardinality rejected and publishe
   });
   assert.deepEqual(core._operationFrontierSummaryProjection(),{
     eligible_operation_count:0,held_operation_count:0,
+  });
+});
+
+test("observer operation frontier does not materialize rejected rows beside pending work", async () => {
+  const core = makeCore(() => 9043);
+  const sourceRef = "data/copy/mixed-history.json#lead";
+  const operations = Array.from({ length:12_001 },(_value,index) => {
+    const id = `mixed-history-operation-${String(index).padStart(5,"0")}`;
+    return { id,decision_id:id,kind:"replace",source_ref:sourceRef,
+      source_revision:"dev-mixed-history",prod_base:"prod-base" };
+  });
+  assert.equal(core.recordReviewRevision({ id:"revision-mixed-history",source_ref:sourceRef,
+    source_revision:"dev-mixed-history",prod_base:"prod-base",commit_sha:"dev-mixed-history",
+    original_hash:"old",proposed_hash:"new",original_text:"old",proposed_text:"new",
+    suggestion_ids:["suggestion-mixed-history"],operations }).ok,true);
+  const pendingId = operations.at(-1).id;
+  const decisions = operations.map((operation) => ({ operation_id:operation.id,
+    decision:operation.id === pendingId ? "accepted" : "rejected" }));
+  assert.equal(core.savePublisherReviewDraft({ actor:"slot:damien",
+    review_revision_id:"revision-mixed-history",source_revision:"dev-mixed-history",
+    prod_base:"prod-base",decisions }).ok,true);
+  assert.equal(core.submitPublisherReview({ id:"review-mixed-history",
+    idempotency_key:"review-mixed-history",request_digest:"review-mixed-history",
+    actor:"slot:damien",review_revision_id:"revision-mixed-history",
+    source_revision:"dev-mixed-history",prod_base:"prod-base",decisions }).ok,true);
+  assert.equal(core._one(`SELECT COUNT(*) AS count FROM production_review_operations
+    WHERE lifecycle_state='unpublished' AND decision='accepted'`).count,1,
+  "the fixture must contain exactly one pending operation");
+  assert.equal(core._operationFrontierCandidateRevisions().length,1,
+    "the pending operation must admit its revision to summary discovery");
+  assert.doesNotThrow(() => core._assertOperationFrontierIntegrity(),
+    "the mixed-history fixture must be internally coherent");
+
+  const materialized = [];
+  const all = core._all.bind(core);
+  core._all = (sql,...args) => {
+    const rows = all(sql,...args);
+    if (sql.includes("normalized.*"))
+      materialized.push(...rows.map((row) => row.operation_id));
+    return rows;
+  };
+  const context = await observerFrontierFromCore(core);
+  assert.deepEqual(materialized,[pendingId,pendingId],
+    "only the pending universe should be materialized across the two summary passes");
+  assertObserverOperationFrontier(context.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
   });
 });
 
