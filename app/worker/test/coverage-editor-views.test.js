@@ -16,8 +16,9 @@ function island(html, id) {
   assert.doesNotMatch(match[1], /[<>&\u2028\u2029]/);
   return JSON.parse(match[1]);
 }
-function fixture() {
+function fixture(t) {
   const core = makeCore();
+  t.after(() => core.sql.db.close());
   const env = {
     SESSION_SIGNING_KEY: 'coverage-views-signing-key', EDIT_ORIGIN: origin,
     EDIT_TOKEN_SCOPES: JSON.stringify({ john: { edit: 1, instructor: 1 }, roger: { edit: 1 }, admin: { admin: 1 } }),
@@ -43,8 +44,8 @@ function seed(core, overrides = {}) {
   return result.suggestion;
 }
 
-test('history integration: cookie login, index links, canonical lookup and per-doc island agree', async () => {
-  const { fetch, login } = fixture();
+test('history integration: cookie login, index links, canonical lookup and per-doc island agree', async (t) => {
+  const { fetch, login } = fixture(t);
   const cookie = await login('john');
   const index = await fetch('/edit/history/', cookie);
   assert.equal(index.status, 200);
@@ -88,8 +89,8 @@ test('history index lists every bundled document alphabetically with accurate re
 });
 
 for (const path of ['/edit/history/', '/edit/history/missing', '/edit/instructor/m01/facts', '/edit/review']) {
-  test(`protected view ${path} uses uniform denial for unauthenticated and wrong-method requests`, async () => {
-    const { fetch, login } = fixture();
+  test(`protected view ${path} uses uniform denial for unauthenticated and wrong-method requests`, async (t) => {
+    const { fetch, login } = fixture(t);
     const absent = await fetch(path);
     const cookie = await login(path === '/edit/review' ? 'admin' : 'john');
     const wrongMethod = await fetch(path, cookie, 'POST');
@@ -99,8 +100,8 @@ for (const path of ['/edit/history/', '/edit/history/missing', '/edit/instructor
   });
 }
 
-test('instructor integration: SQLite pending edits are filtered by editor and document then projected into real bundle', async () => {
-  const { core, fetch, login } = fixture();
+test('instructor integration: SQLite pending edits are filtered by editor and document then projected into real bundle', async (t) => {
+  const { core, fetch, login } = fixture(t);
   const doc = resolveInstructorDoc('m01', 'facts');
   seed(core, { source_ref: doc.blocks[0].source_ref });
   seed(core, { id: 'other-editor', editor: 'slot:roger', source_ref: doc.blocks[1].source_ref, new_text: 'Private other editor' });
@@ -122,8 +123,8 @@ test('instructor integration: SQLite pending edits are filtered by editor and do
   assert.doesNotMatch(html, /Private other editor|Unrelated text|<img src=x/);
 });
 
-test('instructor empty store renders aliases as the same canonical document', async () => {
-  const { fetch, login } = fixture();
+test('instructor empty store renders aliases as the same canonical document', async (t) => {
+  const { fetch, login } = fixture(t);
   const cookie = await login('john');
   for (const type of ['notes', 'instructor-notes', 'instructor_notes', 'key', 'answer-key', 'answer_key']) {
     const doc = resolveInstructorDoc('m01', type);
@@ -135,8 +136,8 @@ test('instructor empty store renders aliases as the same canonical document', as
   }
 });
 
-test('instructor missing and insufficient-scope routes have identical responses', async () => {
-  const { fetch, login } = fixture();
+test('instructor missing and insufficient-scope routes have identical responses', async (t) => {
+  const { fetch, login } = fixture(t);
   const denied = await fetch('/edit/instructor/m01/facts', await login('roger'));
   const missing = await fetch('/edit/instructor/m99/unknown', await login('john'));
   const nested = await fetch('/edit/instructor/m01/facts/extra', await login('john'));
@@ -170,8 +171,8 @@ test('instructor renderer supports a document without editable blocks', async ()
   assert.deepEqual(island(html, 'edits-data').items, []);
 });
 
-test('review integration: admin cookie loads real SQLite suggestions and revert requests with attribution', async () => {
-  const { core, fetch, login } = fixture();
+test('review integration: admin cookie loads real SQLite suggestions and revert requests with attribution', async (t) => {
+  const { core, fetch, login } = fixture(t);
   seed(core);
   seed(core, { id: 'review-roger', editor: 'slot:roger', source_ref: 'other#p0', new_text: 'Second suggestion' });
   assert.equal(core.fileRevertRequest({ id: 'view-revert', editor: 'slot:john', doc: 'data/example.json', run_first: 'a'.repeat(40), run_last: 'b'.repeat(40) }).ok, true);
@@ -188,8 +189,8 @@ test('review integration: admin cookie loads real SQLite suggestions and revert 
   assert.doesNotMatch(html, /<img src=x/);
 });
 
-test('review empty SQLite store yields an empty digest and zero publisher count', async () => {
-  const { fetch, login } = fixture();
+test('review empty SQLite store yields an empty digest and zero publisher count', async (t) => {
+  const { fetch, login } = fixture(t);
   const response = await fetch('/edit/review', await login('admin'));
   assert.equal(response.status, 200);
   const html = await response.text();
@@ -198,8 +199,8 @@ test('review empty SQLite store yields an empty digest and zero publisher count'
   assert.doesNotMatch(html, /rv-revert-row/);
 });
 
-test('review page denies edit-only viewers even when suggestions exist', async () => {
-  const { core, fetch, login } = fixture();
+test('review page denies edit-only viewers even when suggestions exist', async (t) => {
+  const { core, fetch, login } = fixture(t);
   seed(core);
   const response = await fetch('/edit/review', await login('john'));
   assert.equal(response.status, 404);
@@ -253,15 +254,15 @@ test('history slug fallback resolves bundled explicit aliases despite canonical 
   });
 });
 
-test('history router rejects a missing document after successful authentication', async () => {
-  const { fetch, login } = fixture();
+test('history router rejects a missing document after successful authentication', async (t) => {
+  const { fetch, login } = fixture(t);
   const response = await fetch('/edit/history/not-bundled', await login('john'));
   assert.equal(response.status, 404);
   assert.doesNotMatch(await response.text(), /history-data/);
 });
 
-test('history admin-only scope does not grant editor history access', async () => {
-  const { fetch, login } = fixture();
+test('history admin-only scope does not grant editor history access', async (t) => {
+  const { fetch, login } = fixture(t);
   const cookie = await login('admin');
   for (const path of ['/edit/history', `/edit/history/${Object.values(HISTORY.docs)[0].slug}`]) {
     assert.equal((await fetch(path, cookie)).status, 404);

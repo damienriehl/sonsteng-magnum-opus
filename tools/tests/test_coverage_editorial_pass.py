@@ -1,7 +1,6 @@
 """Exercise review orchestration with real isolated Git and local CLI fixtures."""
 import io
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys

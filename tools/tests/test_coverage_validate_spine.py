@@ -417,4 +417,3 @@ def test_machine_report_preserves_global_schema_evidence(spine, tmp_path, capsys
     assert '!= manifest' in encoded
     assert str(spine/'firm/firm.json') in encoded
     assert capsys.readouterr().out==''
-

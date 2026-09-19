@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from test_coverage_review_proposal import pending, publish, approve, apply, review, write_json
+from test_coverage_review_proposal import pending, publish, approve, apply, review
 
 
 def test_apply_cli_writes_replays_and_verifies_tmp_governed_pair(pending, monkeypatch, capsys):

@@ -1,5 +1,4 @@
 """Temporary governed reports exercise proposal validation before and after approval."""
-import copy
 import hashlib
 import json
 import sys
