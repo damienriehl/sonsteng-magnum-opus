@@ -17,16 +17,22 @@ export const CENTS_PER_MTOK = {
   cache_write: 125,
 };
 
+// Provider token counts are nonnegative integers. Treat malformed fields as
+// unknown usage (zero), as with omitted fields; never credit or poison a pool.
+export function normalizeTokenCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
 // Actual cost of one call, in whole cents (rounded up), from normalized usage.
 // Google reports billable thinking separately as thought_tokens; it uses the
 // output rate. Missing fields count as 0, so non-cached calls still price correctly.
 export function centsForUsage(usage) {
   const u = usage || {};
-  const input = u.input_tokens || 0;
-  const output = u.output_tokens || 0;
-  const thoughts = u.thought_tokens || 0;
-  const cacheWrite = u.cache_creation_input_tokens || 0;
-  const cacheRead = u.cache_read_input_tokens || 0;
+  const input = normalizeTokenCount(u.input_tokens);
+  const output = normalizeTokenCount(u.output_tokens);
+  const thoughts = normalizeTokenCount(u.thought_tokens);
+  const cacheWrite = normalizeTokenCount(u.cache_creation_input_tokens);
+  const cacheRead = normalizeTokenCount(u.cache_read_input_tokens);
   const micro =
     input * CENTS_PER_MTOK.input +
     (output + thoughts) * CENTS_PER_MTOK.output +

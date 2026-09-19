@@ -173,6 +173,8 @@ def file_round_trip(
             if item.storage_kind != "prose_sidecar":
                 raise ValueError("unknown storage kind %r" % item.storage_kind)
             stored = document["entries"][int(item.storage_locator)]
+            if not isinstance(stored, dict):
+                raise ValueError("sidecar entry must be an object")
         except (KeyError, IndexError, TypeError, ValueError, UnicodeDecodeError) as exc:
             errors.append("%s %s: cannot read emitted proof record: %s" %
                           (item.path, item.locator, exc))
