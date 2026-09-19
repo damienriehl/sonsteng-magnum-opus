@@ -11,6 +11,7 @@
 // URL-shaped surface — load-bearing for the "key never stored or logged" BYOK
 // guarantee.
 
+import { normalizeTokenCount } from "../cost.js";
 import { completeWithRetry, normalizeStopReason, systemToString } from "./common.js";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
@@ -49,7 +50,7 @@ export function parseResponse(data) {
   const parts = (cand.content && cand.content.parts) || [];
   const text = parts.map((p) => p.text || "").join("");
   const u = data.usageMetadata || {};
-  const cached = u.cachedContentTokenCount || 0;
+  const cached = normalizeTokenCount(u.cachedContentTokenCount);
   const thoughtTokens = Number.isFinite(u.thoughtsTokenCount)
     ? Math.max(0, u.thoughtsTokenCount)
     : null;
@@ -58,8 +59,8 @@ export function parseResponse(data) {
     text,
     stop_reason: stopReason,
     usage: {
-      input_tokens: Math.max(0, (u.promptTokenCount || 0) - cached),
-      output_tokens: u.candidatesTokenCount || 0,
+      input_tokens: Math.max(0, normalizeTokenCount(u.promptTokenCount) - cached),
+      output_tokens: normalizeTokenCount(u.candidatesTokenCount),
       cache_read_input_tokens: cached,
       ...(thoughtTokens != null ? { thought_tokens: thoughtTokens } : {}),
     },
