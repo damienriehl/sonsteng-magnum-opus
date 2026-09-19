@@ -127,7 +127,8 @@ def test_structural_commit_finalizes_source_evidence(transaction, operation):
         assert original not in content
 
 
-def test_replay_missing_leaf_rolls_back_other_retained_edits_without_third_attempt(transaction, monkeypatch):
+@pytest.mark.parametrize("replay_content", ["{}", "{invalid json", "[]", "null"])
+def test_replay_invalid_source_rolls_back_other_retained_edits_without_third_attempt(transaction, monkeypatch, replay_content):
     root, store, _, _ = transaction
     add(transaction, 'bad-number', fixtures.M03_BUS + '#engagement.rate', 'not numeric')
     add(transaction, 'retained-a', fixtures.M03_EX + '#caption', 'Updated caption')
@@ -140,9 +141,9 @@ def test_replay_missing_leaf_rolls_back_other_retained_edits_without_third_attem
         for patch in patches:
             counts[patch.suggestion_id] = counts.get(patch.suggestion_id, 0) + 1
         if relpath == fixtures.M03_EX and counts.get('retained-a') == 2:
-            # Simulate removal of the mapped leaf before the bounded replay.
-            # The actual scalar patcher classifies this as validation_error.
-            Path(worktree, relpath).write_text('{}')
+            # Simulate malformed content or a missing leaf before replay.
+            # The actual patcher classifies each case as validation_error.
+            Path(worktree, relpath).write_text(replay_content)
         return real_apply(worktree, relpath, patches)
 
     monkeypatch.setattr(ap, 'apply_file_patches', concurrent_change_during_replay)

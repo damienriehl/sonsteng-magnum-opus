@@ -54,6 +54,10 @@ class MigrationError(RuntimeError):
     """The environment cannot be migrated without weakening safety."""
 
 
+class MigrationDurabilityError(MigrationError):
+    """Replacement succeeded, but its directory could not be synced."""
+
+
 class MigrationResult(NamedTuple):
     added_count: int
     updated_count: int
@@ -204,6 +208,7 @@ def _append_block(original: bytes, missing: list[tuple[str, str]]) -> bytes:
 def _atomic_replace(path: Path, payload: bytes, original_stat: os.stat_result) -> None:
     descriptor = -1
     staged_name = ""
+    replaced = False
     try:
         descriptor, staged_name = tempfile.mkstemp(
             prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
@@ -224,6 +229,7 @@ def _atomic_replace(path: Path, payload: bytes, original_stat: os.stat_result) -
         if any(getattr(current, field) != getattr(original_stat, field) for field in identity):
             raise MigrationError("production environment changed during migration")
         os.replace(staged_name, path)
+        replaced = True
         staged_name = ""
         directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
@@ -233,6 +239,8 @@ def _atomic_replace(path: Path, payload: bytes, original_stat: os.stat_result) -
     except MigrationError:
         raise
     except OSError as exc:
+        if replaced:
+            raise MigrationDurabilityError("config replaced; durability could not be confirmed") from exc
         raise MigrationError("production environment migration failed safely") from exc
     finally:
         if descriptor >= 0:
@@ -279,8 +287,11 @@ def main(argv: list[str] | None = None) -> int:
         result = migrate_env_file(
             args.env_file, daemon_root=args.daemon_root, state_root=args.state_root
         )
+    except MigrationDurabilityError:
+        print("[prod-release] config replaced; durability could not be confirmed; verify before proceeding", file=os.sys.stderr)
+        return 1
     except MigrationError:
-        print("[prod-release] environment migration refused; config remains unchanged", file=os.sys.stderr)
+        print("[prod-release] environment migration refused; verify config before proceeding", file=os.sys.stderr)
         return 1
     if result.added_count or result.updated_count:
         print(

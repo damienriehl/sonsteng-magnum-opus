@@ -180,3 +180,35 @@ def test_only_credentials_missing_are_appended_blank(tmp_path):
     assert b'# Non-secret controls.' not in appended
     for key in migration._CREDENTIAL_KEYS:
         assert f'{key}=\n'.encode() in appended
+
+
+@pytest.mark.parametrize('operation', ['open-directory', 'fsync-directory'])
+def test_post_replace_failure_reports_changed_file_without_leaking_details(tmp_path, monkeypatch, capsys, operation):
+    path = config_file(tmp_path)
+    original = path.read_bytes()
+    real_open, real_fsync = os.open, os.fsync
+
+    def open_directory(target, flags, *args, **kwargs):
+        if operation == 'open-directory' and Path(target) == path.parent:
+            raise OSError('synthetic private diagnostic')
+        return real_open(target, flags, *args, **kwargs)
+
+    def sync_directory(fd):
+        if operation == 'fsync-directory' and stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError('synthetic private diagnostic')
+        return real_fsync(fd)
+
+    monkeypatch.setattr(migration.os, 'open', open_directory)
+    monkeypatch.setattr(migration.os, 'fsync', sync_directory)
+    assert migration.main(['--env-file', str(path), '--daemon-root', str(tmp_path / 'daemon'),
+                           '--state-root', str(tmp_path / 'state')]) == 1
+    assert path.read_bytes() != original
+    assert b'SONSTENG_PROD_RELEASE_ENABLED=false' in path.read_bytes()
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert list(tmp_path.iterdir()) == [path]
+    output = capsys.readouterr()
+    assert 'replaced' in output.err
+    assert 'durability' in output.err
+    assert 'unchanged' not in output.err
+    assert 'synthetic private diagnostic' not in output.err
+    assert output.out == ''
