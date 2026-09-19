@@ -137,3 +137,57 @@ def test_empty_html_does_not_trigger_false_positive_persona_leak(repo):
 
 def test_missing_render_input_is_distinct_from_empty_markdown(repo):
     assert bundle._render_doc(str(repo), "absent.md") == (None, [])
+
+
+@pytest.mark.parametrize("content", ["Secret solution. {#b:aaaabbbb}\n", "Café naïve solution. {#b:aaaabbbb}\n"])
+def test_persona_leak_detects_json_escaped_marked_html(repo, content, capsys):
+    path = matter(repo, docs={"exercise/answer-key.md": content})
+    html, _ = bundle._render_doc(str(path), "exercise/answer-key.md")
+    persona = repo / "app/worker/personas/personas.generated.json"
+    persona.parent.mkdir(parents=True)
+    persona.write_text(json.dumps({"nested": [{"text": html}]}))
+    assert bundle.main() == 2
+    assert "instructor content leaked" in capsys.readouterr().err
+    assert not Path(bundle.OUT_PATH).exists()
+
+
+@pytest.mark.parametrize("location", ["build-public", "elsewhere", "symlink-directory", "symlink-file"])
+def test_output_must_resolve_inside_private_build_before_write(repo, monkeypatch, location):
+    public = repo / "site/platform"
+    public.mkdir(parents=True)
+    build = repo / "build"
+    build.mkdir()
+    if location == "symlink-directory":
+        (build / "redirect").symlink_to(public, target_is_directory=True)
+        target = build / "redirect/bundle.json"
+    elif location == "symlink-file":
+        target = build / "bundle.json"
+        target.symlink_to(public / "bundle.json")
+    else:
+        target = repo / location / "bundle.json"
+    monkeypatch.setattr(bundle, "OUT_PATH", str(target))
+    assert bundle.main() == 2
+    assert not target.exists()
+    assert not (public / "bundle.json").exists()
+
+
+@pytest.mark.parametrize("contents", [b"{broken", b"\xff"])
+def test_unreadable_persona_bundle_fails_closed_before_output(repo, contents, capsys):
+    matter(repo, docs={"facts.md": "Confidential fact."})
+    persona = repo / "app/worker/personas/personas.generated.json"
+    persona.parent.mkdir(parents=True)
+    persona.write_bytes(contents)
+    assert bundle.main() == 2
+    assert "cannot check personas bundle" in capsys.readouterr().err
+    assert not Path(bundle.OUT_PATH).exists()
+
+
+def test_private_nested_output_and_unrelated_nested_persona_values_are_allowed(repo, monkeypatch):
+    matter(repo, docs={"facts.md": "Confidential fact. {#b:aaaabbbb}"})
+    persona = repo / "app/worker/personas/personas.generated.json"
+    persona.parent.mkdir(parents=True)
+    persona.write_text(json.dumps({"nested": [None, 7, True, {"text": "Public text"}]}))
+    target = repo / "build/nested/instructor.json"
+    monkeypatch.setattr(bundle, "OUT_PATH", str(target))
+    assert bundle.main() == 0
+    assert json.loads(target.read_text())["docs"][0]["matter_id"] == "m02"

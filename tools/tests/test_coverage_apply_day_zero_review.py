@@ -16,6 +16,9 @@ def test_apply_cli_writes_replays_and_verifies_tmp_governed_pair(pending, monkey
     monkeypatch.setattr(sys, 'argv', ['apply', '--repo', str(repo), '--write'])
     assert apply.main() == 0
     result = json.loads(capsys.readouterr().out)
+    assert result['holdouts'] == 2
+    assert result['converted_dates'] == 2
+    assert result['attention_required'] == 0
     assert result['state'] == 'applied' and result['approval_sha256'] == digest
     governed = [repo / review.HOLDOUTS_REL, repo / review.AUDIT_REL]
     first = [path.read_bytes() for path in governed]
@@ -29,7 +32,10 @@ def test_apply_cli_writes_replays_and_verifies_tmp_governed_pair(pending, monkey
     capsys.readouterr()
     monkeypatch.setattr(sys, 'argv', ['apply', '--repo', str(repo)])
     assert apply.main() == 0
-    assert json.loads(capsys.readouterr().out)['state'] == 'verified'
+    verified = json.loads(capsys.readouterr().out)
+    assert verified['state'] == 'verified'
+    assert verified['holdouts'] == 2
+    assert verified['converted_dates'] == 2
     assert (proposal, holdouts, audit) == before
     assert not list((repo / 'data').glob('.*.tmp'))
 
@@ -137,3 +143,24 @@ def test_pair_replacement_preserves_modes_across_directories(tmp_path):
     assert first.stat().st_mode & 0o777 == 0o640
     assert second.stat().st_mode & 0o777 == 0o600
     assert not list(tmp_path.rglob('*.tmp'))
+
+
+@pytest.mark.parametrize("failed_stage", [2, 3])
+def test_pair_staging_failure_removes_already_staged_files(tmp_path, monkeypatch, failed_stage):
+    first, second = tmp_path / "one.json", tmp_path / "two.json"
+    first.write_text("old one")
+    second.write_text("old two")
+    original = apply._stage_bytes
+    calls = 0
+    def stage(path, content):
+        nonlocal calls
+        calls += 1
+        if calls == failed_stage:
+            raise OSError("staging unavailable")
+        return original(path, content)
+    monkeypatch.setattr(apply, "_stage_bytes", stage)
+    with pytest.raises(OSError, match="staging unavailable"):
+        apply._write_governed_pair(first, "new one", second, "new two")
+    assert first.read_text() == "old one"
+    assert second.read_text() == "old two"
+    assert set(tmp_path.iterdir()) == {first, second}

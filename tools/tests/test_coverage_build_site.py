@@ -228,6 +228,12 @@ def test_firm_dashboard_exports_unreconciled_status_and_met_targets(tmp_path, mo
     bs.build_firm_dashboard(corpus)
     page = (tmp_path / 'firm' / 'index.html').read_text()
     assert 'TRUST DISCREPANCY' in page
+    assert 'Trust balances by matter, each reconciled' not in page
+    assert 'Trust balances by matter, discrepancy' in page
+    import re
+    trust_svg = re.search(r'<svg[^>]*aria-label="Trust balances by matter[^>]*>.*?</svg>', page, re.S).group()
+    assert '  ✓' not in trust_svg
+    assert '  ⚠' in trust_svg
     assert 'TARGET 1%' in page
     assert 'TARGET 1% · BELOW' not in page
     import csv
