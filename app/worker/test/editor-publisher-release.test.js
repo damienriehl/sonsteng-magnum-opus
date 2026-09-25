@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeCore } from "./editor-sql-helper.mjs";
@@ -1275,13 +1275,183 @@ function insertCanonicalMalformedEvidence(core,{ suffix,operation }) {
   return { reviewId,revisionId,sourceRef };
 }
 
-test("authoritative queue consumer cannot appear without an executing boundary test", () => {
+// Cross-layer boundary: the Worker's real observer frontier response bytes are
+// fed, unmodified, to the authoritative Python consumer (tools/prove_queues_empty.py)
+// through its full main() entry point. Only the transport, clock, systemd, and
+// host-identity seams are injected, exactly as its own suite injects them; the
+// review endpoint is held at an empty list so the verdict isolates the frontier.
+const AUTHORITATIVE_CONSUMER_DRIVER = String.raw`
+import datetime, hashlib, importlib.util, io, json, os, pathlib, sys, tempfile
+from types import SimpleNamespace
+
+consumer_path = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("prove_queues_empty", consumer_path)
+queues = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queues)
+queues.__cached__ = None
+raw = consumer_path.read_bytes()
+verifier_blob = hashlib.sha1(
+    f"blob {len(raw)}\0".encode("ascii") + raw, usedforsecurity=False
+).hexdigest()
+frontier_body = sys.stdin.buffer.read()
+review_body = b'{"ok":true,"items":[]}'
+
+class WireResponse:
+    def __init__(self, body, server_date):
+        self._body = body
+        self._headers = [("Content-Length", str(len(body))), ("Date", server_date)]
+    def __enter__(self): return self
+    def __exit__(self, *_args): return False
+    def read(self, _size=-1): return self._body
+    def getcode(self): return 200
+    def getheaders(self): return list(self._headers)
+
+requested = []
+def opener(request, timeout):
+    requested.append(request.full_url)
+    if request.full_url.endswith("/edit/v1/review"):
+        return WireResponse(review_body, "Mon, 07 Sep 2026 15:00:00 GMT")
+    if request.full_url.endswith("/edit/v1/prod/releases/frontier"):
+        return WireResponse(frontier_body, "Mon, 07 Sep 2026 15:00:01 GMT")
+    raise AssertionError("unexpected request")
+
+def run_systemctl(argv, **_kwargs):
+    if "is-enabled" in argv:
+        enabled = queues.APPLY_TIMER_UNIT in argv
+        return SimpleNamespace(stdout="enabled\n" if enabled else "disabled\n",
+                               returncode=0 if enabled else 1)
+    return SimpleNamespace(stdout="inactive\n", returncode=3)
+
+clock = iter([
+    datetime.datetime(2026, 9, 7, 15, 0, 0, tzinfo=datetime.timezone.utc),
+    datetime.datetime(2026, 9, 7, 15, 0, 1, tzinfo=datetime.timezone.utc),
+])
+
+with tempfile.TemporaryDirectory() as scratch:
+    scratch = pathlib.Path(scratch)
+    def protected(name, text):
+        path = scratch / name
+        path.write_text(text, encoding="ascii")
+        path.chmod(0o600)
+        return str(path)
+    apply_env = protected("apply.env", "EDIT_SERVICE_TOKEN=boundary-service\n")
+    observer_env = protected("observer.env", "SONSTENG_PROD_OBSERVER_BEARER=boundary-observer\n")
+    nonce_file = protected("nonce.env", "QUEUE_PROOF_WINDOW_NONCE=" + "e" * 64 + "\n")
+    stdout = io.StringIO()
+    code = queues.main(
+        [
+            "--release-commit", "a" * 40,
+            "--verifier-blob", verifier_blob,
+            "--ledger-origin", sorted(queues.ALLOWED_LEDGER_ORIGINS)[0],
+            "--apply-env-file", apply_env,
+            "--observer-env-file", observer_env,
+            "--apply-timer-stopped",
+            "--window-owner", "worker-boundary-test",
+            "--window-nonce-file", nonce_file,
+            "--window-phase", "opening",
+        ],
+        opener=opener,
+        run_systemctl=run_systemctl,
+        utc_now=lambda: next(clock),
+        stdout=stdout,
+        systemctl_path="/usr/bin/systemctl",
+        read_host_identity=lambda: {"boot_id_sha256": "c" * 64, "machine_id_sha256": "d" * 64},
+        process_environment={"LC_ALL": "C"},
+        isolated=True,
+        tls_handshake=lambda _host, _context: {
+            "cipher": "TLS_AES_256_GCM_SHA384", "protocol": "TLSv1.3", "secret_bits": 256,
+        },
+    )
+json.dump({"code": code, "requested": requested,
+           "receipt": json.loads(stdout.getvalue())}, sys.stdout)
+`;
+
+async function workerObserverFrontierBody(core) {
+  const response = await productionPreparationContextEndpoint(new Request(
+    "https://edit.example/edit/v1/prod/releases/frontier"),
+  frontierEnv(async (...args) => core.productionPreparationContext(...args)),{
+    editor:"service:observer",credential_channel:"bearer",
+    scopes:scopes({ releaseObserver:true }),
+  });
+  assert.equal(response.status,200);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function runAuthoritativeConsumer(frontierBody) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
-  const consumerName = ["prove","queues","empty.py"].join("_");
-  const consumerPath = resolve(repoRoot,"tools",consumerName);
-  assert.equal(existsSync(consumerPath),false,
-    `tools/${consumerName} is now present: replace this tripwire in the same change with a test ` +
-    "that executes the authoritative consumer");
+  const consumerPath = resolve(repoRoot,"tools","prove_queues_empty.py");
+  // -I isolates the interpreter from PYTHON* variables and user site-packages;
+  // the child sees only LC_ALL=C (PATH is used by Node for lookup only).
+  const child = spawnSync("python3",["-I","-B","-c",AUTHORITATIVE_CONSUMER_DRIVER,consumerPath],{
+    input:frontierBody,env:{ LC_ALL:"C" },encoding:"buffer",timeout:30_000,
+  });
+  assert.equal(child.error,undefined,`python3 could not be executed: ${child.error}`);
+  assert.equal(child.status,0,`consumer driver failed:\n${child.stderr.toString("utf8")}`);
+  const result = JSON.parse(child.stdout.toString("utf8"));
+  assert.deepEqual(result.requested,[
+    "https://sonsteng-chat.damienriehl.workers.dev/edit/v1/review",
+    "https://sonsteng-chat.damienriehl.workers.dev/edit/v1/prod/releases/frontier",
+  ]);
+  return result;
+}
+
+test("authoritative Python consumer proves an empty Worker frontier empty", async () => {
+  const core = makeCore(() => 9000);
+  const body = await workerObserverFrontierBody(core);
+  const produced = JSON.parse(body.toString("utf8")).context;
+  assertObserverOperationFrontier(produced.operation_frontier,{
+    pending_operation_count:0,blocked_state:"unblocked",
+  });
+  const { code,receipt } = runAuthoritativeConsumer(body);
+  assert.equal(receipt.proof_error,undefined,`consumer refused producer output: ${receipt.proof_error}`);
+  assert.equal(code,0);
+  assert.equal(receipt.all_queues_empty,true);
+  assert.equal(receipt.publication,"observer-frontier");
+  assert.deepEqual(receipt.publication_frontier,{
+    operation_frontier:produced.operation_frontier,queue_count:0,reason:"unprepared",releases:[],
+  });
+});
+
+test("authoritative Python consumer refuses to prove held Worker operation work empty", async () => {
+  const core = makeCore(() => 9020);
+  seedReviewedHeldOperation(core);
+  const body = await workerObserverFrontierBody(core);
+  const produced = JSON.parse(body.toString("utf8")).context;
+  assertObserverOperationFrontier(produced.operation_frontier,{
+    pending_operation_count:1,blocked_state:"unblocked",
+  });
+  const { code,receipt } = runAuthoritativeConsumer(body);
+  assert.equal(receipt.proof_error,undefined,`consumer refused producer output: ${receipt.proof_error}`);
+  assert.equal(code,1);
+  assert.equal(receipt.all_queues_empty,false);
+  assert.deepEqual(receipt.publication_frontier.operation_frontier,produced.operation_frontier);
+  assert.equal(JSON.stringify(receipt).includes("held-operation"),false,
+    "the receipt must not leak operation identities");
+});
+
+test("authoritative Python consumer refuses to prove a blocked Worker frontier empty", async () => {
+  const core = makeCore(() => 9010);
+  insertCanonicalMalformedEvidence(core,{ suffix:"boundary",operation:{} });
+  const body = await workerObserverFrontierBody(core);
+  const produced = JSON.parse(body.toString("utf8")).context;
+  assertObserverOperationFrontier(produced.operation_frontier,{
+    pending_operation_count:0,blocked_state:"blocked",
+  });
+  const { code,receipt } = runAuthoritativeConsumer(body);
+  assert.equal(receipt.proof_error,undefined,`consumer refused producer output: ${receipt.proof_error}`);
+  assert.equal(code,1);
+  assert.equal(receipt.all_queues_empty,false);
+  assert.deepEqual(receipt.publication_frontier.operation_frontier,produced.operation_frontier);
+});
+
+test("authoritative Python consumer rejects a tampered Worker frontier envelope", async () => {
+  const body = await workerObserverFrontierBody(makeCore(() => 9000));
+  const payload = JSON.parse(body.toString("utf8"));
+  payload.context.operation_frontier.unexpected = true;
+  const { code,receipt } = runAuthoritativeConsumer(Buffer.from(JSON.stringify(payload)));
+  assert.equal(code,1);
+  assert.equal(receipt.all_queues_empty,false);
+  assert.equal(receipt.proof_error,"operation-frontier-malformed");
 });
 
 function seedReviewedHeldOperation(core) {
