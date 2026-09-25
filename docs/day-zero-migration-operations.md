@@ -6,6 +6,58 @@ materialization rehearsal and a write-free verification of the exact committed
 candidate. The dependency-injected production state machine consumes only the
 second path. No CLI production adapter exists.
 
+## Operation-frontier integrity migration
+
+The operation frontier deliberately makes a clean break from the former
+unkeyed 32-bit FNV-1a values. Newly derived receipt hashes, revision and
+decision evidence digests, release membership hashes, and fencing tokens are
+SHA-256 over typed, length-prefixed canonical values. Projection identity,
+manifest, evidence, request, and authorization bindings are likewise SHA-256
+at their producer. The serialization preserves field and type boundaries; an
+attacker-controlled string cannot move a delimiter and become another
+structure.
+
+### Assumption (a): legacy values fail closed
+
+There is no compatibility path for an old digest. A stored FNV-era value that
+is compared with a new derivation raises a bounded `operation_frontier_integrity`
+error. The release-service projection throws; the read-only observer returns
+zero with `blocked_state: "blocked"`, never a silent clean zero. One incompatible
+completed schema-v2 release blocks the proof for the whole store and therefore
+every later queue check. Do not update or delete evidence rows to clear it. Keep
+the Day Zero window closed and require a separately reviewed migration decision
+if such a row is ever found.
+
+The same clean break applies outside the projection proof: a replay against an
+FNV-era non-null suggestion `client_fp` returns bounded `id_conflict`, and an
+FNV-era saved review draft returns bounded `draft_mismatch`. Neither old value
+is silently upgraded or treated as an empty result.
+
+This blast radius is accepted because the window is closed, no release is
+prepared or authorized, and pre-change releases already fail closed. The
+repository evidence is the `Prepared release ID` and `Authorized release ID`
+rows marked **NOT RUN** in
+[`docs/uat/editor-publisher-matrix.md`](uat/editor-publisher-matrix.md).
+
+### Assumption (c): append-only remains an operational policy
+
+SQLite does not enforce append-only authority for receipts, normalized
+lifecycle rows, release events, or publication rows. Append-only operation is
+still a privileged-service policy, and that policy permits appends; the
+integrity proof separately rejects duplicate and unknown lifecycle events.
+SHA-256 supplies practical collision and second-preimage resistance, but it is
+not a secret or an external witness: a privileged writer that can rewrite both
+evidence and its digest remains outside this in-process trust boundary.
+
+### Assumption (b): the sentinel is a work bound
+
+The 100,001-row work bound is explicit: the internal summary returns null
+eligible and held counts. The public observer maps either non-integer to exactly
+`{"pending_operation_count":0,"blocked_state":"blocked"}` rather than report
+100,001 held operations as a measured fact. The short circuit limits query and
+integrity-validation work; its safety role is redundant because the endpoint
+independently blocks any earned count above the same 100,000-operation maximum.
+
 ## Phase 1: rehearse the one-time materialization
 
 Run this from the dedicated daemon checkout or another clean trusted checkout:
