@@ -1380,8 +1380,10 @@ async function workerObserverFrontierBody(core) {
 function runAuthoritativeConsumer(frontierBody) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)),"../../..");
   const consumerPath = resolve(repoRoot,"tools","prove_queues_empty.py");
-  // -I isolates the interpreter from PYTHON* variables and user site-packages;
-  // the child sees only LC_ALL=C (PATH is used by Node for lookup only).
+  // -I isolates the interpreter from PYTHON* variables and user site-packages.
+  // The child env is exactly { LC_ALL:"C" } with no PATH, so Node resolves the
+  // bare "python3" through its default search path (/usr/bin:/bin), not the
+  // parent's PATH.
   const child = spawnSync("python3",["-I","-B","-c",AUTHORITATIVE_CONSUMER_DRIVER,consumerPath],{
     input:frontierBody,env:{ LC_ALL:"C" },encoding:"buffer",timeout:30_000,
   });
@@ -1442,6 +1444,38 @@ test("authoritative Python consumer refuses to prove a blocked Worker frontier e
   assert.equal(code,1);
   assert.equal(receipt.all_queues_empty,false);
   assert.deepEqual(receipt.publication_frontier.operation_frontier,produced.operation_frontier);
+});
+
+test("authoritative Python consumer refuses an active Worker release as non-empty", async () => {
+  const core = makeCore(() => 1000);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  seedApplied(core, "batch-2", ["suggestion-0002"], 1200);
+  assert.equal(core.prepareProductionRelease(release()).ok, true);
+  const body = await workerObserverFrontierBody(core);
+  const produced = JSON.parse(body.toString("utf8")).context;
+  assert.notEqual(produced.active_release, null);
+  const { code,receipt } = runAuthoritativeConsumer(body);
+  assert.equal(receipt.proof_error,undefined,`consumer refused producer output: ${receipt.proof_error}`);
+  assert.equal(code,1);
+  assert.equal(receipt.all_queues_empty,false);
+  assert.equal(receipt.publication_frontier.reason,"active_release");
+  assert.deepEqual(receipt.publication_frontier.releases,[{ present:true }]);
+  assert.equal(receipt.publication_frontier.queue_count,0);
+});
+
+test("authoritative Python consumer refuses an unprepared applied Worker batch as non-empty", async () => {
+  const core = makeCore(() => 1000);
+  seedApplied(core, "batch-1", ["suggestion-0001"], 1100);
+  const body = await workerObserverFrontierBody(core);
+  const produced = JSON.parse(body.toString("utf8")).context;
+  assert.equal(produced.active_release, null);
+  const { code,receipt } = runAuthoritativeConsumer(body);
+  assert.equal(receipt.proof_error,undefined,`consumer refused producer output: ${receipt.proof_error}`);
+  assert.equal(code,1);
+  assert.equal(receipt.all_queues_empty,false);
+  assert.equal(receipt.publication_frontier.reason,"ready_to_prepare");
+  assert.equal(receipt.publication_frontier.queue_count,1);
+  assert.deepEqual(receipt.publication_frontier.releases,[]);
 });
 
 test("authoritative Python consumer rejects a tampered Worker frontier envelope", async () => {

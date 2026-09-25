@@ -431,6 +431,9 @@ def test_missing_window_owner_is_refused_before_mutation(
         pytest.param("x" * 257, id="too-long"),
         pytest.param("control\x07character", id="control-character"),
         pytest.param("ops@window-host:packet-d-1", id="userinfo-separator"),
+        # A scheme separator makes the redactor treat the owner as a URL and
+        # record "[redacted]"; refuse it before production can move.
+        pytest.param("x://[", id="url-scheme-separator"),
     ],
 )
 def test_invalid_window_owner_format_is_refused_before_mutation(
@@ -447,7 +450,7 @@ def test_invalid_window_owner_format_is_refused_before_mutation(
     failure = receipt(completed)
     assert failure["error"] == (
         "--window-owner must be a non-empty printable value "
-        "of at most 256 characters without '@'"
+        "of at most 256 characters without '@' or '://'"
     )
     assert failure["error_code"] == "invalid-window-owner"
     assert failure["mutations"] == []

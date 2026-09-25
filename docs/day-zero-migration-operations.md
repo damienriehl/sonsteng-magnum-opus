@@ -9,6 +9,12 @@ Git-only `tools/canonical_ref_cas.py` supplies the bounded canonical `main`
 forward and compensation operations documented below; it does not connect
 `--execute` to any other production surface.
 
+This runbook is the single operating authority for Packet D's supervised
+window. Where an older procedure, handoff, or decision-sheet step reads
+differently, [Settled operator decisions for the Packet D window](#settled-operator-decisions-for-the-packet-d-window)
+and the numbered sequence under
+[Remaining supervised U15 act](#remaining-supervised-u15-act) govern.
+
 ## Operation-frontier integrity migration
 
 The operation frontier deliberately makes a clean break from the former
@@ -91,8 +97,11 @@ source checkout was never the write target.
 This receipt does **not** identify deployable migrated artifacts. Under the
 exclusive production change window, repeat the governed write exactly once in
 the controlled migration worktree, run the generators, review the complete
-diff, and commit source, date-offset sidecars, identifier base, and generated
-artifacts together. The resulting commit—not the pre-write source SHA—is the
+diff, and commit the governed source, date-offset sidecars, identifier-base
+rewrite, and the *tracked* generated artifacts together. Ignored generator
+outputs are never part of that commit; see decision OQ-10 under
+[Settled operator decisions](#settled-operator-decisions-for-the-packet-d-window)
+for the exact split. The resulting commit—not the pre-write source SHA—is the
 only candidate that may proceed.
 
 ## Phase 2: verify the committed candidate without rewriting it
@@ -263,10 +272,13 @@ timer off.
 Any failure after the canonical candidate is proved triggers the complete
 compensation sequence while the window remains held:
 
-1. reactivate and read back the exact prior Pages/Worker pair;
+1. reactivate and read back the exact prior Pages/Worker pair, Pages first and
+   then the Worker, using the full canonical Pages deployment ID (decisions
+   OQ-8 and OQ-9 below);
 2. atomically compare-and-swap canonical `main` from the exact candidate SHA to
    the exact prior SHA, then read back that exact prior SHA;
-3. rebuild and redeploy DEV/editor from that prior tree; and
+3. rebuild and redeploy DEV/editor from that prior tree, regenerating the
+   ignored Worker inputs first (decision OQ-10); and
 4. prove production, canonical `main`, DEV, and editor all name the prior SHA.
 
 `restore_canonical_ref_exact` is not a general-purpose Git writer or a history
@@ -405,8 +417,8 @@ remote name and branch; UTC timestamp; operation labels; validated SHA values;
 the operator-supplied remote expectation; a credential-redacted validated
 remote URL; and the SHA-256 fingerprint of the exact validated URL. It also
 records the required window owner (a printable value of at most 256
-characters, without surrounding whitespace or `@`, refused before any mutation
-otherwise) and host identity, plus best-effort readback
+characters, without surrounding whitespace, `@`, or `://`, refused before any
+mutation otherwise) and host identity, plus best-effort readback
 after a failure so partial state is never silent. It writes and syncs a private
 temporary file in the evidence directory, then publishes the complete receipt
 without overwrite; the named receipt is therefore complete or absent, never a
@@ -476,6 +488,157 @@ not checked; it does not assert those facts.
 Do not put credentials in these arguments. Provider IDs are non-secret recovery
 coordinates; credentials stay in protected process state. Generating the sheet
 does not authorize or execute production work.
+
+## Settled operator decisions for the Packet D window
+
+These decisions close the operator-sequence open questions (OQ numbers) that
+had more than one plausible reading. They bind every numbered step of the
+supervised act below.
+
+**Already settled by merged tooling.** Queue emptiness (OQ-1) is proved only
+by `tools/prove_queues_empty.py` through the readonly launcher in step 2, whose
+publication proof requires the observer's `operation_frontier`; the older
+`tools/prod_release_readiness.py` counts are not a substitute. Exact prior
+recovery IDs before a candidate exists (OQ-4) come from
+`--inspect-cloudflare-pair --print-recovery-ids`. The deterministic rebuild
+compares build stamps without the traceability-only `git_base_sha` (OQ-6,
+Phase 2 step 3). The generated operator sheet is a rendering and binding aid,
+not proof of canonical state (OQ-15); with `--repo` it checks only the facts
+listed under [Generate the exact operator sheet](#generate-the-exact-operator-sheet).
+Canonical `main` moves only through the `tools/canonical_ref_cas.py` `forward`
+and `restore` commands (OQ-7); never `merge --no-ff`, a manual push, or
+`reset --hard`.
+
+**Length-check every comparison.** Every ID or SHA comparison in the window,
+whether scripted or read by eye, first confirms that both sides are present and
+have the expected exact length (40 lowercase hex characters for a Git SHA, 64
+for a SHA-256 digest, the full canonical form for a provider ID). Two empty
+strings compare equal; a prior false PASS came from exactly that. An absent or
+short value is a stop, never a match.
+
+**OQ-8: deploy order and the compatibility proof.** Deploy the production
+Worker first, then Pages. Restore in the reverse order: Pages first, then the
+Worker. Both transients therefore pair the *candidate* production Worker with
+the *prior* Pages deployment, so the window requires an explicit
+new-Worker-serves-old-Pages proof, recorded in the window evidence directory
+before Pages deploys. It is not inherited from the September 7 pre-user release
+or any other earlier release: this migration rewrites dates and the JSON-LD
+identifier base, which changes the generated editor map and persona bundle the
+Worker embeds. The proof records the prior SHA, the candidate SHA, and the
+result of each check:
+
+1. **Editor map against old pages.** The production Worker's `/edit` injector
+   fetches pages from its `EDIT_UPSTREAM` (`https://legalpracticum.org/platform/`,
+   the production Pages origin) and overlays its bundled
+   `editor-data/editor-map.generated.json`, stamping that map's
+   `spine_build_id` into the page as `editor-map-version`. Compare the page-key
+   set of `EDITOR_MAP.pages` built from the prior SHA with the one built from
+   the candidate; they must be identical, because the migration rewrites
+   content, not page structure. Record both `spine_build_id` values. They
+   differ by design, and the editor client's `map_version` and `base_hash`
+   stale guards absorb that difference. A missing or added page key is a stop.
+2. **Chat contract.** The Worker resolves `persona_id` and `matter_id` against
+   its bundled `app/worker/personas/personas.generated.json` (`personas`,
+   `fact_map`, `rubrics`). Compare the key sets of those three maps between
+   `git show <prior-SHA>:app/worker/personas/personas.generated.json` and the
+   candidate; they must be identical. Require identity, not only inclusion:
+   the checked-in chat pages' `sonsteng-api` meta tag names the top-level DEV
+   Worker (`sonsteng-chat.damienriehl.workers.dev`), not the production Worker,
+   so between the Pages deploy (step 6) and the DEV deploy (step 8) new Pages
+   chat talks to the old DEV Worker.
+3. **Provenance during the transient.** After the Worker deploy and before
+   Pages, the production Worker's `GET /edit/release-provenance` must answer
+   `204` with `x-release-sha` equal to the candidate SHA while Pages
+   `x-release-sha` still equals the prior SHA. The inspector's shared-SHA
+   proof fails by design in that interval; do not run it as acceptance until
+   both targets are deployed.
+
+The production executor's `CompatibilityGate` yields the same
+`("worker", "pages")` order only when `new_worker_accepts_old_pages` is the
+sole proved direction. The installed daemon template sets both
+`SONSTENG_NEW_WORKER_ACCEPTS_OLD_PAGES` and
+`SONSTENG_OLD_WORKER_ACCEPTS_NEW_PAGES` to `false`, so this manual window never
+relies on a daemon default.
+
+**OQ-9: the Pages recovery coordinate.** The Pages recovery coordinate is the
+full `canonical_deployment.id` reported by the stable inspector
+(`--print-recovery-ids`, or `--print-operator-plan` in combined mode), both for
+the prior pair captured before any mutation and for the new pair read back in
+step 7. A non-production proof on September 7, 2026 showed that the Pages
+rollback endpoint accepts that full canonical ID and rejects the short
+preview-subdomain ID. The subdomain that `WranglerPagesAdapter.deploy()`
+parses from Wrangler output (`deployable_id`), and that the pre-user procedure
+calls "the deployment ID", is therefore **not** a recovery coordinate for this
+window; never record it in the recovery registry or the D2 paste-back. The
+executor's rollback handler treats Cloudflare error code `8000039` as "already
+active". That code has **not** been verified against the live API. If a
+rollback to the deployment that is already active returns any error, prove the
+state with an inspector readback rather than trusting the error code.
+
+**OQ-10: contents of the one migration commit.** The single migration commit
+contains the governed `data/**` source changes, including the per-matter
+`data/matters/*/date-offsets.json` sidecars and the identifier-base rewrite
+across `identifier_base.authoritative_paths()`, plus the tracked generator
+outputs: `site/platform/**` (including `site/platform/data/.build-stamp.json`)
+and `app/worker/personas/personas.generated.json`. The ignored outputs,
+`build/**` (editor map, instructor bundle, history bundle) and
+`app/worker/editor-data/**` (copied in by `app/worker/scripts/bundle-editor-data.mjs`),
+are never force-added. Before **each** Worker upload in the window, including
+DEV and any compensating redeploy, regenerate them from the exact checkout
+being uploaded (`python3 tools/build_site.py --check`,
+`python3 tools/build_worker_personas.py`,
+`python3 tools/build_instructor_bundle.py`, `python3 tools/build_history.py`,
+then `node app/worker/scripts/bundle-editor-data.mjs`). Then verify that the
+`spine_build_id` in `app/worker/editor-data/editor-map.generated.json`,
+`app/worker/editor-data/instructor-bundle.generated.json`, and
+`app/worker/personas/personas.generated.json` equals the committed
+`site/platform/data/.build-stamp.json` value, each a 64-character hex string.
+Restore the tracked build stamp afterwards
+(`git checkout -- site/platform/data/.build-stamp.json`) so the upload tree
+stays exactly the committed tree.
+
+**OQ-11: one candidate commit, then separate evidence.** "Merge only that
+commit" is the rule for the live corpus candidate. The window forwards
+canonical `main` by exactly that one commit, and every provider, DEV, and
+editor surface names that SHA. The UAT and evidence record (the D2 paste-back
+values and the rows in `docs/uat/`) lands afterwards as a separate docs-only
+commit, after the window closes and the apply timer's prior policy is
+restored. It never amends, rebases, or replaces the candidate, so the
+candidate SHA stays the deployed provenance SHA, and it is not deployed as
+part of this window. Strict enforcement
+(`python3 tools/validate_spine.py --strict --enforce-day-zero-offsets --enforce-legal-practicum-identifiers`)
+runs twice: before any deploy, inside the Phase 2 verification of the exact
+candidate, and again after the window closes against that same candidate SHA,
+with nonzero scope counts and zero old-base occurrences. The second run is the
+durable U16b evidence Packet D requests.
+
+**OQ-12: which procedure is authoritative.** The September 7 pre-user
+production procedure (`docs/pre-user-prod-deploy.md`) is **not** Packet D's
+authority. Its lane expires at the first real user, and repository state cannot
+prove that none exists. Packet D runs under this migration-specific supervised
+protocol: the KTD6 waiver, the Cloudflare PROD principal, the six-actor
+freeze, the queue proofs, the CAS-bounded canonical moves, and the restoration
+and evidence steps below. Reuse only that document's provider command
+mechanics (`wrangler versions upload`/`versions deploy` with
+`--var "RELEASE_SHA:<sha>"`, the staged Pages `_headers` provenance, and the
+GET provenance checks), and only where they agree with this runbook.
+
+**OQ-13: DEV Worker commands.** Deploy the top-level DEV Worker with the
+same version upload and activation pattern as production, from `app/worker/`:
+
+```bash
+npx wrangler@4 versions upload --env="" --message "day-zero:<candidate-SHA>" --var "RELEASE_SHA:<candidate-SHA>"
+npx wrangler@4 versions deploy <DEV-Worker-version-ID> --env="" --yes
+```
+
+Wrangler 4 accepts `--env=""` as the explicit top-level (DEV) target for both
+commands; do not use `--env dev` or omit the flag during the window. Record
+the DEV version ID printed by the upload before activating it, and prove DEV
+with `GET https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance`
+answering `204` with `x-release-sha` equal to the candidate SHA. The apply
+daemon's routine DEV deploys do not set `RELEASE_SHA`, so outside a window
+that endpoint normally answers `503`; the `--var` above is what makes the DEV
+part of step 10's proof possible.
 
 ## Remaining supervised U15 act
 
@@ -1007,9 +1170,15 @@ or nonzero result as a stop before the window.
 
    Publication emptiness additionally requires the observer context to expose
    exactly `operation_frontier:{pending_operation_count,blocked_state}`, with a
-   zero count and `blocked_state:"unblocked"`. Until the observer endpoint
-   exposes that field, a source-faithful response fails closed with
-   `operation-frontier-missing`. If the observer environment file does not
+   zero count and `blocked_state:"unblocked"`. The observer frontier endpoint
+   exposes that field from the observer-frontier merge (PR #63) onward. A
+   response without `operation_frontier`, for example from an older deployed
+   Worker, fails closed with `operation-frontier-missing`. The ledger Worker
+   behind the allowlisted origin `sonsteng-chat.damienriehl.workers.dev` (the
+   `sonsteng-chat` script: its top-level and `env.dev` configurations set
+   `PROD_RELEASE_LEDGER` to `"true"`, while `env.production` sets `"false"`)
+   must therefore be deployed at or after that merge before the opening proof
+   can pass. If the observer environment file does not
    exist, the receipt reports `"publication":"observer-env-absent"` and fails
    closed with `environment-unavailable`; production-timer state is retained
    only as diagnostic metadata and cannot substitute for the observer proof.
@@ -1019,10 +1188,16 @@ or nonzero result as a stop before the window.
    artifacts exactly once; advance canonical `main` by running the exact
    one-commit compare-and-swap below;
 5. verify the exact committed tree with the write-free phase list;
-6. upload only the Pages artifact and named production Worker version;
-7. read back and atomically record the exact new provider pair;
-8. deploy/rebuild DEV/editor from the same SHA;
-9. reactivate and prove the prior pair, then the intended new pair;
+6. regenerate and verify the ignored Worker inputs (OQ-10), record the
+   new-Worker-serves-old-Pages proof (OQ-8), then upload and activate the named
+   production Worker version, prove its provenance, and only then deploy the
+   Pages artifact;
+7. read back and atomically record the exact new provider pair, using the
+   inspector's full canonical Pages deployment ID (OQ-9);
+8. deploy/rebuild DEV/editor from the same SHA with the `--env=""` commands
+   (OQ-13);
+9. reactivate and prove the prior pair (Pages first, then the Worker), then the
+   intended new pair (Worker first, then Pages);
 10. prove canonical `main`, production, DEV, and editor all name the candidate;
 11. at window close, rerun the readonly function from item 2 with the same
     `--window-owner`. The function re-verifies the checkout commit, committed
