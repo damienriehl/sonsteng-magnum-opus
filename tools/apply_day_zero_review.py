@@ -224,10 +224,14 @@ def _write_governed_pair(
 ) -> None:
     """Replace a coupled artifact pair, restoring the first on second-file failure."""
     first_original = first_path.read_bytes()
-    first_staged = _stage_bytes(first_path, first_text.encode())
-    second_staged = _stage_bytes(second_path, second_text.encode())
-    first_rollback = _stage_bytes(first_path, first_original)
+    staged_files = []
     try:
+        first_staged = _stage_bytes(first_path, first_text.encode())
+        staged_files.append(first_staged)
+        second_staged = _stage_bytes(second_path, second_text.encode())
+        staged_files.append(second_staged)
+        first_rollback = _stage_bytes(first_path, first_original)
+        staged_files.append(first_rollback)
         os.replace(first_staged, first_path)
         try:
             os.replace(second_staged, second_path)
@@ -238,9 +242,8 @@ def _write_governed_pair(
         for parent in {first_path.parent, second_path.parent}:
             _fsync_directory(parent)
     finally:
-        first_staged.unlink(missing_ok=True)
-        second_staged.unlink(missing_ok=True)
-        first_rollback.unlink(missing_ok=True)
+        for staged in staged_files:
+            staged.unlink(missing_ok=True)
 
 
 def _approval_digest(repo: Path, proposal_path: Path) -> str:
@@ -323,12 +326,13 @@ def main() -> int:
         state = "applied"
     else:
         validate_applied_review(repo, proposal, holdouts, audit)
+        resolved_holdouts, resolved_audit = holdouts, audit
         state = "verified"
     print(json.dumps({
         "approval_sha256": digest,
-        "holdouts": 635,
-        "converted_dates": 1236,
-        "attention_required": 0,
+        "holdouts": resolved_holdouts["summary"]["count"],
+        "converted_dates": resolved_audit["summary"]["converted_dates"],
+        "attention_required": resolved_audit["summary"]["attention_required"],
         "state": state,
     }, sort_keys=True))
     return 0

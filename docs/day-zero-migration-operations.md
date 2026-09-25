@@ -6,6 +6,58 @@ materialization rehearsal and a write-free verification of the exact committed
 candidate. The dependency-injected production state machine consumes only the
 second path. No CLI production adapter exists.
 
+## Operation-frontier integrity migration
+
+The operation frontier deliberately makes a clean break from the former
+unkeyed 32-bit FNV-1a values. Newly derived receipt hashes, revision and
+decision evidence digests, release membership hashes, and fencing tokens are
+SHA-256 over typed, length-prefixed canonical values. Projection identity,
+manifest, evidence, request, and authorization bindings are likewise SHA-256
+at their producer. The serialization preserves field and type boundaries; an
+attacker-controlled string cannot move a delimiter and become another
+structure.
+
+### Assumption (a): legacy values fail closed
+
+There is no compatibility path for an old digest. A stored FNV-era value that
+is compared with a new derivation raises a bounded `operation_frontier_integrity`
+error. The release-service projection throws; the read-only observer returns
+zero with `blocked_state: "blocked"`, never a silent clean zero. One incompatible
+completed schema-v2 release blocks the proof for the whole store and therefore
+every later queue check. Do not update or delete evidence rows to clear it. Keep
+the Day Zero window closed and require a separately reviewed migration decision
+if such a row is ever found.
+
+The same clean break applies outside the projection proof: a replay against an
+FNV-era non-null suggestion `client_fp` returns bounded `id_conflict`, and an
+FNV-era saved review draft returns bounded `draft_mismatch`. Neither old value
+is silently upgraded or treated as an empty result.
+
+This blast radius is accepted because the window is closed, no release is
+prepared or authorized, and pre-change releases already fail closed. The
+repository evidence is the `Prepared release ID` and `Authorized release ID`
+rows marked **NOT RUN** in
+[`docs/uat/editor-publisher-matrix.md`](uat/editor-publisher-matrix.md).
+
+### Assumption (c): append-only remains an operational policy
+
+SQLite does not enforce append-only authority for receipts, normalized
+lifecycle rows, release events, or publication rows. Append-only operation is
+still a privileged-service policy, and that policy permits appends; the
+integrity proof separately rejects duplicate and unknown lifecycle events.
+SHA-256 supplies practical collision and second-preimage resistance, but it is
+not a secret or an external witness: a privileged writer that can rewrite both
+evidence and its digest remains outside this in-process trust boundary.
+
+### Assumption (b): the sentinel is a work bound
+
+The 100,001-row work bound is explicit: the internal summary returns null
+eligible and held counts. The public observer maps either non-integer to exactly
+`{"pending_operation_count":0,"blocked_state":"blocked"}` rather than report
+100,001 held operations as a measured fact. The short circuit limits query and
+integrity-validation work; its safety role is redundant because the endpoint
+independently blocks any earned count above the same 100,000-operation maximum.
+
 ## Phase 1: rehearse the one-time materialization
 
 Run this from the dedicated daemon checkout or another clean trusted checkout:
@@ -45,12 +97,18 @@ only candidate that may proceed.
 The repository-side helper `verify_materialized(repo, candidate_sha)` runs in a
 fresh standalone exact-SHA clone. The injected production state machine uses
 the same verification-only phase contract. That phase list never contains
-`governed-write`. It performs:
+`governed-write`. Its exact phases are `candidate-commit`,
+`governed-verification`, `generated-build`, `generated-artifact-cleanliness`,
+`build-parity`, `strict-day-zero-enforcement`, `preflight`, and
+`final-tree-cleanliness`. It performs:
 
 1. exact detached `HEAD` and clean-tree proof;
 2. governed dry-run verification;
-3. deterministic generated builds followed by clean-tree proof, proving the
-   committed artifacts match their generators;
+3. deterministic generated builds followed by generated-artifact cleanliness.
+   Every tracked byte must match except that the committed and regenerated
+   `.build-stamp.json` objects are compared without `git_base_sha`, which is
+   traceability-only. Their `spine_build_id` and every other field must match;
+   the committed stamp bytes are then restored before an exact clean-tree proof;
 4. generated-bundle parity;
 5. strict Day Zero and `legalpracticum.org` identifier enforcement;
 6. full headless preflight; and
@@ -104,8 +162,35 @@ python3 tools/day_zero_migration.py \
 
 Normal inspection output contains the shared SHA, digests of the two recovery
 IDs, and `production_mutations: 0`. Exact provider IDs are non-secret but are
-not printed in the ordinary receipt. To place the inspected exact IDs directly
-into the explicitly requested supervised operator sheet, add
+not printed in the ordinary receipt.
+
+To capture exact non-secret recovery coordinates before a candidate exists,
+add `--print-recovery-ids`, `--ack-john-notified`, and `--ack-queue-empty`, with
+`SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true`:
+
+```bash
+credential-helper-that-prints-only-the-token | \
+SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
+python3 tools/day_zero_migration.py \
+  --inspect-cloudflare-pair \
+  --print-recovery-ids \
+  --cloudflare-account-id <32-character-lowercase-account-ID> \
+  --pages-project <Pages-project-name> \
+  --worker-script sonsteng-chat-production \
+  --pages-provenance-url https://legalpracticum.org/ \
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/ \
+  --ack-john-notified \
+  --ack-queue-empty
+```
+
+Only after the stable two-read proof, this mode prints the exact Pages
+canonical deployment ID, Worker version ID, shared SHA, and
+`production_mutations: 0`. It requires no candidate or recovery registry and
+cannot be combined with `--print-operator-plan`; it never prints the token or
+provider bodies.
+
+To place the inspected exact IDs directly into the explicitly requested
+supervised operator sheet, add
 `--print-operator-plan` and all of its candidate, registry, enablement, and
 acknowledgement inputs:
 
@@ -121,6 +206,7 @@ python3 tools/day_zero_migration.py \
   --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
   --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/ \
+  --repo <trusted-repository-path> \
   --candidate-sha <committed-migration-SHA> \
   --recovery-registry "$HOME/.local/state/sonsteng-prod-release/known-good-pairs.json" \
   --ack-john-notified \
@@ -203,14 +289,19 @@ compensation succeeds.
 
 After the controlled worktree has produced and merged the exact migration
 commit, generate the non-secret checklist while the same exclusive window
-remains held. The generated sheet is strictly post-materialization: its supplied
-candidate must already be canonical, clean, and based on the prior SHA.
+remains held. The generated sheet is strictly post-materialization. Supplying
+`--repo` makes generation fail closed unless the candidate exists, a fresh
+exact-candidate clone is clean, its first parent is exactly `--prior-sha`, and
+`prior..candidate` contains exactly one commit. These checks do not prove that
+canonical `main` names the candidate or that materialization was reviewed;
+those remain explicit operator checks.
 
 ```bash
 SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true \
 SONSTENG_PROD_RELEASE_ENABLED=false \
 python3 tools/day_zero_migration.py \
   --print-operator-plan \
+  --repo <trusted-repository-path> \
   --candidate-sha <committed-migration-SHA> \
   --prior-sha <prior-live-SHA> \
   --prior-pages-deployment-id <exact-Pages-deployment-ID> \
@@ -219,6 +310,10 @@ python3 tools/day_zero_migration.py \
   --ack-john-notified \
   --ack-queue-empty
 ```
+
+If `--repo` is omitted, the sheet explicitly says that candidate existence,
+fresh-clone cleanliness, first-parent identity, and the one-commit range were
+not checked; it does not assert those facts.
 
 Do not put credentials in these arguments. Provider IDs are non-secret recovery
 coordinates; credentials stay in protected process state. Generating the sheet

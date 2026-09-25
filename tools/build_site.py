@@ -2934,8 +2934,8 @@ def build_firm_dashboard(corpus):
                  money(h["amount"]),
                  "{m} · {c} · {r}".format(m=h["matter_id"].upper(), c=cname, r=rec_word),
                  VIZ["cat1"])
-        parts.append(_text(LBL6 + w + 6, y + 15, money(h["amount"]) + "  ✓", cls="chart-val"))
-    svg6 = _svg(W6, H6, "".join(parts) + "".join(hits), "Trust balances by matter, each reconciled")
+        parts.append(_text(LBL6 + w + 6, y + 15, money(h["amount"]) + ("  ✓" if trust["three_way_reconciled"] else "  ⚠"), cls="chart-val"))
+    svg6 = _svg(W6, H6, "".join(parts) + "".join(hits), "Trust balances by matter, " + ("each reconciled" if trust["three_way_reconciled"] else "discrepancy"))
     banner = ('<p class="kpi-tile__chip" style="display:inline-block;margin-bottom:var(--sp-2)">'
               '✓ TRUST LEDGER VS BANK · BALANCED AT {b} · THREE-WAY RECONCILED {d}</p>').format(
         b=money(trust["balance"]), d=esc(trust["last_reconciled"])) if trust["three_way_reconciled"] else (

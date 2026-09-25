@@ -16,6 +16,7 @@
 //   * Status machine + terminal enforcement is centralized in _transition().
 
 import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-status.js";
+import { integrityDigest,MAX_DIGEST_DEPTH } from "./integrity-digest.js";
 
 // Kind vocabularies (U4, KTD3). Structural operations are ordinary suggestion
 // rows carried through the ONE pipeline — but they never take the DIRECT_APPLY
@@ -25,6 +26,7 @@ import { STATUS, TERMINAL, ALLOWED_TRANSITIONS, canTransition } from "./editor-s
 export const STRUCTURAL_KINDS = new Set([
   "insert_after", "delete", "split", "merge", "move",
 ]);
+export const OBSERVER_OPERATION_MAX = 100_000;
 
 function classifyProductionScope(sources = []) {
   const structuralGroups = new Set(), structuralRefs = new Set();
@@ -188,7 +190,9 @@ export const SCHEMA_SQL = `
     receipt_hash TEXT NOT NULL, receipt_json TEXT NOT NULL, created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS production_review_decisions (
-    review_id TEXT NOT NULL, operation_id TEXT NOT NULL, decision TEXT NOT NULL,
+    review_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL CHECK(typeof(operation_id)='text' AND length(operation_id)>0),
+    decision TEXT NOT NULL,
     note TEXT NOT NULL, operation_digest TEXT NOT NULL, group_id TEXT,
     PRIMARY KEY(review_id, operation_id)
   );
@@ -204,12 +208,15 @@ export const SCHEMA_SQL = `
   );
   CREATE TABLE IF NOT EXISTS production_review_submission_decisions (
     review_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
-    operation_id TEXT NOT NULL, decision TEXT NOT NULL, note TEXT NOT NULL,
+    operation_id TEXT NOT NULL CHECK(typeof(operation_id)='text' AND length(operation_id)>0),
+    decision TEXT NOT NULL, note TEXT NOT NULL,
     operation_digest TEXT NOT NULL, group_id TEXT,
     PRIMARY KEY(review_id, review_revision_id, operation_id)
   );
   CREATE TABLE IF NOT EXISTS production_review_operations (
-    operation_id TEXT PRIMARY KEY, decision_id TEXT NOT NULL,
+    operation_id TEXT PRIMARY KEY NOT NULL
+      CHECK(typeof(operation_id)='text' AND length(operation_id)>0),
+    decision_id TEXT NOT NULL CHECK(typeof(decision_id)='text' AND length(decision_id)>0),
     review_id TEXT NOT NULL, review_revision_id TEXT NOT NULL,
     source_ref TEXT NOT NULL, group_id TEXT, decision TEXT NOT NULL,
     note TEXT NOT NULL, lifecycle_state TEXT NOT NULL
@@ -218,6 +225,10 @@ export const SCHEMA_SQL = `
     ON production_review_operations(lifecycle_state, decision);
   CREATE INDEX IF NOT EXISTS idx_review_operation_group
     ON production_review_operations(group_id, lifecycle_state);
+  CREATE INDEX IF NOT EXISTS idx_review_operation_submission_decision
+    ON production_review_operations(review_id, review_revision_id, decision_id);
+  CREATE INDEX IF NOT EXISTS idx_review_operation_legacy_decision
+    ON production_review_operations(review_id, decision_id);
   CREATE INDEX IF NOT EXISTS idx_review_operation_source
     ON production_review_operations(source_ref, lifecycle_state);
   CREATE INDEX IF NOT EXISTS idx_review_operation_revision
@@ -535,20 +546,18 @@ export class EditorStoreCore {
     } catch { /* column already present — nothing to do */ }
   }
 
+  _digest(value) {
+    return integrityDigest(value);
+  }
+
   // Payload fingerprint for the idempotency guard (SL — mirror of the fence fix):
-  // a stable, order-sensitive digest of the CLIENT-authored payload (source_ref +
-  // new_text + comment). Same id + same fingerprint = a true idempotent replay;
-  // same id + DIFFERENT fingerprint = a client-id collision that must NOT be
-  // silently swallowed (would lose the newer edit). FNV-1a 32-bit hex — no crypto,
-  // synchronous (the DO forbids awaits inside a method).
+  // SHA-256 over a typed, length-prefixed tuple of the CLIENT-authored fields.
+  // Same id + same fingerprint = a true idempotent replay; same id + DIFFERENT
+  // fingerprint = a client-id collision that must NOT be silently swallowed.
   _fingerprint(source_ref, new_text, comment) {
-    const s = `${source_ref || ""}\u0000${new_text == null ? "" : new_text}\u0000${comment == null ? "" : comment}`;
-    let h = 0x811c9dc5;
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-    }
-    return ("0000000" + h.toString(16)).slice(-8);
+    return this._digest({ digest_type:"client-payload-fingerprint-v2",
+      source_ref:source_ref || "",new_text:new_text == null ? "" : new_text,
+      comment:comment == null ? "" : comment });
   }
 
   _day(ms) {
@@ -563,14 +572,15 @@ export class EditorStoreCore {
     return this.sql.exec(query, ...binds).toArray();
   }
 
-  _canonical(value) {
-    if (Array.isArray(value)) return `[${value.map((item) => this._canonical(item)).join(",")}]`;
+  _canonical(value,depth=0) {
+    if (depth > MAX_DIGEST_DEPTH)
+      throw new TypeError("integrity_digest:max_depth_exceeded");
+    if (Array.isArray(value)) return `[${value.map((item) =>
+      this._canonical(item,depth+1)).join(",")}]`;
     if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) =>
-      `${JSON.stringify(key)}:${this._canonical(value[key])}`).join(",")}}`;
+      `${JSON.stringify(key)}:${this._canonical(value[key],depth+1)}`).join(",")}}`;
     return JSON.stringify(value);
   }
-
-  _digest(value) { return this._fingerprint("review-v1", this._canonical(value), null); }
 
   _get(id) {
     return this._one(`SELECT ${SELECT_COLS} FROM suggestions WHERE id=?`, id);
@@ -1138,8 +1148,10 @@ export class EditorStoreCore {
     if (input.expected_suggestion_ids &&
         JSON.stringify([...input.expected_suggestion_ids].sort()) !== JSON.stringify([...memberIds].sort()))
       return { ok:false, reason:"membership_mismatch" };
-    const membershipHash = this._fingerprint(JSON.stringify(batchIds), JSON.stringify(memberIds),
-      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash].join("\0"));
+    const membershipHash = this._digest({ digest_type:"production-batch-membership-v2",
+      batch_ids:batchIds,member_ids:memberIds,binding:{ base_sha:input.base_sha,
+        candidate_sha:input.candidate_sha,generator_id:input.generator_id,
+        evidence_hash:input.evidence_hash,manifest_hash:input.manifest_hash } });
     const now = this.now();
     this.transactionSync(() => {
     this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1158,6 +1170,28 @@ export class EditorStoreCore {
         target_environment:"production" }),now);
     });
     return { ok:true, release:this.getProductionRelease(input.id) };
+  }
+
+  _releaseEvidenceBinding(release,{ authorization=false,fencing=false } = {}) {
+    const binding = { target_environment:release.target_environment,base_sha:release.base_sha,
+      candidate_sha:release.candidate_sha,generator_id:release.generator_id,
+      evidence_hash:release.evidence_hash,manifest_hash:release.manifest_hash,
+      membership_hash:release.membership_hash,review_receipt_hash:release.review_receipt_hash,
+      projection_identity:release.projection_identity };
+    if (authorization) {
+      binding.authorization_key = release.authorization_key;
+      binding.authorization_digest = release.authorization_digest;
+    }
+    if (fencing) binding.fencing_token = release.fencing_token;
+    return binding;
+  }
+
+  _operationReleaseMembershipDigest(members,held,release) {
+    return this._digest({ digest_type:"production-operation-membership-v2",members,held,
+      binding:{ base_sha:release.base_sha,candidate_sha:release.candidate_sha,
+        generator_id:release.generator_id,evidence_hash:release.evidence_hash,
+        manifest_hash:release.manifest_hash,review_receipt_hash:release.review_receipt_hash,
+        projection_identity:release.projection_identity } });
   }
 
   _prepareOperationRelease(input) {
@@ -1187,14 +1221,24 @@ export class EditorStoreCore {
       return { ok:false,reason:"review_receipt_mismatch" };
 
     const heldGroups = this._heldReviewGroups(projection.sources);
+    const operationIds = (projection.sources || []).flatMap((source) =>
+      (source.operations || []).map((operation) => operation.id));
+    const lifecycleByOperation = new Map();
+    for (let offset=0;offset<operationIds.length;offset+=400) {
+      const chunk = operationIds.slice(offset,offset+400);
+      const marks = chunk.map(() => "?").join(",");
+      for (const row of this._all(`SELECT operation_id,lifecycle_state
+        FROM production_review_operations WHERE operation_id IN (${marks})`,...chunk))
+        lifecycleByOperation.set(row.operation_id,row.lifecycle_state);
+    }
     const members = [],held = [];
     for (const source of projection.sources || []) {
       const decisions = new Map((source.decisions || []).map((item) => [item.operation_id,item]));
       for (const operation of source.operations || []) {
         const decision = decisions.get(operation.decision_id || operation.id);
-        const groupId = operation.group_id || operation.move_pair_id;
-        if (operation.production_scope !== "held" && !source.stale &&
-            !heldGroups.has(groupId) && decision?.decision === "accepted") {
+        const classification = this._classifyReleaseOperation({ source,operation,decision,
+          heldGroups,lifecycleState:lifecycleByOperation.get(operation.id),frozen:false });
+        if (classification.eligible) {
           const affectedSourceRefs = [...new Set([source.source_ref,operation.op_arg]
             .filter((value) => typeof value === "string" && value))].sort();
           members.push({ operation_id:operation.id,review_revision_id:source.review_revision_id,
@@ -1202,9 +1246,8 @@ export class EditorStoreCore {
             affected_source_refs:affectedSourceRefs,
             group_id:decision.group_id || operation.group_id || null });
         } else {
-          const reason = operation.production_hold_reason || (source.stale ? "stale" :
-            heldGroups.has(groupId) ? "group_held" : decision?.decision || "unanswered");
-          held.push({ operation_id:operation.id,decision:decision?.decision || "unanswered",reason });
+          held.push({ operation_id:operation.id,decision:classification.decision,
+            reason:classification.reason });
         }
       }
     }
@@ -1220,9 +1263,7 @@ export class EditorStoreCore {
       if (JSON.stringify(supplied) !== JSON.stringify(authoritative))
         return { ok:false,reason:"held_exclusion_mismatch" };
     }
-    const membershipHash = this._fingerprint(JSON.stringify(members),JSON.stringify(held),
-      [input.base_sha,input.candidate_sha,input.generator_id,input.evidence_hash,input.manifest_hash,
-        input.review_receipt_hash,input.projection_identity].join("\0"));
+    const membershipHash = this._operationReleaseMembershipDigest(members,held,input);
     const now = this.now();
     this.transactionSync(() => {
       this.sql.exec("INSERT INTO production_releases (id,idempotency_key,request_digest,state,actor,credential_channel,target_environment,target_batch_id,base_sha,candidate_sha,generator_id,evidence_hash,manifest_hash,membership_hash,created_at,updated_at,schema_version,review_receipt_hash,projection_identity) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1238,9 +1279,8 @@ export class EditorStoreCore {
         "INSERT INTO production_release_held_exclusions (release_id,operation_id,decision,reason) VALUES (?,?,?,?)",
         input.id,item.operation_id,item.decision,item.reason);
       this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
-        input.id,"prepared",input.actor,JSON.stringify({ membership_hash:membershipHash,
-          review_receipt_hash:input.review_receipt_hash,projection_identity:input.projection_identity,
-          evidence_hash:input.evidence_hash,manifest_hash:input.manifest_hash,target_environment:"production" }),now);
+        input.id,"prepared",input.actor,JSON.stringify(this._releaseEvidenceBinding({ ...input,
+          target_environment:"production",membership_hash:membershipHash })),now);
     });
     return { ok:true,release:this.getProductionRelease(input.id) };
   }
@@ -1273,8 +1313,9 @@ export class EditorStoreCore {
     this.sql.exec("UPDATE production_releases SET state='authorized',actor=?,credential_channel=?,authorization_key=?,authorization_digest=?,updated_at=? WHERE id=? AND state='prepared'",
       input.actor,input.credential_channel,input.idempotency_key,input.request_digest,now,input.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
-      input.id,"authorized",input.actor,JSON.stringify({ membership_hash:release.membership_hash,
-        evidence_hash:release.evidence_hash,manifest_hash:release.manifest_hash,target_environment:"production" }),now);
+      input.id,"authorized",input.actor,JSON.stringify(this._releaseEvidenceBinding({ ...release,
+        authorization_key:input.idempotency_key,authorization_digest:input.request_digest },
+      { authorization:true })),now);
     });
     return { ok:true, release:this.getProductionRelease(input.id) };
   }
@@ -1327,14 +1368,17 @@ export class EditorStoreCore {
         return !revision || this._reviewStaleReason(revision);
       })) return { ok:false,reason:"stale_review" };
     }
-    const token = this._fingerprint(release.id, release.manifest_hash, `${now}:${input.actor}`);
+    const token = this._digest({ digest_type:"production-release-fence-v2",
+      release_id:release.id,manifest_hash:release.manifest_hash,issued_at:now,actor:input.actor });
     const lease = now + Math.max(1000, Math.min(
       input.lease_ms || CEILINGS.leaseMs, CEILINGS.productionLeaseMs));
     this.sql.exec("UPDATE production_releases SET state=?,fencing_token=?,lease_expires_at=?,updated_at=? WHERE id=?",
       release.state === "authorized" ? "executing" : release.state,token,lease,now,release.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
-      release.id,"executing",input.actor,JSON.stringify({ fencing_token:token,
-        manifest_hash:release.manifest_hash }),now);
+      release.id,"executing",input.actor,JSON.stringify((release.schema_version || 1) >= 2 ?
+        this._releaseEvidenceBinding({ ...release,fencing_token:token },{
+          authorization:true,fencing:true }) : { fencing_token:token,
+          manifest_hash:release.manifest_hash }),now);
     return { ok:true, release:this.getProductionRelease(release.id) };
   }
 
@@ -1348,8 +1392,9 @@ export class EditorStoreCore {
       return { ok:false,reason:"lease_active" };
     if (!['failed_fenced','restoring'].includes(release.state))
       return { ok:false,reason:"not_fenced" };
-    const token = this._fingerprint(release.id,release.fencing_token || "",
-      `${now}:${input.actor}:restore`);
+    const token = this._digest({ digest_type:"production-restore-fence-v2",
+      release_id:release.id,prior_fencing_token:release.fencing_token || "",issued_at:now,
+      actor:input.actor });
     const lease = now + Math.max(1000,Math.min(
       input.lease_ms || CEILINGS.productionLeaseMs,CEILINGS.productionLeaseMs));
     this.transactionSync(() => {
@@ -1390,12 +1435,22 @@ export class EditorStoreCore {
     if (['executing','pages_deployed','worker_deployed','verified','restoring'].includes(release.state) &&
         (!release.lease_expires_at || release.lease_expires_at <= this.now()))
       return { ok:false, reason:"lease_expired" };
+    const detail = input.detail && typeof input.detail === "object" ? input.detail : {};
+    const forbidden = JSON.stringify(detail).match(/new_text|original_text|authorization|credential|token/i);
+    if (forbidden) return { ok:false, reason:"unsafe_evidence" };
+    let eventDetail = detail;
+    if ((release.schema_version || 1) >= 2) {
+      const binding = this._releaseEvidenceBinding(release,{ authorization:true,fencing:true });
+      if (Object.keys(binding).some((key) => detail[key] != null && detail[key] !== binding[key]))
+        return { ok:false,reason:"evidence_mismatch" };
+      eventDetail = { ...detail,...binding };
+    }
     const replayable = new Set(["executing","pages_deployed","worker_deployed","verified","complete"]);
     const prior = replayable.has(input.state) && this._one(
       "SELECT detail_json FROM production_release_events WHERE release_id=? AND type=? LIMIT 1", release.id,input.state);
     if (prior) {
-      const requested = JSON.stringify(input.detail && typeof input.detail === "object" ? input.detail : {});
-      if (prior.detail_json !== requested) return { ok:false, reason:"idempotency_conflict" };
+      if (prior.detail_json !== JSON.stringify(eventDetail))
+        return { ok:false, reason:"idempotency_conflict" };
       return { ok:true, replay:true, release:this.getProductionRelease(release.id) };
     }
     if (input.state === "verified") {
@@ -1411,16 +1466,13 @@ export class EditorStoreCore {
       failed_fenced:new Set(), restoring:new Set(["restored","failed_fenced"]),
     };
     if (!allowed[release.state]?.has(input.state)) return { ok:false, reason:"invalid_transition" };
-    const detail = input.detail && typeof input.detail === "object" ? input.detail : {};
-    const forbidden = JSON.stringify(detail).match(/new_text|original_text|authorization|credential|token/i);
-    if (forbidden) return { ok:false, reason:"unsafe_evidence" };
     const now = this.now();
     this.transactionSync(() => {
     this.sql.exec("UPDATE production_releases SET state=?,provider_json=?,lease_expires_at=?,updated_at=? WHERE id=?",
       input.state,JSON.stringify(detail),input.state === "complete" ? null :
         now + CEILINGS.leaseMs,now,release.id);
     this.sql.exec("INSERT INTO production_release_events (release_id,type,actor,detail_json,created_at) VALUES (?,?,?,?,?)",
-      release.id,input.state,input.actor,JSON.stringify(detail),now);
+      release.id,input.state,input.actor,JSON.stringify(eventDetail),now);
     if (input.state === "complete") {
       if ((release.schema_version || 1) >= 2) {
         const members = this._all("SELECT operation_id,review_revision_id,source_ref,affected_source_refs_json FROM production_release_operation_members WHERE release_id=?",release.id);
@@ -2053,9 +2105,805 @@ export class EditorStoreCore {
       .map(([groupId]) => groupId));
   }
 
-  _operationFrontierProjection({ summaryOnly=false } = {}) {
-    const evidenceColumns = summaryOnly ? ",r.operations_json" : `,r.original_hash,r.proposed_hash,
-        r.original_text,r.source_original_text,r.operations_json`;
+  _classifyReleaseOperation({ source,operation,decision,heldGroups,lifecycleState,frozen }) {
+    const decisionValue = decision?.decision || "unanswered";
+    const groupId = operation.group_id || operation.move_pair_id;
+    const eligible = operation.production_scope !== "held" && !source.stale &&
+      lifecycleState === "unpublished" && !frozen && decisionValue === "accepted" &&
+      !heldGroups.has(groupId);
+    // Frontier invariant: no projected, unpublished, non-rejected operation is absent
+    // from both counts. Anything that fails the complete member predicate stays held.
+    const frontierState = eligible ? "eligible" :
+      lifecycleState !== "published" && decisionValue !== "rejected" ? "held" : "excluded";
+    const reason = this._operationReleaseHoldReason({ source,operation,decisionValue,
+      heldGroups,lifecycleState,frozen });
+    return { eligible,frontierState,decision:decisionValue,reason };
+  }
+
+  _operationReleaseHoldReason({ source,operation,decisionValue,heldGroups,lifecycleState,frozen }) {
+    if (operation.production_hold_reason) return operation.production_hold_reason;
+    if (source.stale) return "stale";
+    if (frozen) return "frozen";
+    if (heldGroups.has(operation.group_id || operation.move_pair_id)) return "group_held";
+    if (lifecycleState !== "unpublished") return lifecycleState || "unknown_lifecycle";
+    return decisionValue;
+  }
+
+  _operationFrontierIntegrityError(reason, ErrorType=Error) {
+    return new ErrorType(`operation_frontier_integrity:${reason}`);
+  }
+
+  _hasExactKeys(value, keys) {
+    return isRecord(value) && Object.keys(value).length === keys.length &&
+      keys.every((key) => Object.hasOwn(value,key));
+  }
+
+  _receiptRevision(row, receiptSource) {
+    let suggestionIds,operations;
+    try {
+      suggestionIds = JSON.parse(row.suggestion_ids_json);
+      operations = JSON.parse(row.operations_json);
+    } catch {
+      throw this._operationFrontierIntegrityError("receipt_revision_mismatch",SyntaxError);
+    }
+    if (!Array.isArray(suggestionIds) || !Array.isArray(operations))
+      throw this._operationFrontierIntegrityError("receipt_revision_mismatch");
+    const evidence = { source_ref:row.source_ref,source_revision:row.source_revision,
+      prod_base:row.prod_base,commit_sha:row.commit_sha,original_hash:row.original_hash,
+      proposed_hash:row.proposed_hash,suggestion_ids:suggestionIds,
+      source_original_text:row.source_original_text || row.original_text,
+      source_proposed_text:row.source_proposed_text || row.proposed_text,operations };
+    if (this._digest(evidence) !== row.evidence_digest ||
+        receiptSource.review_revision_id !== row.id ||
+        receiptSource.source_revision !== row.source_revision ||
+        receiptSource.prod_base !== row.prod_base ||
+        receiptSource.evidence_digest !== row.evidence_digest)
+      throw this._operationFrontierIntegrityError("receipt_revision_mismatch");
+    return { ...row,suggestion_ids:suggestionIds,operations };
+  }
+
+  _assertReceiptDecisions({
+    revision,receiptDecisions,reviewId,legacy=false,childDecisionRows=null,
+  }) {
+    if (!Array.isArray(receiptDecisions) || receiptDecisions.some((decision) =>
+      !this._hasExactKeys(decision,
+        ["operation_id","decision","note","operation_digest","group_id"])))
+      throw this._operationFrontierIntegrityError("receipt_decision_set_mismatch");
+    const normalized = this._normalizeReviewDecisions(revision,receiptDecisions);
+    if (normalized.reason ||
+        this._canonical(normalized.decisions) !== this._canonical(receiptDecisions))
+      throw this._operationFrontierIntegrityError("receipt_decision_set_mismatch");
+    const receiptById = new Map();
+    for (const decision of receiptDecisions) {
+      if (receiptById.has(decision.operation_id))
+        throw this._operationFrontierIntegrityError("receipt_decision_set_mismatch");
+      receiptById.set(decision.operation_id,decision);
+    }
+    let childDecisions;
+    if (childDecisionRows) {
+      childDecisions = childDecisionRows;
+    } else {
+      childDecisions = new Map();
+      let afterOperationId = null;
+      while (true) {
+        const rows = this._all(`SELECT operation_id,decision,note,operation_digest,group_id
+          FROM production_review_decisions WHERE review_id=?
+            AND (? IS NULL OR operation_id>?) ORDER BY operation_id LIMIT 5000`,
+        reviewId,afterOperationId,afterOperationId);
+        for (const decision of rows) childDecisions.set(decision.operation_id,decision);
+        if (rows.length < 5000) break;
+        afterOperationId = rows.at(-1).operation_id;
+      }
+    }
+    if (childDecisions.size !== receiptById.size || [...childDecisions].some(([id,decision]) =>
+      this._canonical(decision) !== this._canonical(receiptById.get(id))))
+      throw this._operationFrontierIntegrityError("receipt_decision_set_mismatch");
+  }
+
+  _assertModernReceipt(row) {
+    let receipt;
+    try { receipt = JSON.parse(row.receipt_json); }
+    catch { throw this._operationFrontierIntegrityError("malformed_receipt",SyntaxError); }
+    if (this._canonical(receipt) !== row.receipt_json || this._digest(receipt) !== row.receipt_hash)
+      throw this._operationFrontierIntegrityError("receipt_hash_mismatch");
+    if (!this._hasExactKeys(receipt,["review_id","actor","created_at","sources"]) ||
+        receipt.review_id !== row.id || receipt.actor !== row.actor ||
+        receipt.created_at !== row.created_at || !Array.isArray(receipt.sources) ||
+        !receipt.sources.length)
+      throw this._operationFrontierIntegrityError("receipt_metadata_mismatch");
+    const receiptSources = new Map();
+    for (const source of receipt.sources) {
+      if (!this._hasExactKeys(source,["review_revision_id","source_revision","prod_base",
+        "evidence_digest","decisions"]) || typeof source.review_revision_id !== "string" ||
+        !source.review_revision_id || receiptSources.has(source.review_revision_id))
+        throw this._operationFrontierIntegrityError("receipt_source_set_mismatch");
+      receiptSources.set(source.review_revision_id,source);
+    }
+    const childSources = new Map();
+    let afterRevisionId = null;
+    while (true) {
+      const rows = this._all(`SELECT review_revision_id,source_revision,prod_base,evidence_digest
+        FROM production_review_submission_sources WHERE review_id=?
+          AND (? IS NULL OR review_revision_id>?) ORDER BY review_revision_id LIMIT 5000`,
+      row.id,afterRevisionId,afterRevisionId);
+      for (const source of rows) childSources.set(source.review_revision_id,source);
+      if (rows.length < 5000) break;
+      afterRevisionId = rows.at(-1).review_revision_id;
+    }
+    if (childSources.size !== receiptSources.size ||
+        [...receiptSources.keys()].some((id) => !childSources.has(id)))
+      throw this._operationFrontierIntegrityError("receipt_source_set_mismatch");
+    const revisions = new Map();
+    afterRevisionId = null;
+    while (true) {
+      const rows = this._all(`SELECT revision.* FROM production_review_revisions revision
+        JOIN production_review_submission_sources source
+          ON source.review_revision_id=revision.id
+        WHERE source.review_id=? AND (? IS NULL OR source.review_revision_id>?)
+        ORDER BY source.review_revision_id LIMIT 5000`,row.id,afterRevisionId,afterRevisionId);
+      for (const revision of rows) revisions.set(revision.id,revision);
+      if (rows.length < 5000) break;
+      afterRevisionId = rows.at(-1).id;
+    }
+    if (revisions.size !== receiptSources.size)
+      throw this._operationFrontierIntegrityError("receipt_revision_mismatch");
+    const decisionsByRevision = new Map();
+    let afterDecisionRevision = null,afterOperationId = null;
+    while (true) {
+      const rows = this._all(`SELECT review_revision_id,operation_id,decision,note,
+          operation_digest,group_id FROM production_review_submission_decisions
+        WHERE review_id=? AND (? IS NULL OR review_revision_id>? OR
+          (review_revision_id=? AND operation_id>?))
+        ORDER BY review_revision_id,operation_id LIMIT 5000`,row.id,afterDecisionRevision,
+      afterDecisionRevision,afterDecisionRevision,afterOperationId);
+      for (const decision of rows) {
+        if (!decisionsByRevision.has(decision.review_revision_id))
+          decisionsByRevision.set(decision.review_revision_id,new Map());
+        const childDecision = { operation_id:decision.operation_id,decision:decision.decision,
+          note:decision.note,operation_digest:decision.operation_digest,group_id:decision.group_id };
+        decisionsByRevision.get(decision.review_revision_id)
+          .set(decision.operation_id,childDecision);
+      }
+      if (rows.length < 5000) break;
+      afterDecisionRevision = rows.at(-1).review_revision_id;
+      afterOperationId = rows.at(-1).operation_id;
+    }
+    if ([...decisionsByRevision.keys()].some((id) => !receiptSources.has(id)))
+      throw this._operationFrontierIntegrityError("receipt_decision_set_mismatch");
+    for (const source of receipt.sources) {
+      const child = childSources.get(source.review_revision_id);
+      if (child.source_revision !== source.source_revision || child.prod_base !== source.prod_base ||
+          child.evidence_digest !== source.evidence_digest)
+        throw this._operationFrontierIntegrityError("receipt_source_set_mismatch");
+      const revisionRow = revisions.get(source.review_revision_id);
+      if (!revisionRow) throw this._operationFrontierIntegrityError("receipt_revision_mismatch");
+      const revision = this._receiptRevision(revisionRow,source);
+      this._assertReceiptDecisions({ revision,receiptDecisions:source.decisions,reviewId:row.id,
+        childDecisionRows:decisionsByRevision.get(source.review_revision_id) || new Map() });
+    }
+  }
+
+  _assertLegacyReceipt(row) {
+    let receipt;
+    try { receipt = JSON.parse(row.receipt_json); }
+    catch { throw this._operationFrontierIntegrityError("malformed_receipt",SyntaxError); }
+    if (this._canonical(receipt) !== row.receipt_json || this._digest(receipt) !== row.receipt_hash)
+      throw this._operationFrontierIntegrityError("receipt_hash_mismatch");
+    if (!this._hasExactKeys(receipt,["review_id","actor","created_at","review_revision_id",
+      "source_revision","prod_base","evidence_digest","decisions"]) ||
+        receipt.review_id !== row.id || receipt.actor !== row.actor ||
+        receipt.created_at !== row.created_at || receipt.review_revision_id !== row.review_revision_id ||
+        receipt.source_revision !== row.source_revision || receipt.prod_base !== row.prod_base)
+      throw this._operationFrontierIntegrityError("receipt_metadata_mismatch");
+    const revisionRow = this._one("SELECT * FROM production_review_revisions WHERE id=?",
+      row.review_revision_id);
+    if (!revisionRow) throw this._operationFrontierIntegrityError("receipt_revision_mismatch");
+    const revision = this._receiptRevision(revisionRow,receipt);
+    this._assertReceiptDecisions({ revision,receiptDecisions:receipt.decisions,
+      reviewId:row.id,legacy:true });
+  }
+
+  _assertReviewReceiptIntegrity() {
+    for (const { table,validate } of [
+      { table:"production_review_submissions",validate:(row) => this._assertModernReceipt(row) },
+      { table:"production_reviews",validate:(row) => this._assertLegacyReceipt(row) },
+    ]) {
+      if (this._one(`SELECT 1 AS invalid FROM ${table}
+        WHERE typeof(id)<>'text' OR length(id)=0 LIMIT 1`))
+        throw this._operationFrontierIntegrityError("receipt_metadata_mismatch");
+      let afterId = null;
+      while (true) {
+        const rows = this._all(`SELECT * FROM ${table}
+          WHERE (? IS NULL OR id>?) ORDER BY id LIMIT 5000`,afterId,afterId);
+        for (const row of rows) validate(row);
+        if (rows.length < 5000) break;
+        afterId = rows.at(-1).id;
+      }
+    }
+  }
+
+  _assertReleaseEventBinding(event,release,{
+    authorization=false,fencing=false,currentFencing=false,
+  } = {}) {
+    let detail;
+    try { detail = JSON.parse(event.detail_json); }
+    catch { throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch",SyntaxError); }
+    if (!isRecord(detail))
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    const binding = this._releaseEvidenceBinding(release,{ authorization,fencing });
+    if (fencing && !currentFencing) delete binding.fencing_token;
+    if (Object.entries(binding).some(([key,value]) => typeof value !== "string" || !value ||
+        detail[key] !== value) || (fencing &&
+        (typeof detail.fencing_token !== "string" || !detail.fencing_token)))
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    return detail;
+  }
+
+  _assertCompletedReleaseEvidence(release) {
+    if (release.target_environment !== "production" || release.state !== "complete" ||
+        (release.schema_version || 1) < 2)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    const events = this._all(`SELECT id,type,detail_json,created_at
+      FROM production_release_events WHERE release_id=? ORDER BY id LIMIT 5001`,release.id);
+    if (events.length > 5000)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    const byType = new Map();
+    for (const event of events) {
+      if (!byType.has(event.type)) byType.set(event.type,[]);
+      byType.get(event.type).push(event);
+    }
+    const singletonTypes = ["prepared","authorized","pages_deployed","worker_deployed",
+      "verified","complete"];
+    if (singletonTypes.some((type) => byType.get(type)?.length !== 1) ||
+        !byType.get("executing")?.length ||
+        [...byType.keys()].some((type) => ![...singletonTypes,"executing"].includes(type)))
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    const prepared = byType.get("prepared")[0],authorized = byType.get("authorized")[0];
+    const pages = byType.get("pages_deployed")[0],worker = byType.get("worker_deployed")[0];
+    const verified = byType.get("verified")[0],complete = byType.get("complete")[0];
+    if (!(prepared.id < authorized.id && authorized.id < pages.id && authorized.id < worker.id &&
+        pages.id < verified.id && worker.id < verified.id && verified.id < complete.id) ||
+        byType.get("executing").some((event) => event.id <= authorized.id || event.id >= complete.id) ||
+        release.updated_at !== complete.created_at)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    this._assertReleaseEventBinding(prepared,release);
+    this._assertReleaseEventBinding(authorized,release,{ authorization:true });
+    const executingDetails = new Map(byType.get("executing").map((event) => [event.id,
+      this._assertReleaseEventBinding(event,release,{ authorization:true,fencing:true })]));
+    for (const event of [pages,worker,verified,complete]) {
+      const detail = this._assertReleaseEventBinding(event,release,{
+        authorization:true,fencing:true,currentFencing:event === complete,
+      });
+      const claim = byType.get("executing").filter((candidate) => candidate.id < event.id).at(-1);
+      if (!claim || detail.fencing_token !== executingDetails.get(claim.id).fencing_token)
+        throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+    }
+
+    const members = [];
+    let afterOrdinal = -1,afterOperationId = "";
+    while (true) {
+      const rows = this._all(`SELECT member.operation_id,member.review_revision_id,
+          member.source_ref,member.affected_source_refs_json,member.group_id,member.ordinal,
+          revision.id AS existing_revision_id,revision.source_revision
+        FROM production_release_operation_members member
+        LEFT JOIN production_review_revisions revision ON revision.id=member.review_revision_id
+        WHERE member.release_id=?
+          AND (ordinal>? OR (ordinal=? AND operation_id>?))
+        ORDER BY ordinal,operation_id LIMIT 5000`,release.id,afterOrdinal,afterOrdinal,
+      afterOperationId);
+      for (const row of rows) {
+        let affectedSourceRefs;
+        try { affectedSourceRefs = JSON.parse(row.affected_source_refs_json); }
+        catch { throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch"); }
+        if (!Array.isArray(affectedSourceRefs) || affectedSourceRefs.some((sourceRef) =>
+          typeof sourceRef !== "string" || !sourceRef) ||
+          this._canonical(affectedSourceRefs) !== this._canonical([...new Set(affectedSourceRefs)].sort()) ||
+          row.ordinal !== members.length || row.existing_revision_id !== row.review_revision_id)
+          throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+        members.push({ operation_id:row.operation_id,review_revision_id:row.review_revision_id,
+          source_ref:row.source_ref,source_revision:row.source_revision,
+          affected_source_refs:affectedSourceRefs,group_id:row.group_id });
+      }
+      if (rows.length < 5000) break;
+      afterOrdinal = rows.at(-1).ordinal;
+      afterOperationId = rows.at(-1).operation_id;
+    }
+    const held = [];
+    let afterHeldId = null;
+    while (true) {
+      const rows = this._all(`SELECT operation_id,decision,reason
+        FROM production_release_held_exclusions WHERE release_id=?
+          AND (? IS NULL OR operation_id>?) ORDER BY operation_id LIMIT 5000`,
+      release.id,afterHeldId,afterHeldId);
+      held.push(...rows);
+      if (rows.length < 5000) break;
+      afterHeldId = rows.at(-1).operation_id;
+    }
+    const membershipHash = this._operationReleaseMembershipDigest(members,held,release);
+    if (!members.length || membershipHash !== release.membership_hash)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+
+    const expectedOperations = new Map(members.map((member) => [member.operation_id,{
+      operation_id:member.operation_id,release_id:release.id,
+      review_revision_id:member.review_revision_id,source_ref:member.source_ref,
+      source_revision:member.source_revision,candidate_sha:release.candidate_sha,
+      published_at:complete.created_at,
+    }]));
+    let actualOperationCount = 0;
+    let afterPublishedId = null;
+    while (true) {
+      const rows = this._all(`SELECT operation_id,release_id,review_revision_id,source_ref,
+          source_revision,candidate_sha,published_at FROM production_published_operations
+        WHERE release_id=? AND (? IS NULL OR operation_id>?)
+        ORDER BY operation_id LIMIT 5000`,release.id,afterPublishedId,afterPublishedId);
+      actualOperationCount += rows.length;
+      if (rows.some((row) =>
+        this._canonical(row) !== this._canonical(expectedOperations.get(row.operation_id))))
+        throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+      if (rows.length < 5000) break;
+      afterPublishedId = rows.at(-1).operation_id;
+    }
+    if (actualOperationCount !== expectedOperations.size)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+
+    const expectedSources = new Map();
+    for (const member of members) for (const sourceRef of
+      (member.affected_source_refs.length ? member.affected_source_refs : [member.source_ref])) {
+      const row = { operation_id:member.operation_id,source_ref:sourceRef,release_id:release.id,
+        candidate_sha:release.candidate_sha,published_at:complete.created_at };
+      expectedSources.set(`${member.operation_id}\0${sourceRef}`,row);
+    }
+    let actualSourceCount = 0;
+    let afterSourceOperation = null,afterSourceRef = null;
+    while (true) {
+      const rows = this._all(`SELECT operation_id,source_ref,release_id,candidate_sha,published_at
+        FROM production_published_operation_sources WHERE release_id=? AND
+          (? IS NULL OR operation_id>? OR (operation_id=? AND source_ref>?))
+        ORDER BY operation_id,source_ref LIMIT 5000`,release.id,afterSourceOperation,
+      afterSourceOperation,afterSourceOperation,afterSourceRef);
+      actualSourceCount += rows.length;
+      if (rows.some((row) => this._canonical(row) !== this._canonical(expectedSources.get(
+        `${row.operation_id}\0${row.source_ref}`))))
+        throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+      if (rows.length < 5000) break;
+      afterSourceOperation = rows.at(-1).operation_id;
+      afterSourceRef = rows.at(-1).source_ref;
+    }
+    if (actualSourceCount !== expectedSources.size)
+      throw this._operationFrontierIntegrityError("publication_release_evidence_mismatch");
+  }
+
+  _assertPublicationReleaseEvidence() {
+    let afterId = null;
+    while (true) {
+      const rows = this._all(`SELECT * FROM production_releases
+        WHERE state='complete' AND COALESCE(schema_version,1)>=2
+          AND (? IS NULL OR id>?) ORDER BY id LIMIT 5000`,afterId,afterId);
+      for (const release of rows) this._assertCompletedReleaseEvidence(release);
+      if (rows.length < 5000) break;
+      afterId = rows.at(-1).id;
+    }
+  }
+
+  // This store-wide proof fails closed on any incompatible or malformed evidence. The digest
+  // clean-break and operator response are documented in docs/day-zero-migration-operations.md.
+  _assertOperationFrontierIntegrity() {
+    if (this._one(`SELECT 1 AS invalid FROM production_review_operations
+      WHERE lifecycle_state NOT IN ('unpublished','superseded','published') LIMIT 1`))
+      throw this._operationFrontierIntegrityError("unknown_lifecycle_state");
+    if (this._one(`SELECT 1 AS invalid FROM production_review_operations
+      WHERE decision NOT IN ('accepted','rejected','questioned','unanswered') LIMIT 1`))
+      throw this._operationFrontierIntegrityError("unknown_decision_state");
+    if (this._one(`SELECT 1 AS invalid FROM production_review_operations
+      WHERE typeof(operation_id)<>'text' OR length(operation_id)=0
+        OR typeof(decision_id)<>'text' OR length(decision_id)=0 LIMIT 1`))
+      throw this._operationFrontierIntegrityError("invalid_normalized_identity");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_sources source
+      LEFT JOIN production_review_submissions submission ON submission.id=source.review_id
+      WHERE submission.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_source_missing_submission");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_sources source
+      LEFT JOIN production_review_revisions revision ON revision.id=source.review_revision_id
+      WHERE revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_source_missing_revision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submissions submission
+      LEFT JOIN production_review_submission_sources source ON source.review_id=submission.id
+      WHERE source.review_id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("submission_missing_source");
+    if (this._one(`SELECT 1 AS orphaned FROM production_reviews review
+      LEFT JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      WHERE revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("legacy_review_missing_revision");
+
+    if (this._one(`SELECT 1 AS invalid FROM production_review_revisions revision
+      WHERE CASE WHEN json_valid(revision.operations_json)=0 THEN 1
+        WHEN json_type(revision.operations_json)<>'array' THEN 1 ELSE 0 END AND (
+        EXISTS (SELECT 1 FROM production_review_submission_sources source
+          JOIN production_review_submissions submission ON submission.id=source.review_id
+          WHERE source.review_revision_id=revision.id)
+        OR EXISTS (SELECT 1 FROM production_reviews review
+          WHERE review.review_revision_id=revision.id)
+      ) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("malformed_operations_json",SyntaxError);
+    if (this._one(`SELECT 1 AS invalid FROM production_review_revisions revision
+      JOIN json_each(revision.operations_json) evidence
+      WHERE (EXISTS (SELECT 1 FROM production_review_submission_sources source
+          WHERE source.review_revision_id=revision.id)
+        OR EXISTS (SELECT 1 FROM production_reviews review
+          WHERE review.review_revision_id=revision.id))
+        AND (json_type(evidence.value)<>'object'
+          OR COALESCE(json_type(evidence.value,'$.id'),'missing')<>'text'
+          OR length(json_extract(evidence.value,'$.id'))=0
+          OR (json_type(evidence.value,'$.decision_id') IS NOT NULL
+            AND json_type(evidence.value,'$.decision_id') NOT IN ('null','text'))
+          OR length(COALESCE(json_extract(evidence.value,'$.decision_id'),
+            json_extract(evidence.value,'$.id')))=0) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("invalid_evidence_identity");
+
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      LEFT JOIN production_review_submissions submission ON submission.id=decision.review_id
+      LEFT JOIN production_review_submission_sources source
+        ON source.review_id=decision.review_id
+          AND source.review_revision_id=decision.review_revision_id
+      LEFT JOIN production_review_revisions revision ON revision.id=decision.review_revision_id
+      WHERE submission.id IS NULL OR source.review_id IS NULL OR revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_submission_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_decisions decision
+      LEFT JOIN production_reviews review ON review.id=decision.review_id
+      LEFT JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      WHERE review.id IS NULL OR revision.id IS NULL LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_legacy_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id
+          AND operation.review_revision_id=decision.review_revision_id
+          AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL LIMIT 1`) && this._one(
+      `SELECT 1 AS orphaned FROM production_review_submission_decisions decision
+      JOIN production_review_submission_sources source
+        ON source.review_id=decision.review_id
+          AND source.review_revision_id=decision.review_revision_id
+      JOIN production_review_revisions revision ON revision.id=decision.review_revision_id
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id
+          AND operation.review_revision_id=decision.review_revision_id
+          AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL AND NOT EXISTS (
+        SELECT 1 FROM json_each(revision.operations_json) evidence
+        WHERE COALESCE(json_extract(evidence.value,'$.decision_id'),
+          json_extract(evidence.value,'$.id'))=decision.operation_id) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_submission_decision");
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_decisions decision
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL LIMIT 1`) && this._one(
+      `SELECT 1 AS orphaned FROM production_review_decisions decision
+      JOIN production_reviews review ON review.id=decision.review_id
+      JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+      LEFT JOIN production_review_operations operation
+        ON operation.review_id=decision.review_id AND operation.decision_id=decision.operation_id
+      WHERE operation.operation_id IS NULL AND NOT EXISTS (
+        SELECT 1 FROM json_each(revision.operations_json) evidence
+        WHERE COALESCE(json_extract(evidence.value,'$.decision_id'),
+          json_extract(evidence.value,'$.id'))=decision.operation_id) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_legacy_decision");
+
+    this._assertReviewReceiptIntegrity();
+
+    const sourceOrphans = this._one(`SELECT
+        MAX(CASE WHEN published.operation_id IS NULL THEN 1 ELSE 0 END) AS missing_operation,
+        MAX(CASE WHEN release.id IS NULL OR release.state<>'complete'
+          OR COALESCE(release.schema_version,1)<2 THEN 1 ELSE 0 END) AS missing_completed_release
+      FROM production_published_operation_sources source
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=source.operation_id AND published.release_id=source.release_id
+      LEFT JOIN production_releases release ON release.id=source.release_id`);
+    if (sourceOrphans?.missing_operation)
+      throw this._operationFrontierIntegrityError("publication_source_missing_operation");
+    if (sourceOrphans?.missing_completed_release)
+      throw this._operationFrontierIntegrityError(
+        "publication_source_missing_completed_release");
+
+    if (this._one(`SELECT 1 AS mismatched FROM (
+      SELECT operation.operation_id FROM production_review_operations operation
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=operation.operation_id
+      WHERE (operation.lifecycle_state='published')<>(published.operation_id IS NOT NULL)
+      UNION ALL
+      SELECT published.operation_id FROM production_published_operations published
+      LEFT JOIN production_review_operations operation
+        ON operation.operation_id=published.operation_id
+      WHERE operation.operation_id IS NULL
+    ) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_marker_mismatch");
+    if (this._one(`SELECT 1 AS mismatched FROM production_published_operations published
+      JOIN production_review_operations operation
+        ON operation.operation_id=published.operation_id
+      LEFT JOIN production_review_revisions revision ON revision.id=operation.review_revision_id
+      WHERE revision.id IS NULL OR published.review_revision_id<>operation.review_revision_id
+        OR published.source_ref<>operation.source_ref
+        OR published.source_revision<>revision.source_revision LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_operation_mismatch");
+    if (this._one(`SELECT 1 AS mismatched FROM production_published_operations published
+      LEFT JOIN production_releases release ON release.id=published.release_id
+      LEFT JOIN production_release_operation_members member
+        ON member.release_id=published.release_id AND member.operation_id=published.operation_id
+      WHERE release.id IS NULL OR release.state<>'complete'
+        OR COALESCE(release.schema_version,1)<2
+        OR release.candidate_sha<>published.candidate_sha
+        OR member.operation_id IS NULL
+        OR member.review_revision_id<>published.review_revision_id
+        OR member.source_ref<>published.source_ref LIMIT 1`))
+      throw this._operationFrontierIntegrityError("publication_release_mismatch");
+    this._assertPublicationReleaseEvidence();
+
+    if (this._one(`SELECT 1 AS orphaned FROM production_review_operations operation
+      LEFT JOIN production_review_revisions revision ON revision.id=operation.review_revision_id
+      LEFT JOIN production_review_submission_sources source
+        ON source.review_id=operation.review_id
+          AND source.review_revision_id=operation.review_revision_id
+      LEFT JOIN production_review_submissions submission ON submission.id=source.review_id
+      LEFT JOIN production_reviews review ON review.id=operation.review_id
+        AND review.review_revision_id=operation.review_revision_id
+      WHERE revision.id IS NULL OR (submission.id IS NULL AND review.id IS NULL) LIMIT 1`))
+      throw this._operationFrontierIntegrityError("orphaned_normalized_row");
+
+    const mismatch = this._one(`SELECT * FROM (WITH submitted_evidence_raw AS (
+        SELECT source.review_id,revision.id AS review_revision_id,
+          json_extract(evidence.value,'$.id') AS operation_id,
+          COALESCE(json_extract(evidence.value,'$.decision_id'),
+            json_extract(evidence.value,'$.id')) AS decision_id,
+          revision.source_ref,
+          COALESCE(json_extract(evidence.value,'$.group_id'),
+            json_extract(evidence.value,'$.move_pair_id')) AS group_id,
+          COALESCE(decision.decision,'unanswered') AS decision,
+          COALESCE(decision.note,'') AS note
+        FROM production_review_submission_sources source
+        JOIN production_review_submissions submission ON submission.id=source.review_id
+        JOIN production_review_revisions revision ON revision.id=source.review_revision_id
+        JOIN json_each(revision.operations_json) evidence
+        LEFT JOIN production_review_submission_decisions decision
+          ON decision.review_id=source.review_id
+            AND decision.review_revision_id=revision.id
+            AND decision.operation_id=COALESCE(json_extract(evidence.value,'$.decision_id'),
+              json_extract(evidence.value,'$.id'))
+        UNION ALL
+        SELECT review.id,revision.id,json_extract(evidence.value,'$.id'),
+          COALESCE(json_extract(evidence.value,'$.decision_id'),
+            json_extract(evidence.value,'$.id')),revision.source_ref,
+          COALESCE(json_extract(evidence.value,'$.group_id'),
+            json_extract(evidence.value,'$.move_pair_id')),
+          COALESCE(decision.decision,'unanswered'),COALESCE(decision.note,'')
+        FROM production_reviews review
+        JOIN production_review_revisions revision ON revision.id=review.review_revision_id
+        JOIN json_each(revision.operations_json) evidence
+        LEFT JOIN production_review_decisions decision ON decision.review_id=review.id
+          AND decision.operation_id=COALESCE(json_extract(evidence.value,'$.decision_id'),
+            json_extract(evidence.value,'$.id'))
+      ), submitted_evidence AS (
+        SELECT *,ROW_NUMBER() OVER (PARTITION BY review_id,review_revision_id,operation_id,
+          decision_id,source_ref,group_id,decision,note ORDER BY operation_id) AS occurrence
+        FROM submitted_evidence_raw
+      ), normalized AS (
+        SELECT review_id,review_revision_id,operation_id,decision_id,source_ref,group_id,
+          decision,note,ROW_NUMBER() OVER (PARTITION BY review_id,review_revision_id,operation_id,
+            decision_id,source_ref,group_id,decision,note ORDER BY operation_id) AS occurrence
+        FROM production_review_operations
+      ), extra AS (
+        SELECT * FROM normalized EXCEPT SELECT * FROM submitted_evidence
+      ), missing AS (
+        SELECT * FROM submitted_evidence EXCEPT SELECT * FROM normalized
+      )
+      SELECT mismatch FROM (
+        SELECT 'extra_normalized_row' AS mismatch FROM extra
+        UNION ALL SELECT 'missing_normalized_row' FROM missing
+      ) LIMIT 1)`);
+    if (mismatch)
+      throw this._operationFrontierIntegrityError(mismatch.mismatch);
+  }
+
+  _operationFrontierIntegrityExceedsLimit(operationLimit) {
+    const offset = operationLimit - 1;
+    return this._all(`SELECT operation.operation_id
+      FROM production_review_operations operation
+      LEFT JOIN production_published_operations published
+        ON published.operation_id=operation.operation_id
+      WHERE operation.lifecycle_state<>'published' AND operation.decision<>'rejected'
+        AND published.operation_id IS NULL
+      LIMIT 1 OFFSET ?`,offset).length > 0;
+  }
+
+  _operationFrontierCandidateRevisions(afterRevisionId=null,limit=5_000) {
+    return this._all(`SELECT * FROM (WITH active_groups AS (
+        SELECT DISTINCT group_id FROM production_review_operations
+        WHERE lifecycle_state='unpublished' AND decision='accepted' AND group_id IS NOT NULL
+          AND operation_id NOT IN (SELECT operation_id FROM production_published_operations)
+      ), candidate_revisions AS (
+        SELECT DISTINCT review_revision_id FROM production_review_operations
+        WHERE (? IS NULL OR review_revision_id>?) AND (
+          (lifecycle_state<>'published' AND decision<>'rejected'
+            AND operation_id NOT IN (SELECT operation_id FROM production_published_operations))
+          OR group_id IN (SELECT group_id FROM active_groups))
+      ) SELECT revision.id AS review_revision_id,
+          revision.source_ref AS revision_source_ref,revision.source_revision,
+          revision.prod_base,json_array_length(revision.operations_json) AS operation_count
+        FROM candidate_revisions candidate
+        JOIN production_review_revisions revision ON revision.id=candidate.review_revision_id
+        WHERE EXISTS (SELECT 1 FROM production_review_submission_sources source
+            JOIN production_review_submissions submission ON submission.id=source.review_id
+            WHERE source.review_revision_id=revision.id)
+          OR EXISTS (SELECT 1 FROM production_reviews review
+            WHERE review.review_revision_id=revision.id)
+      ORDER BY revision.id LIMIT ?)`,afterRevisionId,afterRevisionId,limit);
+  }
+
+  _operationFrontierSummaryRows(revisions, startKey=null, endKey=null) {
+    const marks = revisions.map(() => "?").join(",");
+    return this._all(`SELECT * FROM (WITH active_groups AS (
+        SELECT DISTINCT group_id FROM production_review_operations
+        WHERE lifecycle_state='unpublished' AND decision='accepted' AND group_id IS NOT NULL
+          AND operation_id NOT IN (SELECT operation_id FROM production_published_operations)
+      ) SELECT normalized.*,revision.source_ref AS revision_source_ref,
+        revision.source_revision,revision.prod_base,
+        json_extract(evidence.value,'$.group_id') AS operation_group_id,
+        json_extract(evidence.value,'$.move_pair_id') AS move_pair_id,
+        COALESCE(json_extract(evidence.value,'$.source_ref'),revision.source_ref)
+          AS operation_source_ref,
+        json_extract(evidence.value,'$.op') AS operation_type,
+        json_extract(evidence.value,'$.op_arg') AS operation_arg
+      FROM production_review_revisions revision
+      JOIN json_each(revision.operations_json) evidence
+      JOIN production_review_operations normalized
+        ON normalized.review_revision_id=revision.id
+          AND normalized.operation_id=json_extract(evidence.value,'$.id')
+      WHERE revision.id IN (${marks})
+        AND normalized.lifecycle_state<>'published'
+          AND NOT EXISTS (SELECT 1 FROM production_published_operations published
+            WHERE published.operation_id=normalized.operation_id)
+          AND (normalized.decision<>'rejected'
+            OR normalized.group_id IN (SELECT group_id FROM active_groups))
+          AND (? IS NULL OR (CAST(evidence.key AS INTEGER)>=? AND
+            CAST(evidence.key AS INTEGER)<?))
+      ORDER BY revision.id,CAST(evidence.key AS INTEGER))`,
+    ...revisions.map((row) => row.review_revision_id),startKey,startKey,endKey);
+  }
+
+  _populateOperationFrontierSourceStates(rows, sourceStates, legacyProd) {
+    const pending = [...new Map(rows.filter((row) => !sourceStates.has(row.review_revision_id))
+      .map((row) => [row.review_revision_id,row])).values()];
+    for (let offset=0;offset<pending.length;offset+=400) {
+      const chunk = pending.slice(offset,offset+400);
+      const sourceRefs = [...new Set(chunk.map((row) => row.revision_source_ref))];
+      const marks = sourceRefs.map(() => "?").join(",");
+      const latestBySource = new Map(this._all(`SELECT source_ref,id FROM (
+        SELECT source_ref,id,ROW_NUMBER() OVER (
+          PARTITION BY source_ref ORDER BY created_at DESC,id DESC) AS row_num
+        FROM production_review_revisions WHERE source_ref IN (${marks})
+      ) WHERE row_num=1`,...sourceRefs).map((row) => [row.source_ref,row.id]));
+      const publishedBySource = new Map(this._all(`SELECT source_ref,candidate_sha FROM (
+        SELECT source_ref,candidate_sha,ROW_NUMBER() OVER (
+          PARTITION BY source_ref ORDER BY published_at DESC,operation_id DESC) AS row_num
+        FROM production_published_operation_sources WHERE source_ref IN (${marks})
+      ) WHERE row_num=1`,...sourceRefs).map((row) => [row.source_ref,row.candidate_sha]));
+      for (const row of chunk) {
+        const sourcePublished = publishedBySource.get(row.revision_source_ref);
+        sourceStates.set(row.review_revision_id,{ source_ref:row.revision_source_ref,
+          stale:latestBySource.get(row.revision_source_ref) !== row.review_revision_id ||
+            (sourcePublished ? sourcePublished !== row.prod_base :
+              !!legacyProd && legacyProd.candidate_sha !== row.prod_base) });
+      }
+    }
+  }
+
+  _operationFrontierFrozenIds(rows) {
+    const frozen = new Set();
+    for (let offset=0;offset<rows.length;offset+=400) {
+      const chunk = rows.slice(offset,offset+400).map((row) => row.operation_id);
+      const marks = chunk.map(() => "?").join(",");
+      for (const row of this._all(`SELECT DISTINCT member.operation_id
+        FROM production_release_operation_members member
+        JOIN production_releases release ON release.id=member.release_id
+        WHERE release.state IN ('prepared','authorized','executing','pages_deployed',
+          'worker_deployed','delayed','failed_fenced','restoring','verified')
+          AND member.operation_id IN (${marks})`,...chunk)) frozen.add(row.operation_id);
+    }
+    return frozen;
+  }
+
+  _operationFrontierSummaryProjection({ operationLimit=null } = {}) {
+    if (operationLimit && this._operationFrontierIntegrityExceedsLimit(operationLimit))
+      return { eligible_operation_count:null,held_operation_count:null };
+    this._assertOperationFrontierIntegrity();
+    const pageSize = 5_000;
+    const legacyProd = this._one(`SELECT candidate_sha FROM production_releases
+      WHERE state IN ('verified','complete') AND COALESCE(schema_version,1)=1
+      ORDER BY updated_at DESC,id DESC LIMIT 1`);
+    const sourceStates = new Map(),groupStates = new Map();
+    const structuralGroups = new Set(),structuralRefs = new Set();
+    const revisionPages = [];
+    let batch = [],batchSize = 0;
+    const flushBatch = () => {
+      if (batch.length) revisionPages.push({ revisions:batch,startKey:null,endKey:null });
+      batch = [];
+      batchSize = 0;
+    };
+    let afterRevisionId = null;
+    while (true) {
+      const candidates = this._operationFrontierCandidateRevisions(afterRevisionId,pageSize);
+      for (const revision of candidates) {
+        if (revision.operation_count > pageSize) {
+          flushBatch();
+          for (let startKey=0;startKey<revision.operation_count;startKey+=pageSize)
+            revisionPages.push({ revisions:[revision],startKey,
+              endKey:Math.min(startKey+pageSize,revision.operation_count) });
+        } else {
+          if (batchSize + revision.operation_count > pageSize) flushBatch();
+          batch.push(revision);
+          batchSize += revision.operation_count;
+        }
+      }
+      if (candidates.length < pageSize) break;
+      afterRevisionId = candidates.at(-1).review_revision_id;
+    }
+    flushBatch();
+    let total = 0;
+    for (const page of revisionPages) {
+      const rows = this._operationFrontierSummaryRows(
+        page.revisions,page.startKey,page.endKey);
+      total += rows.length;
+      this._populateOperationFrontierSourceStates(rows,sourceStates,legacyProd);
+      for (const row of rows) {
+        const source = sourceStates.get(row.review_revision_id);
+        const groupId = row.operation_group_id || row.move_pair_id;
+        if (groupId) {
+          const state = groupStates.get(groupId) || { accepted:false,held:false };
+          state.accepted ||= row.decision === "accepted";
+          state.held ||= source.stale || row.decision !== "accepted";
+          groupStates.set(groupId,state);
+        }
+        if (STRUCTURAL_KINDS.has(row.operation_type)) {
+          if (row.operation_group_id) structuralGroups.add(row.operation_group_id);
+          for (const ref of [source.source_ref,row.operation_source_ref,row.operation_arg])
+            if (typeof ref === "string" && ref) structuralRefs.add(ref);
+        }
+      }
+    }
+    if (!total) return { eligible_operation_count:0,held_operation_count:0 };
+
+    const heldGroups = new Set([...groupStates].filter(([_groupId,state]) =>
+      state.accepted && state.held).map(([groupId]) => groupId));
+    let eligibleOperationCount = 0,heldOperationCount = 0;
+    for (const page of revisionPages) {
+      const rows = this._operationFrontierSummaryRows(
+        page.revisions,page.startKey,page.endKey);
+      const frozen = this._operationFrontierFrozenIds(rows);
+      for (const row of rows) {
+        const source = sourceStates.get(row.review_revision_id);
+        const structural = STRUCTURAL_KINDS.has(row.operation_type);
+        const dependent = !structural &&
+          ((row.operation_group_id && structuralGroups.has(row.operation_group_id)) ||
+            structuralRefs.has(row.operation_source_ref || source.source_ref));
+        const productionHoldReason = structural ? "structural_prod_deferred" :
+          dependent ? "depends_on_structural_prod_deferred" : null;
+        const operation = { id:row.operation_id,decision_id:row.decision_id,
+          group_id:row.operation_group_id,move_pair_id:row.move_pair_id,
+          source_ref:row.operation_source_ref,op:row.operation_type,op_arg:row.operation_arg,
+          production_scope:productionHoldReason ? "held" : "prose",
+          production_hold_reason:productionHoldReason };
+        const classification = this._classifyReleaseOperation({ source,operation,
+          decision:{ operation_id:row.decision_id,decision:row.decision,note:row.note,
+            group_id:row.group_id },heldGroups,lifecycleState:row.lifecycle_state,
+          frozen:frozen.has(row.operation_id) });
+        if (classification.frontierState === "eligible") eligibleOperationCount += 1;
+        if (classification.frontierState === "held") heldOperationCount += 1;
+      }
+    }
+    return { eligible_operation_count:eligibleOperationCount,
+      held_operation_count:heldOperationCount };
+  }
+
+  _operationFrontierProjection() {
+    this._assertOperationFrontierIntegrity();
     const submittedRows = this._all(`SELECT * FROM (WITH active_groups AS (
         SELECT DISTINCT group_id FROM production_review_operations
         WHERE lifecycle_state='unpublished' AND decision='accepted' AND group_id IS NOT NULL
@@ -2067,13 +2915,15 @@ export class EditorStoreCore {
            OR group_id IN (SELECT group_id FROM active_groups)
       )
       SELECT s.id,s.actor,s.created_at,s.receipt_hash,r.id AS review_revision_id,
-        r.source_ref,r.source_revision,r.prod_base${evidenceColumns}
+        r.source_ref,r.source_revision,r.prod_base,r.original_hash,r.proposed_hash,
+        r.original_text,r.source_original_text,r.operations_json
       FROM candidate_revisions candidate
       JOIN production_review_revisions r ON r.id=candidate.review_revision_id
       JOIN production_review_submission_sources x ON x.review_revision_id=r.id
       JOIN production_review_submissions s ON s.id=x.review_id
       ORDER BY r.source_ref,s.created_at,s.id,r.id)`);
-    if (!submittedRows.length) return { review_receipts:[],sources:[],eligible_operation_count:0 };
+    if (!submittedRows.length) return { review_receipts:[],sources:[],
+      eligible_operation_count:0 };
 
     const revisionIds = [...new Set(submittedRows.map((row) => row.review_revision_id))];
     const revisionMarks = revisionIds.map(() => "?").join(",");
@@ -2126,11 +2976,7 @@ export class EditorStoreCore {
           !!legacyProd && legacyProd.candidate_sha !== row.prod_base);
       const operationState = operationsByRevision.get(row.review_revision_id) || new Map();
       const recordedOperations = JSON.parse(row.operations_json);
-      const operations = (summaryOnly ? recordedOperations.map((operation) => ({
-        id:operation.id,decision_id:operation.decision_id || operation.id,
-        group_id:operation.group_id || null,move_pair_id:operation.move_pair_id || null,
-        source_ref:operation.source_ref || row.source_ref,op:operation.op || null,
-        op_arg:operation.op_arg || null })) : recordedOperations).filter((operation) =>
+      const operations = recordedOperations.filter((operation) =>
           operationState.get(operation.id)?.lifecycle_state !== "published" &&
           !publishedOperations.has(operation.id));
       if (!operations.length) continue;
@@ -2138,24 +2984,23 @@ export class EditorStoreCore {
         receipt_hash:row.receipt_hash });
       projectionSources.push({ review_id:row.id,review_revision_id:row.review_revision_id,
         source_ref:row.source_ref,source_revision:row.source_revision,prod_base:row.prod_base,
-        ...(summaryOnly ? {} : { original_hash:row.original_hash,proposed_hash:row.proposed_hash,
-          original_text:row.original_text,
-          source_original_text:row.source_original_text || row.original_text }),
+        original_hash:row.original_hash,proposed_hash:row.proposed_hash,
+        original_text:row.original_text,
+        source_original_text:row.source_original_text || row.original_text,
         operations,stale,decisions:[...(decisionsByRevision.get(row.review_revision_id)?.values() || [])] });
     }
 
     const classifiedSources = classifyProductionScope(projectionSources);
     const heldGroups = this._heldReviewGroups(classifiedSources);
-    let eligibleOperationCount = 0, heldOperationCount = 0;
+    let eligibleOperationCount = 0,heldOperationCount = 0;
     for (const source of classifiedSources) {
-      const decisions = new Map(source.decisions.map((decision) => [decision.operation_id,decision.decision]));
+      const decisions = new Map(source.decisions.map((decision) => [decision.operation_id,decision]));
       for (const operation of source.operations) {
-        const groupId = operation.group_id || operation.move_pair_id;
         if (operation.production_scope === "held") heldOperationCount += 1;
-        if (operation.production_scope !== "held" && !source.stale &&
-            lifecycleByOperation.get(operation.id) === "unpublished" && !frozen.has(operation.id) &&
-            decisions.get(operation.decision_id || operation.id) === "accepted" &&
-            !heldGroups.has(groupId)) eligibleOperationCount += 1;
+        const classification = this._classifyReleaseOperation({ source,operation,
+          decision:decisions.get(operation.decision_id || operation.id),heldGroups,
+          lifecycleState:lifecycleByOperation.get(operation.id),frozen:frozen.has(operation.id) });
+        if (classification.frontierState === "eligible") eligibleOperationCount += 1;
       }
     }
     return { review_receipts:[...receiptById.values()].sort((a,b) =>
@@ -2164,8 +3009,11 @@ export class EditorStoreCore {
   }
 
   publisherSummary() {
-    if (this._one("SELECT operation_id FROM production_review_operations LIMIT 1"))
-      return { eligible:this._operationFrontierProjection({ summaryOnly:true }).eligible_operation_count };
+    if (this._one(`SELECT 1 AS operation_frontier FROM production_review_operations
+      UNION ALL SELECT 1 FROM production_review_submissions
+      UNION ALL SELECT 1 FROM production_reviews
+      UNION ALL SELECT 1 FROM production_published_operation_sources LIMIT 1`))
+      return { eligible:this._operationFrontierSummaryProjection().eligible_operation_count };
     const frontier = this._one(
       "SELECT b.created_at,b.batch_id FROM production_releases r JOIN apply_batches b ON b.batch_id=r.target_batch_id WHERE r.state IN ('verified','complete') ORDER BY r.updated_at DESC,r.id DESC LIMIT 1");
     const row = frontier ? this._one(
@@ -2233,14 +3081,28 @@ export class EditorStoreCore {
   // Minimal, text-free projection for the trusted candidate builder.  The
   // service receives immutable IDs and commit evidence; edited copy remains
   // confined to the human Publisher preview.
-  productionPreparationContext() {
+  productionPreparationContext({ tolerateOperationProjectionFailure=false } = {}) {
+    const projectionForContext = () => {
+      let projection;
+      try {
+        projection = tolerateOperationProjectionFailure ?
+          this._operationFrontierSummaryProjection({ operationLimit:OBSERVER_OPERATION_MAX+1 }) :
+          this._operationFrontierProjection();
+      } catch (error) {
+        if (!tolerateOperationProjectionFailure) throw error;
+      }
+      if (!projection) return {};
+      return { projection };
+    };
     const activeRow = this._one(
       "SELECT id FROM production_releases WHERE state NOT IN ('complete','restored') ORDER BY updated_at DESC,id DESC LIMIT 1");
-    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[] };
+    if (activeRow) return { active_release:this.getProductionRelease(activeRow.id), batches:[],
+      ...(tolerateOperationProjectionFailure ? projectionForContext() : {}) };
     const missing = this._one(
       "SELECT batch_id FROM apply_batches WHERE phase='evidence_missing' ORDER BY created_at,batch_id LIMIT 1");
     if (missing) return { active_release:null, batches:[], blocked_reason:"missing_batch_evidence",
-      blocked_batch_id:missing.batch_id };
+      blocked_batch_id:missing.batch_id,
+      ...(tolerateOperationProjectionFailure ? projectionForContext() : {}) };
     const frontier = this._one(
       "SELECT target_batch_id,candidate_sha FROM production_releases WHERE state='complete' ORDER BY updated_at DESC,id DESC LIMIT 1");
     const allDone = this._all(
@@ -2260,8 +3122,8 @@ export class EditorStoreCore {
         batch.batch_id, STATUS.APPLIED).map((row) => row.id), ...this._all(
         "SELECT id FROM canonical_mutations WHERE batch_id=? ORDER BY id", batch.batch_id)
         .map((row) => row.id)] }));
-    const projection = this._operationFrontierProjection();
-    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches, projection };
+    return { active_release:null, base_sha:frontier?.candidate_sha || null, batches,
+      ...projectionForContext() };
   }
 
   // Startup crash reconciliation: for every batch with an EXPIRED lease that is

@@ -72,6 +72,9 @@ WORKER_PROVENANCE_ORIGIN = "https://sonsteng-chat-production.damienriehl.workers
 MAX_HTTP_BODY_BYTES = 1_048_576
 HTTP_TIMEOUT_SECONDS = 20
 EX_CONFIG = 78
+BUILD_STAMP_RELATIVE_PATH = pathlib.PurePosixPath(
+    "site/platform/data/.build-stamp.json"
+)
 
 
 class MigrationError(RuntimeError):
@@ -91,6 +94,30 @@ class BoundedArgumentParser(argparse.ArgumentParser):
 
     def error(self, _message):
         raise MigrationError("invalid command arguments")
+
+
+def _json_object_without_duplicate_keys(pairs):
+    value = {}
+    for key, member in pairs:
+        if key in value:
+            raise ValueError
+        value[key] = member
+    return value
+
+
+def _json_values_identical(left, right) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            _json_values_identical(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _json_values_identical(left_member, right_member)
+            for left_member, right_member in zip(left, right)
+        )
+    return left == right
 
 
 @dataclasses.dataclass(frozen=True)
@@ -437,15 +464,21 @@ def _valid_pair(pair: ProductionPair) -> bool:
     )
 
 
+def _validate_acknowledgements(john_notified: bool, queue_empty: bool) -> None:
+    if not john_notified:
+        raise MigrationError("explicit John-notified acknowledgement is required")
+    if not queue_empty:
+        raise MigrationError("explicit queue-empty acknowledgement is required")
+
+
 def _validate_request(request: MigrationRequest) -> None:
     if not request.enabled:
         raise MigrationError("production Day Zero migration is disabled by default")
     if not request.normal_release_config_off:
         raise MigrationError("normal production release must remain config-off")
-    if not request.john_notified:
-        raise MigrationError("explicit John-notified acknowledgement is required")
-    if not request.queue_empty_acknowledged:
-        raise MigrationError("explicit queue-empty acknowledgement is required")
+    _validate_acknowledgements(
+        request.john_notified, request.queue_empty_acknowledged,
+    )
     if not SHA_RE.fullmatch(request.candidate_sha or ""):
         raise MigrationError("an exact lowercase candidate SHA is required")
     if not _valid_pair(request.prior_pair):
@@ -453,6 +486,12 @@ def _validate_request(request: MigrationRequest) -> None:
     registry = pathlib.Path(request.recovery_registry)
     if not registry.is_absolute() or registry.is_symlink():
         raise MigrationError("recovery registry must be an absolute, non-symlink path")
+
+
+def _validate_recovery_id_receipt(args) -> None:
+    if os.environ.get("SONSTENG_DAY_ZERO_MIGRATION_ENABLED") != "true":
+        raise MigrationError("production Day Zero migration is disabled by default")
+    _validate_acknowledgements(args.ack_john_notified, args.ack_queue_empty)
 
 
 def _safe_operator_call(action: Callable, failure: str):
@@ -558,9 +597,16 @@ def isolated_git_copy(repo: pathlib.Path, candidate_sha: str) -> Iterator[pathli
 class LocalRehearsalPhases:
     """Run bounded U15 gates in an isolated copy, suppressing authored output."""
 
-    def __init__(self, checkout: pathlib.Path, timeout: int = 1800):
+    def __init__(
+        self,
+        checkout: pathlib.Path,
+        timeout: int = 1800,
+        *,
+        allow_traceability_stamp_refresh: bool = False,
+    ):
         self.checkout = pathlib.Path(checkout).resolve()
         self.timeout = timeout
+        self.allow_traceability_stamp_refresh = allow_traceability_stamp_refresh
 
     def _command(self, argv: list[str]) -> None:
         sensitive_markers = (
@@ -603,10 +649,76 @@ class LocalRehearsalPhases:
         except (OSError, subprocess.SubprocessError):
             raise MigrationError("could not prove the exact committed candidate tree") from None
 
+    def _assert_generated_artifact_cleanliness(self, candidate_sha: str) -> None:
+        """Ignore only the regenerated stamp's traceability SHA, then restore it."""
+        stamp_path = self.checkout / BUILD_STAMP_RELATIVE_PATH
+        try:
+            committed_bytes = subprocess.run(
+                ["git", "show", f"{candidate_sha}:{BUILD_STAMP_RELATIVE_PATH}"],
+                cwd=self.checkout,
+                check=True,
+                capture_output=True,
+                timeout=30,
+            ).stdout
+            regenerated_bytes = stamp_path.read_bytes()
+        except (OSError, subprocess.SubprocessError):
+            raise MigrationError("could not compare the committed generated build stamp") from None
+
+        comparison_error = None
+        try:
+            committed_stamp = json.loads(
+                committed_bytes,
+                object_pairs_hook=_json_object_without_duplicate_keys,
+            )
+            regenerated_stamp = json.loads(
+                regenerated_bytes,
+                object_pairs_hook=_json_object_without_duplicate_keys,
+            )
+            if not isinstance(committed_stamp, dict) or not isinstance(regenerated_stamp, dict):
+                raise ValueError
+            committed_spine_build_id = committed_stamp.get("spine_build_id")
+            if (
+                not isinstance(committed_spine_build_id, str)
+                or not committed_spine_build_id
+                or committed_spine_build_id != regenerated_stamp.get("spine_build_id")
+            ):
+                comparison_error = MigrationError(
+                    "regenerated spine_build_id did not match the committed build stamp"
+                )
+            committed_without_traceability = dict(committed_stamp)
+            regenerated_without_traceability = dict(regenerated_stamp)
+            committed_without_traceability.pop("git_base_sha", None)
+            regenerated_without_traceability.pop("git_base_sha", None)
+            if (
+                comparison_error is None
+                and not _json_values_identical(
+                    committed_without_traceability,
+                    regenerated_without_traceability,
+                )
+            ):
+                comparison_error = MigrationError(
+                    "regenerated build stamp differed beyond git_base_sha"
+                )
+        except (UnicodeError, ValueError, RecursionError):
+            comparison_error = MigrationError("generated build stamp was invalid")
+
+        try:
+            stamp_path.write_bytes(committed_bytes)
+        except OSError:
+            raise MigrationError("could not restore the committed generated build stamp") from None
+        if comparison_error is not None:
+            raise comparison_error
+        self._assert_exact_clean_tree(candidate_sha)
+
     def run(self, phase: str, candidate_sha: str) -> None:
         print(f"rehearsal-phase:start:{phase}", file=sys.stderr, flush=True)
-        if phase in {"candidate-commit", "generated-artifact-cleanliness",
-                     "final-tree-cleanliness"}:
+        if (
+            phase == "generated-artifact-cleanliness"
+            and self.allow_traceability_stamp_refresh
+        ):
+            self._assert_generated_artifact_cleanliness(candidate_sha)
+        elif phase in {"candidate-commit", "generated-artifact-cleanliness",
+                       "final-tree-cleanliness"}:
             self._assert_exact_clean_tree(candidate_sha)
         elif phase == "governed-verification":
             self._command(["python3", "tools/day_zero.py", "--repo", str(self.checkout)])
@@ -691,7 +803,9 @@ def verify_materialized(
         raise MigrationError("an exact lowercase candidate SHA is required")
     repo = pathlib.Path(repo).resolve()
     with isolated_copy(repo, candidate_sha) as checkout:
-        runner = phases or LocalRehearsalPhases(checkout)
+        runner = phases or LocalRehearsalPhases(
+            checkout, allow_traceability_stamp_refresh=True,
+        )
         _run_phases(
             runner, candidate_sha, context="verify-only",
             phase_names=VERIFY_ONLY_PHASES,
@@ -980,8 +1094,91 @@ def execute(request: MigrationRequest, phases, production) -> dict:
     }
 
 
-def operator_plan(request: MigrationRequest) -> str:
+def validate_operator_plan_candidate(
+    repo: pathlib.Path,
+    candidate_sha: str,
+    prior_sha: str,
+    *,
+    isolated_copy: Callable = isolated_git_copy,
+) -> None:
+    """Prove the repository-derived claims made by an operator sheet."""
+    repo = pathlib.Path(repo).resolve()
+    try:
+        resolved_candidate = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{candidate_sha}^{{commit}}"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        raise MigrationError("operator-plan candidate commit does not exist") from None
+    if resolved_candidate != candidate_sha:
+        raise MigrationError("operator-plan candidate commit does not exist")
+
+    with isolated_copy(repo, candidate_sha) as checkout:
+        runner = LocalRehearsalPhases(checkout)
+        try:
+            runner._assert_exact_clean_tree(candidate_sha)
+        except MigrationError:
+            raise MigrationError(
+                "operator-plan candidate tree was not clean in a fresh exact clone"
+            ) from None
+        try:
+            ancestry = subprocess.run(
+                ["git", "rev-list", "--parents", "-n", "1", candidate_sha],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ).stdout.strip().split()
+        except (OSError, subprocess.SubprocessError):
+            raise MigrationError("operator-plan candidate ancestry could not be proved") from None
+        if len(ancestry) < 2 or ancestry[1] != prior_sha:
+            raise MigrationError(
+                "operator-plan candidate first parent did not match prior SHA"
+            )
+        try:
+            commit_count = subprocess.run(
+                ["git", "rev-list", "--count", f"{prior_sha}..{candidate_sha}"],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            raise MigrationError(
+                "operator-plan prior-to-candidate range could not be proved"
+            ) from None
+        if commit_count != "1":
+            raise MigrationError(
+                "operator-plan prior-to-candidate range was not exactly one commit"
+            )
+
+
+def operator_plan(
+    request: MigrationRequest,
+    *,
+    repository_validation_performed: bool = False,
+) -> str:
     """Render exact, non-secret inputs beside the supervised execution order."""
+    if repository_validation_performed:
+        repository_validation = (
+            "Repository validation was performed: the candidate commit exists, its fresh exact "
+            "clone was clean, its first parent was exactly the prior SHA, and the "
+            "prior-to-candidate range contained exactly one commit. Canonical `main` identity "
+            "and materialization review were NOT checked; prove both in step 1."
+        )
+    else:
+        repository_validation = (
+            "Repository validation was NOT performed because `--repo` was not supplied: "
+            "candidate existence, fresh-clone cleanliness, first-parent identity, and the "
+            "one-commit range were NOT proved. Prove all of them before using this sheet; "
+            "canonical `main` identity and materialization review also remain operator checks."
+        )
     return f"""# U15 Day Zero supervised operator sheet
 
 Candidate SHA: `{request.candidate_sha}`
@@ -995,8 +1192,7 @@ This remains a **Damien at the keyboard** production act. Keep
 disabled and inactive. Never use `deploy/deploy-prod.sh`, which is the disabled
 Publisher-bypass tripwire.
 
-This sheet is strictly post-materialization. The supplied candidate SHA already exists as a
-materialized, reviewed, canonical, and clean commit; its parent is the prior SHA above.
+This sheet is strictly post-materialization. {repository_validation}
 
 1. Prove the supplied candidate is the exact clean canonical `main` commit and
    has the prior SHA above as its parent. Stop on any difference.
@@ -1050,8 +1246,7 @@ def _head_sha(repo: pathlib.Path) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = BoundedArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=pathlib.Path,
-                        default=pathlib.Path(__file__).resolve().parents[1])
+    parser.add_argument("--repo", type=pathlib.Path)
     parser.add_argument("--candidate-sha")
     parser.add_argument("--inspect-cloudflare-pair", action="store_true",
                         help="read and prove the active provider pair without mutation")
@@ -1069,6 +1264,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ack-john-notified", action="store_true")
     parser.add_argument("--ack-queue-empty", action="store_true")
     parser.add_argument("--print-operator-plan", action="store_true")
+    parser.add_argument(
+        "--print-recovery-ids",
+        action="store_true",
+        help="print exact non-secret recovery coordinates after stable inspection",
+    )
     return parser
 
 
@@ -1089,10 +1289,19 @@ def _migration_request(args, candidate_sha: str, prior_pair: ProductionPair) -> 
 def main(argv=None) -> int:
     try:
         args = build_parser().parse_args(argv)
-        repo = args.repo.resolve()
+        repo_supplied = args.repo is not None
+        repo = (args.repo or pathlib.Path(__file__).resolve().parents[1]).resolve()
+        if args.print_recovery_ids and not args.inspect_cloudflare_pair:
+            raise MigrationError("recovery-ID receipt requires Cloudflare inspection")
         if args.inspect_cloudflare_pair:
             if args.execute:
                 raise MigrationError("Cloudflare inspection cannot be combined with execution")
+            if args.print_recovery_ids and args.print_operator_plan:
+                raise MigrationError(
+                    "recovery-ID receipt cannot be combined with the operator plan"
+                )
+            if args.print_recovery_ids:
+                _validate_recovery_id_receipt(args)
             required = (
                 args.cloudflare_account_id,
                 args.pages_project,
@@ -1113,6 +1322,15 @@ def main(argv=None) -> int:
                 args.pages_provenance_url,
                 args.worker_provenance_url,
             )
+            if args.print_recovery_ids:
+                print(json.dumps({
+                    "mode": "read-only-cloudflare-recovery-ids",
+                    "pages_deployment_id": pair.pages_deployment_id,
+                    "production_mutations": 0,
+                    "sha": pair.sha,
+                    "worker_version_id": pair.worker_version_id,
+                }, sort_keys=True, separators=(",", ":")))
+                return 0
             if args.print_operator_plan:
                 if any((args.prior_sha, args.prior_pages_deployment_id,
                         args.prior_worker_version_id)):
@@ -1123,7 +1341,14 @@ def main(argv=None) -> int:
                     args, args.candidate_sha or _head_sha(repo), pair
                 )
                 _validate_request(request)
-                print(operator_plan(request))
+                if repo_supplied:
+                    validate_operator_plan_candidate(
+                        repo, request.candidate_sha, request.prior_pair.sha,
+                    )
+                print(operator_plan(
+                    request,
+                    repository_validation_performed=repo_supplied,
+                ))
                 return 0
             print(json.dumps({
                 "mode": "read-only-cloudflare-inspection",
@@ -1144,7 +1369,14 @@ def main(argv=None) -> int:
             )
             _validate_request(request)
             if args.print_operator_plan:
-                print(operator_plan(request))
+                if repo_supplied:
+                    validate_operator_plan_candidate(
+                        repo, request.candidate_sha, request.prior_pair.sha,
+                    )
+                print(operator_plan(
+                    request,
+                    repository_validation_performed=repo_supplied,
+                ))
                 return 0
             print(
                 "error: no direct production adapter is installed; use the supervised "

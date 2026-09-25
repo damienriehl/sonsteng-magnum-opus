@@ -1026,7 +1026,12 @@ def apply_file_patches(worktree, relpath, patches):
     # doesn't EXACTLY equal parse->set-at-path), we fall back to the v1
     # whole-file parse->set->serialize path. Either way the logical object is
     # identical; only the diff minimality differs.
-    obj = json.loads(raw)
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError:
+        # A source may change between mapping and replay. Route malformed
+        # content through the same bounded rollback as an invalid leaf.
+        return {p.suggestion_id: OUT_VALIDATION_ERROR for p in patches}
     # body values evolve as patches apply (text edits, then structural ops),
     # so track the CURRENT value per body path and emit one edit per path.
     body_values = {}

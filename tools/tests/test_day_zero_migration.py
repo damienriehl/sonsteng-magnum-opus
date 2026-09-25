@@ -240,6 +240,97 @@ def git_repo(tmp_path):
     return repo
 
 
+def materialized_git_repo(tmp_path):
+    repo = git_repo(tmp_path)
+    prior_sha = git(repo, "rev-parse", "HEAD")
+    stamp = repo / "site/platform/data/.build-stamp.json"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_text(json.dumps({
+        "schema_version": 1,
+        "spine_build_id": "spine-build-id",
+        "git_base_sha": prior_sha,
+    }, indent=2) + "\n", encoding="utf-8")
+    (repo / "other-generated.txt").write_text("committed\n", encoding="utf-8")
+    git(repo, "add", "site/platform/data/.build-stamp.json", "other-generated.txt")
+    git(repo, "commit", "-m", "materialized candidate")
+    return repo, prior_sha, git(repo, "rev-parse", "HEAD")
+
+
+def amend_materialized_stamp(repo, stamp_text):
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    stamp.write_text(stamp_text, encoding="utf-8")
+    git(repo, "add", str(migration.BUILD_STAMP_RELATIVE_PATH))
+    git(repo, "commit", "--amend", "--no-edit")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def assert_generated_stamp_rejected_and_restored(repo, candidate_sha, regenerated_text):
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_bytes = stamp.read_bytes()
+    stamp.write_text(regenerated_text, encoding="utf-8")
+    runner = migration.LocalRehearsalPhases(
+        repo, allow_traceability_stamp_refresh=True,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: generated-artifact-cleanliness$"):
+        migration._run_phases(
+            runner,
+            candidate_sha,
+            context="verify-only",
+            phase_names=("generated-artifact-cleanliness",),
+        )
+
+    assert stamp.read_bytes() == committed_bytes
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def candidate_history_repo(tmp_path):
+    repo = git_repo(tmp_path)
+    prior_sha = git(repo, "rev-parse", "HEAD")
+    (repo / "candidate.txt").write_text("materialized candidate\n", encoding="utf-8")
+    git(repo, "commit", "-am", "materialized candidate")
+    return repo, prior_sha, git(repo, "rev-parse", "HEAD")
+
+
+def stub_materialized_verification_commands(
+        monkeypatch, *, stamp_spine_build_id=None, change_other_generated=False,
+        later_phase_observations=None):
+    def command(runner, argv):
+        script = argv[1] if len(argv) > 1 else ""
+        if script == "tools/build_site.py":
+            stamp = runner.checkout / "site/platform/data/.build-stamp.json"
+            payload = json.loads(stamp.read_text(encoding="utf-8"))
+            payload["git_base_sha"] = git(runner.checkout, "rev-parse", "HEAD")
+            if stamp_spine_build_id is not None:
+                payload["spine_build_id"] = stamp_spine_build_id
+            stamp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+            if change_other_generated:
+                (runner.checkout / "other-generated.txt").write_text(
+                    "regenerated differently\n", encoding="utf-8",
+                )
+        elif script == "tools/check_build_parity.py" and later_phase_observations is not None:
+            later_phase_observations.append(git(runner.checkout, "status", "--porcelain"))
+        elif script == "tools/validate_spine.py":
+            (runner.checkout / ".day-zero-migration-validation.json").write_text(
+                json.dumps({
+                    "day_zero_offset_enforcement": True,
+                    "identifier_base_enforcement": True,
+                    "totals": {
+                        "checked_dates": 1,
+                        "offset_dates_checked": 1,
+                        "identifier_files_checked": 1,
+                        "identifier_base_values_checked": 1,
+                        "old_identifier_base_occurrences": 0,
+                    },
+                }),
+                encoding="utf-8",
+            )
+
+    monkeypatch.setattr(migration.LocalRehearsalPhases, "_command", command)
+
+
 def test_isolated_git_copy_accepts_only_the_exact_commit_object(tmp_path):
     repo = git_repo(tmp_path)
     commit_sha = git(repo, "rev-parse", "HEAD")
@@ -340,6 +431,114 @@ def test_materialized_candidate_verification_never_reruns_governed_write(tmp_pat
     assert receipt["mode"] == "verify-only"
     assert receipt["candidate_sha"] == SHA_NEW
     assert receipt["production_mutations"] == 0
+
+
+def test_verify_materialized_accepts_traceability_only_build_stamp_refresh(
+        tmp_path, monkeypatch):
+    repo, prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    later_phase_observations = []
+    stub_materialized_verification_commands(
+        monkeypatch, later_phase_observations=later_phase_observations,
+    )
+
+    receipt = migration.verify_materialized(repo, candidate_sha)
+
+    committed_stamp = json.loads(git(
+        repo, "show", f"{candidate_sha}:site/platform/data/.build-stamp.json",
+    ))
+    assert committed_stamp["git_base_sha"] == prior_sha
+    assert candidate_sha != prior_sha
+    assert later_phase_observations == [""]
+    assert receipt["mode"] == "verify-only"
+    assert receipt["candidate_sha"] == candidate_sha
+
+
+def test_verify_materialized_rejects_spine_build_id_change_at_generated_artifact_cleanliness(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(
+        monkeypatch, stamp_spine_build_id="different-spine-build-id",
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="verify-only phase failed: generated-artifact-cleanliness"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_verify_materialized_rejects_other_generated_artifact_diff(tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(monkeypatch, change_other_generated=True)
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="verify-only phase failed: generated-artifact-cleanliness"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_generated_artifact_cleanliness_rejects_integer_vs_boolean(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = 1
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = True
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+def test_generated_artifact_cleanliness_rejects_string_vs_integer(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = "1"
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = 1
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+def test_generated_artifact_cleanliness_rejects_nested_list_order_change(tmp_path):
+    repo, _prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed = json.loads(stamp.read_text(encoding="utf-8"))
+    committed["extra_contract_field"] = {"nested": ["first", "second"]}
+    candidate_sha = amend_materialized_stamp(repo, json.dumps(committed))
+    regenerated = dict(committed)
+    regenerated["git_base_sha"] = candidate_sha
+    regenerated["extra_contract_field"] = {"nested": ["second", "first"]}
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, json.dumps(regenerated),
+    )
+
+
+@pytest.mark.parametrize("duplicate_side", ["committed", "regenerated"])
+def test_generated_artifact_cleanliness_rejects_duplicate_key_in_either_stamp(
+        tmp_path, duplicate_side):
+    repo, prior_sha, _candidate_sha = materialized_git_repo(tmp_path)
+    valid_stamp = (
+        f'{{"schema_version":1,"spine_build_id":"spine-build-id",'
+        f'"git_base_sha":"{prior_sha}","extra_contract_field":1}}'
+    )
+    duplicate_stamp = valid_stamp[:-1] + ',"extra_contract_field":1}'
+    committed_text = duplicate_stamp if duplicate_side == "committed" else valid_stamp
+    candidate_sha = amend_materialized_stamp(repo, committed_text)
+    regenerated_text = (
+        duplicate_stamp if duplicate_side == "regenerated" else valid_stamp
+    )
+
+    assert_generated_stamp_rejected_and_restored(
+        repo, candidate_sha, regenerated_text,
+    )
 
 
 def test_candidate_cleanliness_phase_requires_exact_head_and_no_changes(tmp_path):
@@ -730,7 +929,7 @@ def test_cli_execute_is_unwired_even_with_explicit_enablement(monkeypatch, tmp_p
 
 
 def test_operator_plan_contains_exact_inputs_and_supervised_boundary(tmp_path):
-    plan = migration.operator_plan(request(tmp_path))
+    plan = migration.operator_plan(request(tmp_path), repository_validation_performed=True)
     assert SHA_NEW in plan
     assert "pages-old" in plan
     assert "worker-old" in plan
@@ -738,12 +937,118 @@ def test_operator_plan_contains_exact_inputs_and_supervised_boundary(tmp_path):
     assert "SONSTENG_PROD_RELEASE_ENABLED=false" in plan
     assert "deploy/deploy-prod.sh" in plan
     assert "never" in plan.lower()
-    assert "candidate SHA already exists" in plan
-    assert "canonical, and clean commit" in plan
+    assert "Repository validation was performed" in plan
+    assert "fresh exact clone was clean" in plan
+    assert "Canonical `main` identity and materialization review were NOT checked" in plan
     assert "same exclusive change window remains held" in plan
     assert "governed write" not in plan
     assert "commit the complete" not in plan
     assert "Merge only" not in plan
+
+
+def operator_plan_args(tmp_path, candidate_sha, prior_sha, *, repo=None):
+    args = [
+        "--print-operator-plan",
+        "--candidate-sha", candidate_sha,
+        "--prior-sha", prior_sha,
+        "--prior-pages-deployment-id", "pages-old",
+        "--prior-worker-version-id", "worker-old",
+        "--recovery-registry", str(tmp_path / "registry.json"),
+        "--ack-john-notified",
+        "--ack-queue-empty",
+    ]
+    if repo is not None:
+        args.extend(["--repo", str(repo)])
+    return args
+
+
+def test_operator_plan_with_repo_proves_candidate_history_in_fresh_clone(
+        tmp_path, monkeypatch, capsys):
+    repo, prior_sha, candidate_sha = candidate_history_repo(tmp_path)
+    monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "false")
+
+    code = migration.main(operator_plan_args(
+        tmp_path, candidate_sha, prior_sha, repo=repo,
+    ))
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Repository validation was performed" in captured.out
+    assert "fresh exact clone was clean" in captured.out
+
+
+def test_operator_plan_without_repo_marks_candidate_checks_not_performed(
+        tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "false")
+
+    code = migration.main(operator_plan_args(tmp_path, SHA_NEW, SHA_OLD))
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Repository validation was NOT performed" in captured.out
+    assert "candidate existence, fresh-clone cleanliness, first-parent identity, and the " \
+           "one-commit range were NOT proved" in captured.out
+
+
+def test_operator_plan_repo_validation_rejects_missing_candidate_commit(
+        tmp_path, monkeypatch, capsys):
+    repo, prior_sha, _candidate_sha = candidate_history_repo(tmp_path)
+    monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    monkeypatch.setenv("SONSTENG_PROD_RELEASE_ENABLED", "false")
+
+    code = migration.main(operator_plan_args(tmp_path, SHA_NEW, prior_sha, repo=repo))
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == "error: operator-plan candidate commit does not exist\n"
+
+
+def test_operator_plan_repo_validation_rejects_dirty_fresh_exact_clone(tmp_path):
+    repo, prior_sha, candidate_sha = candidate_history_repo(tmp_path)
+    (repo / "dirty.txt").write_text("dirty\n", encoding="utf-8")
+
+    @contextlib.contextmanager
+    def dirty_exact_copy(_repo, _candidate_sha):
+        yield repo
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="operator-plan candidate tree was not clean in a fresh exact clone"):
+        migration.validate_operator_plan_candidate(
+            repo, candidate_sha, prior_sha, isolated_copy=dirty_exact_copy,
+        )
+
+
+def test_operator_plan_repo_validation_rejects_wrong_first_parent(tmp_path):
+    repo, prior_sha, candidate_sha = candidate_history_repo(tmp_path)
+    (repo / "candidate.txt").write_text("third commit\n", encoding="utf-8")
+    git(repo, "commit", "-am", "third commit")
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="operator-plan candidate first parent did not match prior SHA"):
+        migration.validate_operator_plan_candidate(repo, git(repo, "rev-parse", "HEAD"), prior_sha)
+    assert git(repo, "rev-parse", f"{candidate_sha}^1") == prior_sha
+
+
+def test_operator_plan_repo_validation_rejects_multi_commit_prior_range(tmp_path):
+    repo, prior_sha, _candidate_sha = candidate_history_repo(tmp_path)
+    git(repo, "checkout", "-b", "side", prior_sha)
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    git(repo, "add", "side.txt")
+    git(repo, "commit", "-m", "side commit")
+    side_sha = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "--detach", prior_sha)
+    git(repo, "merge", "--no-ff", "--no-edit", side_sha)
+    merge_sha = git(repo, "rev-parse", "HEAD")
+    assert git(repo, "rev-parse", f"{merge_sha}^1") == prior_sha
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="operator-plan prior-to-candidate range was not exactly one commit"):
+        migration.validate_operator_plan_candidate(repo, merge_sha, prior_sha)
 
 
 # U3: stable, read-only Cloudflare production-pair inspection.
@@ -1114,6 +1419,106 @@ def test_cli_has_no_token_argument_and_emits_only_redacted_pair(monkeypatch, tmp
     assert observed["token"] == CF_TOKEN
     assert not any(action.dest in {"cloudflare_token", "token"}
                    for action in migration.build_parser()._actions)
+
+
+def test_cli_print_recovery_ids_emits_exact_stable_pair_without_provider_bodies(
+        monkeypatch, tmp_path, capsys):
+    credential = tmp_path / "cloudflare-token"
+    credential.write_text(CF_TOKEN, encoding="utf-8")
+    credential.chmod(0o600)
+    inspector, reader = make_inspector(inspector_responses(
+        pages_a=pages_payload("pages-exact-recovery-id", provider_body="do-not-print"),
+        worker_a=worker_payload(deployment_id="worker-deployment-do-not-print"),
+    ))
+    monkeypatch.setattr(
+        migration, "CloudflarePairInspector",
+        lambda _account, _project, _script, token: inspector if token == CF_TOKEN else None,
+    )
+    monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    with credential.open(encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stdin", stream)
+        code = migration.main([
+            "--inspect-cloudflare-pair",
+            "--print-recovery-ids",
+            "--cloudflare-account-id", CF_ACCOUNT,
+            "--pages-project", "legal-practicum",
+            "--worker-script", "sonsteng-chat",
+            "--pages-provenance-url", PAGES_URL,
+            "--worker-provenance-url", WORKER_URL,
+            "--ack-john-notified",
+            "--ack-queue-empty",
+        ])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == json.dumps({
+        "mode": "read-only-cloudflare-recovery-ids",
+        "pages_deployment_id": "pages-exact-recovery-id",
+        "production_mutations": 0,
+        "sha": SHA_NEW,
+        "worker_version_id": "worker-version-active",
+    }, sort_keys=True, separators=(",", ":")) + "\n"
+    assert CF_TOKEN not in captured.out + captured.err
+    assert "do-not-print" not in captured.out + captured.err
+    assert "worker-deployment-do-not-print" not in captured.out + captured.err
+    assert len(reader.requests) == 6
+
+
+@pytest.mark.parametrize(
+    ("enabled", "john_ack", "queue_ack", "message"),
+    [
+        (False, True, True, "production Day Zero migration is disabled by default"),
+        (True, False, True, "explicit John-notified acknowledgement is required"),
+        (True, True, False, "explicit queue-empty acknowledgement is required"),
+    ],
+)
+def test_cli_print_recovery_ids_requires_enablement_and_acknowledgements(
+        monkeypatch, capsys, enabled, john_ack, queue_ack, message):
+    if enabled:
+        monkeypatch.setenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", "true")
+    else:
+        monkeypatch.delenv("SONSTENG_DAY_ZERO_MIGRATION_ENABLED", raising=False)
+    args = [
+        "--inspect-cloudflare-pair",
+        "--print-recovery-ids",
+        "--cloudflare-account-id", CF_ACCOUNT,
+        "--pages-project", "legal-practicum",
+        "--worker-script", "sonsteng-chat",
+        "--pages-provenance-url", PAGES_URL,
+        "--worker-provenance-url", WORKER_URL,
+    ]
+    if john_ack:
+        args.append("--ack-john-notified")
+    if queue_ack:
+        args.append("--ack-queue-empty")
+
+    code = migration.main(args)
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == f"error: {message}\n"
+
+
+def test_cli_refuses_recovery_ids_with_operator_plan_before_inspection(capsys):
+    code = migration.main([
+        "--inspect-cloudflare-pair",
+        "--print-recovery-ids",
+        "--print-operator-plan",
+    ])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == (
+        "error: recovery-ID receipt cannot be combined with the operator plan\n"
+    )
+
+
+def test_cli_refuses_recovery_ids_without_cloudflare_inspection(capsys):
+    code = migration.main(["--print-recovery-ids"])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err == "error: recovery-ID receipt requires Cloudflare inspection\n"
 
 
 def test_rejected_token_shaped_command_argument_is_not_reflected(capsys):
