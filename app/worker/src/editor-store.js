@@ -88,5 +88,5 @@ export class EditorStore extends DurableObject {
   publisherContext() { return this.core.publisherContext(); }
   publisherSummary() { return this.core.publisherSummary(); }
   productionReleaseAudit() { return this.core.productionReleaseAudit(); }
-  productionPreparationContext() { return this.core.productionPreparationContext(); }
+  productionPreparationContext(options) { return this.core.productionPreparationContext(options); }
 }
