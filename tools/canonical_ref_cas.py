@@ -152,6 +152,105 @@ class CasFailure(CasError):
         self.receipt = receipt
 
 
+def _redact_url_userinfo(value: str, *, url_field: bool = False) -> str:
+    embedded_scheme_userinfo = re.search(
+        r"[A-Za-z][A-Za-z0-9+.-]*://[^\s/?#]*@[^\s/?#]+", value
+    )
+    if embedded_scheme_userinfo and embedded_scheme_userinfo.start() != 0:
+        return "[redacted]"
+    embedded_scp_userinfo = re.search(
+        r"(?<![A-Za-z0-9._+-])[A-Za-z0-9._+-]+@[^/:\s]+:[^\s]+", value
+    )
+    if embedded_scp_userinfo and embedded_scp_userinfo.start() != 0:
+        return "[redacted]"
+    if "://" in value:
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            return "[redacted]"
+        if not parsed.scheme:
+            return "[redacted]" if url_field else value
+        if "@" not in parsed.netloc:
+            return value
+        netloc = parsed.netloc.rsplit("@", 1)[-1]
+        return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+    if "@" not in value or os.path.isabs(value):
+        return value
+    userinfo, scp_target = value.split("@", 1)
+    if ":" in userinfo:
+        return value
+    scp_host, separator, scp_path = scp_target.partition(":")
+    if (
+        separator
+        and re.fullmatch(r"[^/:\s@]+", userinfo)
+        and scp_host
+        and "/" not in scp_host
+        and scp_path
+    ):
+        return scp_target
+    return "[redacted]" if url_field else value
+
+
+def _receipt_safe_value(value, *, field_name: str | None = None):
+    if isinstance(value, str):
+        return _redact_url_userinfo(
+            value,
+            url_field=field_name is not None and "url" in field_name.lower(),
+        )
+    if isinstance(value, Mapping):
+        return {
+            _receipt_safe_key(key): _receipt_safe_value(
+                nested, field_name=str(key)
+            )
+            for key, nested in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _receipt_safe_value(nested, field_name=field_name)
+            for nested in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _receipt_safe_value(nested, field_name=field_name) for nested in value
+        )
+    return value
+
+
+def _receipt_safe_key(key):
+    if isinstance(key, str):
+        return _redact_url_userinfo(key)
+    return key
+
+
+class _Receipt(dict):
+    """A receipt whose every inserted field passes through URL-userinfo redaction."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def __setitem__(self, key, value) -> None:
+        super().__setitem__(
+            _receipt_safe_key(key),
+            _receipt_safe_value(value, field_name=str(key)),
+        )
+
+    def update(self, *args, **kwargs) -> None:
+        fields = dict(*args, **kwargs)
+        for key, value in fields.items():
+            self[key] = value
+
+    def setdefault(self, key, default=None):
+        safe_key = _receipt_safe_key(key)
+        if safe_key not in self:
+            self[key] = default
+        return self[safe_key]
+
+    def __ior__(self, other):
+        self.update(other)
+        return self
+
+
 @dataclass(frozen=True)
 class Operation:
     verb: str
@@ -1225,59 +1324,35 @@ def _cas_remote_tracking_main(
         raise CasError("remote-tracking main compare-and-swap mismatch")
 
 
-def _base_receipt(operation: Operation, mutations: list[str] | None) -> dict:
-    return {
-        "branch": None,
-        "dry_run": operation.dry_run,
-        "expected": {"from": None, "to": None},
-        "expected_remote_url_sha256": None,
-        "git_executable": GIT_PATH,
-        "host_identity": HOST_IDENTITY,
-        "mutations": mutations,
-        "remote": None,
-        "remote_url": None,
-        "remote_url_sha256": None,
-        "repo": None,
-        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc)
-        .isoformat(timespec="microseconds")
-        .replace("+00:00", "Z"),
-        "tool": {"path": TOOL_PATH, "sha256": TOOL_SHA256},
-        "verb": operation.verb,
-        "window_owner": None,
-    }
+def _base_receipt(operation: Operation, mutations: list[str] | None) -> _Receipt:
+    return _Receipt(
+        {
+            "branch": None,
+            "dry_run": operation.dry_run,
+            "expected": {"from": None, "to": None},
+            "expected_remote_url_sha256": None,
+            "git_executable": GIT_PATH,
+            "host_identity": HOST_IDENTITY,
+            "mutations": mutations,
+            "remote": None,
+            "remote_url": None,
+            "remote_url_sha256": None,
+            "repo": None,
+            "timestamp_utc": datetime.datetime.now(datetime.timezone.utc)
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z"),
+            "tool": {"path": TOOL_PATH, "sha256": TOOL_SHA256},
+            "verb": operation.verb,
+            "window_owner": None,
+        }
+    )
 
 
 def _receipt_remote_identity(remote_url: str) -> dict[str, str]:
     if not remote_url:
         raise CasError("validated remote URL was empty")
     fingerprint = hashlib.sha256(remote_url.encode("utf-8")).hexdigest()
-    display = remote_url
-    if "://" in remote_url:
-        try:
-            parsed = urlsplit(remote_url)
-        except ValueError:
-            display = "[redacted]"
-        else:
-            if parsed.scheme:
-                netloc = parsed.netloc.rsplit("@", 1)[-1]
-                display = urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
-            else:
-                display = "[redacted]"
-    elif "@" in remote_url:
-        userinfo, scp_target = remote_url.rsplit("@", 1)
-        scp_host, separator, scp_path = scp_target.partition(":")
-        display = "[redacted]"
-        if os.path.isabs(remote_url):
-            display = remote_url
-        elif (
-            separator
-            and userinfo
-            and "/" not in userinfo
-            and scp_host
-            and "/" not in scp_host
-            and scp_path
-        ):
-            display = scp_target
+    display = _redact_url_userinfo(remote_url, url_field=True)
     if not display or not fingerprint:
         raise CasError("validated remote URL could not be recorded safely")
     return {"remote_url": display, "remote_url_sha256": fingerprint}
@@ -1312,8 +1387,8 @@ def _require_remote_head_main(operation: Operation, snapshot: RemoteSnapshot) ->
 
 
 def _execute(operation: Operation) -> dict:
-    mutations: list[str] = []
-    receipt = _base_receipt(operation, mutations)
+    receipt = _base_receipt(operation, [])
+    mutations: list[str] = receipt["mutations"]
     operation_validated = False
     remote_main_attempted = False
     remote_url: str | None = None
@@ -1655,7 +1730,12 @@ def _open_receipt(path: str) -> tuple[int, int, str, str]:
 
 def _receipt_payload(receipt: dict) -> bytes:
     return (
-        json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+        json.dumps(
+            _Receipt(receipt),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
     ).encode("utf-8")
 
 
