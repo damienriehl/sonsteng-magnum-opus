@@ -58,8 +58,12 @@ URL_USERINFO_REDACTION_CASES = (
     ),
     (
         "operator@example.invalid:repository@archive",
-        "example.invalid:repository@archive",
+        "[redacted]",
     ),
+)
+SCHEMELESS_USERINFO_CASES = (
+    "user-info:masked-value@example.invalid",
+    "user-info:masked-value@example.invalid/org/repository.git",
 )
 
 
@@ -280,6 +284,13 @@ def assert_receipt_contains_no_url_userinfo(result: dict) -> None:
             )
             is None
         )
+        assert (
+            re.search(
+                r"(?<![A-Za-z0-9._+-])[A-Za-z0-9._+-]+:[^\s/@]+@[^\s/@]+",
+                value,
+            )
+            is None
+        )
 
 
 def remote_url_sha256(repositories: Repositories) -> str:
@@ -419,6 +430,7 @@ def test_missing_window_owner_is_refused_before_mutation(
         pytest.param(" leading-space", id="leading-space"),
         pytest.param("x" * 257, id="too-long"),
         pytest.param("control\x07character", id="control-character"),
+        pytest.param("ops@window-host:packet-d-1", id="userinfo-separator"),
     ],
 )
 def test_invalid_window_owner_format_is_refused_before_mutation(
@@ -435,7 +447,7 @@ def test_invalid_window_owner_format_is_refused_before_mutation(
     failure = receipt(completed)
     assert failure["error"] == (
         "--window-owner must be a non-empty printable value "
-        "of at most 256 characters"
+        "of at most 256 characters without '@'"
     )
     assert failure["error_code"] == "invalid-window-owner"
     assert failure["mutations"] == []
@@ -4822,7 +4834,8 @@ def test_receipt_redacts_remote_url_credentials_on_success_and_baseline_refusal(
             "operator@example.invalid/not-scp",
             "[redacted]",
         ),
-    ),
+    )
+    + tuple((url, "[redacted]") for url in SCHEMELESS_USERINFO_CASES),
 )
 def test_failure_receipt_redacts_userinfo_from_every_remote_url_form(
     repositories: Repositories,
@@ -4945,8 +4958,67 @@ def test_outermost_fallback_redacts_userinfo_from_every_receipt_field(
     assert json.loads(captured.err) == result
     assert result["transition_outcome"] == "undetermined"
     assert result["transition_outcome_source"] == "outermost-fallback"
-    assert result["remote"] == redacted_url
+    assert result["remote"] == "[redacted]"
     assert_receipt_contains_no_url_userinfo(result)
+
+
+@pytest.mark.parametrize("url_with_userinfo", SCHEMELESS_USERINFO_CASES)
+@pytest.mark.parametrize(
+    "echoed_argument",
+    ["--remote", "--repo", "--branch", "--window-owner", "--from"],
+)
+def test_outermost_fallback_redacts_schemeless_userinfo_from_echoed_arguments(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+    url_with_userinfo: str,
+    echoed_argument: str,
+):
+    receipt_path = tmp_path / "outermost-fallback.json"
+    arguments = {
+        "--repo": "~canonical-ref-cas-user-that-must-not-exist/repository",
+        "--remote": "origin",
+        "--branch": "main",
+        "--from": "1" * 40,
+        "--to": "2" * 40,
+        "--expect-remote-url-sha256": "3" * 64,
+        "--window-owner": WINDOW_OWNER,
+        "--receipt-path": str(receipt_path),
+    }
+    arguments[echoed_argument] = url_with_userinfo
+    argv = ["forward"]
+    for option, value in arguments.items():
+        argv.extend([option, value])
+
+    result_code = cas.main(argv)
+
+    captured = capfd.readouterr()
+    result = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert result_code == 1
+    assert json.loads(captured.err) == result
+    for secret in ("user-info", "masked-value"):
+        assert secret not in captured.out
+        assert secret not in captured.err
+        assert secret not in json.dumps(result, sort_keys=True)
+    assert_receipt_contains_no_url_userinfo(result)
+    if echoed_argument == "--remote":
+        assert result["transition_outcome_source"] == "outermost-fallback"
+        assert result["remote"] == "[redacted]"
+
+
+def test_url_named_future_fields_redact_bare_userinfo_host():
+    bare_userinfo_host = "operator@example.invalid/not-scp"
+
+    result = cas._Receipt(
+        future_mirror_url=bare_userinfo_host,
+        future_diagnostics={"fetch_url": bare_userinfo_host},
+    )
+    serialized_result = json.loads(
+        cas._receipt_payload({"future_mirror_url": bare_userinfo_host})
+    )
+
+    assert result["future_mirror_url"] == "[redacted]"
+    assert result["future_diagnostics"] == {"fetch_url": "[redacted]"}
+    assert serialized_result["future_mirror_url"] == "[redacted]"
 
 
 def test_malformed_remote_url_produces_bounded_receipt_without_traceback(

@@ -318,7 +318,9 @@ includes the verifier's absolute path and self-hash; the absolute repository;
 remote name and branch; UTC timestamp; operation labels; validated SHA values;
 the operator-supplied remote expectation; a credential-redacted validated
 remote URL; and the SHA-256 fingerprint of the exact validated URL. It also
-records the required window owner and host identity, plus best-effort readback
+records the required window owner (a printable value of at most 256
+characters, without surrounding whitespace or `@`, refused before any mutation
+otherwise) and host identity, plus best-effort readback
 after a failure so partial state is never silent. It writes and syncs a private
 temporary file in the evidence directory, then publishes the complete receipt
 without overwrite; the named receipt is therefore complete or absent, never a
@@ -547,7 +549,10 @@ Every possible `transition_outcome` has an operator rule:
   `remote`, `branch`, `expected_remote_url_sha256`, and `window_owner` are
   unvalidated echoes of the command input so the receipt can still be tied to
   its requested transition and migration window; they are not proof that any
-  repository state or identity was validated.
+  repository state or identity was validated. The echoes are still
+  credential-redacted: `remote` is echoed only when it is a plain remote name
+  and is otherwise `[redacted]`, and any echo carrying URL or scp-like userinfo
+  is redacted.
 
 On any normally handled failure after operation validation,
 `transition_outcome_source` is `"post-failure-readback"`. If the failure handler

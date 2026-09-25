@@ -178,7 +178,8 @@ def _redact_url_userinfo(value: str, *, url_field: bool = False) -> str:
         return value
     userinfo, scp_target = value.split("@", 1)
     if ":" in userinfo:
-        return value
+        # A scheme-less ``user:password@host[/path]`` carries a credential.
+        return "[redacted]"
     scp_host, separator, scp_path = scp_target.partition(":")
     if (
         separator
@@ -187,7 +188,10 @@ def _redact_url_userinfo(value: str, *, url_field: bool = False) -> str:
         and "/" not in scp_host
         and scp_path
     ):
-        return scp_target
+        # A later ``@`` in the scp path would make the stripped value look like
+        # ``user:password@host`` on the next pass; collapse it so redaction is
+        # idempotent. ``remote_url_sha256`` still identifies the exact URL.
+        return "[redacted]" if "@" in scp_path else scp_target
     return "[redacted]" if url_field else value
 
 
@@ -740,11 +744,12 @@ def _validated_window_owner(operation: Operation) -> str:
     if (
         len(owner) > 256
         or owner.strip() != owner
+        or "@" in owner
         or any(not character.isprintable() for character in owner)
     ):
         raise CasError(
             "--window-owner must be a non-empty printable value "
-            "of at most 256 characters",
+            "of at most 256 characters without '@'",
             error_code="invalid-window-owner",
         )
     if not HOST_IDENTITY or len(HOST_IDENTITY) > 255:
@@ -1934,7 +1939,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected={"from": args.from_sha, "to": args.to_sha},
                 expected_remote_url_sha256=args.expect_remote_url_sha256,
                 readback=readback,
-                remote=args.remote,
+                remote=(
+                    args.remote
+                    if isinstance(args.remote, str)
+                    and REMOTE_RE.fullmatch(args.remote)
+                    else "[redacted]"
+                ),
                 repo=args.repo,
                 window_owner=args.window_owner,
                 **_undetermined_failure_fields(
