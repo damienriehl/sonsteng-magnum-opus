@@ -19,7 +19,7 @@ CRITICAL — this bundle contains ANSWER KEYS and concealed instructor content. 
 is SERVER-ONLY and must NEVER land in:
     * site/platform/            (the public static build), or
     * personas.generated.json   (the persona/chat bundle).
-A self-check at the end asserts the output path is outside site/platform/ and
+A preflight check ensures the output path is inside build/ and outside site/platform/ and
 refuses to run if it isn't. The public leak-sweep (build_site.py) independently
 proves none of this text reaches the static site.
 
@@ -83,13 +83,32 @@ def _render_doc(matter_dir, relfile):
     return html, entries
 
 
+def _json_strings(value):
+    """Walk decoded strings so JSON escaping cannot conceal leaked HTML."""
+    if isinstance(value, str):
+        yield text_norm.normalize(value)
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            yield text_norm.normalize(key)
+            yield from _json_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _json_strings(child)
+
+
 def main():
     # Fail-closed guard: this bundle must never be written under the public site.
-    out_abs = os.path.abspath(OUT_PATH)
-    if os.path.commonpath([out_abs, os.path.abspath(SITE_PLATFORM)]) == os.path.abspath(SITE_PLATFORM):
+    out_abs = os.path.realpath(OUT_PATH)
+    public_abs = os.path.realpath(SITE_PLATFORM)
+    build_abs = os.path.realpath(os.path.join(REPO_ROOT, "build"))
+    if os.path.commonpath([out_abs, public_abs]) == public_abs:
         sys.stderr.write(
             "FATAL: instructor bundle output path is inside site/platform/ — refusing "
             "to write answer-key content into the public build.\n")
+        return 2
+
+    if os.path.commonpath([out_abs, build_abs]) != build_abs:
+        sys.stderr.write("FATAL: instructor bundle must be written under build/ — refusing to write.\n")
         return 2
 
     bs.EDMAP.reset()
@@ -128,25 +147,26 @@ def main():
         "docs": docs,
     }
 
+    persona_bundle = os.path.join(REPO_ROOT, "app", "worker", "personas", "personas.generated.json")
+    if os.path.isfile(persona_bundle):
+        try:
+            with open(persona_bundle, "r", encoding="utf-8") as fh:
+                pb = list(_json_strings(json.load(fh)))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            sys.stderr.write("FATAL: cannot check personas bundle: %s\n" % exc)
+            return 2
+        # No instructor HTML doc should appear inside the persona/chat bundle.
+        for d in docs:
+            snippet = text_norm.normalize(d["html"])[:80]
+            if snippet and any(snippet in value for value in pb):
+                sys.stderr.write("FATAL: instructor content leaked into personas bundle (%s/%s)\n"
+                                 % (d["matter_id"], d["doc_type"]))
+                return 2
+
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     with open(OUT_PATH, "w", encoding="utf-8") as fh:
         json.dump(bundle, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
-
-    # ---- self-checks (fail loud) ----
-    assert os.path.abspath(OUT_PATH).startswith(os.path.abspath(os.path.join(REPO_ROOT, "build"))), \
-        "instructor bundle must be written under build/"
-    persona_bundle = os.path.join(REPO_ROOT, "app", "worker", "personas", "personas.generated.json")
-    if os.path.isfile(persona_bundle):
-        with open(persona_bundle, "r", encoding="utf-8") as fh:
-            pb = fh.read()
-        # No instructor HTML doc should appear inside the persona/chat bundle.
-        for d in docs:
-            snippet = text_norm.normalize(d["html"])[:80]
-            if snippet and snippet in pb:
-                sys.stderr.write("FATAL: instructor content leaked into personas bundle (%s/%s)\n"
-                                 % (d["matter_id"], d["doc_type"]))
-                return 2
 
     total_blocks = sum(len(d["blocks"]) for d in docs)
     print("instructor bundle written: %s" % os.path.relpath(OUT_PATH, REPO_ROOT))

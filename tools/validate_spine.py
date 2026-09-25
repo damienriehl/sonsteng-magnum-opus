@@ -962,7 +962,13 @@ class Validator:
         root = bundle.dir
         for path in sorted(root.rglob("*.md")):
             source = self._normal_source(path)
-            for match in DAY_ZERO_FULL_DATE_RE.finditer(path.read_text(encoding="utf-8")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                self.report.add(bundle.id, "F30", ERROR,
+                                f"Cannot read prose date source {source}.")
+                continue
+            for match in DAY_ZERO_FULL_DATE_RE.finditer(text):
                 inventory[(source, match.group(0))] += 1
 
         for path in sorted(root.rglob("*.json")):
@@ -1013,7 +1019,12 @@ class Validator:
                 self.report.add(mid, "F30", ERROR,
                                 f"{mid} cannot resolve date-offsets {locator}.")
                 continue
-            resolved = sidecar_anchor + timedelta(days=offset)
+            try:
+                resolved = sidecar_anchor + timedelta(days=offset)
+            except OverflowError:
+                self.report.add(mid, "F30", ERROR,
+                                f"{mid} cannot resolve date-offsets {locator}: offset outside date range.")
+                continue
             if literal != resolved:
                 self.report.add(mid, "F30", ERROR,
                                 f"{mid} date-offsets {locator} literal {entry.get('literal')} "
@@ -1326,7 +1337,11 @@ class Validator:
         if err or not obj:
             self.report.add(scope, "E23", WARN, "folio-crosswalk.json unreadable; existence check skipped.")
             return
-        known = set(obj.get("iris", obj if isinstance(obj, list) else []))
+        iris = obj.get("iris", []) if isinstance(obj, dict) else obj
+        if not isinstance(iris, list) or any(not isinstance(value, str) for value in iris):
+            self.report.add(scope, "E23", WARN, "folio-crosswalk.json unreadable; existence check skipped.")
+            return
+        known = set(iris)
         bare = iri.rsplit("/", 1)[-1]
         if iri not in known and bare not in known:
             self.report.add(scope, "E23", WARN,
@@ -1738,7 +1753,7 @@ class Validator:
             self.report.add(mid, "DEPTH", ERROR,
                             f"{mid} depth floor: {len(exhibits)} exhibits < {DEPTH_MIN_EXHIBITS}.")
 
-        personas = list(bundle.personas.values())
+        personas = [p for p in bundle.personas.values() if p.schema_ok]
         if len(personas) < DEPTH_MIN_PERSONAS:
             self.report.add(mid, "DEPTH", ERROR,
                             f"{mid} depth floor: {len(personas)} personas < {DEPTH_MIN_PERSONAS}.")
@@ -1828,6 +1843,8 @@ class Validator:
             for w in mo.get("witnesses", []):
                 names.append(w.get("name", ""))
             for p in bundle.personas.values():
+                if not p.schema_ok:
+                    continue
                 names.append(p.obj.get("identity", {}).get("name", ""))
             for nm in names:
                 sn = norm_name(surname_of(nm))

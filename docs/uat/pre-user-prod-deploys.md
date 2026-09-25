@@ -58,3 +58,18 @@ Pages provenance: 200 + sha on /, /platform/, /platform/matters/
 DEV/production parity: SAME spine-build 3c6cab1f6a10220c; DEV Worker at 3fe1050 (2026-09-06) and DEV compose at 6c6ae09 (2026-09-06)
 Operator: orchestrating agent under Damien's 2026-09-02 authority, on his inline 2026-09-07 answer to ask sonsteng-magnum-opus-2026-09-07-1315-prod-promotion (J1); preconditions verified: clean worktree at origin/main, full preflight 22/22 with 44/44 persona journeys on the candidate, production dry-run clean
 ```
+
+```
+Date (UTC): 2026-09-19 13:25–13:29
+Candidate SHA: 0159c1115e28df58b0511ba5fbbadd4f1435b4d2 (main after PR #61)
+Previous Worker version / Pages deployment: 5410598b-dbcd-4ed0-88f4-e07cf86fcd05 / 256a9d6d-f4b7-403a-b821-89c52594d90f (source 8601b327e74dd915d1cc5e1008cd7f9791a42a41)
+New Worker version / Pages deployment: 9830359d-1081-45ee-a921-06b11a233bbc / c97f0e28 (https://c97f0e28.sonsteng.pages.dev)
+Worker provenance: 204 + candidate SHA; seven smoke checks passed (provenance, normal CSS, inherited asset names returning 404, unauthenticated editor 404, session Turnstile gate 403)
+Pages provenance: 200 + candidate SHA on /, /platform/, /platform/matters/, /platform/skills/
+DEV/production parity: SAME except permitted spine-build metadata on all four checked pages; no DEV deployment performed
+Operator: orchestrating agent under Damien's explicit 2026-09-19 authorization to push to production
+Validation: full preflight 22/22; Python 2378 passed, 1 skipped, 21693 subtests; JavaScript 1209 passed; persona journeys 44/44; layout 284/284; interview/critique 28/28; accessibility 0 failures, 85 existing warnings
+Release checks: merged tree identical to tested branch; clean isolated checkout at origin/main; fresh site, persona, instructor, editor-map and history artifacts; bundle parity and leak checks passed; production dry run passed; no schema or configuration changes
+Review: production-fixes-20260919 complete, ready to merge; one test-comment correction applied before commit; earlier coverage review coverage-20260919 complete
+Note: Python urllib's default client received a public-site 403; curl GETs returned 200 and verified all four pages and matching provenance. Wrangler's documented DEV-only variable warnings were unchanged.
+```

@@ -378,7 +378,7 @@ export function serveAsset(name) {
     "assessment-review.css": [CLIENT.ASSESSMENT_REVIEW_CSS || "", "text/css; charset=utf-8"],
     "assessment-review.js": [CLIENT.ASSESSMENT_REVIEW_JS || "", "text/javascript; charset=utf-8"],
   };
+  if (!Object.hasOwn(map, name)) return null;
   const hit = map[name];
-  if (!hit) return null;
   return new Response(hit[0], { status: 200, headers: { "content-type": hit[1] } });
 }

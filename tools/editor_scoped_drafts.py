@@ -188,11 +188,17 @@ def parse_drafts(raw):
 def validate_drafts(drafts, blocks):
     """Keep only drafts that address an enumerated block, actually change its
     text, and carry no reserved marker bytes."""
+    if not isinstance(drafts, list):
+        return []
     by_ref = {b["source_ref"]: b for b in blocks}
     seen = set()
     out = []
-    for d in drafts or []:
+    for d in drafts:
+        if not isinstance(d, dict):
+            continue
         ref = d.get("source_ref")
+        if not isinstance(ref, str):
+            continue
         new = d.get("new_text")
         blk = by_ref.get(ref)
         if not blk or not isinstance(new, str) or ref in seen:
