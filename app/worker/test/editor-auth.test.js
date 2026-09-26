@@ -177,3 +177,55 @@ test("service auth: a valid cookie still wins and Bearer is only the no-cookie f
   const auth = await resolveAuth(ENV, req);
   assert.equal(auth.slot, "john"); // cookie wins; Bearer not consulted
 });
+
+// The committed Worker configuration, not a fixture: the Day Zero queue proof
+// (tools/prove_queues_empty.py) presents the observer bearer to the DEV/editor
+// Worker, so the observer slot must be committed there with observer-only
+// authority, and production (PROD_RELEASE_LEDGER false) must not carry it.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const COMMITTED_CONFIG = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "wrangler.jsonc"), "utf8")
+    .replace(/^\s*\/\/.*$/gm, ""),
+);
+
+test("committed observer slot grants only release_observer in DEV and is absent from production", () => {
+  for (const [name, vars] of [["top-level", COMMITTED_CONFIG.vars],
+    ["env.dev", COMMITTED_CONFIG.env.dev.vars]]) {
+    const scopes = JSON.parse(vars.EDIT_TOKEN_SCOPES);
+    assert.deepEqual(scopes.observer, { release_observer: 1 }, name);
+    const holders = Object.entries(scopes)
+      .filter(([, grants]) => grants.release_observer != null).map(([slot]) => slot);
+    assert.deepEqual(holders, ["observer"], `${name}: only the observer slot observes`);
+  }
+  const production = JSON.parse(COMMITTED_CONFIG.env.production.vars.EDIT_TOKEN_SCOPES);
+  assert.equal(production.observer, undefined);
+  assert.equal(COMMITTED_CONFIG.env.production.vars.PROD_RELEASE_LEDGER, "false");
+});
+
+test("committed observer slot authenticates nothing while its secret is unset", async () => {
+  const env = { SESSION_SIGNING_KEY: SIGNING, EDIT_ORIGIN: "https://worker.example.com",
+    EDIT_TOKEN_SCOPES: COMMITTED_CONFIG.vars.EDIT_TOKEN_SCOPES,
+    EDIT_TOKEN_RELEASE: "release-opaque-token-value-456" };
+  for (const presented of ["", "undefined", "null", "\u0000", "observer", "EDIT_TOKEN_OBSERVER"]) {
+    assert.equal(await resolveOpaqueToken(env, presented), null, JSON.stringify(presented));
+  }
+  for (const empty of [undefined, ""]) {
+    const probe = { ...env, EDIT_TOKEN_OBSERVER: empty };
+    const request = new Request("https://worker.example.com/edit/v1/prod/releases/frontier",
+      { headers: { Authorization: "Bearer " } });
+    const scopes = await resolveRequestScopes(probe, request);
+    assert.equal(scopes.release_observer.granted, false);
+    // Other slots keep working when the observer secret is absent.
+    const release = await resolveOpaqueToken(probe, "release-opaque-token-value-456");
+    assert.equal(release.slot, "release");
+    assert.equal(release.record.release_observer.granted, false);
+  }
+  const minted = { ...env, EDIT_TOKEN_OBSERVER: "observer-opaque-token-value-789" };
+  const observer = await resolveOpaqueToken(minted, "observer-opaque-token-value-789");
+  assert.equal(observer.slot, "observer");
+  assert.deepEqual(Object.entries(observer.record)
+    .filter(([, scope]) => scope.granted).map(([name]) => name), ["release_observer"]);
+});

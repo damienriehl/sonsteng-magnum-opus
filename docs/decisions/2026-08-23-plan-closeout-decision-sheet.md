@@ -195,8 +195,12 @@ python3 tools/day_zero_migration.py \
   --pages-project <pages-project> \
   --worker-script sonsteng-chat-production \
   --pages-provenance-url https://legalpracticum.org/ \
-  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/
+  --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance
 ```
+
+The Worker provenance URL must be the `/edit/release-provenance` path; the Worker root carries no
+`X-Release-SHA` header. `docs/day-zero-migration-operations.md` is the operating authority for the
+window.
 
 ### D1. Schedule and authorize the supervised window
 

@@ -745,11 +745,12 @@ def _validated_window_owner(operation: Operation) -> str:
         len(owner) > 256
         or owner.strip() != owner
         or "@" in owner
+        or "://" in owner
         or any(not character.isprintable() for character in owner)
     ):
         raise CasError(
             "--window-owner must be a non-empty printable value "
-            "of at most 256 characters without '@'",
+            "of at most 256 characters without '@' or '://'",
             error_code="invalid-window-owner",
         )
     if not HOST_IDENTITY or len(HOST_IDENTITY) > 255:

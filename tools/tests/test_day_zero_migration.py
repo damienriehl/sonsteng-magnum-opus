@@ -296,9 +296,22 @@ def candidate_history_repo(tmp_path):
 
 def stub_materialized_verification_commands(
         monkeypatch, *, stamp_spine_build_id=None, change_other_generated=False,
-        later_phase_observations=None):
+        later_phase_observations=None, preflight_stamp_updates=None,
+        preflight_change_other_generated=False):
     def command(runner, argv):
         script = argv[1] if len(argv) > 1 else ""
+        if script == "tools/preflight.sh" and preflight_stamp_updates is not None:
+            # tools/preflight.sh reruns build_site.py --check, which rewrites the
+            # stamp's traceability-only git_base_sha to HEAD (the candidate).
+            stamp = runner.checkout / "site/platform/data/.build-stamp.json"
+            payload = json.loads(stamp.read_text(encoding="utf-8"))
+            payload["git_base_sha"] = git(runner.checkout, "rev-parse", "HEAD")
+            payload.update(preflight_stamp_updates)
+            stamp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        if script == "tools/preflight.sh" and preflight_change_other_generated:
+            (runner.checkout / "other-generated.txt").write_text(
+                "preflight regenerated differently\n", encoding="utf-8",
+            )
         if script == "tools/build_site.py":
             stamp = runner.checkout / "site/platform/data/.build-stamp.json"
             payload = json.loads(stamp.read_text(encoding="utf-8"))
@@ -451,6 +464,106 @@ def test_verify_materialized_accepts_traceability_only_build_stamp_refresh(
     assert later_phase_observations == [""]
     assert receipt["mode"] == "verify-only"
     assert receipt["candidate_sha"] == candidate_sha
+
+
+def test_verify_materialized_accepts_preflight_traceability_only_stamp_refresh(
+        tmp_path, monkeypatch):
+    repo, prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    committed_stamp_bytes = (repo / migration.BUILD_STAMP_RELATIVE_PATH).read_bytes()
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+
+    receipt = migration.verify_materialized(repo, candidate_sha)
+
+    committed_stamp = json.loads(committed_stamp_bytes)
+    assert committed_stamp["git_base_sha"] == prior_sha != candidate_sha
+    assert receipt["mode"] == "verify-only"
+    assert receipt["candidate_sha"] == candidate_sha
+    assert receipt["phases"] == list(migration.VERIFY_ONLY_PHASES)
+    assert receipt["production_mutations"] == 0
+
+
+def test_preflight_stamp_refresh_restores_committed_bytes_before_final_tree_proof(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_stamp_bytes = stamp.read_bytes()
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    runner = migration.LocalRehearsalPhases(repo, allow_traceability_stamp_refresh=True)
+
+    migration._run_phases(
+        runner, candidate_sha, context="verify-only",
+        phase_names=("preflight", "final-tree-cleanliness"),
+    )
+
+    assert stamp.read_bytes() == committed_stamp_bytes
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_preflight_stamp_refresh_is_not_tolerated_without_the_verify_only_flag(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    runner = migration.LocalRehearsalPhases(repo)
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: final-tree-cleanliness$"):
+        migration._run_phases(
+            runner, candidate_sha, context="verify-only",
+            phase_names=("preflight", "final-tree-cleanliness"),
+        )
+
+
+@pytest.mark.parametrize("stamp_updates", [
+    {"spine_build_id": "different-spine-build-id"},
+    {"schema_version": 2},
+    {"extra_contract_field": True},
+])
+def test_verify_materialized_rejects_preflight_stamp_change_beyond_git_base_sha(
+        tmp_path, monkeypatch, stamp_updates):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_stamp_bytes = stamp.read_bytes()
+    stub_materialized_verification_commands(
+        monkeypatch, preflight_stamp_updates=stamp_updates,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_verify_materialized_rejects_preflight_change_to_other_tracked_bytes(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(
+        monkeypatch, preflight_stamp_updates={},
+        preflight_change_other_generated=True,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_verify_materialized_rejects_preflight_untracked_output(tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    original = migration.LocalRehearsalPhases._command
+
+    def command(runner, argv):
+        original(runner, argv)
+        if argv[1:2] == ["tools/preflight.sh"]:
+            (runner.checkout / "stray-output.txt").write_text("x\n", encoding="utf-8")
+
+    monkeypatch.setattr(migration.LocalRehearsalPhases, "_command", command)
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
 
 
 def test_verify_materialized_rejects_spine_build_id_change_at_generated_artifact_cleanliness(
@@ -1256,6 +1369,60 @@ def test_cloudflare_inspector_rejects_missing_malformed_or_mismatched_live_sha(
     ))
     with pytest.raises(migration.MigrationError, match=expected):
         inspector.inspect(PAGES_URL, WORKER_URL)
+
+
+WORKER_PROVENANCE_PATH_URL = migration.WORKER_PROVENANCE_ORIGIN + "/edit/release-provenance"
+
+
+def test_cloudflare_inspector_accepts_worker_provenance_204_with_release_header():
+    # The Worker answers GET /edit/release-provenance with 204 No Content plus
+    # X-Release-SHA (app/worker/src/editor.js); a 200-only reader cannot prove it.
+    inspector, reader = make_inspector(inspector_responses(
+        worker_live=migration.HTTPSResponse(
+            status=204, headers={"X-Release-SHA": SHA_NEW}, body=b"",
+        ),
+    ))
+
+    pair = inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
+
+    assert pair.sha == SHA_NEW
+    assert reader.requests[3][0].full_url == WORKER_PROVENANCE_PATH_URL
+
+
+@pytest.mark.parametrize(
+    ("pages_live", "worker_live", "expected"),
+    [
+        # Pages keeps its exact 200-only semantics.
+        (migration.HTTPSResponse(204, {"x-release-sha": SHA_NEW}, b""), live_response(),
+         "Pages provenance request failed"),
+        # The Worker accepts only 200 or 204; unavailable or redirected fails closed.
+        (live_response(), migration.HTTPSResponse(503, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(404, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(302, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(206, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        # A 204 without exactly one valid header is still invalid provenance.
+        (live_response(), migration.HTTPSResponse(204, {}, b""),
+         "Worker provenance was invalid"),
+    ],
+)
+def test_cloudflare_inspector_bounds_provenance_statuses_per_surface(
+        pages_live, worker_live, expected):
+    inspector, _reader = make_inspector(inspector_responses(
+        pages_live=pages_live,
+        worker_live=worker_live,
+    ))
+    with pytest.raises(migration.MigrationError, match=expected):
+        inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
+
+
+def test_cloudflare_provider_json_reads_remain_200_only():
+    inspector, _reader = make_inspector([https_json(pages_payload(), status=204)])
+    with pytest.raises(migration.MigrationError, match="Pages provider request failed"):
+        inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
 
 
 @pytest.mark.parametrize(
