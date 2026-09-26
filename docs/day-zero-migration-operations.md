@@ -159,6 +159,12 @@ Supply the least-privilege Cloudflare read token through stdin. There is no
 token command-line option and the tool does not consult an environment variable
 for it. A regular stdin credential file must be owned by the current user and
 mode `0600`; a password-manager or credential-helper pipe is also accepted.
+Stdin must hold exactly one bearer on one line (a trailing newline is
+trimmed): 20 to 512 characters of the RFC 6750 `b64token` set, that is ASCII
+letters, digits, and `-._~+/`, optionally followed by `=` padding. Both a
+scoped API token and the wrangler OAuth access token (which contains `.`)
+qualify. Spaces, tabs, CR/LF, a second line, control or non-ASCII characters,
+and a `Bearer ` prefix are refused as malformed before any request is made.
 The tool never writes the token or provider response bodies.
 
 ```bash

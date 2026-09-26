@@ -64,7 +64,11 @@ REQUIRED_CHANGE_WINDOW_ACTORS = (
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 CLOUDFLARE_ACCOUNT_ID_RE = re.compile(r"[0-9a-f]{32}")
 CLOUDFLARE_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,62}")
-CLOUDFLARE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]{20,512}")
+# RFC 6750 ``b64token``: scoped API tokens and wrangler OAuth access tokens
+# (which contain ``.``) both fit. The class is ASCII-only and excludes
+# whitespace, CR/LF, controls, quotes, ``,``, ``;`` and ``:``, so an accepted
+# value cannot split, extend, or inject into the Authorization header.
+CLOUDFLARE_TOKEN_RE = re.compile(r"(?=.{20,512}\Z)[A-Za-z0-9._~+/-]+=*", re.ASCII | re.DOTALL)
 CLOUDFLARE_API_ORIGIN = "https://api.cloudflare.com"
 CLOUDFLARE_API_PREFIX = "/client/v4"
 PAGES_PROVENANCE_ORIGIN = "https://legalpracticum.org"
