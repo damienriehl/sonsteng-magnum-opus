@@ -294,7 +294,12 @@ class CloudflarePairInspector:
         self._reader = reader
         self._timeout = timeout
 
-    def _read(self, request: urllib.request.Request, category: str) -> HTTPSResponse:
+    def _read(
+        self,
+        request: urllib.request.Request,
+        category: str,
+        accepted_statuses: tuple[int, ...] = (200,),
+    ) -> HTTPSResponse:
         parsed = urllib.parse.urlsplit(request.full_url)
         bearer = request.get_header("Authorization")
         if request.get_method() != "GET":
@@ -313,7 +318,7 @@ class CloudflarePairInspector:
             raise MigrationError(f"{category} request failed") from None
         if (
             not isinstance(response, HTTPSResponse)
-            or response.status != 200
+            or response.status not in accepted_statuses
             or not isinstance(response.headers, dict)
             or not isinstance(response.body, bytes)
             or len(response.body) > MAX_HTTP_BODY_BYTES
@@ -405,7 +410,12 @@ class CloudflarePairInspector:
             method="GET",
             headers={"Accept": "*/*", "User-Agent": "sonsteng-read-only-pair-inspector/1"},
         )
-        response = self._read(request, f"{surface} provenance")
+        # The Worker attests only at GET /edit/release-provenance, which answers
+        # 204 No Content with X-Release-SHA (app/worker/src/editor.js). Pages
+        # serves the header on an ordinary 200 page. Provider JSON stays 200-only
+        # and redirects remain disabled by the reader.
+        accepted = (200, 204) if surface == "Worker" else (200,)
+        response = self._read(request, f"{surface} provenance", accepted)
         values = [value for name, value in response.headers.items()
                   if isinstance(name, str) and name.lower() == "x-release-sha"]
         if (

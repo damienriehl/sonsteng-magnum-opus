@@ -1258,6 +1258,60 @@ def test_cloudflare_inspector_rejects_missing_malformed_or_mismatched_live_sha(
         inspector.inspect(PAGES_URL, WORKER_URL)
 
 
+WORKER_PROVENANCE_PATH_URL = migration.WORKER_PROVENANCE_ORIGIN + "/edit/release-provenance"
+
+
+def test_cloudflare_inspector_accepts_worker_provenance_204_with_release_header():
+    # The Worker answers GET /edit/release-provenance with 204 No Content plus
+    # X-Release-SHA (app/worker/src/editor.js); a 200-only reader cannot prove it.
+    inspector, reader = make_inspector(inspector_responses(
+        worker_live=migration.HTTPSResponse(
+            status=204, headers={"X-Release-SHA": SHA_NEW}, body=b"",
+        ),
+    ))
+
+    pair = inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
+
+    assert pair.sha == SHA_NEW
+    assert reader.requests[3][0].full_url == WORKER_PROVENANCE_PATH_URL
+
+
+@pytest.mark.parametrize(
+    ("pages_live", "worker_live", "expected"),
+    [
+        # Pages keeps its exact 200-only semantics.
+        (migration.HTTPSResponse(204, {"x-release-sha": SHA_NEW}, b""), live_response(),
+         "Pages provenance request failed"),
+        # The Worker accepts only 200 or 204; unavailable or redirected fails closed.
+        (live_response(), migration.HTTPSResponse(503, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(404, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(302, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        (live_response(), migration.HTTPSResponse(206, {"x-release-sha": SHA_NEW}, b""),
+         "Worker provenance request failed"),
+        # A 204 without exactly one valid header is still invalid provenance.
+        (live_response(), migration.HTTPSResponse(204, {}, b""),
+         "Worker provenance was invalid"),
+    ],
+)
+def test_cloudflare_inspector_bounds_provenance_statuses_per_surface(
+        pages_live, worker_live, expected):
+    inspector, _reader = make_inspector(inspector_responses(
+        pages_live=pages_live,
+        worker_live=worker_live,
+    ))
+    with pytest.raises(migration.MigrationError, match=expected):
+        inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
+
+
+def test_cloudflare_provider_json_reads_remain_200_only():
+    inspector, _reader = make_inspector([https_json(pages_payload(), status=204)])
+    with pytest.raises(migration.MigrationError, match="Pages provider request failed"):
+        inspector.inspect(PAGES_URL, WORKER_PROVENANCE_PATH_URL)
+
+
 @pytest.mark.parametrize(
     ("first_response", "expected"),
     [
