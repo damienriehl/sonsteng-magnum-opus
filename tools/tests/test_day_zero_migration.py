@@ -296,9 +296,22 @@ def candidate_history_repo(tmp_path):
 
 def stub_materialized_verification_commands(
         monkeypatch, *, stamp_spine_build_id=None, change_other_generated=False,
-        later_phase_observations=None):
+        later_phase_observations=None, preflight_stamp_updates=None,
+        preflight_change_other_generated=False):
     def command(runner, argv):
         script = argv[1] if len(argv) > 1 else ""
+        if script == "tools/preflight.sh" and preflight_stamp_updates is not None:
+            # tools/preflight.sh reruns build_site.py --check, which rewrites the
+            # stamp's traceability-only git_base_sha to HEAD (the candidate).
+            stamp = runner.checkout / "site/platform/data/.build-stamp.json"
+            payload = json.loads(stamp.read_text(encoding="utf-8"))
+            payload["git_base_sha"] = git(runner.checkout, "rev-parse", "HEAD")
+            payload.update(preflight_stamp_updates)
+            stamp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        if script == "tools/preflight.sh" and preflight_change_other_generated:
+            (runner.checkout / "other-generated.txt").write_text(
+                "preflight regenerated differently\n", encoding="utf-8",
+            )
         if script == "tools/build_site.py":
             stamp = runner.checkout / "site/platform/data/.build-stamp.json"
             payload = json.loads(stamp.read_text(encoding="utf-8"))
@@ -451,6 +464,106 @@ def test_verify_materialized_accepts_traceability_only_build_stamp_refresh(
     assert later_phase_observations == [""]
     assert receipt["mode"] == "verify-only"
     assert receipt["candidate_sha"] == candidate_sha
+
+
+def test_verify_materialized_accepts_preflight_traceability_only_stamp_refresh(
+        tmp_path, monkeypatch):
+    repo, prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    committed_stamp_bytes = (repo / migration.BUILD_STAMP_RELATIVE_PATH).read_bytes()
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+
+    receipt = migration.verify_materialized(repo, candidate_sha)
+
+    committed_stamp = json.loads(committed_stamp_bytes)
+    assert committed_stamp["git_base_sha"] == prior_sha != candidate_sha
+    assert receipt["mode"] == "verify-only"
+    assert receipt["candidate_sha"] == candidate_sha
+    assert receipt["phases"] == list(migration.VERIFY_ONLY_PHASES)
+    assert receipt["production_mutations"] == 0
+
+
+def test_preflight_stamp_refresh_restores_committed_bytes_before_final_tree_proof(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_stamp_bytes = stamp.read_bytes()
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    runner = migration.LocalRehearsalPhases(repo, allow_traceability_stamp_refresh=True)
+
+    migration._run_phases(
+        runner, candidate_sha, context="verify-only",
+        phase_names=("preflight", "final-tree-cleanliness"),
+    )
+
+    assert stamp.read_bytes() == committed_stamp_bytes
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_preflight_stamp_refresh_is_not_tolerated_without_the_verify_only_flag(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    runner = migration.LocalRehearsalPhases(repo)
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: final-tree-cleanliness$"):
+        migration._run_phases(
+            runner, candidate_sha, context="verify-only",
+            phase_names=("preflight", "final-tree-cleanliness"),
+        )
+
+
+@pytest.mark.parametrize("stamp_updates", [
+    {"spine_build_id": "different-spine-build-id"},
+    {"schema_version": 2},
+    {"extra_contract_field": True},
+])
+def test_verify_materialized_rejects_preflight_stamp_change_beyond_git_base_sha(
+        tmp_path, monkeypatch, stamp_updates):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stamp = repo / migration.BUILD_STAMP_RELATIVE_PATH
+    committed_stamp_bytes = stamp.read_bytes()
+    stub_materialized_verification_commands(
+        monkeypatch, preflight_stamp_updates=stamp_updates,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_verify_materialized_rejects_preflight_change_to_other_tracked_bytes(
+        tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(
+        monkeypatch, preflight_stamp_updates={},
+        preflight_change_other_generated=True,
+    )
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
+
+
+def test_verify_materialized_rejects_preflight_untracked_output(tmp_path, monkeypatch):
+    repo, _prior_sha, candidate_sha = materialized_git_repo(tmp_path)
+    stub_materialized_verification_commands(monkeypatch, preflight_stamp_updates={})
+    original = migration.LocalRehearsalPhases._command
+
+    def command(runner, argv):
+        original(runner, argv)
+        if argv[1:2] == ["tools/preflight.sh"]:
+            (runner.checkout / "stray-output.txt").write_text("x\n", encoding="utf-8")
+
+    monkeypatch.setattr(migration.LocalRehearsalPhases, "_command", command)
+
+    with pytest.raises(
+            migration.MigrationError,
+            match="^verify-only phase failed: preflight$"):
+        migration.verify_materialized(repo, candidate_sha)
 
 
 def test_verify_materialized_rejects_spine_build_id_change_at_generated_artifact_cleanliness(

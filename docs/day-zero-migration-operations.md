@@ -263,7 +263,10 @@ The dependency-injected production contract requires, before provider mutation:
 - explicit acknowledgements that John was notified and the queue was empty;
 - `SONSTENG_PROD_RELEASE_ENABLED=false`;
 - the production release timer disabled and inactive;
-- the apply timer stopped and disabled with readback;
+- the apply timer stopped and disabled with readback (this is the injected
+  state machine's own contract; the manual Packet D window below instead
+  stops the apply timer **without** disabling it, because the queue-proof
+  receipt validator requires it to read back enabled; see step 1);
 - no relevant service, process, or lease;
 - the candidate commit clean, canonical, and based on the declared prior SHA;
   and
@@ -292,15 +295,49 @@ compensation sequence while the window remains held:
 
 1. reactivate and read back the exact prior Pages/Worker pair, Pages first and
    then the Worker, using the full canonical Pages deployment ID (decisions
-   OQ-8 and OQ-9 below);
+   OQ-8 and OQ-9 below). Use exactly the commands in
+   [Pages and Worker rollback commands](#pages-and-worker-rollback-commands):
+
+   ```bash
+   credential-helper-that-prints-only-the-Cloudflare-bearer | pages_rollback "$PRIOR_PAGES_DEPLOYMENT_ID"
+   echo "pages rollback rc=$?"
+   ( cd "$CONTROLLED_REPO/app/worker" &&
+     npx wrangler@4 versions deploy "$PRIOR_WORKER_VERSION_ID" --env production --yes )
+   echo "worker rollback rc=$?"
+   ```
+
+   Then read the pair back with the step-3 inspector helpers:
+
+   ```bash
+   RECOVERY_JSON=$(recovery_ids); echo "inspector rc=$? $RECOVERY_JSON"
+   test "$(recovery_field sha)" = "$PRIOR_PAIR_SHA" &&
+     test "$(recovery_field pages_deployment_id)" = "$PRIOR_PAGES_DEPLOYMENT_ID" &&
+     test "$(recovery_field worker_version_id)" = "$PRIOR_WORKER_VERSION_ID" &&
+     echo "PRIOR PAIR OK" || echo "STOP: prior pair readback"
+   ```
+
+   Require `PRIOR PAIR OK`;
 2. atomically compare-and-swap canonical `main` from the exact candidate SHA to
    the exact prior SHA (`PRIOR_SHA`), then read back that exact prior SHA;
-3. rebuild and redeploy DEV/editor from the `PRIOR_SHA` tree in the same order
-   as step 8: (a) the DEV static site with
-   `bash deploy/deploy-dev.sh "$PRIOR_SHA"` and its `spine-build` proof against
-   `PRIOR_SHA`'s committed build stamp, then (b) the top-level DEV Worker with
-   the OQ-13 commands and `<prior-SHA>` in place of `<candidate-SHA>`,
-   regenerating the ignored Worker inputs first (decision OQ-10); and
+3. return DEV/editor to `PRIOR_SHA` in the same fixed OQ-13 order as step 8,
+   (a) then (b), with `TARGET_SHA=$PRIOR_SHA` (see OQ-13 for why one order is
+   used everywhere): (a) the DEV static site with
+   `bash deploy/deploy-dev.sh "$PRIOR_SHA"` from `$CONTROLLED_REPO` and its
+   `spine-build` proof against `PRIOR_SHA`'s committed build stamp, then
+   (b) the top-level DEV Worker. For (b), reactivate the exact step-1a DEV
+   version recorded in step 1a.7, which already carries
+   `RELEASE_SHA=PRIOR_SHA` and the observer secret, from `app/worker` of any
+   checkout:
+
+   ```bash
+   npx wrangler@4 versions deploy "$STEP1A_DEV_VERSION_ID" --env="" --yes
+   echo "dev worker rollback rc=$?"
+   prove_provenance https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance 204 "$PRIOR_SHA"
+   ```
+
+   Only if that version cannot be activated, rebuild instead: regenerate the
+   ignored Worker inputs in a clean `PRIOR_SHA` checkout (OQ-10) and run the
+   OQ-13 part (b) upload, view, and deploy with `TARGET_SHA=$PRIOR_SHA`; and
 4. prove every surface is back on its prior state: production's two
    `x-release-sha` headers name `PRIOR_PAIR_SHA` with the exact prior provider
    IDs; canonical `main` and the DEV/editor Worker's `x-release-sha` name
@@ -374,7 +411,24 @@ test "$ACTUAL_CAS_SHA256" = "$REVIEWED_CAS_SHA256"
 /usr/bin/env -i /usr/bin/test ! -e "$RECEIPT_DIR"
 umask 077
 /usr/bin/env -i /usr/bin/mkdir "$RECEIPT_DIR"
+echo "PINNING OK"
+set +e
 ```
+
+**Use one persistent interactive shell for the whole window.** Run this block,
+every helper definition (`prove_provenance`, `check_version_view`,
+`version_secret_names`, and `pages_rollback`), and every numbered step in the
+same interactive Bash session, for example one `tmux` pane that an agent
+operator drives by sending keys and reading the pane. The window variables
+(`PRIOR_SHA`, `CANDIDATE_SHA`, the provider IDs, `CONTROLLED_REPO`, and the
+others) and the helper functions exist only in that shell; a fresh shell per
+command loses them. The block runs under `set -eu` so that any failed identity
+comparison aborts it before `PINNING OK` prints; if `PINNING OK` did not print,
+STOP. Its final `set +e` switches fail-fast off again, so that a later failing
+check prints its `STOP` line and `rc=` value instead of killing the window
+shell. `set -u` stays on deliberately: in an interactive shell a reference to
+an unset window variable aborts only that command line with `unbound variable`,
+which is a STOP.
 
 `WINDOW_OWNER` is passed to both the queue verifier (`--window-owner` in the
 launcher below) and every CAS command, so choose one value that satisfies the
@@ -616,14 +670,47 @@ SHA, and the result of each check:
    ```
 
    Require `prior build rc=0`, `check-1 rc=0`, nonzero key counts, and two
-   64-character `spine_build_id` values. Keep the JSON line in the window
-   evidence directory, then delete `$PRIOR_MAP_DIR`.
+   64-character `spine_build_id` values. Then rerun only the Python comparison
+   (from `python3 - ...` through `echo "check-1 rc=$?"`) with
+   `"$PRIOR_DIR/tree/build/editor-map.generated.json"` as its first argument
+   in place of the `$PRIOR_MAP_DIR` path. That is the `PRIOR_SHA` map that
+   step 1a.3 built, and it covers the DEV transients (OQ-13). Require
+   `check-1 rc=0` again. Keep both JSON lines in the window evidence
+   directory, then delete `$PRIOR_MAP_DIR`.
 2. **Chat contract.** The Worker resolves `persona_id` and `matter_id` against
    its bundled `app/worker/personas/personas.generated.json` (`personas`,
    `fact_map`, `rubrics`). Compare the key sets of those three maps between
    the candidate and **both** `git show "$PRIOR_SHA":app/worker/personas/personas.generated.json`
    and `git show "$PRIOR_PAIR_SHA":app/worker/personas/personas.generated.json`;
-   they must be identical. Require identity, not only inclusion: the
+   they must be identical. From `$CONTROLLED_REPO` at the committed
+   candidate:
+
+   ```bash
+   python3 - "$PRIOR_SHA" "$PRIOR_PAIR_SHA" "$CANDIDATE_SHA" <<'PY'
+   import json, re, subprocess, sys
+   KEYS = ("personas", "fact_map", "rubrics")
+   def key_sets(sha):
+       if not re.fullmatch("[0-9a-f]{40}", sha):
+           sys.exit("STOP: malformed SHA %r" % sha)
+       blob = subprocess.run(
+           ["git", "show", sha + ":app/worker/personas/personas.generated.json"],
+           check=True, capture_output=True).stdout
+       data = json.loads(blob)
+       return {key: sorted(data[key]) for key in KEYS}
+   prior, pair, candidate = (key_sets(sha) for sha in sys.argv[1:4])
+   result = {key: {"prior": len(prior[key]), "pair": len(pair[key]),
+                   "candidate": len(candidate[key]),
+                   "identical": prior[key] == pair[key] == candidate[key]}
+             for key in KEYS}
+   print(json.dumps(result, sort_keys=True))
+   ok = all(r["identical"] and r["candidate"] > 0 for r in result.values())
+   sys.exit(0 if ok else 1)
+   PY
+   echo "check-2 rc=$?"
+   ```
+
+   Require `check-2 rc=0` and keep the JSON line in the window evidence
+   directory. Require identity, not only inclusion: the
    checked-in chat pages' `sonsteng-api` meta tag names the top-level DEV
    Worker (`sonsteng-chat.damienriehl.workers.dev`), not the production Worker,
    so between the Pages deploy (step 6) and the DEV deploy (step 8) new Pages
@@ -668,6 +755,91 @@ active". That code has **not** been verified against the live API. If a
 rollback to the deployment that is already active returns any error, prove the
 state with an inspector readback rather than trusting the error code.
 
+#### Pages and Worker rollback commands
+
+These are the only rollback commands for the window: step 9's drill and every
+compensation path use them. Record the four recovery coordinates as shell
+variables when they are read (never retype them later): step 3 sets
+`PRIOR_PAGES_DEPLOYMENT_ID` and `PRIOR_WORKER_VERSION_ID` from the
+`--print-recovery-ids` JSON fields `pages_deployment_id` and
+`worker_version_id`; step 7 sets `NEW_PAGES_DEPLOYMENT_ID` and
+`NEW_WORKER_VERSION_ID` the same way. Print `${#…}` for each; an empty value,
+or a Pages value as short as the 8-character preview subdomain, is a stop.
+
+**Pages.** Pages has no version-deploy CLI; rollback is one `POST` to the
+Cloudflare Pages rollback API, issued by the executor's own
+`WranglerPagesAdapter.restore` (`tools/prod_release_executor.py`). It posts
+to `/accounts/<account>/pages/projects/sonsteng/deployments/<id>/rollback`
+and succeeds only when the response binds the exact requested ID. The bearer
+comes from the credential helper that prints only the Cloudflare bearer (see
+the private operator notes). The bearer arrives only on stdin; it never
+appears in argv, the environment, or any output. The helper below disables
+redirects, so the bearer can never be forwarded to another host. Define it
+once in the window shell, after the pinning block has set `OPS_REPO`:
+
+```bash
+CF_ACCOUNT_ID=<32-character-lowercase-account-ID>
+echo "account id len=${#CF_ACCOUNT_ID}"   # must print 32
+pages_rollback() {
+  /usr/bin/python3 -I -c '
+import re, sys, urllib.request
+sys.path.insert(0, sys.argv[1])
+import prod_release_executor as e
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args):
+        return None
+account, target = sys.argv[2], sys.argv[3]
+if not re.fullmatch("[0-9a-f]{32}", account) or len(target) <= 8:
+    sys.exit("STOP: account or deployment ID malformed")
+token = sys.stdin.readline().strip()
+if not token:
+    sys.exit("STOP: no Cloudflare bearer on stdin")
+adapter = e.WranglerPagesAdapter(
+    "sonsteng", "site", "https://legalpracticum.org/",
+    opener=urllib.request.build_opener(NoRedirect).open,
+    account_id=account, api_token=token)
+try:
+    adapter.restore(target)
+except e.ReleaseError as exc:
+    sys.exit("STOP: " + str(exc))
+except Exception:
+    sys.exit("STOP: Pages rollback request failed")
+print("pages rollback accepted:", target)' "$OPS_REPO/tools" "$CF_ACCOUNT_ID" "$1"
+}
+```
+
+Use it with the bearer piped in:
+
+```bash
+credential-helper-that-prints-only-the-Cloudflare-bearer | pages_rollback "$PRIOR_PAGES_DEPLOYMENT_ID"
+echo "pages rollback rc=$?"
+```
+
+It must print `pages rollback accepted: <ID>` and `pages rollback rc=0`. Any
+`STOP` line, including the adapter's `Pages rollback API rejected the exact
+deployment`, is a failure. Rolling back to the deployment that is already
+active may be accepted silently (error code `8000039`, not live-verified);
+either way, prove the result with the inspector, never with this output alone.
+
+**Worker.** From `app/worker` of any checkout of this repository (the
+controlled worktree is the default), under the Cloudflare PROD principal:
+
+```bash
+( cd "$CONTROLLED_REPO/app/worker" &&
+  npx wrangler@4 versions deploy "$PRIOR_WORKER_VERSION_ID" --env production --yes )
+echo "worker rollback rc=$?"
+```
+
+Substitute `NEW_WORKER_VERSION_ID` (and `NEW_PAGES_DEPLOYMENT_ID` above) to
+return to the new pair. The DEV equivalent is
+`npx wrangler@4 versions deploy "$STEP1A_DEV_VERSION_ID" --env="" --yes`
+(compensation step 3) or `"$PRE1A_DEV_VERSION_ID"` (a step-1a failure).
+
+**Readback.** After each pair change, run the `--print-recovery-ids`
+inspector. Its `sha` must equal the pair's SHA (`PRIOR_PAIR_SHA` or
+`CANDIDATE_SHA`), and its `pages_deployment_id` and `worker_version_id` must
+equal the two variables just used, compared with `test`, not by eye.
+
 **OQ-10: contents of the one migration commit.** The single migration commit
 contains the governed `data/**` source changes, including the per-matter
 `data/matters/*/date-offsets.json` sidecars and the identifier-base rewrite
@@ -688,7 +860,37 @@ then `node app/worker/scripts/bundle-editor-data.mjs`). Then verify that the
 `site/platform/data/.build-stamp.json` value, each a 64-character hex string.
 Restore the tracked build stamp afterwards
 (`git checkout -- site/platform/data/.build-stamp.json`) so the upload tree
-stays exactly the committed tree.
+stays exactly the committed tree. Run this from the root of the checkout being
+uploaded, after the five generator commands:
+
+```bash
+python3 - <<'PY'
+import json, re, subprocess, sys
+head = subprocess.run(["git", "rev-parse", "HEAD"], check=True,
+                      capture_output=True, text=True).stdout.strip()
+stamp = json.loads(subprocess.run(
+    ["git", "show", "HEAD:site/platform/data/.build-stamp.json"],
+    check=True, capture_output=True).stdout)["spine_build_id"]
+paths = ("app/worker/editor-data/editor-map.generated.json",
+         "app/worker/editor-data/instructor-bundle.generated.json",
+         "app/worker/personas/personas.generated.json")
+values = {path: json.load(open(path, encoding="utf-8")).get("spine_build_id")
+          for path in paths}
+print("HEAD", head, "committed spine_build_id", stamp)
+for path, value in values.items():
+    print(path, value)
+ok = (re.fullmatch("[0-9a-f]{64}", stamp or "") is not None
+      and all(value == stamp for value in values.values()))
+print("SPINE OK" if ok else "STOP: spine_build_id mismatch")
+sys.exit(0 if ok else 1)
+PY
+echo "spine rc=$?"
+git checkout -- site/platform/data/.build-stamp.json
+PORCELAIN=$(git status --porcelain) && test -z "$PORCELAIN" && echo "TREE CLEAN" || echo "STOP: tree dirty or git failed"
+```
+
+Require `HEAD` to equal the SHA being uploaded, `SPINE OK`, `spine rc=0`,
+and `TREE CLEAN`.
 
 Stage the migration commit explicitly. `day_zero.py --write` creates the
 per-matter `data/matters/*/date-offsets.json` sidecars as **new untracked**
@@ -742,8 +944,18 @@ mechanics (`wrangler versions upload`/`versions deploy` with
 GET provenance checks), and only where they agree with this runbook.
 
 **OQ-13: DEV/editor commands.** "DEV/editor from one SHA" means two
-surfaces, always deployed in this order from the same clean exact-SHA
-checkout, with the OQ-10 ignored inputs regenerated first:
+surfaces, always deployed in this order, (a) then (b), from the same clean
+exact-SHA checkout, with the OQ-10 ignored inputs regenerated first. One fixed
+order is used for every use (step 1a, step 8, and compensation step 3), so the
+operator runs one pattern. Either order leaves a brief mixed DEV state: going
+forward (step 8), the prior DEV Worker overlays candidate static pages; going
+back (compensation), the candidate DEV Worker overlays prior static pages, the
+same direction production uses. Both mixed states are covered, because the
+OQ-8 checks are identity checks and therefore symmetric: the editor page-key
+set is identical between `PRIOR_SHA` and the candidate (check 1, second run),
+and the persona, fact-map, and rubric key sets are identical (check 2). Under
+pencils-down no editor traffic flows during either transient.
+
 
 (a) **DEV static site.** `edit.legalpracticum.org` is served by the
 `sonsteng-chat` Worker, whose top-level `EDIT_UPSTREAM` is the Hetzner DEV
@@ -776,18 +988,25 @@ the same version upload and activation pattern as production, from
 `app/worker/` of the same checkout:
 
 ```bash
-npx wrangler@4 versions upload --env="" --message "day-zero:<candidate-SHA>" --var "RELEASE_SHA:<candidate-SHA>"
-npx wrangler@4 versions view <DEV-Worker-version-ID> --env=""
-npx wrangler@4 versions deploy <DEV-Worker-version-ID> --env="" --yes
+npx wrangler@4 versions upload --env="" --message "day-zero:$TARGET_SHA" --var "RELEASE_SHA:$TARGET_SHA"
+echo "upload rc=$?"
+DEV_VERSION_ID=<paste the full "Worker Version ID:" UUID printed above>
+echo "dev version id len=${#DEV_VERSION_ID}"   # must print 36
+npx wrangler@4 versions view "$DEV_VERSION_ID" --env="" --json | check_version_view dev "$TARGET_SHA"
+echo "view rc=$?"
+npx wrangler@4 versions deploy "$DEV_VERSION_ID" --env="" --yes
 ```
 
 Wrangler 4 accepts `--env=""` as the explicit top-level (DEV) target for these
 commands; do not use `--env dev` or omit the flag during the window. Copy the
-full `Worker Version ID:` UUID printed by the upload (36 characters, checked
-with `${#…}`) into the window log before activating it. Before `versions
-deploy`, `versions view` must list `RELEASE_SHA` with the intended SHA and must
-still list `PROD_RELEASE_LEDGER`, `EDIT_UPSTREAM`, and `EDIT_ORIGIN`; any
-missing var is a stop. Then prove the Worker:
+full `Worker Version ID:` UUID printed by the upload into the window log
+before activating it. Run `versions deploy` only after `check_version_view`
+prints `VIEW OK` and `view rc=0`. The helper checks the exact 40-character
+`RELEASE_SHA` and the exact DEV `EDIT_UPSTREAM`, `EDIT_ORIGIN`, and
+`PROD_RELEASE_LEDGER` values from `wrangler.jsonc`; any other result is a stop.
+Do not read the plain `versions view` table instead: Wrangler 4.141 truncates
+values of 40 or more characters to 37 plus `...`, so a SHA can never be
+confirmed there. Then prove the Worker:
 
 ```bash
 prove_provenance https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance 204 "$TARGET_SHA"
@@ -801,10 +1020,12 @@ which proves nothing about the code currently deployed. The `--var` above is
 what makes the DEV part of step 10's proof possible.
 
 The same two parts, (a) then (b), are used three times with different SHAs:
-step 1a uses `<prior-SHA>` (`PRIOR_SHA`), step 8 uses `<candidate-SHA>`, and
-compensation step 3 uses the same commands with `<prior-SHA>` in place of
-`<candidate-SHA>`, including the `--message "day-zero-prior:<prior-SHA>"`
-form. Set `TARGET_SHA` to the SHA of that use.
+step 1a with `TARGET_SHA=$PRIOR_SHA` (its own part (b) block adds the observer
+secrets file), step 8 with `TARGET_SHA=$CANDIDATE_SHA`, and compensation
+step 3 with `TARGET_SHA=$PRIOR_SHA`, where part (b) first tries to reactivate
+the recorded step-1a DEV version. Set `TARGET_SHA`, and check
+`${#TARGET_SHA}` is 40, before each use; no command line carries a
+hand-substituted SHA.
 
 ### Two prior SHAs: PRIOR_PAIR_SHA and PRIOR_SHA
 
@@ -829,11 +1050,14 @@ never substitute one for the other.
 
 The other window variables are `CANDIDATE_SHA` (set by the OQ-10 commit
 block), `CONTROLLED_REPO` (the absolute path of the controlled migration
-worktree, created detached at `PRIOR_SHA` outside the daemon checkout), and
-`TARGET_SHA` (the SHA of the current OQ-13 use). Commands that name a relative
-path such as `deploy/deploy-dev.sh` or `app/worker` run from the checkout that
-step names; step 1a leaves the shell inside `$PRIOR_DIR/tree`, so `cd` back to
-`$CONTROLLED_REPO` before step 4.
+worktree, a detached linked worktree of `$DAEMON_REPO` at `PRIOR_SHA`, created
+by the command in step 4), `TARGET_SHA` (the SHA of the current OQ-13 use),
+and the recovery coordinates listed under
+[Pages and Worker rollback commands](#pages-and-worker-rollback-commands).
+Commands that name a relative path such as `deploy/deploy-dev.sh` or
+`app/worker` run from the checkout that step names. Step 1a leaves the shell
+inside `$PRIOR_DIR/tree/app/worker`; step 3 therefore begins with
+`cd "$OPS_REPO"`, and step 4 creates `$CONTROLLED_REPO` and changes into it.
 
 Define this helper once in the window shell. It issues one redirect-free
 `GET`, prints what it saw, and succeeds only on the exact status, exactly one
@@ -859,6 +1083,84 @@ prove_provenance() {
   fi
 }
 ```
+
+Define these two helpers once in the window shell as well. Wrangler 4.141's
+human-readable `versions view` table truncates every value of 40 or more
+characters to its first 37 characters plus `...`, so a 40-character
+`RELEASE_SHA` (and the 47-character DEV `EDIT_UPSTREAM`) can never be
+confirmed from it. Always read a version with `versions view <ID> --json` and
+pipe it to `check_version_view`. The JSON is the Cloudflare API version
+object; its `resources.bindings` list gives each plain-text var's full `text`
+and each secret's `name` only. The API never returns secret values, so the
+helper cannot print one. Its first argument selects the expected values from
+`app/worker/wrangler.jsonc` (`dev` for the top-level `sonsteng-chat` Worker,
+`production` for `env.production`), its second is the exact expected SHA, and
+any further arguments are secret names that must be present:
+
+```bash
+check_version_view() {
+  python3 -c '
+import json, re, sys
+env, want_sha, required = sys.argv[1], sys.argv[2], sys.argv[3:]
+expected = {
+    "dev": {
+        "EDIT_UPSTREAM": "https://sonsteng-dev.damienriehl.com/platform/",
+        "EDIT_ORIGIN": "https://edit.legalpracticum.org,https://sonsteng-chat.damienriehl.workers.dev",
+        "PROD_RELEASE_LEDGER": "true",
+    },
+    "production": {
+        "EDIT_UPSTREAM": "https://legalpracticum.org/platform/",
+        "EDIT_ORIGIN": "https://sonsteng-chat-production.damienriehl.workers.dev",
+        "PROD_RELEASE_LEDGER": "false",
+    },
+}.get(env)
+try:
+    bindings = json.load(sys.stdin)["resources"]["bindings"]
+    plain = {b["name"]: b.get("text") for b in bindings if b.get("type") == "plain_text"}
+    secrets = sorted(b["name"] for b in bindings if b.get("type") == "secret_text")
+except (ValueError, KeyError, TypeError):
+    print("STOP: version view JSON unreadable")
+    sys.exit(1)
+sha = plain.get("RELEASE_SHA") or ""
+checks = {
+    "known env": expected is not None,
+    "expected SHA is 40 hex": re.fullmatch("[0-9a-f]{40}", want_sha) is not None,
+    "RELEASE_SHA exact": len(sha) == 40 and sha == want_sha,
+    "required secret names": all(re.fullmatch("[A-Z0-9_]+", n) and n in secrets for n in required),
+}
+for key, value in (expected or {}).items():
+    checks[key] = plain.get(key) == value
+print("RELEASE_SHA len=%d value=%s" % (len(sha), sha))
+for key in ("EDIT_UPSTREAM", "EDIT_ORIGIN", "PROD_RELEASE_LEDGER"):
+    print("%s=%s" % (key, plain.get(key)))
+print("secret names:", " ".join(secrets))
+missing = [n for n in required if n not in secrets]
+if missing:
+    print("missing secret names:", " ".join(missing))
+failed = [name for name, ok in checks.items() if not ok]
+print("VIEW OK" if not failed else "STOP: version view mismatch: " + ", ".join(failed))
+sys.exit(1 if failed else 0)' "$@"
+}
+
+version_secret_names() {
+  python3 -c '
+import json, re, sys
+try:
+    bindings = json.load(sys.stdin)["resources"]["bindings"]
+    names = sorted(b["name"] for b in bindings if b.get("type") == "secret_text")
+except (ValueError, KeyError, TypeError):
+    sys.exit("STOP: version view JSON unreadable")
+if not names or not all(re.fullmatch("[A-Z0-9_]+", n) for n in names):
+    sys.exit("STOP: no or unexpected secret names")
+print(" ".join(names))'
+}
+```
+
+`check_version_view` prints `VIEW OK` and returns `0` only when every check
+passes; otherwise it prints `STOP: version view mismatch:` with the failed
+checks and returns `1`. An empty or failed `wrangler` read reaches it as
+unreadable JSON, which is also a stop. `version_secret_names` prints only the
+sorted secret names, space-separated, and fails on an empty list.
 
 The dependency-injected state machine and the generated operator sheet model a
 single prior SHA. When the two values differ, neither may be used for this
@@ -907,7 +1209,20 @@ or nonzero result as a stop before the window.
 
 1. notify John, establish pencils-down, stop the apply timer, prove both
    services quiescent, take the daemon lock, and establish the six-actor
-   exclusive change window;
+   exclusive change window. **Stop the apply timer; do not disable it.** The
+   step-2 receipt validator requires `fence.apply_timer` to read back exactly
+   `{"active":false,"available":true,"enabled":true}`, so a disabled apply
+   timer fails the queue proof (validator exit `75`). The production release
+   timer is the opposite: it must already be disabled and inactive
+   (`timer` must read `{"active":false,"available":true,"enabled":false}`).
+
+   ```bash
+   systemctl --user stop sonsteng-apply.timer; echo "stop rc=$?"
+   systemctl --user is-active sonsteng-apply.timer    # must print: inactive
+   systemctl --user is-enabled sonsteng-apply.timer   # must print: enabled
+   systemctl --user is-active sonsteng-prod-release.timer    # must print: inactive
+   systemctl --user is-enabled sonsteng-prod-release.timer   # must print: disabled
+   ```
 
    **1a. Re-establish DEV/editor at `PRIOR_SHA`** (after the window is
    established, before the opening queue proof). The opening proof reads the
@@ -942,7 +1257,19 @@ or nonzero result as a stop before the window.
       `npx wrangler@4 deployments list --env=""` and record the active DEV
       Worker version ID (the last entry, at 100 percent; full 36-character
       UUID). This **pre-1a DEV version ID** is the rollback coordinate if step
-      1a fails.
+      1a fails. Record it and capture its secret names (names only; the API
+      never returns secret values):
+
+      ```bash
+      PRE1A_DEV_VERSION_ID=<the full 36-character version ID at 100 percent>
+      echo "pre-1a id len=${#PRE1A_DEV_VERSION_ID}"   # must print 36
+      PRE1A_SECRET_NAMES=$(npx wrangler@4 versions view "$PRE1A_DEV_VERSION_ID" --env="" --json | version_secret_names)
+      echo "pre-1a names rc=$? names=$PRE1A_SECRET_NAMES"
+      ```
+
+      Require `pre-1a names rc=0` and a non-empty list; keep the line in the
+      window log. Sub-step 6 requires every one of these names, plus
+      `EDIT_TOKEN_OBSERVER`, in the step-1a version.
    3. Create a clean `PRIOR_SHA` checkout outside every existing checkout and
       regenerate the ignored Worker inputs there (OQ-10):
 
@@ -957,9 +1284,9 @@ or nonzero result as a stop before the window.
         node app/worker/scripts/bundle-editor-data.mjs; echo "prior regen rc=$?"
       ```
 
-      Verify the OQ-10 `spine_build_id` equality against `PRIOR_SHA`'s
-      committed stamp, run `git checkout -- site/platform/data/.build-stamp.json`,
-      and require `git status --porcelain` to print nothing.
+      Then, still in `$PRIOR_DIR/tree`, run the OQ-10 `spine_build_id`
+      equality block (it restores the stamp and checks the tree); require its
+      `HEAD` to equal `PRIOR_SHA`, `SPINE OK`, `spine rc=0`, and `TREE CLEAN`.
    4. **DEV static prior-state check.** With `TARGET_SHA=$PRIOR_SHA`, run the
       OQ-13 part (a) `spine-build` comparison without deploying first. If it
       prints `DEV static OK`, DEV static is already on `PRIOR_SHA`. Otherwise
@@ -978,21 +1305,62 @@ or nonzero result as a stop before the window.
 
       ```bash
       OBS_ENV="$HOME/.config/sonsteng-release-observer/env"
-      ( umask 077; set -o noclobber
-        mkdir -p "$HOME/.config/sonsteng-release-observer"
-        chmod 700 "$HOME/.config/sonsteng-release-observer"
-        if [ -e "$OBS_ENV" ]; then echo "observer env exists; reusing it"
-        else python3 -c 'import secrets; print("SONSTENG_PROD_OBSERVER_BEARER=" + secrets.token_urlsafe(32))' > "$OBS_ENV" &&
-          echo "observer env minted" || echo "STOP: observer mint failed"; fi )
+      python3 - "$OBS_ENV" <<'PY'
+      import os, re, secrets, stat, sys
+      path = sys.argv[1]
+      directory = os.path.dirname(path)
+      os.makedirs(directory, mode=0o700, exist_ok=True)
+      os.chmod(directory, 0o700)
+      TEMPLATE = ["SONSTENG_PROD_OBSERVER_BEARER="]
+      def mint(target):
+          line = "SONSTENG_PROD_OBSERVER_BEARER=" + secrets.token_urlsafe(32) + "\n"
+          fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+          with os.fdopen(fd, "w", encoding="utf-8") as handle:
+              handle.write(line)
+              handle.flush()
+              os.fsync(handle.fileno())
+      try:
+          info = os.lstat(path)
+      except FileNotFoundError:
+          mint(path)
+          print("observer env minted")
+          sys.exit(0)
+      if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+              or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 65536):
+          sys.exit("STOP: observer env is not an owned regular mode-0600 file; left untouched")
+      fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+      with os.fdopen(fd, encoding="utf-8") as handle:
+          text = handle.read()
+      assignments = [line for line in text.splitlines()
+                     if line.strip() and not line.lstrip().startswith("#")]
+      if assignments == TEMPLATE:
+          mint(path + ".mint")
+          os.replace(path + ".mint", path)
+          print("observer env was the empty installer template; minted")
+      elif (len(text.splitlines()) == 1 and re.fullmatch(
+              "SONSTENG_PROD_OBSERVER_BEARER=[A-Za-z0-9_-]{43}", text.rstrip("\n"))):
+          print("observer env exists and is populated; reusing it")
+      else:
+          sys.exit("STOP: observer env has unexpected content; left untouched")
+      PY
+      echo "observer mint rc=$?"
       stat -c '%a %U %F' "$OBS_ENV"    # must print: 600 <operator> regular file
       grep -c '^SONSTENG_PROD_OBSERVER_BEARER=[A-Za-z0-9_-]\{43\}$' "$OBS_ENV"   # must print 1
       grep -c . "$OBS_ENV"             # must print 1 (the one line; no other keys)
       ```
 
-      On a retry of step 1a, the file already exists and is reused. The Worker
-      secret is always derived from the file, so the two cannot diverge. If an
-      existing file fails either `grep`, STOP: do not overwrite it inside the
-      window.
+      The script handles exactly three states and prints which one it found.
+      An **absent** file is minted. An **empty installer template** is
+      replaced: `tools/install-apply-daemon.sh` writes a template of comment
+      lines plus an empty `SONSTENG_PROD_OBSERVER_BEARER=` when the file is
+      absent, and the script replaces it only if that is its sole assignment
+      and the file is a regular, operator-owned, mode-`0600` file. A
+      **populated** file (one line, a 43-character value) is reused, which is
+      what a retry of step 1a finds. Anything else, including a symlink, the
+      wrong owner or mode, or any other content, prints `STOP` and leaves the
+      file untouched: do not overwrite it inside the window. Require
+      `observer mint rc=0` and all three check lines. The Worker secret is
+      always derived from the file, so the two cannot diverge.
 
       Derive the one-key secrets file that sub-step 6 passes to Wrangler. It
       goes in the mode-0700 `$PRIOR_DIR`, outside the `PRIOR_SHA` checkout:
@@ -1032,21 +1400,36 @@ or nonzero result as a stop before the window.
    6. **DEV/editor Worker at `PRIOR_SHA`.** From `$PRIOR_DIR/tree/app/worker`:
 
       ```bash
-      npx wrangler@4 versions upload --env="" --message "day-zero-prior:<prior-SHA>" --var "RELEASE_SHA:<prior-SHA>" --secrets-file "$OBS_SECRETS"; echo "upload rc=$?"
-      rm -f "$OBS_SECRETS"; test ! -e "$OBS_SECRETS" && echo "observer secrets file removed"
-      npx wrangler@4 versions view <step-1a-DEV-version-ID> --env=""
-      npx wrangler@4 versions view <step-1a-DEV-version-ID> --env="" | grep -oE 'EDIT_TOKEN_[A-Z0-9_]+' | sort -u
-      npx wrangler@4 versions deploy <step-1a-DEV-version-ID> --env="" --yes
+      cd "$PRIOR_DIR/tree/app/worker"
+      TARGET_SHA=$PRIOR_SHA
+      ( trap 'rm -f "$OBS_SECRETS"' EXIT
+        npx wrangler@4 versions upload --env="" --message "day-zero-prior:$TARGET_SHA" \
+          --var "RELEASE_SHA:$TARGET_SHA" --secrets-file "$OBS_SECRETS" )
+      echo "upload rc=$?"
+      rm -f "$OBS_SECRETS"
+      test ! -e "$OBS_SECRETS" && echo "observer secrets file removed" || echo "STOP: observer secrets file still present"
+      STEP1A_DEV_VERSION_ID=<paste the full "Worker Version ID:" UUID printed above>
+      echo "step-1a id len=${#STEP1A_DEV_VERSION_ID}"   # must print 36
+      npx wrangler@4 versions view "$STEP1A_DEV_VERSION_ID" --env="" --json |
+        check_version_view dev "$PRIOR_SHA" EDIT_TOKEN_OBSERVER $PRE1A_SECRET_NAMES
+      echo "view rc=$?"
+      npx wrangler@4 versions deploy "$STEP1A_DEV_VERSION_ID" --env="" --yes
       prove_provenance https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance 204 "$PRIOR_SHA"
       ```
 
-      Remove `$OBS_SECRETS` whether or not the upload succeeded. Apply the
-      OQ-13 `versions view` var check before `versions deploy`. The
-      names-only listing must include `EDIT_TOKEN_OBSERVER` and every
-      `EDIT_TOKEN_<SLOT>` secret the pre-1a version carried, such as
-      `EDIT_TOKEN_RELEASE` and `EDIT_TOKEN_ADMIN`. A missing name is a STOP
-      before `versions deploy`, and the live editor is still on the pre-1a
-      version. Wrangler shows secret names, never values. `prove_provenance`
+      The upload runs in a subshell whose `EXIT` trap removes `$OBS_SECRETS`
+      whether the upload succeeds, fails, or is interrupted; the next line
+      removes it again and proves it is gone. `$PRE1A_SECRET_NAMES` is left
+      unquoted on purpose so that each captured name becomes one argument
+      (`version_secret_names` only emits `[A-Z0-9_]` names). Run
+      `versions deploy` only after `check_version_view` prints `VIEW OK` and
+      `view rc=0`: that proves the exact 40-character `RELEASE_SHA`, the exact
+      DEV `EDIT_UPSTREAM`, `EDIT_ORIGIN`, and `PROD_RELEASE_LEDGER` values,
+      and that the `secret names:` line includes `EDIT_TOKEN_OBSERVER` and
+      every secret name the pre-1a version carried (such as
+      `EDIT_TOKEN_RELEASE` and `EDIT_TOKEN_ADMIN`). A `STOP` there comes
+      before `versions deploy`, so the live editor is still on the pre-1a
+      version. The API returns secret names, never values. `prove_provenance`
       must print `OK` (`204`, one header, 40 characters, equal to
       `PRIOR_SHA`).
 
@@ -1056,23 +1439,30 @@ or nonzero result as a stop before the window.
       ```bash
       python3 - "$OBS_ENV" <<'PY'
       import json, sys, urllib.error, urllib.request
+      class NoRedirect(urllib.request.HTTPRedirectHandler):
+          def redirect_request(self, *args):
+              return None
       token = open(sys.argv[1], encoding="utf-8").read().strip().split("=", 1)[1]
       request = urllib.request.Request(
           "https://sonsteng-chat.damienriehl.workers.dev/edit/v1/prod/releases/frontier",
           headers={"Authorization": "Bearer " + token, "Accept": "application/json",
                    "User-Agent": "sonsteng-queue-proof/1.0"})
       try:
-          with urllib.request.urlopen(request, timeout=20) as response:
+          with urllib.request.build_opener(NoRedirect).open(request, timeout=20) as response:
               body = json.load(response)
               frontier = (body.get("context") or {}).get("operation_frontier") or {}
               print("status", response.status, "ok", body.get("ok"),
                     "blocked_state", frontier.get("blocked_state"))
       except urllib.error.HTTPError as error:
           print("status", error.code, "STOP: observer refused")
+      except (urllib.error.URLError, OSError, ValueError):
+          print("STOP: observer request failed")
       PY
       ```
 
-      It must print `status 200 ok True` and a `blocked_state`. This is a
+      Redirects are disabled, as in the verifier, so the bearer is never
+      forwarded to another host; a `3xx` prints its status and `STOP`. It must
+      print `status 200 ok True` and a `blocked_state`. This is a
       fail-fast credential check, not the proof: step 2's receipt is the
       authoritative queue evidence. A `401` or `403` means the secret or slot
       did not land. Treat it as a step-1a failure.
@@ -1081,7 +1471,8 @@ or nonzero result as a stop before the window.
       step-1a version is the DEV state that compensation must reproduce.
 
    If any part of step 1a fails, reactivate the pre-1a version with
-   `npx wrangler@4 versions deploy <pre-1a-DEV-version-ID> --env="" --yes`,
+   `npx wrangler@4 versions deploy "$PRE1A_DEV_VERSION_ID" --env="" --yes`
+   (from any `app/worker` directory),
    perform no migration step, and close the window. The pre-1a version has no
    `EDIT_TOKEN_OBSERVER` secret, because secrets set with `--secrets-file`
    attach only to the new version. Whether or not its vars list the
@@ -1127,8 +1518,8 @@ or nonzero result as a stop before the window.
      `EDIT_TOKEN_OBSERVER`, and the committed `observer` slot in
      `EDIT_TOKEN_SCOPES` must grant only `{"release_observer":1}`
      (`docs/prod-release-operations.md`). Step 1a sub-step 1 proves that
-     `PRIOR_SHA` carries the slot. Sub-step 6's names-only `versions view`
-     listing and observer `GET` prove the deployed version carries the secret.
+     `PRIOR_SHA` carries the slot. Sub-step 6's `check_version_view`
+     `secret names:` line and observer `GET` prove the deployed version carries the secret.
      If either is missing, the frontier `GET` is refused with `401` or `403`,
      and the proof fails with `http-status-invalid`.
 
@@ -1635,14 +2026,61 @@ or nonzero result as a stop before the window.
 3. capture and verify the exact prior pair and both live SHA headers with the
    stable inspector's `--print-recovery-ids` form. Record its `sha` as
    `PRIOR_PAIR_SHA`, plus the full `pages_deployment_id` and
-   `worker_version_id`, each length-checked. Then prove
-   `git merge-base --is-ancestor "$PRIOR_PAIR_SHA" "$PRIOR_SHA"`. When
+   `worker_version_id` as `PRIOR_PAGES_DEPLOYMENT_ID` and
+   `PRIOR_WORKER_VERSION_ID`, each length-checked. Step 1a left the shell in
+   `$PRIOR_DIR/tree/app/worker`, so change to the reviewed operations checkout
+   first:
+
+   ```bash
+   cd "$OPS_REPO"
+   recovery_ids() {
+     credential-helper-that-prints-only-the-Cloudflare-bearer |
+     SONSTENG_DAY_ZERO_MIGRATION_ENABLED=true python3 "$OPS_REPO/tools/day_zero_migration.py" \
+       --inspect-cloudflare-pair --print-recovery-ids \
+       --cloudflare-account-id "$CF_ACCOUNT_ID" --pages-project sonsteng \
+       --worker-script sonsteng-chat-production \
+       --pages-provenance-url https://legalpracticum.org/ \
+       --worker-provenance-url https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance \
+       --ack-john-notified --ack-queue-empty
+   }
+   recovery_field() {
+     printf '%s' "$RECOVERY_JSON" | python3 -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
+   }
+   RECOVERY_JSON=$(recovery_ids); echo "inspector rc=$? $RECOVERY_JSON"
+   PRIOR_PAIR_SHA=$(recovery_field sha)
+   PRIOR_PAGES_DEPLOYMENT_ID=$(recovery_field pages_deployment_id)
+   PRIOR_WORKER_VERSION_ID=$(recovery_field worker_version_id)
+   echo "lens sha=${#PRIOR_PAIR_SHA} pages=${#PRIOR_PAGES_DEPLOYMENT_ID} worker=${#PRIOR_WORKER_VERSION_ID}"
+   git -C "$DAEMON_REPO" merge-base --is-ancestor "$PRIOR_PAIR_SHA" "$PRIOR_SHA" && echo "pair ancestry OK" || echo "STOP: production runs a commit main does not contain"
+   ```
+
+   `recovery_ids` and `recovery_field` stay defined in the window shell;
+   step 7, step 9, and compensation step 1 reuse them. Require
+   `inspector rc=0`, `sha=40`, `worker=36`, `pages=36` (the canonical
+   Pages deployment ID is a 36-character UUID, as in every recorded pair; the
+   8-character preview subdomain is never a recovery coordinate, OQ-9), and
+   `pair ancestry OK`. When
    `PRIOR_PAIR_SHA` differs from `PRIOR_SHA`, which is the expected case on
    2026-09-25, keep both. See
    [Two prior SHAs](#two-prior-shas-prior_pair_sha-and-prior_sha);
 4. rehearse, then materialize and commit the combined rewrite plus generated
    artifacts exactly once in a controlled worktree created at `PRIOR_SHA`
-   (OQ-10, including its explicit `git add`). Before moving canonical `main`,
+   (OQ-10, including its explicit `git add`). Create the controlled worktree
+   as a detached linked worktree of the daemon repository, so that the CAS
+   `forward` finds the candidate commit object in `$DAEMON_REPO`; a separate
+   clone fails the CAS dry run. Choose a new absolute path outside every
+   existing checkout:
+
+   ```bash
+   CONTROLLED_REPO=/absolute/path/for/the/new/controlled-worktree
+   test "${CONTROLLED_REPO#/}" != "$CONTROLLED_REPO" && test ! -e "$CONTROLLED_REPO" && echo "path OK" || echo "STOP: path relative or exists"
+   git -C "$DAEMON_REPO" worktree add --detach "$CONTROLLED_REPO" "$PRIOR_SHA"
+   test "$(git -C "$CONTROLLED_REPO" rev-parse HEAD)" = "$PRIOR_SHA" && echo "controlled worktree at PRIOR_SHA" || echo "STOP: controlled worktree HEAD"
+   cd "$CONTROLLED_REPO"
+   ```
+
+   `--detach` leaves `main` checked out only in the daemon checkout, which
+   `forward` requires. Before moving canonical `main`,
    run the Phase 2 verification from item 5 against the committed candidate;
    it runs in its own exact-SHA clone and does not need `main`, so a failure
    here needs no canonical restore. Only after it passes, advance canonical
@@ -1672,7 +2110,13 @@ or nonzero result as a stop before the window.
    whose `candidate_sha` equals `CANDIDATE_SHA`, whose `phases` list is
    exactly the Phase 2 list, and whose `production_mutations` is `0`. Keep the
    JSON in the window evidence directory. Run it before the forward CAS (item
-   4). After the forward CAS, confirm the CAS receipt's three readbacks equal
+   4). Its `preflight` phase reruns `tools/preflight.sh`, which reruns
+   `build_site.py --check` and so rewrites the stamp's traceability-only
+   `git_base_sha` to the candidate; `verify_materialized` compares that stamp
+   without `git_base_sha`, restores the committed bytes, and requires the
+   exact clean tree before `final-tree-cleanliness`. Any other stamp or tracked
+   change still fails as `verify-only phase failed: preflight`. After the
+   forward CAS, confirm the CAS receipt's three readbacks equal
    `CANDIDATE_SHA`; the tree is unchanged, so a second Phase 2 run is
    optional;
 6. regenerate and verify the ignored Worker inputs (OQ-10), record the
@@ -1683,19 +2127,25 @@ or nonzero result as a stop before the window.
    under the Cloudflare PROD principal:
 
    ```bash
-   cd app/worker
-   npx wrangler@4 versions upload --env production --message "day-zero:<candidate-SHA>" --var "RELEASE_SHA:<candidate-SHA>"
-   # Copy the full "Worker Version ID:" UUID (36 characters) into the window log.
-   npx wrangler@4 versions view <new-production-Worker-version-ID> --env production
-   npx wrangler@4 versions deploy <new-production-Worker-version-ID> --env production --yes
+   cd "$CONTROLLED_REPO/app/worker"
+   npx wrangler@4 versions upload --env production --message "day-zero:$CANDIDATE_SHA" --var "RELEASE_SHA:$CANDIDATE_SHA"
+   echo "upload rc=$?"
+   NEW_WORKER_VERSION_ID=<paste the full "Worker Version ID:" UUID printed above>
+   echo "new worker id len=${#NEW_WORKER_VERSION_ID}"   # must print 36
+   npx wrangler@4 versions view "$NEW_WORKER_VERSION_ID" --env production --json | check_version_view production "$CANDIDATE_SHA"
+   echo "view rc=$?"
+   npx wrangler@4 versions deploy "$NEW_WORKER_VERSION_ID" --env production --yes
    prove_provenance https://sonsteng-chat-production.damienriehl.workers.dev/edit/release-provenance 204 "$CANDIDATE_SHA"
    prove_provenance https://legalpracticum.org/ 200 "$PRIOR_PAIR_SHA"
-   cd ../..
+   cd "$CONTROLLED_REPO"
    ```
 
-   `versions view` must list `RELEASE_SHA` equal to the candidate and the
-   production `EDIT_UPSTREAM` (`https://legalpracticum.org/platform/`) before
-   activation. The only expected upload warning concerns top-level vars that
+   `check_version_view` must print `VIEW OK` and `view rc=0` before
+   `versions deploy`: the exact 40-character `RELEASE_SHA` equal to the
+   candidate and the exact production `EDIT_UPSTREAM`
+   (`https://legalpracticum.org/platform/`), `EDIT_ORIGIN`, and
+   `PROD_RELEASE_LEDGER` (`false`). Any `STOP` is a stop before activation,
+   while production still serves the prior pair. The only expected upload warning concerns top-level vars that
    are absent from `env.production`. Those two `prove_provenance` lines are
    OQ-8 check 3. Only after both print `OK`, stage and deploy Pages from the
    repository root:
@@ -1718,22 +2168,67 @@ or nonzero result as a stop before the window.
    prints is **not** the recovery coordinate (OQ-9). Delete `$PAGES_STAGE`
    afterwards;
 7. read back and atomically record the exact new provider pair, using the
-   inspector's full canonical Pages deployment ID (OQ-9). Run the
-   `--print-recovery-ids` inspector: its `sha` must equal `CANDIDATE_SHA`,
-   and its two IDs are the new pair;
+   inspector's full canonical Pages deployment ID (OQ-9):
+
+   ```bash
+   RECOVERY_JSON=$(recovery_ids); echo "inspector rc=$? $RECOVERY_JSON"
+   test "$(recovery_field sha)" = "$CANDIDATE_SHA" && echo "new pair sha OK" || echo "STOP: new pair sha"
+   test "$(recovery_field worker_version_id)" = "$NEW_WORKER_VERSION_ID" && echo "new worker id OK" || echo "STOP: new worker id"
+   NEW_PAGES_DEPLOYMENT_ID=$(recovery_field pages_deployment_id)
+   test "${#NEW_PAGES_DEPLOYMENT_ID}" -eq 36 && echo "new pages id len OK" || echo "STOP: new pages id is not a 36-character canonical id"
+   ```
+
+   Record `NEW_PAGES_DEPLOYMENT_ID` and `NEW_WORKER_VERSION_ID` as the new
+   pair;
 8. deploy/rebuild DEV/editor from the same SHA with OQ-13 and
-   `TARGET_SHA=$CANDIDATE_SHA`: (a) `bash deploy/deploy-dev.sh "$CANDIDATE_SHA"`
-   from the controlled worktree, then the `spine-build` proof against the
-   candidate's committed `.build-stamp.json` `spine_build_id` (64 hex,
-   length-checked); then (b) the `--env=""` Worker upload, view, and deploy
-   with `RELEASE_SHA:<candidate-SHA>`, and `prove_provenance` on
+   `TARGET_SHA=$CANDIDATE_SHA`, in the fixed OQ-13 order: (a)
+   `bash deploy/deploy-dev.sh "$CANDIDATE_SHA"` from the controlled worktree,
+   then the `spine-build` proof against the candidate's committed
+   `.build-stamp.json` `spine_build_id` (64 hex, length-checked); then (b) the
+   `--env=""` Worker upload, `check_version_view dev "$CANDIDATE_SHA"`, and
+   deploy, and `prove_provenance` on
    `https://sonsteng-chat.damienriehl.workers.dev/edit/release-provenance`
-   with `204` and the candidate SHA. The Worker must never be deployed at the
-   candidate while DEV static is still on the prior pages;
+   with `204` and the candidate SHA. Between (a) and (b) the prior DEV Worker
+   briefly overlays candidate static pages; OQ-13 explains why that mixed
+   state, and compensation's opposite one, are both covered by the OQ-8
+   identity checks. Run (b) promptly after (a) prints `DEV static OK`, and
+   never skip (b);
 9. reactivate and prove the prior pair (Pages first, then the Worker), then the
-   intended new pair (Worker first, then Pages). The prior pair is the one
+   intended new pair (Worker first, then Pages), with the
+   [Pages and Worker rollback commands](#pages-and-worker-rollback-commands)
+   and an inspector readback after each pair. The prior pair is the one
    recorded in step 3, so its proof is the inspector's `sha` equal to
-   `PRIOR_PAIR_SHA` with the exact prior IDs, not `PRIOR_SHA`;
+   `PRIOR_PAIR_SHA` with the exact prior IDs, not `PRIOR_SHA`:
+
+   ```bash
+   credential-helper-that-prints-only-the-Cloudflare-bearer | pages_rollback "$PRIOR_PAGES_DEPLOYMENT_ID"
+   echo "pages rollback rc=$?"
+   ( cd "$CONTROLLED_REPO/app/worker" &&
+     npx wrangler@4 versions deploy "$PRIOR_WORKER_VERSION_ID" --env production --yes )
+   echo "worker rollback rc=$?"
+   RECOVERY_JSON=$(recovery_ids); echo "inspector rc=$? $RECOVERY_JSON"
+   test "$(recovery_field sha)" = "$PRIOR_PAIR_SHA" &&
+     test "$(recovery_field pages_deployment_id)" = "$PRIOR_PAGES_DEPLOYMENT_ID" &&
+     test "$(recovery_field worker_version_id)" = "$PRIOR_WORKER_VERSION_ID" &&
+     echo "PRIOR PAIR OK" || echo "STOP: prior pair readback"
+
+   ( cd "$CONTROLLED_REPO/app/worker" &&
+     npx wrangler@4 versions deploy "$NEW_WORKER_VERSION_ID" --env production --yes )
+   echo "worker forward rc=$?"
+   credential-helper-that-prints-only-the-Cloudflare-bearer | pages_rollback "$NEW_PAGES_DEPLOYMENT_ID"
+   echo "pages forward rc=$?"
+   RECOVERY_JSON=$(recovery_ids); echo "inspector rc=$? $RECOVERY_JSON"
+   test "$(recovery_field sha)" = "$CANDIDATE_SHA" &&
+     test "$(recovery_field pages_deployment_id)" = "$NEW_PAGES_DEPLOYMENT_ID" &&
+     test "$(recovery_field worker_version_id)" = "$NEW_WORKER_VERSION_ID" &&
+     echo "NEW PAIR OK" || echo "STOP: new pair readback"
+   ```
+
+   Require every `rc=0`, `PRIOR PAIR OK`, and `NEW PAIR OK`. Do not run the
+   inspector between the two halves of a pair change: its shared-SHA proof
+   fails by design while Pages and the Worker name different SHAs. Any `STOP`
+   means complete compensation, which starts by restoring and re-proving the
+   prior pair;
 10. prove canonical `main`, production, DEV, and editor all name the candidate:
     canonical `main` (CAS readback), both production `x-release-sha` headers
     (inspector), and the DEV/editor Worker `x-release-sha` equal

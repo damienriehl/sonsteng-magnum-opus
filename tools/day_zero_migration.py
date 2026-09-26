@@ -772,6 +772,12 @@ class LocalRehearsalPhases:
                 report.unlink(missing_ok=True)
         elif phase == "preflight":
             self._command(["bash", "tools/preflight.sh", "--no-browser"])
+            if self.allow_traceability_stamp_refresh:
+                # preflight.sh reruns build_site.py --check, which rewrites the
+                # stamp's traceability-only git_base_sha to HEAD. Compare without
+                # that one field, restore the committed bytes, and require the
+                # exact clean tree before the final-tree-cleanliness proof.
+                self._assert_generated_artifact_cleanliness(candidate_sha)
         else:
             raise MigrationError("unknown migration phase")
 
